@@ -1,0 +1,19 @@
+build*/
+cmake-build*/
+*.d
+*.bin
+*.elf
+generated.*.ld
+
+# CLion
+.idea/
+
+# QtCreator
+CMakeLists.txt.user
+
+# KiCad
+*.gbr
+*.drl
+*-bak
+*-cache.lib
+fp-info-cache
