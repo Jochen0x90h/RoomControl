@@ -40,89 +40,94 @@ add_definitions(-DDEBUG)
 # strip unised dylibs
 #add_link_options(-dead_strip_dylibs)
 
-# OpenGL support
-set(GLAD
-	emulator/glad/glad.c
-	emulator/glad/glad.h
-	emulator/glad/khrplatform.h
-)
-source_group(glad FILES ${GLAD})
 
-# emulator
-set(EMULATOR
-	emulator/main.cpp
-	emulator/assert.hpp
-	emulator/config.hpp
-	emulator/global.cpp
-	emulator/global.hpp
-	emulator/Bus.cpp
-	emulator/Bus.hpp
-	emulator/Clock.cpp
-	emulator/Clock.hpp
-	emulator/Display.cpp
-	emulator/Display.hpp
-	emulator/Flash.cpp
-	emulator/Gui.cpp
-	emulator/Gui.hpp
-	emulator/Network.cpp
-	emulator/Network.hpp
-	emulator/Poti.cpp
-	emulator/Poti.hpp
-	emulator/SystemTimer.cpp
-	emulator/SystemTimer.hpp
-)
-source_group(emulator FILES ${EMULATOR})
-
-# util classes
+# system independent utilities
 set(UTIL
-	control/Array.hpp
-	control/ArrayList.hpp
-	control/Bitmap.cpp
-	control/Bitmap.hpp
-	control/ClockTime.hpp
-	control/convert.cpp
-	control/convert.hpp
-	control/defines.hpp
-	control/optional.hpp
-	control/String.hpp
-	control/StringBuffer.hpp
-	control/StringOperators.hpp
-	control/StringSet.hpp
-	control/TopicBuffer.cpp
-	control/TopicBuffer.hpp
-	control/util.hpp
+	util/src/Array.hpp
+	util/src/ArrayList.hpp
+	util/src/Bitmap.cpp
+	util/src/Bitmap.hpp
+	util/src/convert.cpp
+	util/src/convert.hpp
+	util/src/defines.hpp
+	util/src/optional.hpp
+	util/src/String.hpp
+	util/src/StringBuffer.hpp
+	util/src/StringOperators.hpp
+	util/src/StringSet.hpp
+	util/src/TopicBuffer.cpp
+	util/src/TopicBuffer.hpp
+	util/src/util.hpp
 )
+source_group(util FILES ${UTIL})
+
+# base code for nodes (control and gateway)
+set(NODE
+	node/src/ClockTime.hpp
+	node/src/flash.hpp
+	node/src/SystemTime.hpp
+	node/src/MqttSnClient.cpp
+	node/src/MqttSnClient.hpp
+	node/src/MqttSnBroker.cpp
+	node/src/MqttSnBroker.hpp
+	node/src/emu/flash.cpp
+)
+source_group(node FILES ${NODE})
 
 # room control software running on the nRF52840
 set(CONTROL
-	control/Device.hpp
-	control/Font.cpp
-	control/Font.hpp
-	control/Flash.hpp
-	control/MqttSnClient.cpp
-	control/MqttSnClient.hpp
-	control/MqttSnBroker.cpp
-	control/MqttSnBroker.hpp
-	control/RoomControl.cpp
-	control/RoomControl.hpp
-	control/Storage.cpp
-	control/Storage.hpp
-	control/SystemTime.hpp
-	control/tahoma_8pt.cpp
-	control/tahoma_8pt.hpp
+	control/src/Device.hpp
+	control/src/Font.cpp
+	control/src/Font.hpp
+	control/src/RoomControl.cpp
+	control/src/RoomControl.hpp
+	control/src/Storage.cpp
+	control/src/Storage.hpp
+	control/src/tahoma_8pt.cpp
+	control/src/tahoma_8pt.hpp
+	control/src/emu/main.cpp
+	control/src/emu/assert.hpp
+	control/src/emu/config.hpp
+	control/src/emu/global.cpp
+	control/src/emu/global.hpp
+	control/src/emu/BusDevices.cpp
+	control/src/emu/BusDevices.hpp
+	control/src/emu/Clock.cpp
+	control/src/emu/Clock.hpp
+	control/src/emu/Display.cpp
+	control/src/emu/Display.hpp
+	control/src/emu/Gui.cpp
+	control/src/emu/Gui.hpp
+	control/src/emu/Network.cpp
+	control/src/emu/Network.hpp
+	control/src/emu/Poti.cpp
+	control/src/emu/Poti.hpp
+	control/src/emu/SystemTimer.cpp
+	control/src/emu/SystemTimer.hpp
 )
-source_group(control FILES ${CONTROL} ${UTIL})
+source_group(control FILES ${CONTROL})
+
+# OpenGL support
+set(GLAD
+	glad/glad.c
+	glad/glad.h
+	glad/khrplatform.h
+)
+source_group(glad FILES ${GLAD})
 
 # emulator executable
 add_executable(emulator
-	${GLAD}
-	${EMULATOR}
 	${UTIL}
+	${NODE}
 	${CONTROL}
+	${GLAD}
 )
 include_directories(emulator
-	#emulator/src
-	control
+	control/src/emu
+	control/src
+	node/src
+	util/src
+	glad
 )
 conan_target_link_libraries(emulator)
 
@@ -135,36 +140,37 @@ install(TARGETS emulator
 
 
 
-# test broker
-add_executable(testBroker
-	test/testBroker.cpp
-	control/MqttSnClient.cpp
-	control/MqttSnClient.hpp
-	control/MqttSnBroker.cpp
-	control/MqttSnBroker.hpp
-	control/SystemTime.hpp
-	emulator/Network.cpp
-	emulator/Network.hpp
-	emulator/SystemTimer.cpp
-	emulator/SystemTimer.hpp
-	emulator/global.cpp
-	emulator/global.hpp
+# broker test (command line tool)
+add_executable(brokerTest
+	node/test/brokerTest.cpp
+	${NODE}
+	control/src/emu/Network.cpp
+	control/src/emu/Network.hpp
+	control/src/emu/SystemTimer.cpp
+	control/src/emu/SystemTimer.hpp
+	control/src/emu/global.cpp
+	control/src/emu/global.hpp
 )
-include_directories(testBroker
-	control
+include_directories(brokerTest
+	control/src/emu
+	control/src
+	node/src
+	util/src
+	glad
 )
-conan_target_link_libraries(testBroker)
+conan_target_link_libraries(brokerTest)
 
 
 
 # enable testing, adds a target to run all tests
 enable_testing()
 
-add_executable(testUtil
-	test/testUtil.cpp
+# util test (GTest)
+add_executable(utilTest
+	util/test/utilTest.cpp
 	${UTIL}
 )
-conan_target_link_libraries(testUtil)
+conan_target_link_libraries(utilTest)
 add_test(NAME utilTest
 	COMMAND utilTest --gtest_output=xml:report.xml
 	#WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/../testdata

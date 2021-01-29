@@ -386,7 +386,7 @@ R1
 Text Notes 4600 1450 2    50   ~ 0
 R2
 Text GLabel 8200 3800 2    50   Input ~ 0
-SWITCH
+BUTTON
 $Comp
 L RoomControl:Rotary_Encoder_Switch SW1
 U 1 1 5EAC7E37
@@ -745,13 +745,13 @@ SPI_MOSI
 Text GLabel 4900 5100 0    50   Input ~ 0
 BME_CS
 Text GLabel 1950 6750 2    50   Input ~ 0
-SP_LRCLK
+AU_LRCLK
 Text GLabel 1950 6850 2    50   Input ~ 0
-SP_DIN
+AU_DIN
 Text GLabel 1950 6650 2    50   Input ~ 0
-SP_BCLK
+AU_BCLK
 Text GLabel 1950 7050 2    50   Input ~ 0
-SP_EN
+AU_EN
 $Comp
 L power:+3V3 #PWR0117
 U 1 1 5EB1B62F
@@ -775,19 +775,19 @@ F 3 "" H 2400 7550 50  0001 C CNN
 	-1   0    0    -1  
 $EndComp
 Text GLabel 6300 5400 2    50   Input ~ 0
-SP_EN
+AU_EN
 Text GLabel 6300 5500 2    50   Input ~ 0
-SP_DIN
+AU_DIN
 Text GLabel 6300 5700 2    50   Input ~ 0
-SP_LRCLK
+AU_LRCLK
 Text GLabel 6300 5600 2    50   Input ~ 0
-SP_BCLK
+AU_BCLK
 Text GLabel 6300 4800 2    50   Input ~ 0
 POTI_B
 Text GLabel 4900 6000 0    50   Input ~ 0
 POTI_A
 Text GLabel 4900 6300 0    50   Input ~ 0
-SWITCH
+BUTTON
 $Comp
 L Connector_Generic:Conn_01x02 J7
 U 1 1 5EBA4222
@@ -962,7 +962,7 @@ Text GLabel 9650 2500 0    50   Input ~ 0
 EXT1
 Connection ~ 3250 1000
 Text Notes 1300 6050 0    50   ~ 0
-Speaker
+Audio
 $Comp
 L Connector_Generic:Conn_01x05 J2
 U 1 1 5EE8632D
@@ -1827,4 +1827,28 @@ Wire Wire Line
 	1950 7150 1950 7350
 Wire Wire Line
 	1950 7350 2250 7350
+Text Notes 600  6450 0    50   ~ 0
+Speaker
+$Comp
+L Connector_Generic:Conn_01x01 J3
+U 1 1 600F3523
+P 5750 7350
+F 0 "J3" H 5668 7125 50  0000 C CNN
+F 1 "Conn_01x01" H 5668 7216 50  0000 C CNN
+F 2 "Connector_PinHeader_2.54mm:PinHeader_1x01_P2.54mm_Vertical" H 5750 7350 50  0001 C CNN
+F 3 "~" H 5750 7350 50  0001 C CNN
+	1    5750 7350
+	-1   0    0    1   
+$EndComp
+$Comp
+L power:GND #PWR0134
+U 1 1 600F3A85
+P 5950 7350
+F 0 "#PWR0134" H 5950 7100 50  0001 C CNN
+F 1 "GND" H 5955 7177 50  0000 C CNN
+F 2 "" H 5950 7350 50  0001 C CNN
+F 3 "" H 5950 7350 50  0001 C CNN
+	1    5950 7350
+	1    0    0    -1  
+$EndComp
 $EndSCHEMATC
