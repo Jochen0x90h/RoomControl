@@ -1,0 +1,47 @@
+#pragma once
+
+#include "SystemTime.hpp"
+#include <functional>
+
+namespace timer {
+
+/**
+ * Initialze the system
+ */
+void init();
+
+/**
+ * Wait for event and handle system events 
+ */
+void handle();
+
+/**
+ * Get current time in 1/1024 seconds
+ */
+SystemTime getTime();
+
+/**
+ * Set timeout handler
+ * @param onTimeout called when the timeout time was reached
+ */
+void setHandler(int index, std::function<void ()> onTimeout);
+
+/**
+ * Start timer
+ * @param index timer channel
+ * @param time timeout time
+ */
+void start(int index, SystemTime time);
+
+inline void start(int index, SystemTime time, std::function<void ()> onTimeout) {
+	setHandler(index, onTimeout);
+	start(index, time);
+}
+
+/**
+ * Stop timer
+ * @param index timer channel
+ */ 
+void stop(int index);
+	
+} // namespace timer

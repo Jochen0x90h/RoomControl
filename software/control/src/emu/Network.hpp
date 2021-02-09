@@ -1,6 +1,6 @@
 #pragma once
 
-#include "global.hpp"
+#include <emu/global.hpp>
 #include <boost/bimap.hpp>
 #include "util.hpp"
 

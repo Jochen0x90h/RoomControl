@@ -8,16 +8,18 @@
 #include <MqttSnBroker.hpp>
 #include <Storage.hpp>
 #include "Device.hpp"
-#include <Clock.hpp>
-#include <Display.hpp>
-#include <Poti.hpp>
+#include <calendar.hpp>
+//#include <Display.hpp>
+#include <poti.hpp>
 
 
 /**
  * Main room control class that inherits platform dependent (hardware or emulator) components
  */
-class RoomControl : public MqttSnBroker, public BusDevices, public Clock, public Display, public Poti {
+class RoomControl : public MqttSnBroker, public BusDevices {
 public:
+	static constexpr int TIMER_INDEX = 2;
+
 	// maximum number of mqtt routes
 	static constexpr int MAX_ROUTE_COUNT = 32;
 	
@@ -69,22 +71,22 @@ public:
 // SystemTimer
 // -----------
 		
-	void onSystemTimeout3(SystemTime time) override;
+	void onTimeout();
 
 
 // Display
 // -------
 
-	void onDisplayReady() override;
+	void onDisplayReady();
 
 	// display bitmap
-	Bitmap<128, 64> bitmap;
+	Bitmap<DISPLAY_WIDTH, DISPLAY_HEIGHT> bitmap;
 	
 
 // Poti
 // ----
 
-	void onPotiChanged(int delta, bool activated) override;
+	void onPotiChanged(int delta, bool activated);
 
 
 // Menu
@@ -879,7 +881,7 @@ public:
 // Clock
 // -----
 
-	void onSecondElapsed() override;
+	void onSecondElapsed();
 
 
 // Temporary variables for editing via menu

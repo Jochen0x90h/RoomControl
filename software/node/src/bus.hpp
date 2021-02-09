@@ -17,20 +17,17 @@ void init();
 void handle();
 
 /**
- * Transfer data on the bus, cancels any running transfer
- * @param sendData data to send
- * @param sendLength length of data to send
- * @param receiveData data to receive
- * @param receiveLength length of data to receive
- * @param onTransferred completion handler 
+ * Send data on the bus, cancels any running transfer
+ * @param txData data to transmit
+ * @param txLength length of data to transmit
+ * @param onRx called when data was received on the bus (transmit data and reply by a device). Zero length is error 
  */
-void transferBus(uint8_t const *sendData, int sendLength, uint8_t *receiveData, int receiveLength,
-	std::function<void ()> onTransferred);
+void transferBus(uint8_t const *txData, int txLength, std::function<void (uint8_t const *, int)> onRx);
 
 /**
- * Set handler that gets called when a device sends a wakeup request
- * @param onWakeup wakeup handler
+ * Set handler that gets called when a device requests to be queried
+ * @param onRequest called when a device requests to be queried
  */ 
-void setWakeupHandler(std::function<void ()> onWakeup);
+void setRequestHandler(std::function<void (uint8_t const *, int)> onRequest);
 
 } // namespace system

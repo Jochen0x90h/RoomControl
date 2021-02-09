@@ -15,7 +15,7 @@ constexpr EndpointType device2Endpoints[] = {EndpointType::ROCKER, EndpointType:
 constexpr EndpointType device3Endpoints[] = {EndpointType::TEMPERATURE_SENSOR};
 
 BusDevices::BusDevices() {
-	// post onLinReady() into event loop
+	// post onBusReady() into event loop
 	boost::asio::post(global::context, [this] {
 		onBusReady();
 	});

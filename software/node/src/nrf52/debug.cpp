@@ -1,4 +1,5 @@
-#include <nrf52/util.hpp>
+#include "../debug.hpp"
+#include "global.hpp"
 
 
 namespace debug {

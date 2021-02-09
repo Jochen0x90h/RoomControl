@@ -1,5 +1,5 @@
-#include <system.hpp>
-#include <clock.hpp>
+#include <timer.hpp>
+#include <calendar.hpp>
 #include <debug.hpp>
 
 
@@ -9,22 +9,22 @@ bool blink2 = false;
 
 void setTimer0() {
 	debug::setRedLed(blink0 = !blink0);
-	system::setTimer(0, system::getTime() + 1s, []() {setTimer0();});	
+	timer::start(0, timer::getTime() + 1s, []() {setTimer0();});	
 }
 
 void setTimer1() {
 	debug::setGreenLed(blink1 = !blink1);
-	system::setTimer(1, system::getTime() + 5s + 500ms, []() {setTimer1();});	
+	timer::start(1, timer::getTime() + 5s + 500ms, []() {setTimer1();});	
 }
 
 void setTimer2() {
 	debug::setBlueLed(blink2 = !blink2);
-	system::setTimer(2, system::getTime() + 3s + 333ms, []() {setTimer2();});	
+	timer::start(2, timer::getTime() + 3s + 333ms, []() {setTimer2();});	
 }
 
 int main(void) {
-	system::init();
-	clock::init();
+	timer::init();
+	calendar::init();
 	debug::init();
 	
 	setTimer0();
@@ -32,7 +32,7 @@ int main(void) {
 	setTimer2();
 	
 	while (true) {
-		system::handle();
-		clock::handle();
+		timer::handle();
+		calendar::handle();
 	}
 }

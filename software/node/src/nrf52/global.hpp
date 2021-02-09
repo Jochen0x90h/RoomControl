@@ -11,9 +11,6 @@
 // get bitfield
 #define G(reg, field) (((reg) & field##_Msk) >> field##_Pos)
 
-// test condition
-#define T(reg, field, value) (((reg) & field##_Msk) == field##_##value << field##_Pos)
-
 // all task triggers have the value 1
 constexpr int Trigger = 1;
 
@@ -37,6 +34,9 @@ inline void waitForEvent() {
 // see NVIC_Type in system/core_cm4.h
 inline void enableInterrupt(int n) {
 	NVIC->ISER[n >> 5] = 1 << (n & 31);
+}
+inline void disableInterrupt(int n) {
+	NVIC->ICER[n >> 5] = 1 << (n & 31);
 }
 inline bool isInterruptPending(int n) {
 	return (NVIC->ISPR[n >> 5] & (1 << (n & 31))) != 0;
@@ -82,5 +82,19 @@ inline void setOutput(int pin, bool value) {
 		p->OUTCLR = 1 << (pin & 31);
 }
 
-inline void nop() {
+// toggle output value
+inline void toggleOutput(int pin) {
+	auto p = pin >= PORT1 ? NRF_P1 : NRF_P0;
+	uint32_t bit = 1 << (pin & 31);
+	bool value = (p->OUT & bit) == 0;
+	if (value)
+		p->OUTSET = bit;
+	else
+		p->OUTCLR = bit;
+}
+
+// get input value
+inline bool getInput(int pin) {
+	auto p = pin >= PORT1 ? NRF_P1 : NRF_P0;
+	return (p->IN & (1 << (pin & 31))) != 0; 
 }

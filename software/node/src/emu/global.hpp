@@ -20,4 +20,5 @@ namespace global {
 
 	// emulator user interface
 	extern Gui *gui;
+
 };

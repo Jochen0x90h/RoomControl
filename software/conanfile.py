@@ -19,7 +19,7 @@ def get_version():
         if version is None:
             # not found: use branch name
             version = git.get_branch()
-        return version.replace("/", "-")
+        return version.replace("/", "-").replace(" ", "_").replace("(", "").replace(")", "")
     except:
         None
 

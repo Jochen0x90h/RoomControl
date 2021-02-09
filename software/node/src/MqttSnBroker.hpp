@@ -10,6 +10,8 @@
  */
 class MqttSnBroker : public MqttSnClient {
 public:
+	static constexpr int TIMER_INDEX = 1;
+
 	// maximum number of remote clients that can connect
 	static constexpr int MAX_CLIENT_COUNT = 31;
 	static constexpr int LOCAL_CLIENT_INDEX = MAX_CLIENT_COUNT;
@@ -156,7 +158,7 @@ protected:
 	
 	void onDownSent() override;
 
-	void onSystemTimeout2(SystemTime time) override;
+	void onDownTimeout();
     
 private:
 

@@ -1,22 +1,24 @@
 PROJECT_NAME     := FunctionTest
-TARGETS          := systemTest busTest
+TARGETS          := timerTest spiTest busTest
 OUTPUT_DIRECTORY := build
 TEMPLATE_PATH    := ../../src/nrf52/system
 #VERBOSE          := 1
 
 
 # Include folders
-INC_FOLDERS += ../../src .
+INC_FOLDERS += . ../../src ../../../util/src
 
 # Source files common to all targets
 SRC_FILES += $(TEMPLATE_PATH)/gcc_startup_nrf52840.S
 SRC_FILES += $(TEMPLATE_PATH)/system_nrf52840.c
-SRC_FILES += ../../src/nrf52/system.cpp
-SRC_FILES += ../../src/nrf52/clock.cpp
+SRC_FILES += ../../src/nrf52/timer.cpp
+SRC_FILES += ../../src/nrf52/calendar.cpp
 SRC_FILES += ../../src/nrf52/debug.cpp
 
 # Target specific source files
-SRC_FILES_systemTest += ../systemTest.cpp
+SRC_FILES_timerTest += ../timerTest.cpp
+SRC_FILES_spiTest += ../spiTest.cpp
+SRC_FILES_spiTest += ../../src/nrf52/spi.cpp
 SRC_FILES_busTest += ../busTest.cpp
 SRC_FILES_busTest += ../../src/nrf52/bus.cpp
 
@@ -39,10 +41,6 @@ CFLAGS += -fno-builtin -fshort-enums
 CFLAGS += -D__HEAP_SIZE=8192
 CFLAGS += -D__STACK_SIZE=8192
 CFLAGS += -Wall
-
-# Target specific C flags
-CFLAGS_spiTest += -DHAVE_SPI
-CFLAGS_spiTest += -DHAVE_LEDS
 
 # C++ flags (C++ also uses CFLAGS)
 CXXFLAGS += -Wno-literal-suffix
@@ -68,14 +66,12 @@ LDFLAGS += --specs=nano.specs # use newlib in nano version
 .PHONY: default help
 
 # Default target - first one defined
-default: systemTest busTest
+default: $(TARGETS)
 
 # Print all targets that can be built
 help:
 	@echo following targets are available:
-	@echo systemTest
-	@echo busTest
-
+	@echo $(TARGETS)
 
 include $(TEMPLATE_PATH)/Makefile.common
 

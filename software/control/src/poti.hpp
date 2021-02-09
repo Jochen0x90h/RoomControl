@@ -16,15 +16,9 @@ void init();
 void handle();
 
 /**
- * Set callback for digital potentiometer that notifies differential change
- * @param onChanged called when the quadrature decoder detected a change
+ * Set callback for digital potentiometer that notifies differential change or button press
+ * @param onChanged called when the quadrature decoder detected a change or button was activated
  */
-void setPotiHandler(std::function<void (int)> onChanged);
-
-/**
- * Set callback for button activation
- * @param onActivated called when the button was activated
- */
-void setButtonHandler(std::function<void ()> onActivated);
+void setHandler(std::function<void (int, bool)> onChanged);
 
 } // namespace poti

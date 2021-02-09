@@ -5,10 +5,15 @@
 #include <thread>
 #include <iterator>
 
-#include "Flash.hpp"
+#include <flash.hpp>
 #include "RoomControl.hpp"
 
 #include "Gui.hpp"
+
+
+namespace spi {
+	void getDisplay(uint8_t *buffer);
+}
 
 
 static void errorCallback(int error, const char* description)
@@ -153,6 +158,10 @@ int main(int argc, const char **argv) {
 	global::upLink = asio::ip::udp::endpoint(localhost, 47193);
 	global::gui = &gui;
 
+	// init drivers
+	timer::init();
+	calendar::init();
+
 	// the room control application
 	RoomControl roomControl;
 
@@ -285,7 +294,11 @@ int main(int argc, const char **argv) {
 			int id = 0;
 		
 			// display
-			gui.display(roomControl.emulatorDisplayBitmap);
+			{
+				uint8_t displayBuffer[DISPLAY_WIDTH * DISPLAY_HEIGHT];
+				spi::getDisplay(displayBuffer);
+				gui.display(displayBuffer);
+			}
 		
 			// poti
 			auto poti = gui.poti(id++);

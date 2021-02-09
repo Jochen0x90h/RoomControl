@@ -1,8 +1,8 @@
 #pragma once
 
 #include "Network.hpp"
-#include "SystemTimer.hpp"
-#include "String.hpp"
+#include "timer.hpp"
+#include <String.hpp>
 
 // MQTT-SN helper functions
 
@@ -102,8 +102,9 @@ inline void setUShort(uint8_t *buffer, uint16_t value) {
  * Inherits platform dependent (hardware or emulator) components for network and timing
  * Gateway search is removed as we know that our gateway is always on the other side of the up-link
  */
-class MqttSnClient : public SystemTimer, public Network {
+class MqttSnClient : public Network {
 public:
+	static constexpr int TIMER_INDEX = 0;
 
 	// Port the MQTT-SN client binds to
 	//static constexpr int CLIENT_PORT = 47194;
@@ -359,7 +360,7 @@ protected:
 
 	void onUpSent() override;
 
-	void onSystemTimeout1(SystemTime time) override;
+	void onUpTimeout();
     
 private:
 

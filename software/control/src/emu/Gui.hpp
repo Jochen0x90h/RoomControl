@@ -3,7 +3,7 @@
 #include <glad.h>
 #include <GLFW/glfw3.h> // http://www.glfw.org/docs/latest/quick_guide.html
 #include "assert.hpp"
-#include "Display.hpp"
+//#include "Display.hpp"
 #include <map>
 
 
@@ -26,7 +26,7 @@ public:
 	 * Add a display
 	 * @param bitmap content of display
 	 */
-	void display(Bitmap<Display::WIDTH, Display::HEIGHT> const &bitmap);
+	void display(uint8_t const *displayBuffer);
 
 	/**
 	 * Add a digital potentiometer with button
@@ -154,9 +154,6 @@ protected:
 
 	// display
 	Render *displayRender;
-	
-	// buffer for copying bitmap contents into the texture
-	uint8_t displayBuffer[Display::WIDTH * Display::HEIGHT];
 	
 	// display texture
 	GLuint displayTexture;

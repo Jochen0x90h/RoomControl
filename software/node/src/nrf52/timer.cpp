@@ -1,8 +1,8 @@
-#include "system.hpp"
-#include "util.hpp"
+#include "../timer.hpp"
+#include "global.hpp"
 
 
-namespace system {
+namespace timer {
 
 SystemTime systemTime;
 
@@ -12,7 +12,7 @@ struct Timer {
 	std::function<void ()> onTimeout;
 };
 
-Timer timers[SYSTEM_TIMER_COUNT];
+Timer timers[TIMER_COUNT];
 SystemTime next;
 
 void init() {
@@ -78,12 +78,18 @@ SystemTime getTime() {
 	return systemTime;
 }
 
-void setTimer(int index, SystemTime time, std::function<void ()> onTimeout) {
-	if (uint32_t(index) < uint32_t(SYSTEM_TIMER_COUNT)) {
+void setHandler(int index, std::function<void ()> onTimeout) {
+	if (uint32_t(index) < uint32_t(TIMER_COUNT)) {
+		Timer &timer = timers[index];
+		timer.onTimeout = onTimeout;
+	}
+}
+
+void start(int index, SystemTime time) {
+	if (uint32_t(index) < uint32_t(TIMER_COUNT)) {
 		Timer &timer = timers[index];
 		timer.active = true;
 		timer.time = time;
-		timer.onTimeout = onTimeout;
 		
 		// check if this timer is the next to elapse
 		if (time < next) {
@@ -98,9 +104,9 @@ void setTimer(int index, SystemTime time, std::function<void ()> onTimeout) {
 	}	
 }
 
-void stopTimer(int index) {
-	if (uint32_t(index) < uint32_t(SYSTEM_TIMER_COUNT))
+void stop(int index) {
+	if (uint32_t(index) < uint32_t(TIMER_COUNT))
 		timers[index].active = false;
 }
 
-} // namespace system
+} // namespace timer

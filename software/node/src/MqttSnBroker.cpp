@@ -5,6 +5,8 @@ constexpr int8_t min(int8_t x, int8_t y) {return x < y ? x : y;}
 
 
 MqttSnBroker::MqttSnBroker() {
+	timer::setHandler(TIMER_INDEX, [this]() {onDownTimeout();});
+
 	// init clients
 	for (int i = 0; i < MAX_CLIENT_COUNT; ++i) {
 		ClientInfo &client = this->clients[i];
@@ -636,7 +638,7 @@ void MqttSnBroker::onDownSent() {
 	}
 }
 
-void MqttSnBroker::onSystemTimeout2(SystemTime time) {
+void MqttSnBroker::onDownTimeout() {
 	if (this->sendMessagesTail < this->sendMessagesCurrent) {
 		// resend a message that was not acknowledged or mark as pending
 		if (!(this->resendPending = isDownSendBusy()))
@@ -913,7 +915,7 @@ void MqttSnBroker::sendCurrentMessage() {
 	data[1] = flags;
 
 	// set sent time
-	SystemTime now = getSystemTime();
+	auto now = timer::getTime();
 	info.sentTime = now;
 
 	if (current == this->sendMessagesTail) {
@@ -923,11 +925,11 @@ void MqttSnBroker::sendCurrentMessage() {
 				this->sendMessagesTail = current + 1;
 
 			// set timer for idle ping to keep the connection alive
-			setSystemTimeout2(now + KEEP_ALIVE_INTERVAL);
+			timer::start(TIMER_INDEX, now + KEEP_ALIVE_INTERVAL);
 		} else {
 			// start retransmission timeout
 			if (this->sendMessagesClientIndex == 0)
-				setSystemTimeout2(now + RETRANSMISSION_INTERVAL);
+				timer::start(TIMER_INDEX, now + RETRANSMISSION_INTERVAL);
 		}
 	}
 
@@ -985,7 +987,7 @@ void MqttSnBroker::resend() {
 	data[1] = flags;
 
 	// start timeout, either for retransmission or idle ping
-	setSystemTimeout2(getSystemTime() + RETRANSMISSION_INTERVAL);
+	timer::start(TIMER_INDEX, timer::getTime() + RETRANSMISSION_INTERVAL);
 }
 
 void MqttSnBroker::removeSentMessage(uint16_t msgId, uint16_t clientIndex) {
@@ -1029,23 +1031,23 @@ void MqttSnBroker::removeSentMessage(uint16_t msgId, uint16_t clientIndex) {
 	}
 	this->sendMessagesTail = tail;
 
-	SystemTime systemTime = getSystemTime();
+	auto now = timer::getTime();
 	if (tail < this->sendMessagesCurrent) {
 		// get next message
 		MessageInfo &info = this->sendMessages[tail];
 		
 		// check if we have to resend it immediately
-		if (systemTime >= info.sentTime + RETRANSMISSION_INTERVAL) {
+		if (now >= info.sentTime + RETRANSMISSION_INTERVAL) {
 			// resend a message that was not acknowledged or mark as pending
 			if (!(this->resendPending = isDownSendBusy()))
 				resend();
 		} else {
 			// wait until next message has to be resent
-			setSystemTimeout1(info.sentTime + RETRANSMISSION_INTERVAL);
+			timer::start(TIMER_INDEX, info.sentTime + RETRANSMISSION_INTERVAL);
 		}
 	} else {
 		// set timer for idle ping to keep the connection alive
-		setSystemTimeout1(systemTime + KEEP_ALIVE_INTERVAL);
+		timer::start(TIMER_INDEX, now + KEEP_ALIVE_INTERVAL);
 	}
 }
 

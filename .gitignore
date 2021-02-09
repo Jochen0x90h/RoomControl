@@ -4,6 +4,7 @@ cmake-build*/
 *.bin
 *.elf
 generated.*.ld
+__pycache__/
 
 # CLion
 .idea/

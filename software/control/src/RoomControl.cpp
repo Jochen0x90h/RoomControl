@@ -1,5 +1,7 @@
 //#include <iostream>
 #include "RoomControl.hpp"
+#include <calendar.hpp>
+#include <spi.hpp>
 
 // font
 #include "tahoma_8pt.hpp"
@@ -186,6 +188,10 @@ ValueInfo valueInfos[] = {
 RoomControl::RoomControl()
 	: storage(0, FLASH_PAGE_COUNT, room, devices, routes, timers)
 {
+	timer::setHandler(TIMER_INDEX, [this]() {onTimeout();});
+	calendar::setSecondTick([this]() {onSecondElapsed();});
+	poti::setHandler([this](int delta, bool activated) {onPotiChanged(delta, activated);});
+
 	if (this->room.size() == 0) {
 		assign(this->temp.room.name, "room");
 		this->room.write(0, &this->temp.room);
@@ -195,10 +201,10 @@ RoomControl::RoomControl()
 	subscribeAll();
 	
 	// start device update
-	SystemTime time = getSystemTime();
-	this->lastUpdateTime = time;
-	this->nextReportTime = time;
-	onSystemTimeout3(time);
+	auto now = timer::getTime();
+	this->lastUpdateTime = now;
+	this->nextReportTime = now;
+	onTimeout();
 }
 
 RoomControl::~RoomControl() {
@@ -291,9 +297,9 @@ void RoomControl::onPublished(uint16_t topicId, uint8_t const *data, int length,
 	}
 	
 	// update devices and set next timeout
-	SystemTime time = getSystemTime();
-	SystemTime nextTimeout = updateDevices(time, 0, nullptr, topicId, message);
-	setSystemTimeout3(nextTimeout);
+	auto now = timer::getTime();
+	auto nextTimeout = updateDevices(now, 0, nullptr, topicId, message);
+	timer::start(TIMER_INDEX, nextTimeout);
 }
 
 
@@ -336,9 +342,9 @@ void RoomControl::onBusReady() {
 
 void RoomControl::onBusReceived(uint8_t endpointId, uint8_t const *data, int length) {
 	// update devices and set next timeout
-	SystemTime time = getSystemTime();
-	SystemTime nextTimeout = updateDevices(time, endpointId, data, 0, String());
-	setSystemTimeout3(nextTimeout);
+	auto now = timer::getTime();
+	auto nextTimeout = updateDevices(now, endpointId, data, 0, String());
+	timer::start(TIMER_INDEX, nextTimeout);
 }
 
 void RoomControl::onBusSent() {
@@ -349,11 +355,12 @@ void RoomControl::onBusSent() {
 // SystemTimer
 // -----------
 		
-void RoomControl::onSystemTimeout3(SystemTime time) {
+void RoomControl::onTimeout() {
+	auto now = timer::getTime();
 	//std::cout << "time: " << time.value << std::endl;
-	SystemTime nextTimeout = updateDevices(time, 0, nullptr, 0, String());
+	SystemTime nextTimeout = updateDevices(now, 0, nullptr, 0, String());
 	//std::cout << "next: " << nextTimeout.value << std::endl;
-	setSystemTimeout3(nextTimeout);
+	timer::start(TIMER_INDEX, nextTimeout);
 }
 
 
@@ -370,7 +377,9 @@ void RoomControl::onDisplayReady() {
 
 void RoomControl::onPotiChanged(int delta, bool activated) {
 	updateMenu(delta, activated);
-	setDisplay(this->bitmap);
+	//setDisplay(this->bitmap);
+	spi::writeDisplay(this->bitmap.data, 0, array::size(this->bitmap.data),
+		[this]() {onDisplayReady();});
 }
 
 
@@ -394,7 +403,7 @@ void RoomControl::updateMenu(int delta, bool activated) {
 	this->bitmap.clear();
 
 	// toast
-	if (!this->buffer.empty() && getSystemTime() - this->toastTime < 3s) {
+	if (!this->buffer.empty() && timer::getTime() - this->toastTime < 3s) {
 		String text = this->buffer;
 		int y = 10;
 		int len = tahoma_8pt.calcWidth(text, 1);
@@ -407,13 +416,13 @@ void RoomControl::updateMenu(int delta, bool activated) {
 	case IDLE:
 		{
 			// get current clock time
-			ClockTime time = getClockTime();
+			auto now = calendar::getTime();
 						
 			// display weekday and clock time
-			StringBuffer<16> b = weekdays[time.getWeekday()] + "  "
-				+ dec(time.getHours()) + ':'
-				+ dec(time.getMinutes(), 2) + ':'
-				+ dec(time.getSeconds(), 2);
+			StringBuffer<16> b = weekdays[now.getWeekday()] + "  "
+				+ dec(now.getHours()) + ':'
+				+ dec(now.getMinutes(), 2) + ':'
+				+ dec(now.getSeconds(), 2);
 			bitmap.drawText(20, 10, tahoma_8pt, b, 1);
 /*
 			// update target temperature
@@ -1407,7 +1416,7 @@ int RoomControl::Room::getFlashSize() const {
 			break;
 		}
 	}
-	return offsetof(Room, name[length]);
+	return getOffset(Room, name[length]);
 }
 
 int RoomControl::Room::getRamSize() const {
@@ -2407,10 +2416,12 @@ void RoomControl::CommandEditor::next() {
 
 void RoomControl::onSecondElapsed() {
 	updateMenu(0, false);
-	setDisplay(this->bitmap);
+	//setDisplay(this->bitmap);
+	spi::writeDisplay(this->bitmap.data, 0, array::size(this->bitmap.data),
+		[this]() {onDisplayReady();});
 
 	// check for timer event
-	ClockTime now = getClockTime();
+	auto now = calendar::getTime();
 	if (now.getSeconds() == 0) {
 		int minutes = now.getMinutes();
 		int hours = now.getHours();

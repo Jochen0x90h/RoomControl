@@ -1,5 +1,7 @@
 #pragma once
 
+#include "String.hpp"
+
 
 /**
  * Alphabetically sorted set of strings
@@ -45,14 +47,15 @@ struct StringSet {
 			return false;
 		this->length = length;
 
-		// move elements
+		// move elements behind insert position to mace space for new element
 		for (int i = length - 1; i > index; --i) {
 			this->elements[i] = this->elements[i - 1];
 		}
 		
-		// set new element
+		// add new element
 		this->elements[index] = {uint16_t(this->dataLength), uint16_t(element.length)};
-		memcpy(this->data + this->dataLength, element.data, element.length);
+		char *data = this->data + this->dataLength;
+		array::copy(data, data + element.length, element.data);
 		this->dataLength += element.length;
 
 		return result;

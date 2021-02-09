@@ -1,5 +1,5 @@
 PROJECT_NAME     := FunctionTest
-TARGETS          := potiTest spiTest
+TARGETS          := potiTest
 OUTPUT_DIRECTORY := build
 TEMPLATE_PATH    := ../../../node/src/nrf52/system
 #VERBOSE          := 1
@@ -11,13 +11,11 @@ INC_FOLDERS += ../../src ../../../node/src .
 # Source files common to all targets
 SRC_FILES += $(TEMPLATE_PATH)/gcc_startup_nrf52840.S
 SRC_FILES += $(TEMPLATE_PATH)/system_nrf52840.c
-SRC_FILES += ../../../node/src/nrf52/system.cpp
-SRC_FILES += ../../../node/src/nrf52/clock.cpp
+SRC_FILES += ../../../node/src/nrf52/timer.cpp
+SRC_FILES += ../../../node/src/nrf52/calendar.cpp
 SRC_FILES += ../../../node/src/nrf52/debug.cpp
 
 # Target specific source files
-SRC_FILES_spiTest += ../spiTest.cpp
-SRC_FILES_spiTest += ../../src/nrf52/spi.cpp
 SRC_FILES_potiTest += ../potiTest.cpp
 SRC_FILES_potiTest += ../../src/nrf52/poti.cpp
 
@@ -40,10 +38,6 @@ CFLAGS += -fno-builtin -fshort-enums
 CFLAGS += -D__HEAP_SIZE=8192
 CFLAGS += -D__STACK_SIZE=8192
 CFLAGS += -Wall
-
-# Target specific C flags
-CFLAGS_spiTest += -DHAVE_SPI
-CFLAGS_spiTest += -DHAVE_LEDS
 
 # C++ flags (C++ also uses CFLAGS)
 CXXFLAGS += -Wno-literal-suffix
@@ -69,14 +63,12 @@ LDFLAGS += --specs=nano.specs # use newlib in nano version
 .PHONY: default help
 
 # Default target - first one defined
-default: potiTest spiTest
+default: $(TARGETS)
 
 # Print all targets that can be built
 help:
 	@echo following targets are available:
-	@echo potiTest
-	@echo spiTest
-
+	@echo $(TARGETS)
 
 include $(TEMPLATE_PATH)/Makefile.common
 

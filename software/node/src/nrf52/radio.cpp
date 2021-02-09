@@ -1,5 +1,5 @@
-#include "radio.hpp"
-#include "util.hpp"
+#include "../radio.hpp"
+#include "global.hpp"
 
 
 namespace radio {

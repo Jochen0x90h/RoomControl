@@ -4,7 +4,7 @@
 #include <functional>
 
 
-namespace clock {
+namespace calendar {
 
 /**
  * Initialze the clock
@@ -17,7 +17,7 @@ void init();
 void handle();
 
 /**
- * Get current wall clock time
+ * Get current wall clock time including weekday
  * @return clock time
  */
 ClockTime getTime();
@@ -28,4 +28,4 @@ ClockTime getTime();
  */
 void setSecondTick(std::function<void ()> onElapsed);
 
-} // namespace system
+} // namespace calendar

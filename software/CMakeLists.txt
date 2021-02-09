@@ -63,14 +63,22 @@ source_group(util FILES ${UTIL})
 
 # base code for nodes (control and gateway)
 set(NODE
+	node/src/emu/calendar.cpp
+	node/src/calendar.hpp
 	node/src/ClockTime.hpp
+	node/src/emu/flash.cpp
 	node/src/flash.hpp
-	node/src/SystemTime.hpp
+	node/src/emu/spi.cpp
+	node/src/spi.hpp
+	node/src/emu/timer.cpp
+	node/src/timer.hpp
 	node/src/MqttSnClient.cpp
 	node/src/MqttSnClient.hpp
 	node/src/MqttSnBroker.cpp
 	node/src/MqttSnBroker.hpp
-	node/src/emu/flash.cpp
+	node/src/SystemTime.hpp
+	node/src/emu/global.cpp
+	node/src/emu/global.hpp
 )
 source_group(node FILES ${NODE})
 
@@ -81,6 +89,8 @@ set(CONTROL
 	control/src/Font.hpp
 	control/src/RoomControl.cpp
 	control/src/RoomControl.hpp
+	control/src/emu/poti.cpp
+	control/src/poti.hpp
 	control/src/Storage.cpp
 	control/src/Storage.hpp
 	control/src/tahoma_8pt.cpp
@@ -88,22 +98,20 @@ set(CONTROL
 	control/src/emu/main.cpp
 	control/src/emu/assert.hpp
 	control/src/emu/config.hpp
-	control/src/emu/global.cpp
-	control/src/emu/global.hpp
+	#control/src/emu/global.cpp
+	#control/src/emu/global.hpp
 	control/src/emu/BusDevices.cpp
 	control/src/emu/BusDevices.hpp
-	control/src/emu/Clock.cpp
-	control/src/emu/Clock.hpp
-	control/src/emu/Display.cpp
-	control/src/emu/Display.hpp
+	#control/src/emu/Clock.cpp
+	#control/src/emu/Clock.hpp
+	#control/src/emu/Display.cpp
+	#control/src/emu/Display.hpp
 	control/src/emu/Gui.cpp
 	control/src/emu/Gui.hpp
 	control/src/emu/Network.cpp
 	control/src/emu/Network.hpp
-	control/src/emu/Poti.cpp
-	control/src/emu/Poti.hpp
-	control/src/emu/SystemTimer.cpp
-	control/src/emu/SystemTimer.hpp
+	#control/src/emu/SystemTimer.cpp
+	#control/src/emu/SystemTimer.hpp
 )
 source_group(control FILES ${CONTROL})
 
@@ -141,24 +149,20 @@ install(TARGETS emulator
 
 
 # broker test (command line tool)
-add_executable(brokerTest
-	node/test/brokerTest.cpp
-	${NODE}
-	control/src/emu/Network.cpp
-	control/src/emu/Network.hpp
-	control/src/emu/SystemTimer.cpp
-	control/src/emu/SystemTimer.hpp
-	control/src/emu/global.cpp
-	control/src/emu/global.hpp
-)
-include_directories(brokerTest
-	control/src/emu
-	control/src
-	node/src
-	util/src
-	glad
-)
-conan_target_link_libraries(brokerTest)
+#add_executable(brokerTest
+#	node/test/brokerTest.cpp
+#	${NODE}
+#	control/src/emu/Network.cpp
+#	control/src/emu/Network.hpp
+#)
+#include_directories(brokerTest
+#	control/src/emu
+#	control/src
+#	node/src
+#	util/src
+#	glad
+#)
+#conan_target_link_libraries(brokerTest)
 
 
 

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "global.hpp"
+#include <emu/global.hpp>
 #include "Array.hpp"
 #include "Device.hpp"
 #include "Gui.hpp"

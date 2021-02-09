@@ -1,5 +1,4 @@
-#include <system.hpp>
-#include <clock.hpp>
+#include <timer.hpp>
 #include <poti.hpp>
 #include <debug.hpp>
 
@@ -7,22 +6,20 @@
 bool blink = false;
 
 int main(void) {
-	system::init();
+	timer::init();
 	poti::init();
 	debug::init();	
 	
-	poti::setPotiHandler([](int d) {
+	poti::setHandler([](int d, bool activated) {
 		debug::setRedLed(d & 1);
 		debug::setGreenLed(d & 2);
 		debug::setBlueLed(d & 4);
+		if (activated)
+			debug::setGreenLed(blink = !blink);		
 	});	
-	
-	poti::setButtonHandler([]() {
-		debug::setGreenLed(blink = !blink);		
-	});
-		
+			
 	while (true) {
-		system::handle();
+		timer::handle();
 		poti::handle();
 	}
 }

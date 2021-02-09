@@ -1,6 +1,8 @@
 #include "Gui.hpp"
 #include "StringBuffer.hpp"
 #include "tahoma_8pt.hpp"
+#include <Bitmap.hpp>
+#include <config.hpp>
 #include <vector>
 #include <stdexcept>
 #include <cmath>
@@ -46,6 +48,7 @@ GLuint createShader(GLenum type, char const *code)
 	return shader;
 }
 
+
 template <int W, int H>
 void convert(uint8_t *buffer, Bitmap<W, H> const &bitmap) {
 	uint8_t const foreground = 255;
@@ -64,6 +67,7 @@ void convert(uint8_t *buffer, Bitmap<W, H> const &bitmap) {
 		}
 	}
 }
+
 
 // Gui::Render
 
@@ -242,7 +246,7 @@ Gui::Gui() {
 		"void main() {\n"
 			"pixel = texture(tex, xy).xxxw;\n"
 		"}\n");
-	this->displayTexture = createTexture(Display::WIDTH, Display::HEIGHT);
+	this->displayTexture = createTexture(DISPLAY_WIDTH, DISPLAY_HEIGHT);
 	
 	// poti
 	this->potiRender = new Render("#version 330\n"
@@ -403,18 +407,18 @@ void Gui::newLine() {
 	this->y += this->maxHeight + MARGIN;
 }
 
-void Gui::display(Bitmap<Display::WIDTH, Display::HEIGHT> const &bitmap) {
+void Gui::display(uint8_t const *displayBuffer) {
 	float const w = 0.4f;
 	float const h = 0.2f;
 
 	// convert bitmap to 8 bit display buffer
-	convert(this->displayBuffer, bitmap);
+	//convert(this->displayBuffer, bitmap);
 
 	// set state
 	this->displayRender->setState(this->x, this->y, w, h);
 	glBindTexture(GL_TEXTURE_2D, this->displayTexture);
-	glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, Display::WIDTH, Display::HEIGHT, GL_RED, GL_UNSIGNED_BYTE,
-		this->displayBuffer);
+	glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT, GL_RED, GL_UNSIGNED_BYTE,
+		displayBuffer);
 
 	// draw and reset state
 	this->displayRender->drawAndResetState();
@@ -573,13 +577,14 @@ int Gui::temperatureSensor(int id) {
 	bitmap.drawText(2, 0, tahoma_8pt, buffer);
 
 	// convert bitmap to 8 bit display buffer
-	convert(this->displayBuffer, bitmap);
+	uint8_t displayBuffer[TEMPERATURE_BITMAP_WIDTH * 16];
+	convert(displayBuffer, bitmap);
 
 	// set state
 	this->displayRender->setState(this->x + w*0.15f, this->y + h*0.35f, w*0.7f, h*0.3f);
 	glBindTexture(GL_TEXTURE_2D, this->temperatureTexture);
 	glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, TEMPERATURE_BITMAP_WIDTH, tahoma_8pt.height, GL_RED, GL_UNSIGNED_BYTE,
-		this->displayBuffer);
+		displayBuffer);
 
 	// draw and reset state
 	this->displayRender->drawAndResetState();

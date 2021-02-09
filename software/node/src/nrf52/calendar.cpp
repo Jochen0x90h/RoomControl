@@ -1,7 +1,9 @@
-#include "clock.hpp"
-#include "util.hpp"
+#include "../calendar.hpp"
+#include "global.hpp"
 
-namespace clock {
+namespace calendar {
+
+inline void nop() {}
 
 std::function<void ()> onSecondElapsed = nop;
 uint8_t seconds = 0;
@@ -24,28 +26,28 @@ void handle() {
 		NRF_RTC0->CC[1] = (NRF_RTC0->COUNTER + 16384 + 256) & ~16383;
 		
 		// increment clock time
-		if (++seconds == 60) {
-			seconds = 0;
-			if (++minutes == 60) {
-				minutes = 0;
-				if (++hours == 24) {
-					hours = 0;
-					if (++weekday == 7)
-						weekday = 0;
+		if (++calendar::seconds == 60) {
+			calendar::seconds = 0;
+			if (++calendar::minutes == 60) {
+				calendar::minutes = 0;
+				if (++calendar::hours == 24) {
+					calendar::hours = 0;
+					if (++calendar::weekday == 7)
+						calendar::weekday = 0;
 				}
 			}
 		}
 	
-		onSecondElapsed();
+		calendar::onSecondElapsed();
 	}
 }
 
 ClockTime getTime() {
-	return ClockTime(weekday, hours, minutes, seconds);
+	return ClockTime(calendar::weekday, calendar::hours, calendar::minutes, calendar::seconds);
 }
 
 void setSecondTick(std::function<void ()> onElapsed) {
-	onSecondElapsed = onElapsed;
+	calendar::onSecondElapsed = onElapsed;
 }
 
-} // namespace system
+} // namespace calendar

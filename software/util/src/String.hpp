@@ -2,6 +2,7 @@
 
 #include "util.hpp"
 #include "defines.hpp"
+#include <limits>
 #include <iostream>
 
 
@@ -47,13 +48,9 @@ struct String {
 		: data(), length(0)
 	{}
 
-	String(String &str)
-		: data(str.data), length(str.length)
-	{}
+	String(String &str) = default;
 
-	String(String const &str)
-		: data(str.data), length(str.length)
-	{}
+	String(String const &str) = default;
 
 	template<typename T>
 	constexpr String(T &str)
@@ -107,7 +104,7 @@ struct String {
 	 * @param defaultValue value to return when the character is not found
 	 * @return index of first occurrence of the character
 	 */
-	int lastIndexOf(char ch, int startIndex = INT_MAX, int defaultValue = -1) {
+	int lastIndexOf(char ch, int startIndex = std::numeric_limits<int>::max(), int defaultValue = -1) {
 		int i = min(startIndex, this->length);
 		while (i > 0) {
 			--i;
@@ -144,8 +141,8 @@ inline bool operator !=(String a, String b) {return !operator ==(a, b);}
 inline bool operator <(String a, String b) {
 	int length = min(a.length, b.length);
 	for (int i = 0; i < length; ++i) {
-		unsigned char c = a.data[i];
-		unsigned char d = b.data[i];
+		auto c = (unsigned char)a.data[i];
+		auto d = (unsigned char)b.data[i];
 		if (c < d)
 			return true;
 		if (c > d)

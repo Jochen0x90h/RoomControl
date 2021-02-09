@@ -1,11 +1,14 @@
-#include "poti.hpp"
-#include <nrf52/util.hpp>
+#include "../poti.hpp"
+#include <timer.hpp>
+#include <nrf52/global.hpp>
 
 
 namespace poti {
 
-std::function<void (int)> onPotiChanged;
-std::function<void ()> onButtonActivated;
+std::function<void (int, bool)> onChanged;
+int acc = 0;
+bool buttonState = false;
+uint32_t counter;
 
 void init() {
 	configureInputWithPullUp(POTI_A_PIN);
@@ -20,6 +23,9 @@ void init() {
 	NRF_QDEC->PSEL.A = POTI_A_PIN;
 	NRF_QDEC->PSEL.B = POTI_B_PIN;
 	NRF_QDEC->DBFEN = N(QDEC_DBFEN_DBFEN, Enabled); // enable debounce filter
+
+	// gpio event
+	NRF_GPIOTE->INTENSET = N(GPIOTE_INTENSET_IN0, Enabled) | N(GPIOTE_INTENSET_IN1, Enabled);
 }
 
 void handle() {
@@ -28,18 +34,41 @@ void handle() {
 		NRF_QDEC->EVENTS_REPORTRDY = 0;
 		clearInterrupt(QDEC_IRQn);
 
-		onPotiChanged(NRF_QDEC->ACCREAD);
+		poti::acc += NRF_QDEC->ACCREAD;
+		int poti = poti::acc & ~3;
+		if (poti != 0) {
+			poti::acc -= poti;
+			poti::onChanged(poti >> 2, false);
+		}
+	}
+	if (NRF_GPIOTE->EVENTS_IN[0]) {
+		// clear pending interrupt flags at peripheral and NVIC
+		NRF_GPIOTE->EVENTS_IN[0] = 0;
+		clearInterrupt(GPIOTE_IRQn);
+		
+		// debounce filter
+		bool b = !getInput(BUTTON_PIN);
+		uint32_t c = timer::getTime().value;		
+		bool activated = !poti::buttonState;
+		if (activated) {
+			if (c - poti::counter > 100)
+				poti::onChanged(0, true);		
+		}
+		poti::buttonState = b;
+		poti::counter = c;
 	}
 }
 
-void setPotiHandler(std::function<void (int)> onChanged) {
-	onPotiChanged = onChanged;
-	NRF_QDEC->ENABLE = N(QDEC_ENABLE_ENABLE, Enabled); // enable quadrature decoder
-	NRF_QDEC->TASKS_START = Trigger;
-}
+void setHandler(std::function<void (int, bool)> onChanged) {
+	poti::onChanged = onChanged;
 
-void setButtonHandler(std::function<void ()> onActivated) {
-	
+	// quadrature decoder
+	NRF_QDEC->ENABLE = N(QDEC_ENABLE_ENABLE, Enabled);
+	NRF_QDEC->TASKS_START = Trigger;
+
+	// button
+	NRF_GPIOTE->CONFIG[0] = N(GPIOTE_CONFIG_MODE, Event) | N(GPIOTE_CONFIG_POLARITY, Toggle)
+		| (BUTTON_PIN << GPIOTE_CONFIG_PSEL_Pos);
 }
 
 } // namespace poti
