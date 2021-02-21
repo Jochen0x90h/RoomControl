@@ -405,6 +405,7 @@ void Gui::next(float w, float h) {
 void Gui::newLine() {
 	this->x = MARGIN;
 	this->y += this->maxHeight + MARGIN;
+	this->maxHeight = 0;
 }
 
 void Gui::display(uint8_t const *displayBuffer) {
@@ -567,12 +568,14 @@ int Gui::temperatureSensor(int id) {
 		this->potiRender->drawAndResetState();
 	}
 	
-	// temperature display	
-	Bitmap<TEMPERATURE_BITMAP_WIDTH, 16> bitmap;
-	bitmap.clear();
+	// get temperature from widget in 1/10 °C
 	int temperature = ((widget->value >> 14) & 0x1ff);
 	bool changed = temperature != widget->lastValue;
 	widget->lastValue = temperature;
+
+	// temperature bitmap
+	Bitmap<TEMPERATURE_BITMAP_WIDTH, 16> bitmap;
+	bitmap.clear();
 	StringBuffer<8> buffer = dec(temperature / 10) + '.' + dec(temperature % 10) + " oC";
 	bitmap.drawText(2, 0, tahoma_8pt, buffer);
 

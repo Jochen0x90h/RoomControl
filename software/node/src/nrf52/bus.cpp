@@ -5,8 +5,6 @@
 
 namespace bus {
 
-void nop(uint8_t const *, int) {}
-
 enum State {
 	BREAK,
 	SYNC,
@@ -16,21 +14,23 @@ enum State {
 State volatile state;
 
 // transmit buffer
-uint8_t const * volatile txData;
+uint8_t const *volatile txData;
 int volatile txLength;
 int volatile txIndex;
 
 // receive buffer
-uint8_t rxData[10];
+uint8_t *volatile rxData;
+int volatile rxLength;
+//uint8_t rxData[10];
 int volatile rxIndex;
 bool rxReady;
-std::function<void (uint8_t const *, int)> onRx = bus::nop;
+std::function<void (int)> onRx = [](int) {};
 
 // request buffer
-uint8_t requestData[10];
+uint8_t requestData[1];
 int volatile requestIndex;
 bool requestReady;
-std::function<void (uint8_t const *, int)> onRequest = bus::nop;
+std::function<void (uint8_t)> onRequest = [](uint8_t) {};
 
 
 extern "C" {
@@ -81,7 +81,7 @@ void UARTE0_UART0_IRQHandler(void) {
 			int rxIndex = bus::rxIndex;
 			bus::rxData[rxIndex] = NRF_UART0->RXD;
 			bus::rxIndex = rxIndex + 1;
-			if (rxIndex == array::size(bus::rxData)) {
+			if (bus::rxIndex == bus::rxLength) {
 				// indicate that rx buffer is ready
 				bus::rxReady = true;
 
@@ -182,17 +182,17 @@ void init() {
 void handle() {
 	if (rxReady) {
 		rxReady = false;
-		bus::onRx(bus::rxData, bus::rxIndex);
+		bus::onRx(bus::rxIndex);
 		setOutput(21, true);
 	}
 	if (requestReady) {
 		requestReady = false;
-		bus::onRequest(bus::requestData, bus::requestIndex);
+		bus::onRequest(bus::requestData[0]);//, bus::requestIndex);
 		bus::requestIndex = 0;
 	}
 }
 
-void transferBus(uint8_t const *txData, int txLength, std::function<void (uint8_t const *, int)> onRx) {	
+void transfer(uint8_t const *txData, int txLength, uint8_t *rxData, int rxLength, std::function<void (int)> onRx) {
 	// reset timer
 	NRF_TIMER1->TASKS_STOP = Trigger;
 	NRF_TIMER1->TASKS_CLEAR = Trigger;
@@ -212,6 +212,8 @@ void transferBus(uint8_t const *txData, int txLength, std::function<void (uint8_
 	bus::txIndex = 0;
 
 	// receive buffer
+	bus::rxData = rxData;
+	bus::rxLength = rxLength;
 	bus::rxIndex = 0;
 	bus::rxReady = false;
 	bus::onRx = onRx;
@@ -224,7 +226,7 @@ void transferBus(uint8_t const *txData, int txLength, std::function<void (uint8_
 	bus::state = BREAK;
 }
 
-void setRequestHandler(std::function<void (uint8_t const *, int)> onRequest) {
+void setRequestHandler(std::function<void (uint8_t)> onRequest) {
 	bus::onRequest = onRequest;
 }
 

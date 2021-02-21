@@ -4,6 +4,8 @@
 
 namespace radio {
 
+std::function<void (uint8_t const *, int)> onReceived = [](uint8_t const *, int) {};
+
 void init() {
 	// set modulation mode
 	NRF_RADIO->MODE = N(RADIO_MODE_MODE, Ieee802154_250Kbit);
@@ -31,10 +33,13 @@ void setRadioChannel(int channel) {
 	NRF_RADIO->FREQUENCY = V(RADIO_FREQUENCY_FREQUENCY, 2405 + 5 * (channel - 11) - 2400);
 }
 
-void sendRadio(uint8_t const* data, int length, std::function<void ()> onSent) {
+bool send(uint8_t const* data, int length, std::function<void ()> onSent) {
+
+	return true;
 }
 
-void receiveRadio(uint8_t* data, int length, std::function<void ()> onReceived) {
+void setReceiveHandler(std::function<void (uint8_t const *, int)> onReceived) {
+	radio::onReceived = onReceived;
 }
 
 } // namespace radio

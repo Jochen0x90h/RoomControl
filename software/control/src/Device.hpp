@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstdint>
+
 
 /**
  * Device id type

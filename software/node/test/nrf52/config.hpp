@@ -47,8 +47,8 @@ constexpr int BUS_TX_PIN = PORT0 | 3;
 constexpr int BUS_RX_PIN = PORT0 | 2;
 
 
-// debug led's
-// -----------
+// debug
+// -----
 
 constexpr int LED_RED_PIN = PORT0 | 23;
 constexpr int LED_GREEN_PIN = PORT0 | 22;

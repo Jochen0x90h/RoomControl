@@ -10,6 +10,8 @@ struct Timer {
 	bool active;
 	SystemTime time;
 	std::function<void ()> onTimeout;
+	
+	Timer() : onTimeout([]() {}) {}
 };
 
 Timer timers[TIMER_COUNT];

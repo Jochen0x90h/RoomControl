@@ -7,7 +7,7 @@
 namespace radio {
 
 /**
- * Initialze the system
+ * Initialze the radio
  */
 void init();
 
@@ -19,10 +19,21 @@ void handle();
 /**
  * Set radio channel
  */
-void setRadioChannel(int channel);
+void setChannel(int channel);
 
-void sendRadio(uint8_t const* data, int length, std::function<void ()> onSent);
+/**
+ * Send data over radio when no other carrier was detected
+ * @param data data to send
+ * @param length data length
+ * @param onSent called when finished sending
+ * @return true on success, false if busy with previous send
+ */
+bool send(uint8_t const *data, int length, std::function<void ()> onSent);
 
-void receiveRadio(uint8_t* data, int length, std::function<void ()> onReceived);
+/**
+ * Set handler that gets called when data was received
+ * @param onReceived called when data was received
+ */
+void setReceiveHandler(std::function<void (uint8_t const *, int)> onReceived);
 
 } // namespace radio

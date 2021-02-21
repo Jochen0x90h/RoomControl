@@ -17,8 +17,4 @@ namespace global {
 
 	// remote endpoint of uplink
 	extern asio::ip::udp::endpoint upLink;
-
-	// emulator user interface
-	extern Gui *gui;
-
 };

@@ -1,22 +1,22 @@
 #pragma once
 
+#include "LocalInterface.hpp"
+#include "BusInterface.hpp"
 #include <Bitmap.hpp>
 #include <StringBuffer.hpp>
 #include <StringSet.hpp>
 #include <TopicBuffer.hpp>
-#include <BusDevices.hpp>
 #include <MqttSnBroker.hpp>
+#include <SSD1309.hpp>
 #include <Storage.hpp>
-#include "Device.hpp"
 #include <calendar.hpp>
-//#include <Display.hpp>
 #include <poti.hpp>
 
 
 /**
  * Main room control class that inherits platform dependent (hardware or emulator) components
  */
-class RoomControl : public MqttSnBroker, public BusDevices {
+class RoomControl : public MqttSnBroker {
 public:
 	static constexpr int TIMER_INDEX = 2;
 
@@ -58,16 +58,6 @@ public:
 	void onPublished(uint16_t topicId, uint8_t const *data, int length, int8_t qos, bool retain) override;
 	
 
-// Bus
-// ---
-
-	void onBusReady() override;
-
-	void onBusReceived(uint8_t endpointId, uint8_t const *data, int length) override;
-
-	void onBusSent() override;
-
-	
 // SystemTimer
 // -----------
 		
@@ -81,6 +71,9 @@ public:
 
 	// display bitmap
 	Bitmap<DISPLAY_WIDTH, DISPLAY_HEIGHT> bitmap;
+	
+	// display controller
+	SSD1309 display;
 	
 
 // Poti
@@ -97,14 +90,19 @@ public:
 		IDLE,
 		MAIN,
 		
-		// local devices connected by lin bus
+		// local devices
+		LOCAL_DEVICES,
+		EDIT_LOCAL_DEVICE,
+		ADD_LOCAL_DEVICE,
+		EDIT_LOCAL_COMPONENT,
+		ADD_LOCAL_COMPONENT,
+
+		// devices connected by bus
 		BUS_DEVICES,
 		EDIT_BUS_DEVICE,
 		ADD_BUS_DEVICE,
-		
-		// device component
-		EDIT_COMPONENT,
-		ADD_COMPONENT,
+		EDIT_BUS_COMPONENT,
+		ADD_BUS_COMPONENT,
 		
 		// connections
 		ROUTES,
@@ -245,6 +243,8 @@ public:
 
 	Storage::Array<Room, RoomState> room;
 	using RoomElement = Storage::Element<Room, RoomState>;
+
+
 
 
 // Devices
@@ -515,24 +515,41 @@ public:
 	};
 	
 	// subscribe one device to mqtt topics
-	void subscribeDevice(int index);
+	void subscribeDevice(Storage::Element<Device, DeviceState> e);
 
-	// update devices, handle time, endpoint events and topic events
+	// update all devices, handle time, endpoint events and topic events
 	SystemTime updateDevices(SystemTime time, uint8_t endpointId, uint8_t const *data,
 		uint16_t topicId, String message);
+
+	// update devices for one interface
+	SystemTime updateDevices(SystemTime time, SystemDuration duration, bool reportChanging,
+		Interface &interface, Storage::Array<Device, DeviceState> &devices, uint8_t endpointId, uint8_t const *data,
+		uint16_t topicId, String message, SystemTime nextTimeout);
 
 	// check compatibility between device endpoint and device element
 	static bool isCompatible(EndpointType endpointType, Device::Component::Type type);
 
+	// list devices menu
+	void listDevices(Storage::Array<Device, DeviceState> &devices, MenuState editDevice, MenuState addDevice);
+
+	// edit device menu
+	void editDevice(Interface &interface, Storage::Array<Device, DeviceState> &devices, bool add,
+		MenuState editComponent, MenuState addComponent);
+
+	// edit device component menu
+	void editComponent(int delta, Interface &interface, bool add);
+
 	// clone device and its state (subscribe command topics)
-	void clone(Device &dstDevice, DeviceState &dstDeviceState, Device const &srcDevice, DeviceState const &srcDeviceState);
+	void clone(Device &dstDevice, DeviceState &dstDeviceState,
+		Device const &srcDevice, DeviceState const &srcDeviceState);
 
 	// destroy device (unsubscribe command topics)
 	void destroy(Device const &device, DeviceState &deviceState);
 
 
-	Storage::Array<Device, DeviceState> devices;
-	using DeviceElement = Storage::Element<Device, DeviceState>;
+	Storage::Array<Device, DeviceState> localDevices;
+	Storage::Array<Device, DeviceState> busDevices;
+	//using DeviceElement = Storage::Element<Device, DeviceState>;
 
 	// next time for reporting changing values
 	SystemTime nextReportTime;
@@ -598,6 +615,34 @@ public:
 		uint32_t *state;
 		uint32_t *statesEnd;
 	};
+
+
+// Interface
+// ---------
+
+	void subscribeInterface(Interface &interface, Storage::Array<Device, DeviceState> &devices);
+
+
+// LocalInterface
+// --------------
+
+	// interface to locally connected devices
+	LocalInterface localInterface;
+
+
+// BusInterface
+// ------------
+
+	// called when bus interface has finished enumerating the devices
+	void onBusReady();
+
+	// called when a device connected to the bus has sent data
+	void onBusReceived(uint8_t endpointId, uint8_t const *data, int length);
+
+	//void onBusSent() override;
+
+	// interface to devices connected via bus
+	BusInterface busInterface;
 
 
 // Routes

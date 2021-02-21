@@ -42,6 +42,9 @@ constexpr EndpointInfo endpointInfos[] = {
 	{EndpointType::LIGHT, "Light", 0},
 	{EndpointType::BLIND, "Blind", 2},
 	{EndpointType::TEMPERATURE_SENSOR, "Temperature Sensor", 0},
+	{EndpointType::AIR_PRESSURE_SENSOR, "Air Pressure Sensor", 0},
+	{EndpointType::AIR_HUMIDITY_SENSOR, "Air Humidity Sensor", 0},
+	{EndpointType::AIR_VOC_SENSOR, "Air VOC Sensor", 0},
 };
 
 EndpointInfo const *findEndpointInfo(EndpointType type) {
@@ -186,7 +189,9 @@ ValueInfo valueInfos[] = {
 // -----------
 
 RoomControl::RoomControl()
-	: storage(0, FLASH_PAGE_COUNT, room, devices, routes, timers)
+	: storage(0, FLASH_PAGE_COUNT, room, localDevices, busDevices, routes, timers)
+	, display([this]() {onDisplayReady();})
+	, busInterface([this]() {onBusReady();})
 {
 	timer::setHandler(TIMER_INDEX, [this]() {onTimeout();});
 	calendar::setSecondTick([this]() {onSecondElapsed();});
@@ -197,7 +202,11 @@ RoomControl::RoomControl()
 		this->room.write(0, &this->temp.room);
 	}
 	
-	// subscribe to mqtt broker (has to be repeated when connection to gateway is established)
+	// subscribe to local devices
+	subscribeInterface(this->localInterface, this->localDevices);
+
+	// subscribe to mqtt broker (has to be repeated when connection to gateway is established because the broker does
+	// not store the topic names)
 	subscribeAll();
 	
 	// start device update
@@ -280,8 +289,12 @@ void RoomControl::onPublished(uint16_t topicId, uint8_t const *data, int length,
 	if (topicId == roomState.roomTopicId && message.empty()) {
 		// publish device names
 		// todo: do async
-		for (int i = 0; i < this->devices.size(); ++i) {
-			auto e = this->devices[i];
+		for (int i = 0; i < this->localDevices.size(); ++i) {
+			auto e = this->localDevices[i];
+			publish(roomState.roomTopicId, e.flash->getName(), QOS);
+		}
+		for (int i = 0; i < this->busDevices.size(); ++i) {
+			auto e = this->busDevices[i];
 			publish(roomState.roomTopicId, e.flash->getName(), QOS);
 		}
 		return;
@@ -303,41 +316,16 @@ void RoomControl::onPublished(uint16_t topicId, uint8_t const *data, int length,
 }
 
 
-// Bus
-// ---
+
+// BusDevices
+// ----------
 
 void RoomControl::onBusReady() {
-	for (DeviceId deviceId : getBusDevices()) {
-		// check if the device is registered
-		for (auto e : this->devices) {
-			Device const &device = *e.flash;
-			DeviceState &deviceState = *e.ram;
-		
-			if (device.deviceId == deviceId) {
-				// found device, now subscribe to endpoints
-				Array<EndpointType> endpoints = getBusDeviceEndpoints(deviceId);
-				
-				ComponentIterator it(device, deviceState);
-				while (!it.atEnd()) {
-					auto &component = it.getComponent();
-					auto &state = it.getState();
-
-					int endpointIndex = component.endpointIndex;
-					if (endpointIndex < endpoints.length) {
-						// check endpoint type compatibility
-						if (isCompatible(endpoints[endpointIndex], component.type)) {
-							// subscribe
-							subscribeBus(state.endpointId, deviceId, endpointIndex);
-						}
-					}
-					
-					// next element
-					it.next();
-				}
-				break;
-			}
-		}
-	}
+	subscribeInterface(this->busInterface, this->busDevices);
+	
+	this->busInterface.setReceiveHandler([this](uint8_t endpointId, uint8_t const *data, int length) {
+		onBusReceived(endpointId, data, length);
+	});
 }
 
 void RoomControl::onBusReceived(uint8_t endpointId, uint8_t const *data, int length) {
@@ -347,9 +335,8 @@ void RoomControl::onBusReceived(uint8_t endpointId, uint8_t const *data, int len
 	timer::start(TIMER_INDEX, nextTimeout);
 }
 
-void RoomControl::onBusSent() {
-
-}
+//void RoomControl::onBusSent() {
+//}
 
 	
 // SystemTimer
@@ -368,7 +355,8 @@ void RoomControl::onTimeout() {
 // -------
 
 void RoomControl::onDisplayReady() {
-
+	if (!this->display.isEnabled())
+		this->display.enable();
 }
 
 
@@ -377,9 +365,9 @@ void RoomControl::onDisplayReady() {
 
 void RoomControl::onPotiChanged(int delta, bool activated) {
 	updateMenu(delta, activated);
-	//setDisplay(this->bitmap);
-	spi::writeDisplay(this->bitmap.data, 0, array::size(this->bitmap.data),
-		[this]() {onDisplayReady();});
+	if (this->display.getSendCount() == 0) {
+		display.set(this->bitmap);
+	}
 }
 
 
@@ -447,6 +435,8 @@ void RoomControl::updateMenu(int delta, bool activated) {
 	case MAIN:
 		menu(delta, activated);
 
+		if (entry("Local Devices"))
+			push(LOCAL_DEVICES);
 		if (entry("Bus Devices"))
 			push(BUS_DEVICES);
 		if (entry("Routes"))
@@ -457,312 +447,38 @@ void RoomControl::updateMenu(int delta, bool activated) {
 			this->menuState = IDLE;
 		}
 		break;
+	
+	case LOCAL_DEVICES:
+		menu(delta, activated);
+		listDevices(this->localDevices, EDIT_LOCAL_DEVICE, ADD_LOCAL_DEVICE);
+		break;
+	case EDIT_LOCAL_DEVICE:
+	case ADD_LOCAL_DEVICE:
+		menu(delta, activated);
+		editDevice(this->localInterface, this->localDevices, this->menuState == ADD_LOCAL_DEVICE,
+			EDIT_LOCAL_COMPONENT, ADD_LOCAL_COMPONENT);
+		break;
+	case EDIT_LOCAL_COMPONENT:
+	case ADD_LOCAL_COMPONENT:
+		menu(delta, activated);
+		editComponent(delta, this->localInterface, this->menuState == ADD_LOCAL_COMPONENT);
+		break;
+	
 	case BUS_DEVICES:
 		menu(delta, activated);
-		
-		// list devices
-		for (auto e : this->devices) {
-			auto &device = *e.flash;
-			
-			StringBuffer<24> b = device.getName();
-			if (entry(b)) {
-				// edit device
-				clone(this->temp.device, this->tempState.device, device, *e.ram);
-				push(EDIT_BUS_DEVICE);
-			}
-		}
-
-		// add device
-
-		if (entry("Exit"))
-			pop();
+		listDevices(this->busDevices, EDIT_BUS_DEVICE, ADD_BUS_DEVICE);
 		break;
 	case EDIT_BUS_DEVICE:
 	case ADD_BUS_DEVICE:
 		menu(delta, activated);
-		{
-			Device &device = this->temp.device;
-			DeviceState &deviceState = this->tempState.device;
-
-			// device name
-			//todo: edit name
-			label(device.getName());
-
-			// device endpoints
-			Array<EndpointType> endpoints = getBusDeviceEndpoints(device.deviceId);
-			ComponentIterator it(device, deviceState);
-			for (int endpointIndex = 0; endpointIndex < endpoints.length; ++endpointIndex) {
-				line();
-				
-				// endpoint type
-				auto endpointType = endpoints[endpointIndex];
-				StringBuffer<24> b;
-				auto endpointInfo = findEndpointInfo(endpointType);
-				if (endpointInfo != nullptr)
-					b += endpointInfo->name;
-				else
-					b += '?';
-				label(b);
-				
-				// device components that are associated with the current device endpoint
-				while (!it.atEnd() && it.getComponent().endpointIndex == endpointIndex) {
-					auto &component = it.getComponent();
-					ComponentInfo const &componentInfo = componentInfos[component.type];
-
-					// menu entry for component
-					b = component.getName() + ": " + componentInfo.name;
-					if (entry(b)) {
-						// set index
-						this->tempIndex = it.componentIndex;
-
-						// copy component
-						auto dst = reinterpret_cast<uint32_t *>(&this->temp2.component);
-						auto src = reinterpret_cast<uint32_t const *>(&component);
-						array::copy(dst, dst + componentInfo.component.size, src);
-						
-						push(EDIT_COMPONENT);
-					}
-					
-					it.next();
-				}
-				
-				// add device component
-				if (device.componentCount < Device::MAX_COMPONENT_COUNT) {
-					if (entry("Add Component")) {
-						// set index
-						this->tempIndex = it.componentIndex;
-
-						// select first valid type
-						auto &component = this->temp2.component;
-						component.init(endpointType);
-						component.endpointIndex = endpointIndex;
-						component.nameIndex = device.getNameIndex(component.type, -1);
-
-						// set default duration
-						if (component.is<Device::TimeComponent>())
-							this->temp2.timeComponent.duration = 1s;
-
-						push(ADD_COMPONENT);
-					}
-				}
-			}
-			line();
-
-			// save, delete, cancel
-			if (entry("Save Device")) {
-				int index = getThisIndex();
-				
-				// unsubscribe old command topics
-				if (index < this->devices.size()) {
-					auto e = this->devices[index];
-					destroy(*e.flash, *e.ram);
-				}
-				this->devices.write(index, &device, &deviceState);
-				pop();
-			}
-			if (this->menuState == EDIT_BUS_DEVICE) {
-				if (entry("Delete Device")) {
-					int index = getThisIndex();
-
-					// unsubscribe new command topics
-					destroy(device, deviceState);
-
-					// unsubscribe old command topics
-					auto e = this->devices[index];
-					destroy(*e.flash, *e.ram);
-					
-					this->routes.erase(getThisIndex());
-					pop();
-				}
-			}
-			if (entry("Cancel")) {
-				// unsubscribe new command topics
-				destroy(device, deviceState);
-				pop();
-			}
-		}
+		editDevice(this->busInterface, this->busDevices, this->menuState == ADD_BUS_DEVICE,
+			EDIT_BUS_COMPONENT, ADD_BUS_COMPONENT);
 		break;
 		
-	case EDIT_COMPONENT:
-	case ADD_COMPONENT:
+	case EDIT_BUS_COMPONENT:
+	case ADD_BUS_COMPONENT:
 		menu(delta, activated);
-		{
-			uint8_t editBegin[5];
-			uint8_t editEnd[5];
-			Device const &device = this->temp.device;
-			Device::Component &component = this->temp2.component;
-			
-			// get endpoint type
-			auto endpointType = getBusDeviceEndpoints(device.deviceId)[component.endpointIndex];
-			auto endpointInfo = findEndpointInfo(endpointType);
-			
-			// edit component type
-			int edit = getEdit(1);
-			if (edit > 0 && delta != 0) {
-				component.rotateType(endpointType, delta);
-				component.nameIndex = device.getNameIndex(component.type, this->tempIndex);
-
-				// set default values
-				if (component.is<Device::TimeComponent>())
-					this->temp2.timeComponent.duration = 1s;
-			}
-			ComponentInfo const &componentInfo = componentInfos[component.type];
-			
-			// menu entry for component type
-			editBegin[1] = 0;
-			StringBuffer<24> b = componentInfo.name;
-			editEnd[1] = b.length();
-			entry(b, edit > 0, editBegin[1], editEnd[1]);
-
-			// name
-			b = "Name: " + component.getName();
-			label(b);
-		
-			// element index
-			int step = componentInfo.elementIndexStep;
-			if (step != 0 && endpointInfo != nullptr && endpointInfo->elementCount >= 2) {
-				// edit element index
-				int edit = getEdit(1);
-				if (edit > 0) {
-					int elementCount = endpointInfo->elementCount;
-					component.elementIndex = (component.elementIndex + delta * step + elementCount) % elementCount;
-				}
-
-				// menu entry for element index
-				b = "Index: ";
-				editBegin[1] = b.length();
-				b += dec(component.elementIndex);
-				editEnd[1] = b.length();
-				entry(b, edit > 0, editBegin[1], editEnd[1]);
-			}
-		
-			// duration
-			if (component.is<Device::TimeComponent>()) {
-				SystemDuration duration = this->temp2.timeComponent.duration;
-								
-				// decompose duration
-				int tenths = duration % 1s / 100ms;
-				int seconds = int(duration / 1s) % 60;
-				int minutes = int(duration / 1min) % 60;
-				int hours = duration / 1h;
-				
-				// edit duration
-				int edit = getEdit(hours == 0 ? 4 : 3);
-				if (edit > 0) {
-					if (delta != 0) {
-						if (edit == 1) {
-							hours = (hours + delta + 512) & 511;
-							tenths = 0;
-						}
-						if (edit == 2)
-							minutes = (minutes + delta + 60) % 60;
-						if (edit == 3)
-							seconds = (seconds + delta + 60) % 60;
-						if (edit == 4) {
-							tenths = (tenths + delta + 10) % 10;
-						}
-						this->temp2.timeComponent.duration = ((hours * 60 + minutes) * 60 + seconds) * 1s + tenths * 100ms;
-					}
-				}/* else if (duration < 100ms) {
-					// enforce minimum duration
-					this->temp2.timeComponent.duration = 100ms;
-				}*/
-
-				// menu entry for duration
-				b = "Duration: ";
-				editBegin[1] = b.length();
-				b += dec(hours);
-				editEnd[1] = b.length();
-				b += ':';
-				editBegin[2] = b.length();
-				b += dec(minutes, 2);
-				editEnd[2] = b.length();
-				b += ':';
-				editBegin[3] = b.length();
-				b += dec(seconds, 2);
-				editEnd[3] = b.length();
-				if (hours == 0) {
-					b += '.';
-					editBegin[4] = b.length();
-					b += dec(tenths);
-					editEnd[4] = b.length();
-				}
-				entry(b, edit > 0, editBegin[edit], editEnd[edit]);
-			}
-		
-			// save, delete, cancel
-			if (entry("Save Component")) {
-				// seek to component
-				ComponentEditor editor(this->temp.device, this->tempState.device, this->tempIndex);
-				auto &state = editor.getState();
-				TopicBuffer topic = getRoomName() / device.getName();
-
-				// set type or insert component
-				if (this->menuState == EDIT_COMPONENT) {
-					auto &oldComponent = editor.getComponent();
-
-					// unregister old status topic
-					unregisterTopic(state.statusTopicId);
-					
-					// unsubscribe from old command topic
-					if (state.is<DeviceState::CommandComponent>(oldComponent)) {
-						auto &oldCommandState = state.cast<DeviceState::CommandComponent>();
-						StringBuffer<8> b = oldComponent.getName();
-						topic /= b;
-						unsubscribeTopic(oldCommandState.commandTopicId, topic.command());
-						topic.removeLast();
-					}
-										
-					// change component
-					editor.changeType(component.type);
-				} else {
-					// add component
-					editor.insert(component.type);
-					++this->temp.device.componentCount;
-				
-					// subscribe to endpoint
-					subscribeBus(state.endpointId, device.deviceId, component.endpointIndex);
-				}
-
-				// copy component
-				auto &newComponent = editor.getComponent();
-				auto dst = reinterpret_cast<uint32_t *>(&newComponent);
-				auto src = reinterpret_cast<uint32_t const *>(&component);
-				array::copy(dst, dst + componentInfo.component.size, src);
-
-				// register new state topic
-				StringBuffer<8> b = component.getName();
-				topic /= b;
-				registerTopic(state.statusTopicId, topic.state());
-
-				// subscribe new command topic
-				if (state.is<DeviceState::CommandComponent>(component)) {
-					auto &commandState = state.cast<DeviceState::CommandComponent>();
-					subscribeTopic(commandState.commandTopicId, topic.command(), QOS);
-				}
-
-				pop();
-			}
-			if (this->menuState == EDIT_COMPONENT) {
-				if (entry("Delete Component")) {
-					ComponentEditor editor(this->temp.device, this->tempState.device, this->tempIndex);
-					auto &state = editor.getState();
-					TopicBuffer topic = getRoomName() / device.getName();
-
-					// unsubscribe old command topic
-					if (state.is<DeviceState::CommandComponent>(component)) {
-						auto &commandState = state.cast<DeviceState::CommandComponent>();
-						unsubscribeTopic(commandState.commandTopicId, topic.command());
-					}
-
-					editor.erase();
-					pop();
-				}
-			}
-			if (entry("Cancel")) {
-				pop();
-			}
-		}
+		editComponent(delta, this->busInterface, this->menuState == ADD_BUS_COMPONENT);
 		break;
 
 	case ROUTES:
@@ -1265,6 +981,7 @@ void RoomControl::updateMenu(int delta, bool activated) {
 
 
 
+
 // Menu System
 // -----------
 
@@ -1441,8 +1158,11 @@ void RoomControl::subscribeAll() {
 
 
 	// register/subscribe device topics
-	for (int i = 0; i < this->devices.size(); ++i) {
-		subscribeDevice(i);
+	for (int i = 0; i < this->localDevices.size(); ++i) {
+		subscribeDevice(this->localDevices[i]);
+	}
+	for (int i = 0; i < this->busDevices.size(); ++i) {
+		subscribeDevice(this->busDevices[i]);
 	}
 
 	// register routes
@@ -1567,8 +1287,7 @@ bool RoomControl::DeviceState::Component::checkClass(Device::Component::Type typ
 	return (componentInfos[type].state.classFlags & classFlags) == classFlags;
 }
 
-void RoomControl::subscribeDevice(int index) {
-	auto e = this->devices[index];
+void RoomControl::subscribeDevice(Storage::Element<Device, DeviceState> e) {
 	Device const &device = *e.flash;
 	DeviceState &deviceState = *e.ram;
 
@@ -1604,6 +1323,11 @@ void RoomControl::subscribeDevice(int index) {
 SystemTime RoomControl::updateDevices(SystemTime time, uint8_t endpointId, uint8_t const *data,
 	uint16_t topicId, String message)
 {
+	// get duration since last update
+	SystemDuration duration = time - this->lastUpdateTime;
+	this->lastUpdateTime = time;
+
+	// flag that indicates if changing values (e.g. moving blind) should be reported
 	bool reportChanging = time >= this->nextReportTime;
 	if (reportChanging) {
 		// publish changing values in a regular interval
@@ -1611,15 +1335,23 @@ SystemTime RoomControl::updateDevices(SystemTime time, uint8_t endpointId, uint8
 		//std::cout << "report" << std::endl;
 	}
 
-	// get duration since last update
-	SystemDuration duration = time - this->lastUpdateTime;
-	this->lastUpdateTime = time;
-
 	// next timeout, may be decreased by a device that needs earlier timeout
 	SystemTime nextTimeout = this->nextReportTime;
 
+	nextTimeout = updateDevices(time, duration, reportChanging, this->localInterface, this->localDevices, endpointId,
+		data, topicId, message, nextTimeout);
+	nextTimeout = updateDevices(time, duration, reportChanging, this->busInterface, this->busDevices, endpointId,
+		data, topicId, message, nextTimeout);
+
+	return nextTimeout;
+}
+
+SystemTime RoomControl::updateDevices(SystemTime time, SystemDuration duration, bool reportChanging,
+	Interface &interface, Storage::Array<Device, DeviceState> &devices, uint8_t endpointId, uint8_t const *data,
+	uint16_t topicId, String message, SystemTime nextTimeout)
+{
 	// iterate over bus devices
-	for (auto e : this->devices) {
+	for (auto e : devices) {
 		Device const &device = *e.flash;
 		DeviceState &deviceState = *e.ram;
 		
@@ -2008,7 +1740,8 @@ SystemTime RoomControl::updateDevices(SystemTime time, uint8_t endpointId, uint8
 			it.next();
 			if (it.atEnd() || it.getComponent().endpointIndex != endpointIndex) {
 				if (outValid) {
-					busSend(endpointId, outData, 1);
+					//busSend(endpointId, outData, 1);
+					interface.send(endpointId, outData, 1);
 					outValid = false;
 				}
 				outData[0] = 0;
@@ -2016,15 +1749,14 @@ SystemTime RoomControl::updateDevices(SystemTime time, uint8_t endpointId, uint8
 			}
 		}
 	}
-	
 	return nextTimeout;
 }
 
 bool RoomControl::isCompatible(EndpointType endpointType, Device::Component::Type type) {
 	bool binary = type == Device::Component::BUTTON || type == Device::Component::SWITCH;
-	bool timeBinary = type == Device::Component::HOLD_BUTTON || Device::Component::DELAY_BUTTON;
+	bool timedBinary = type == Device::Component::HOLD_BUTTON || type == Device::Component::DELAY_BUTTON;
 	bool ternary = type == Device::Component::ROCKER;
-	bool timeTernary = type == Device::Component::HOLD_ROCKER;
+	bool timedTernary = type == Device::Component::HOLD_ROCKER;
 	bool relay = type == Device::Component::RELAY || type == Device::Component::TIME_RELAY;
 	
 	switch (endpointType) {
@@ -2032,10 +1764,10 @@ bool RoomControl::isCompatible(EndpointType endpointType, Device::Component::Typ
 	case EndpointType::BUTTON:
 	case EndpointType::SWITCH:
 		// buttons and switchs
-		return binary || timeBinary;
+		return binary || timedBinary;
 	case EndpointType::ROCKER:
 		// buttons, switches and rockers
-		return binary || timeBinary || ternary || timeTernary;
+		return binary || timedBinary || ternary || timedTernary;
 	case EndpointType::RELAY:
 	case EndpointType::LIGHT:
 		// one relay with binary sensors for the relay state
@@ -2048,6 +1780,308 @@ bool RoomControl::isCompatible(EndpointType endpointType, Device::Component::Typ
 		return type == Device::Component::CELSIUS || type == Device::Component::FAHRENHEIT;
 	}
 	return false;
+}
+
+void RoomControl::listDevices(Storage::Array<Device, DeviceState> &devices, MenuState editDevice, MenuState addDevice) {
+	// list devices
+	for (auto e : devices) {
+		auto &device = *e.flash;
+		
+		StringBuffer<24> b = device.getName();
+		if (entry(b)) {
+			// edit device
+			clone(this->temp.device, this->tempState.device, device, *e.ram);
+			push(editDevice);
+		}
+	}
+
+	// add device
+
+	if (entry("Exit"))
+		pop();
+}
+
+void RoomControl::editDevice(Interface &interface, Storage::Array<Device, DeviceState> &devices, bool add,
+	MenuState editComponent, MenuState addComponent)
+{
+	Device &device = this->temp.device;
+	DeviceState &deviceState = this->tempState.device;
+
+	// device name
+	//todo: edit name
+	label(device.getName());
+
+	// device endpoints
+	Array<EndpointType> endpoints = interface.getEndpoints(device.deviceId);
+	ComponentIterator it(device, deviceState);
+	for (int endpointIndex = 0; endpointIndex < endpoints.length; ++endpointIndex) {
+		line();
+		
+		// endpoint type
+		auto endpointType = endpoints[endpointIndex];
+		StringBuffer<24> b;
+		auto endpointInfo = findEndpointInfo(endpointType);
+		if (endpointInfo != nullptr)
+			b += endpointInfo->name;
+		else
+			b += '?';
+		label(b);
+		
+		// device components that are associated with the current device endpoint
+		while (!it.atEnd() && it.getComponent().endpointIndex == endpointIndex) {
+			auto &component = it.getComponent();
+			ComponentInfo const &componentInfo = componentInfos[component.type];
+
+			// menu entry for component
+			b = component.getName() + ": " + componentInfo.name;
+			if (entry(b)) {
+				// set index
+				this->tempIndex = it.componentIndex;
+
+				// copy component
+				auto dst = reinterpret_cast<uint32_t *>(&this->temp2.component);
+				auto src = reinterpret_cast<uint32_t const *>(&component);
+				array::copy(dst, dst + componentInfo.component.size, src);
+				
+				push(editComponent);
+			}
+			
+			it.next();
+		}
+		
+		// add device component
+		if (device.componentCount < Device::MAX_COMPONENT_COUNT) {
+			if (entry("Add Component")) {
+				// set index
+				this->tempIndex = it.componentIndex;
+
+				// select first valid type
+				auto &component = this->temp2.component;
+				component.init(endpointType);
+				component.endpointIndex = endpointIndex;
+				component.nameIndex = device.getNameIndex(component.type, -1);
+
+				// set default duration
+				if (component.is<Device::TimeComponent>())
+					this->temp2.timeComponent.duration = 1s;
+
+				push(addComponent);
+			}
+		}
+	}
+	line();
+
+	// save, delete, cancel
+	if (entry("Save Device")) {
+		int index = getThisIndex();
+		
+		// unsubscribe old command topics
+		if (index < devices.size()) {
+			auto e = devices[index];
+			destroy(*e.flash, *e.ram);
+		}
+		devices.write(index, &device, &deviceState);
+		pop();
+	}
+	if (!add) {
+		if (entry("Delete Device")) {
+			int index = getThisIndex();
+
+			// unsubscribe new command topics
+			destroy(device, deviceState);
+
+			// unsubscribe old command topics
+			auto e = devices[index];
+			destroy(*e.flash, *e.ram);
+			
+			this->routes.erase(getThisIndex());
+			pop();
+		}
+	}
+	if (entry("Cancel")) {
+		// unsubscribe new command topics
+		destroy(device, deviceState);
+		pop();
+	}
+}
+
+void RoomControl::editComponent(int delta, Interface &interface, bool add) {
+	uint8_t editBegin[5];
+	uint8_t editEnd[5];
+	Device const &device = this->temp.device;
+	Device::Component &component = this->temp2.component;
+	
+	// get endpoint type
+	auto endpointType = interface.getEndpoints(device.deviceId)[component.endpointIndex];
+	auto endpointInfo = findEndpointInfo(endpointType);
+	
+	// edit component type
+	int edit = getEdit(1);
+	if (edit > 0 && delta != 0) {
+		component.rotateType(endpointType, delta);
+		component.nameIndex = device.getNameIndex(component.type, this->tempIndex);
+
+		// set default values
+		if (component.is<Device::TimeComponent>())
+			this->temp2.timeComponent.duration = 1s;
+	}
+	ComponentInfo const &componentInfo = componentInfos[component.type];
+	
+	// menu entry for component type
+	editBegin[1] = 0;
+	StringBuffer<24> b = componentInfo.name;
+	editEnd[1] = b.length();
+	entry(b, edit > 0, editBegin[1], editEnd[1]);
+
+	// name
+	b = "Name: " + component.getName();
+	label(b);
+
+	// element index
+	int step = componentInfo.elementIndexStep;
+	if (step != 0 && endpointInfo != nullptr && endpointInfo->elementCount >= 2) {
+		// edit element index
+		int edit = getEdit(1);
+		if (edit > 0) {
+			int elementCount = endpointInfo->elementCount;
+			component.elementIndex = (component.elementIndex + delta * step + elementCount) % elementCount;
+		}
+
+		// menu entry for element index
+		b = "Index: ";
+		editBegin[1] = b.length();
+		b += dec(component.elementIndex);
+		editEnd[1] = b.length();
+		entry(b, edit > 0, editBegin[1], editEnd[1]);
+	}
+
+	// duration
+	if (component.is<Device::TimeComponent>()) {
+		SystemDuration duration = this->temp2.timeComponent.duration;
+						
+		// decompose duration
+		int tenths = duration % 1s / 100ms;
+		int seconds = int(duration / 1s) % 60;
+		int minutes = int(duration / 1min) % 60;
+		int hours = duration / 1h;
+		
+		// edit duration
+		int edit = getEdit(hours == 0 ? 4 : 3);
+		if (edit > 0) {
+			if (delta != 0) {
+				if (edit == 1) {
+					hours = (hours + delta + 512) & 511;
+					tenths = 0;
+				}
+				if (edit == 2)
+					minutes = (minutes + delta + 60) % 60;
+				if (edit == 3)
+					seconds = (seconds + delta + 60) % 60;
+				if (edit == 4) {
+					tenths = (tenths + delta + 10) % 10;
+				}
+				this->temp2.timeComponent.duration = ((hours * 60 + minutes) * 60 + seconds) * 1s + tenths * 100ms;
+			}
+		}/* else if (duration < 100ms) {
+			// enforce minimum duration
+			this->temp2.timeComponent.duration = 100ms;
+		}*/
+
+		// menu entry for duration
+		b = "Duration: ";
+		editBegin[1] = b.length();
+		b += dec(hours);
+		editEnd[1] = b.length();
+		b += ':';
+		editBegin[2] = b.length();
+		b += dec(minutes, 2);
+		editEnd[2] = b.length();
+		b += ':';
+		editBegin[3] = b.length();
+		b += dec(seconds, 2);
+		editEnd[3] = b.length();
+		if (hours == 0) {
+			b += '.';
+			editBegin[4] = b.length();
+			b += dec(tenths);
+			editEnd[4] = b.length();
+		}
+		entry(b, edit > 0, editBegin[edit], editEnd[edit]);
+	}
+
+	// save, delete, cancel
+	if (entry("Save Component")) {
+		// seek to component
+		ComponentEditor editor(this->temp.device, this->tempState.device, this->tempIndex);
+		auto &state = editor.getState();
+		TopicBuffer topic = getRoomName() / device.getName();
+
+		// set type or insert component
+		if (!add) {
+			// edit component
+			auto &oldComponent = editor.getComponent();
+
+			// unregister old status topic
+			unregisterTopic(state.statusTopicId);
+			
+			// unsubscribe from old command topic
+			if (state.is<DeviceState::CommandComponent>(oldComponent)) {
+				auto &oldCommandState = state.cast<DeviceState::CommandComponent>();
+				StringBuffer<8> b = oldComponent.getName();
+				topic /= b;
+				unsubscribeTopic(oldCommandState.commandTopicId, topic.command());
+				topic.removeLast();
+			}
+								
+			// change component
+			editor.changeType(component.type);
+		} else {
+			// add component
+			editor.insert(component.type);
+			++this->temp.device.componentCount;
+		
+			// subscribe to endpoint
+			interface.subscribe(state.endpointId, device.deviceId, component.endpointIndex);
+		}
+
+		// copy component
+		auto &newComponent = editor.getComponent();
+		auto dst = reinterpret_cast<uint32_t *>(&newComponent);
+		auto src = reinterpret_cast<uint32_t const *>(&component);
+		array::copy(dst, dst + componentInfo.component.size, src);
+
+		// register new state topic
+		StringBuffer<8> b = component.getName();
+		topic /= b;
+		registerTopic(state.statusTopicId, topic.state());
+
+		// subscribe new command topic
+		if (state.is<DeviceState::CommandComponent>(component)) {
+			auto &commandState = state.cast<DeviceState::CommandComponent>();
+			subscribeTopic(commandState.commandTopicId, topic.command(), QOS);
+		}
+
+		pop();
+	}
+	if (!add) {
+		if (entry("Delete Component")) {
+			ComponentEditor editor(this->temp.device, this->tempState.device, this->tempIndex);
+			auto &state = editor.getState();
+			TopicBuffer topic = getRoomName() / device.getName();
+
+			// unsubscribe old command topic
+			if (state.is<DeviceState::CommandComponent>(component)) {
+				auto &commandState = state.cast<DeviceState::CommandComponent>();
+				unsubscribeTopic(commandState.commandTopicId, topic.command());
+			}
+
+			editor.erase();
+			pop();
+		}
+	}
+	if (entry("Cancel")) {
+		pop();
+	}
 }
 
 void RoomControl::clone(Device &dstDevice, DeviceState &dstDeviceState,
@@ -2179,6 +2213,73 @@ void RoomControl::ComponentEditor::next() {
 	this->state += componentInfos[type].state.size;
 }
 */
+
+
+// Interface
+// ---------
+
+void RoomControl::subscribeInterface(Interface &interface, Storage::Array<Device, DeviceState> &devices) {
+	for (auto e : devices) {
+		Device const &device = *e.flash;
+		DeviceState &deviceState = *e.ram;
+	
+		// get list of endpoints (is empty if device not found)
+		Array<EndpointType> endpoints = interface.getEndpoints(device.deviceId);
+		
+		ComponentIterator it(device, deviceState);
+		while (!it.atEnd()) {
+			auto &component = it.getComponent();
+			auto &state = it.getState();
+
+			int endpointIndex = component.endpointIndex;
+			if (endpointIndex < endpoints.length) {
+				// check endpoint type compatibility
+				if (isCompatible(endpoints[endpointIndex], component.type)) {
+					// subscribe
+					interface.subscribe(state.endpointId, device.deviceId, endpointIndex);
+				}
+			}
+			
+			// next element
+			it.next();
+		}
+	}
+
+
+/*
+	for (DeviceId deviceId : interface.getDevices()) {
+		// check if the device is registered
+		for (auto e : devices) {
+			Device const &device = *e.flash;
+			DeviceState &deviceState = *e.ram;
+		
+			if (device.deviceId == deviceId) {
+				// found device, now subscribe to endpoints
+				Array<EndpointType> endpoints = interface.getEndpoints(deviceId);
+				
+				ComponentIterator it(device, deviceState);
+				while (!it.atEnd()) {
+					auto &component = it.getComponent();
+					auto &state = it.getState();
+
+					int endpointIndex = component.endpointIndex;
+					if (endpointIndex < endpoints.length) {
+						// check endpoint type compatibility
+						if (isCompatible(endpoints[endpointIndex], component.type)) {
+							// subscribe
+							interface.subscribe(state.endpointId, deviceId, endpointIndex);
+						}
+					}
+					
+					// next element
+					it.next();
+				}
+				break;
+			}
+		}
+	}
+*/
+}
 
 
 // Routes
@@ -2416,9 +2517,9 @@ void RoomControl::CommandEditor::next() {
 
 void RoomControl::onSecondElapsed() {
 	updateMenu(0, false);
-	//setDisplay(this->bitmap);
-	spi::writeDisplay(this->bitmap.data, 0, array::size(this->bitmap.data),
-		[this]() {onDisplayReady();});
+	if (this->display.getSendCount() == 0) {
+		display.set(this->bitmap);
+	}
 
 	// check for timer event
 	auto now = calendar::getTime();

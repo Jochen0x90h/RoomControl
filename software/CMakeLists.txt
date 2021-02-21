@@ -63,12 +63,12 @@ source_group(util FILES ${UTIL})
 
 # base code for nodes (control and gateway)
 set(NODE
+	node/src/bus.hpp
 	node/src/emu/calendar.cpp
 	node/src/calendar.hpp
 	node/src/ClockTime.hpp
 	node/src/emu/flash.cpp
 	node/src/flash.hpp
-	node/src/emu/spi.cpp
 	node/src/spi.hpp
 	node/src/emu/timer.cpp
 	node/src/timer.hpp
@@ -84,34 +84,38 @@ source_group(node FILES ${NODE})
 
 # room control software running on the nRF52840
 set(CONTROL
+	control/src/emu/main.cpp
+	control/src/emu/assert.hpp
+	control/src/BME680.cpp
+	control/src/BME680.hpp
+	control/src/BusInterface.cpp
+	control/src/BusInterface.hpp
+	control/src/emu/bus.cpp
+	control/src/emu/config.hpp
 	control/src/Device.hpp
+	control/src/emu/display.cpp
+	control/src/display.hpp
 	control/src/Font.cpp
 	control/src/Font.hpp
-	control/src/RoomControl.cpp
-	control/src/RoomControl.hpp
+	control/src/emu/Gui.cpp
+	control/src/emu/Gui.hpp
+	control/src/Interface.cpp
+	control/src/Interface.hpp
+	control/src/LocalInterface.cpp
+	control/src/LocalInterface.hpp
+	control/src/emu/Network.cpp
+	control/src/emu/Network.hpp
 	control/src/emu/poti.cpp
 	control/src/poti.hpp
+	control/src/RoomControl.cpp
+	control/src/RoomControl.hpp
+	control/src/emu/spi.cpp
+	control/src/SSD1309.cpp
+	control/src/SSD1309.hpp
 	control/src/Storage.cpp
 	control/src/Storage.hpp
 	control/src/tahoma_8pt.cpp
 	control/src/tahoma_8pt.hpp
-	control/src/emu/main.cpp
-	control/src/emu/assert.hpp
-	control/src/emu/config.hpp
-	#control/src/emu/global.cpp
-	#control/src/emu/global.hpp
-	control/src/emu/BusDevices.cpp
-	control/src/emu/BusDevices.hpp
-	#control/src/emu/Clock.cpp
-	#control/src/emu/Clock.hpp
-	#control/src/emu/Display.cpp
-	#control/src/emu/Display.hpp
-	control/src/emu/Gui.cpp
-	control/src/emu/Gui.hpp
-	control/src/emu/Network.cpp
-	control/src/emu/Network.hpp
-	#control/src/emu/SystemTimer.cpp
-	#control/src/emu/SystemTimer.hpp
 )
 source_group(control FILES ${CONTROL})
 

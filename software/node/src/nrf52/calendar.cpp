@@ -3,9 +3,7 @@
 
 namespace calendar {
 
-inline void nop() {}
-
-std::function<void ()> onSecondElapsed = nop;
+std::function<void ()> onSecondElapsed = []() {};
 uint8_t seconds = 0;
 uint8_t minutes = 0;
 uint8_t hours = 0;

@@ -3,6 +3,8 @@
 #include "Network.hpp"
 #include "timer.hpp"
 #include <String.hpp>
+#include <config.hpp>
+
 
 // MQTT-SN helper functions
 
@@ -104,7 +106,7 @@ inline void setUShort(uint8_t *buffer, uint16_t value) {
  */
 class MqttSnClient : public Network {
 public:
-	static constexpr int TIMER_INDEX = 0;
+	static constexpr int TIMER_INDEX = CLIENT_TIMER_INDEX;
 
 	// Port the MQTT-SN client binds to
 	//static constexpr int CLIENT_PORT = 47194;

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <assert.hpp>
 
 /**
  * Array, only references the data

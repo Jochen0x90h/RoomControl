@@ -1,18 +1,25 @@
-
+#include "RoomControl.hpp"
+#include "Gui.hpp"
+#include <flash.hpp>
+#include <spi.hpp>
+#include <display.hpp>
 #include <iostream>
 #include <fstream>
 #include <vector>
 #include <thread>
 #include <iterator>
 
-#include <flash.hpp>
-#include "RoomControl.hpp"
-
-#include "Gui.hpp"
 
 
+// emulator drivers
 namespace spi {
+	void doGui(Gui &gui, int &id);
+}
+namespace display {
 	void getDisplay(uint8_t *buffer);
+}
+namespace bus {
+  void doGui(Gui &gui, int &id);
 }
 
 
@@ -55,8 +62,16 @@ struct DeviceData {
 	Component components[10];
 };
 
-// matches to emulated devices in Bus.cpp
-constexpr DeviceData deviceData[] = {
+// configuration for local devices (air sensor, brightness sensor, motion detector)
+constexpr DeviceData localDeviceData[] = {
+	{0x00000001, "tempsensor", 1, {
+		{RoomControl::Device::Component::CELSIUS, 0, 0}
+	}}
+};
+
+
+// configuration for emulated devices in Bus.cpp
+constexpr DeviceData busDeviceData[] = {
 	{0x00000001, "switch1", 7, {
 		{RoomControl::Device::Component::ROCKER, 0, 0},
 		{RoomControl::Device::Component::BUTTON, 1, 0},
@@ -76,10 +91,41 @@ constexpr DeviceData deviceData[] = {
 		{RoomControl::Device::Component::SWITCH, 5, 0},
 		{RoomControl::Device::Component::SWITCH, 5, 1},
 		{RoomControl::Device::Component::RELAY, 6, 0},
-		{RoomControl::Device::Component::RELAY, 7, 0}}},
-{0x00000003, "tempsensor", 1, {
-		{RoomControl::Device::Component::CELSIUS, 0, 0}}},
+		{RoomControl::Device::Component::RELAY, 7, 0}
+	}},
+	{0x00000003, "tempsensor", 1, {
+		{RoomControl::Device::Component::CELSIUS, 0, 0}
+	}}
 };
+
+void setDevices(Array<DeviceData> deviceData, Storage::Array<RoomControl::Device, RoomControl::DeviceState> &devices) {
+	for (auto d : deviceData) {
+		RoomControl::Device device = {};
+		RoomControl::DeviceState deviceState = {};
+		device.deviceId = d.deviceId;
+		device.setName(d.name);
+		
+		// add components
+		for (int i = 0; i < d.componentCount; ++i) {
+			auto &componentData = d.components[i];
+			auto type = componentData.type;
+
+			RoomControl::ComponentEditor editor(device, deviceState, i);
+			auto &component = editor.insert(type);
+			++device.componentCount;
+			
+			component.endpointIndex = componentData.endpointIndex;
+			component.nameIndex = device.getNameIndex(type, i);
+			component.elementIndex = componentData.elementIndex;
+			
+			if (component.is<RoomControl::Device::TimeComponent>()) {
+				auto &timeComponent = component.cast<RoomControl::Device::TimeComponent>();
+				timeComponent.duration = componentData.duration;
+			}
+		}
+		devices.write(devices.size(), &device);
+	}
+}
 
 constexpr String routeData[][2] = {
 	{"room/switch1/rk0", "room/switch1/rl0"},
@@ -156,51 +202,19 @@ int main(int argc, const char **argv) {
 	asio::ip::address localhost = asio::ip::address::from_string("::1", ec);
 	global::local = asio::ip::udp::endpoint(asio::ip::udp::v6(), 1337);
 	global::upLink = asio::ip::udp::endpoint(localhost, 47193);
-	global::gui = &gui;
 
 	// init drivers
 	timer::init();
 	calendar::init();
+	spi::init();
+	display::init();
 
 	// the room control application
 	RoomControl roomControl;
 
-
-	void (RoomControl::*member)(uint8_t endpointId, uint8_t const *data, int length);
-	member = &RoomControl::busSend;
-	std::cout << sizeof(member) << std::endl;
-	//(*this.*member)(...);
-
-	std::function<void (uint8_t, uint8_t const *, int)> func = [&roomControl] (uint8_t endpointId, uint8_t const *data, int length) {roomControl.busSend(endpointId, data, length);};
-	std::cout << sizeof(func) << std::endl;
-
 	// add test data
-	for (auto d : deviceData) {
-		RoomControl::Device device = {};
-		RoomControl::DeviceState deviceState = {};
-		device.deviceId = d.deviceId;
-		device.setName(d.name);
-		
-		// add components
-		for (int i = 0; i < d.componentCount; ++i) {
-			auto &componentData = d.components[i];
-			auto type = componentData.type;
-
-			RoomControl::ComponentEditor editor(device, deviceState, i);
-			auto &component = editor.insert(type);
-			++device.componentCount;
-			
-			component.endpointIndex = componentData.endpointIndex;
-			component.nameIndex = device.getNameIndex(type, i);
-			component.elementIndex = componentData.elementIndex;
-			
-			if (component.is<RoomControl::Device::TimeComponent>()) {
-				auto &timeComponent = component.cast<RoomControl::Device::TimeComponent>();
-				timeComponent.duration = componentData.duration;
-			}
-		}
-		roomControl.devices.write(roomControl.devices.size(), &device);
-	}
+	setDevices(localDeviceData, roomControl.localDevices);
+	setDevices(busDeviceData, roomControl.busDevices);
 	for (auto r : routeData) {
 		RoomControl::Route route = {};
 		route.setSrcTopic(r[0]);
@@ -226,7 +240,7 @@ int main(int argc, const char **argv) {
 	}
 
 	// debug print devices
-	for (auto e : roomControl.devices) {
+	for (auto e : roomControl.busDevices) {
 		RoomControl::Device const &device = *e.flash;
 		RoomControl::DeviceState &deviceState = *e.ram;
 		std::cout << device.getName() << std::endl;
@@ -293,23 +307,25 @@ int main(int argc, const char **argv) {
 		{
 			int id = 0;
 		
-			// display
+			// user interface
 			{
+				// display
 				uint8_t displayBuffer[DISPLAY_WIDTH * DISPLAY_HEIGHT];
-				spi::getDisplay(displayBuffer);
+				display::getDisplay(displayBuffer);
 				gui.display(displayBuffer);
-			}
-		
-			// poti
-			auto poti = gui.poti(id++);
-			roomControl.onPotiChanged(poti.first, poti.second);
-			
-			// temperature sensor
-			//gui.temperatureSensor(id++);
 
-			gui.newLine();
+				// poti
+				auto poti = gui.poti(id++);
+				roomControl.onPotiChanged(poti.first, poti.second);
+
+				gui.newLine();
+			}
 						
-			roomControl.doGui(id);
+			// local devices
+			spi::doGui(gui, id);
+			
+			// bus devices
+			bus::doGui(gui, id);
 		}
 		
 		// swap render buffer to screen

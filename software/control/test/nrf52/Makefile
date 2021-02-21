@@ -1,5 +1,5 @@
 PROJECT_NAME     := FunctionTest
-TARGETS          := potiTest
+TARGETS          := potiTest displayTest bme680Test
 OUTPUT_DIRECTORY := build
 TEMPLATE_PATH    := ../../../node/src/nrf52/system
 #VERBOSE          := 1
@@ -18,6 +18,12 @@ SRC_FILES += ../../../node/src/nrf52/debug.cpp
 # Target specific source files
 SRC_FILES_potiTest += ../potiTest.cpp
 SRC_FILES_potiTest += ../../src/nrf52/poti.cpp
+SRC_FILES_displayTest += ../displayTest.cpp
+SRC_FILES_displayTest += ../../../node/src/nrf52/spi.cpp
+SRC_FILES_displayTest += ../../src/nrf52/display.cpp
+SRC_FILES_bme680Test += ../bme680Test.cpp
+SRC_FILES_bme680Test += ../../src/BME680.cpp
+SRC_FILES_bme680Test += ../../../node/src/nrf52/spi.cpp
 
 # Libraries
 LIB_FILES +=

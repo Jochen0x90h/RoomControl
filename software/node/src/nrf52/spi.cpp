@@ -1,34 +1,24 @@
 #include "../spi.hpp"
+#include "spi.hpp"
 #include <nrf52/global.hpp>
 
 
 namespace spi {
 
-struct SpiTask {
-	int csPin;
-	
-	intptr_t writeData;
-	int writeLength;
-	intptr_t readData;
-	int readLength;
-	
-	std::function<void ()> onTransferred;
-};
+Task tasks[SPI_TASK_COUNT];
+int taskHead = 0;
+int taskTail = 0;
+int taskCount = 0;
 
-SpiTask spiTasks[SPI_TASK_COUNT];
-int spiTaskHead = 0;
-int spiTaskTail = 0;
-int spiTaskCount = 0;
-
-static SpiTask &allocateSpiTask() {
-	SpiTask &task = spiTasks[spiTaskHead];
-	spiTaskHead = (spiTaskHead == SPI_TASK_COUNT - 1) ? 0 : spiTaskHead + 1;
-	++spiTaskCount;
+Task &allocateTask() {
+	Task &task = spi::tasks[spi::taskHead];
+	spi::taskHead = (spi::taskHead == SPI_TASK_COUNT - 1) ? 0 : spi::taskHead + 1;
+	++spi::taskCount;
 	return task;
 }
 
-static void transferSpi() {
-	SpiTask const &task = spiTasks[spiTaskTail];
+void transfer() {
+	Task const &task = spi::tasks[spi::taskTail];
 	
 	// set CS pin
 	NRF_SPIM3->PSEL.CSN = task.csPin;
@@ -37,20 +27,18 @@ static void transferSpi() {
 	NRF_SPIM3->TXD.PTR = task.writeData;
 	NRF_SPIM3->TXD.MAXCNT = task.writeLength;
 	
-#ifdef HAVE_SPI_DISPLAY
-	if (task.csPin == DISPLAY_CS_PIN) {
+	// check if this is a write-only task for display
+	if (task.readData == 1) {
 		// configure MISO pin as D/C# pin and set D/C# count
 		NRF_SPIM3->PSEL.MISO = Disconnected;
 		NRF_SPIM3->PSELDCX = SPI_MISO_PIN;
-		configureOutput(SPI_MISO_PIN);
+		//configureOutput(SPI_MISO_PIN); // done automatically
 		NRF_SPIM3->DCXCNT = task.readLength;
 	
 		// no read data
 		NRF_SPIM3->RXD.PTR = 0;
 		NRF_SPIM3->RXD.MAXCNT = 0;
-	} else
-#endif	
-	{
+	} else {
 		// set read data
 		NRF_SPIM3->RXD.PTR = task.readData;
 		NRF_SPIM3->RXD.MAXCNT = task.readLength;
@@ -74,10 +62,6 @@ void init() {
 		setOutput(csPin, true);
 		configureOutput(csPin);
 	}
-#ifdef HAVE_SPI_DISPLAY
-	setOutput(DISPLAY_CS_PIN, true);
-	configureOutput(DISPLAY_CS_PIN);	
-#endif
 
 	NRF_SPIM3->INTENSET = N(SPIM_INTENSET_END, Set);
 	NRF_SPIM3->PSEL.SCK = SPI_SCK_PIN;
@@ -99,21 +83,19 @@ void handle() {
 		NRF_SPIM3->ENABLE = 0;
 
 		// get current task
-		SpiTask const &task = spiTasks[spiTaskTail];
-#ifdef HAVE_SPI_DISPLAY
-		if (task.csPin == DISPLAY_CS_PIN) {
+		Task const &task = spi::tasks[spi::taskTail];
+		if (task.readData == 1) {
 			// restore MISO pin
 			NRF_SPIM3->PSELDCX = Disconnected;
 			NRF_SPIM3->PSEL.MISO = SPI_MISO_PIN;
-			configureInputWithPullUp(SPI_MISO_PIN);
+			//configureInputWithPullUp(SPI_MISO_PIN); // done automatically
 		}
-#endif
-		spiTaskTail = (spiTaskTail == SPI_TASK_COUNT - 1) ? 0 : spiTaskTail + 1;
-		--spiTaskCount;
+		spi::taskTail = (spi::taskTail == SPI_TASK_COUNT - 1) ? 0 : spi::taskTail + 1;
+		--spi::taskCount;
 		
 		// transfer pending tasks
-		if (spiTaskCount > 0)
-			transferSpi();
+		if (spi::taskCount > 0)
+			transfer();
 
 		task.onTransferred();			
 	}
@@ -123,10 +105,10 @@ bool transfer(int csPin, uint8_t const *writeData, int writeLength, uint8_t *rea
 	std::function<void ()> onTransferred)
 {
 	// check if task list is full
-	if (spiTaskCount >= SPI_TASK_COUNT)
+	if (spi::taskCount >= SPI_TASK_COUNT)
 		return false;
 
-	SpiTask &task = allocateSpiTask();
+	Task &task = allocateTask();
 	task.csPin = csPin;
 	task.writeData = intptr_t(writeData);
 	task.writeLength = writeLength;
@@ -136,31 +118,9 @@ bool transfer(int csPin, uint8_t const *writeData, int writeLength, uint8_t *rea
 
 	// transfer immediately if SPI is idle
 	if (!NRF_SPIM3->ENABLE)
-		transferSpi();
+		transfer();
 
 	return true;
 }
-
-#ifdef HAVE_SPI_DISPLAY
-bool writeDisplay(uint8_t const* data, int commandLength, int dataLength, std::function<void ()> onWritten) {
-	// check if task list is full
-	if (spiTaskCount >= SPI_TASK_COUNT)
-		return false;
-	
-	SpiTask &task = allocateSpiTask();
-	task.csPin = DISPLAY_CS_PIN;
-	task.writeData = intptr_t(data);
-	task.writeLength = commandLength + dataLength;
-	task.readData = 0;
-	task.readLength = commandLength; // use readDataLength to store length of command part
-	task.onTransferred = onWritten;
-
-	// transfer immediately if SPI is idle
-	if (!NRF_SPIM3->ENABLE)
-		transferSpi();
-
-	return true;
-}
-#endif
 
 } // namespace spi

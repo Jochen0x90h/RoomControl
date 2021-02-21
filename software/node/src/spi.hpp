@@ -5,7 +5,6 @@
 #include <functional>
 
 
-// display, air sensor, fe-ram
 namespace spi {
 
 /**
@@ -30,17 +29,5 @@ void handle();
  */
 bool transfer(int csPin, uint8_t const *writeData, int writeLength, uint8_t *readData, int readLength,
 	std::function<void ()> onTransferred);
-
-#ifdef HAVE_SPI_DISPLAY
-/**
- * Write to display that is connected to the SPI bus
- * @param data command and data to write, must be in ram, not in flash
- * @param commandLength length of command to write (may be 0)
- * @param dataLength length of data to write (may be 0)
- * @param onWritten completion handler 
- * @return true on success, false if busy with previous write
- */
-bool writeDisplay(uint8_t const *data, int commandLength, int dataLength, std::function<void ()> onWritten);
-#endif
 
 } // namespace spi

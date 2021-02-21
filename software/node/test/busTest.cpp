@@ -2,14 +2,14 @@
 #include <calendar.hpp>
 #include <bus.hpp>
 #include <debug.hpp>
+#include <util.hpp>
 
 
 uint8_t send[] = {0x55, 0x01, 0x33, 0x55, 0x00, 0x01, 0x33, 0x55};
-
+uint8_t receive[10];
 
 void transferBus() {
-	//bus::transferBus(send, 2, receive, 2, []() {transferBus();});
-	bus::transferBus(send, 5, [](uint8_t const* data, int length) {debug::setRedLed(true);});
+	bus::transfer(send, 5, receive, array::size(receive), [](int length) {debug::setRedLed(true);});
 }
 
 bool blink = false;
@@ -19,8 +19,6 @@ int main(void) {
 	calendar::init();
 	bus::init();
 	debug::init();
-
-	//transferBus();
 	
 	calendar::setSecondTick([]() {
 		debug::setBlueLed(blink = !blink);

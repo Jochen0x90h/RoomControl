@@ -10,7 +10,7 @@
  */
 class MqttSnBroker : public MqttSnClient {
 public:
-	static constexpr int TIMER_INDEX = 1;
+	static constexpr int TIMER_INDEX = BROKER_TIMER_INDEX;
 
 	// maximum number of remote clients that can connect
 	static constexpr int MAX_CLIENT_COUNT = 31;

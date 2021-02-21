@@ -1,8 +1,9 @@
-#include "../spi.hpp"
+#include "../display.hpp"
 #include <emu/global.hpp>
+#include <config.hpp>
 
 
-namespace spi {
+namespace display {
 
 // display layout: rows of 8 pixels where each byte describes a column in each row
 // this would be the layout of a 16x16 display where each '|' is one byte
@@ -11,14 +12,14 @@ namespace spi {
 int column; // column 0 to 127
 int page; // page of 8 vertical pixels, 0 to 7
 int displayContrast = 255;
-bool displayOn = false;
+bool displayOn = false; // all pixels on
 bool displayInverse = false;
-bool displaySleep = false;
+bool displayEnabled = false;
 uint8_t display[DISPLAY_WIDTH * DISPLAY_HEIGHT / 8];
 
 void getDisplay(uint8_t *buffer) {
-	uint8_t foreground = displaySleep ? 0 : displayContrast;
-	uint8_t background = (displaySleep || displayOn) ? foreground : (48 * displayContrast) / 255;
+	uint8_t foreground = !displayEnabled ? 0 : displayContrast;
+	uint8_t background = (!displayEnabled || displayOn) ? foreground : (48 * displayContrast) / 255;
 	if (displayInverse)
 		std::swap(foreground, background);	
 	
@@ -41,18 +42,7 @@ void getDisplay(uint8_t *buffer) {
 void init() {
 }
 
-void handle() {
-}
-
-bool transfer(int csPin, uint8_t const *writeData, int writeLength, uint8_t *readData, int readLength,
-	std::function<void ()> onTransferred)
-{
-
-	return true;
-}
-
-#ifdef HAVE_SPI_DISPLAY
-bool writeDisplay(uint8_t const* data, int commandLength, int dataLength, std::function<void ()> onWritten) {
+bool send(uint8_t const* data, int commandLength, int dataLength, std::function<void ()> onSent) {
 
 	// execute commands	
 	for (int i = 0; i < commandLength; ++i) {
@@ -80,10 +70,10 @@ bool writeDisplay(uint8_t const* data, int commandLength, int dataLength, std::f
 
 		// set display on/off
 		case 0xAE:
-			displaySleep = true;
+			displayEnabled = false;
 			break;
 		case 0xAF:
-			displaySleep = false;
+			displayEnabled = true;
 			break;
 		}		
 	}
@@ -98,10 +88,9 @@ bool writeDisplay(uint8_t const* data, int commandLength, int dataLength, std::f
 	}
 	
 	// notify that we are ready
-	asio::post(global::context, onWritten);
+	asio::post(global::context, onSent);
 	
 	return true;
 }
-#endif
 
 } // namespace spi
