@@ -102,7 +102,7 @@ void handle() {
 }
 
 bool transfer(int csPin, uint8_t const *writeData, int writeLength, uint8_t *readData, int readLength,
-	std::function<void ()> onTransferred)
+	std::function<void ()> const &onTransferred)
 {
 	// check if task list is full
 	if (spi::taskCount >= SPI_TASK_COUNT)

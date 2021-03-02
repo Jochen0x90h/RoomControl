@@ -23,11 +23,11 @@ constexpr int BUTTON_PIN = PORT0 | 6;
 // ---
 
 constexpr int SPI_TASK_COUNT = 4;
-constexpr int SPI_SCK_PIN = PORT0 | 3;
-constexpr int SPI_MOSI_PIN = PORT0 | 2;
+constexpr int SPI_SCK_PIN = PORT0 | 19;
+constexpr int SPI_MOSI_PIN = PORT0 | 20;
 constexpr int SPI_MISO_PIN = PORT0 | 21; // also connected to display D/C#
-constexpr int AIR_SENSOR_CS_PIN = PORT0 | 19;
-constexpr int FERAM_CS_PIN = PORT0 | 19;
+constexpr int AIR_SENSOR_CS_PIN = PORT0 | 2;
+constexpr int FERAM_CS_PIN = PORT0 | 3;
 constexpr int SPI_CS_PINS[2] = {AIR_SENSOR_CS_PIN, FERAM_CS_PIN};
 
 
@@ -35,7 +35,7 @@ constexpr int SPI_CS_PINS[2] = {AIR_SENSOR_CS_PIN, FERAM_CS_PIN};
 // -------
 
 #define HAVE_SPI_DISPLAY
-constexpr int DISPLAY_CS_PIN = PORT0 | 20;
+constexpr int DISPLAY_CS_PIN = PORT0 | 3;
 constexpr int DISPLAY_WIDTH = 128;
 constexpr int DISPLAY_HEIGHT = 64;
 

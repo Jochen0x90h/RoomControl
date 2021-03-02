@@ -49,12 +49,23 @@ void Storage::ArrayData::enlarge(int count) {
 	}
 }
 
-void Storage::ArrayData::shrink(int count) {
+void Storage::ArrayData::shrink(int index, int count) {
+	void const **flashElements = this->flashElements;
+	uint32_t **ramElements = this->ramElements;
+
+	// erase from this array
+	this->count -= count;
+	this->storage->elementCount -= count;
+	for (int i = index; i < this->count; ++i) {
+		flashElements[i] = flashElements[i + count];
+		ramElements[i] = ramElements[i + count];
+	}
+
 	// flash
 	{
 		// find range of flash elements of following arrays to move
-		void const **end = this->flashElements + this->count;
-		void const **it = end;
+		void const **end = flashElements + this->count;
+		void const **it = end + count;
 		ArrayData *arrayData = this;
 		while ((arrayData = arrayData->next) != nullptr) {
 			arrayData->flashElements = end;
@@ -62,7 +73,7 @@ void Storage::ArrayData::shrink(int count) {
 		}
 		
 		// move elements of following arrays
-		while (it != end) {
+		while (it < end) {
 			it[-count] = it[0];
 			++it;
 		}
@@ -71,8 +82,8 @@ void Storage::ArrayData::shrink(int count) {
 	// ram
 	{
 		// find range of flash elements of following arrays to move
-		uint32_t **end = this->ramElements + this->count;
-		uint32_t **it = end;
+		uint32_t **end = ramElements + this->count;
+		uint32_t **it = end + count;
 		ArrayData *arrayData = this;
 		while ((arrayData = arrayData->next) != nullptr) {
 			arrayData->ramElements = end;
@@ -80,7 +91,7 @@ void Storage::ArrayData::shrink(int count) {
 		}
 		
 		// move elements of following arrays
-		while (it != end) {
+		while (it < end) {
 			it[-count] = it[0];
 			++it;
 		}
@@ -90,8 +101,8 @@ void Storage::ArrayData::shrink(int count) {
 	}
 	
 	// update number of elements of this array and of all arrays
-	this->count -= count;
-	this->storage->elementCount -= count;
+	//this->count -= count;
+	//this->storage->elementCount -= count;
 }
 /*
 void Storage::ArrayData::write(int op, int index, int value) {
@@ -221,22 +232,13 @@ bool Storage::ArrayData::write(int index, void const *flashElement, void const* 
 void Storage::ArrayData::erase(int index) {
 	Storage *storage = this->storage;
 
-	void const **f = this->flashElements;
-	uint32_t **r = this->ramElements;
+	void const **flashElements = this->flashElements;
+	uint32_t **ramElements = this->ramElements;
 
 	// element sizes
 	int alignedFlashHeaderSize = flashAlign(sizeof(FlashHeader));
-	storage->flashElementsSize -= this->flashSize(f[index]);
-	int alignedRamElementSize = r[index + 1] - r[index];
-
-	// erase element
-	for (int i = index; i < this->count - 1; ++i) {
-		f[i] = f[i + 1];
-		r[i] = r[i + 1];
-	}
-
-	// shrink allocated size of this array by one
-	shrink(1);
+	storage->flashElementsSize -= this->flashSize(flashElements[index]);
+	int alignedRamElementSize = ramElements[index + 1] - ramElements[index];
 
 	// check if there is enough flash space for a header
 	if (storage->it + alignedFlashHeaderSize <= storage->end) {
@@ -250,7 +252,10 @@ void Storage::ArrayData::erase(int index) {
 	}
 	
 	// move ram
-	storage->ramInsert(r + index, -alignedRamElementSize);
+	storage->ramInsert(ramElements + index, -alignedRamElementSize);
+
+	// shrink allocated size of this array by one
+	shrink(index, 1);
 }
 
 void Storage::ArrayData::move(int index, int newIndex) {
@@ -389,10 +394,10 @@ void Storage::init() {
 		} else if (op == Op::ERASE) {
 			// erase array elements
 			int count = header->value;
-			for (int i = index; i < arrayData->count - count; ++i) {
-				arrayData->flashElements[i] = arrayData->flashElements[i + count];
-			}
-			arrayData->shrink(count);
+			//for (int i = index; i < arrayData->count - count; ++i) {
+			//	arrayData->flashElements[i] = arrayData->flashElements[i + count];
+			//}
+			arrayData->shrink(index, count);
 		} else if (op == Op::MOVE) {
 			// move element
 			int newIndex = header->value;
@@ -517,6 +522,7 @@ void Storage::ramInsert(uint32_t **ramElement, int sizeChange) {
 	
 	// move ram contents
 	if (sizeChange > 0) {
+		// insert
 		uint32_t *src = *e;
 		uint32_t *dst = src + sizeChange;
 		uint32_t *begin = *ramElement;
@@ -526,6 +532,7 @@ void Storage::ramInsert(uint32_t **ramElement, int sizeChange) {
 			*dst = *src;
 		}
 	} else {
+		// erase
 		uint32_t *src = *ramElement - sizeChange;
 		uint32_t *dst = *ramElement;
 		uint32_t *end = *e;

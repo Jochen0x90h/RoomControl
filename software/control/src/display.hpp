@@ -29,6 +29,6 @@ inline void enableVcc(bool enable) {}
  * @param onSent completion handler 
  * @return true on success, false if busy with previous send
  */
-bool send(uint8_t const *data, int commandLength, int dataLength, std::function<void ()> onSent);
+bool send(uint8_t const *data, int commandLength, int dataLength, std::function<void ()> const &onSent);
 
 } // namespace display

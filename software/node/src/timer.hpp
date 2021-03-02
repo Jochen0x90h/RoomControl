@@ -24,7 +24,7 @@ SystemTime getTime();
  * Set timeout handler
  * @param onTimeout called when the timeout time was reached
  */
-void setHandler(int index, std::function<void ()> onTimeout);
+void setHandler(int index, std::function<void ()> const &onTimeout);
 
 /**
  * Start timer
@@ -33,7 +33,7 @@ void setHandler(int index, std::function<void ()> onTimeout);
  */
 void start(int index, SystemTime time);
 
-inline void start(int index, SystemTime time, std::function<void ()> onTimeout) {
+inline void start(int index, SystemTime time, std::function<void ()> const &onTimeout) {
 	setHandler(index, onTimeout);
 	start(index, time);
 }

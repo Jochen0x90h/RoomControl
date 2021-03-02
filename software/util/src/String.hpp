@@ -3,8 +3,9 @@
 #include "util.hpp"
 #include "defines.hpp"
 #include <limits>
+#ifdef EMU
 #include <iostream>
-
+#endif
 
 // helper classes for distinguishing between fixed size array and c-string
 struct False {};
@@ -171,7 +172,9 @@ inline void assign(char (&str)[N], String s) {
 	}
 }
 
+#ifdef EMU
 inline std::ostream &operator <<(std::ostream &s, String str) {
 	s.write(str.data, str.length);
 	return s;
 }
+#endif

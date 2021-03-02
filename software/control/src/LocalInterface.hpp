@@ -21,17 +21,18 @@ public:
 
 	void subscribe(uint8_t &endpointId, DeviceId deviceId, uint8_t endpointIndex) override;
 
-	void unsubscribe(uint8_t &endpointId) override;
+	void unsubscribe(uint8_t &endpointId, DeviceId deviceId, uint8_t endpointIndex) override;
 
 	bool send(uint8_t endpointId, uint8_t const *data, int length) override;
 	
-	void setReceiveHandler(std::function<void (uint8_t, uint8_t const *, int)> onReceived) override;
+	void setReceiveHandler(std::function<void (uint8_t, uint8_t const *, int)> const &onReceived) override;
 
 protected:
 
+	void onAirSensorInitialized();
+
 	void measure();
 
-	void onAirSensorInitialized();
 	void readAirSensor();
 	void airSensorGetValues();
 

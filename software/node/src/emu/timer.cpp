@@ -30,7 +30,7 @@ SystemTime getTime() {
 	return {uint32_t(us.count() * 128 / 125000)};
 }
 
-void setHandler(int index, std::function<void ()> onTimeout) {
+void setHandler(int index, std::function<void ()> const &onTimeout) {
 	if (uint32_t(index) < uint32_t(TIMER_COUNT)) {
 		timer::onTimeouts[index] = onTimeout;
 	}

@@ -43,7 +43,7 @@ ClockTime getTime() {
 	return ClockTime(weekDay, hours, minutes, seconds);
 }
 
-void setSecondTick(std::function<void ()> onElapsed) {
+void setSecondTick(std::function<void ()> const &onElapsed) {
 	calendar::onSecondElapsed = onElapsed;
 }
 

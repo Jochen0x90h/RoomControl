@@ -12,9 +12,10 @@ class SSD1309 {
 public:
 	
 	/**
-	 * Constructor. Initializes the display and leaves it in disabled state. Calls onReady when finished
+	 * Constructor. Initializes the display and leaves it in disabled state.
+	 * @param onInitialized called when the sensor is initialized and setParameters() needs to be called
 	 */
-	SSD1309(std::function<void ()> onReady);
+	SSD1309(std::function<void ()> const &onInitialized);
 
 	~SSD1309();
 

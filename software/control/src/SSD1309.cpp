@@ -2,8 +2,8 @@
 #include <display.hpp>
 
 
-SSD1309::SSD1309(std::function<void ()> onReady)
-	: onReady(onReady)
+SSD1309::SSD1309(std::function<void ()> const &onInitialized)
+	: onReady(onInitialized)
 {
 	// command unlock
 	this->command[0] = 0xFD;

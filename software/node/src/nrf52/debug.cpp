@@ -16,13 +16,22 @@ void init() {
 void setRedLed(bool value) {
 	setOutput(LED_RED_PIN, !value);
 }
+void toggleRedLed() {
+	toggleOutput(LED_RED_PIN);
+}
 
 void setGreenLed(bool value) {
 	setOutput(LED_GREEN_PIN, !value);
 }
+void toggleGreenLed() {
+	toggleOutput(LED_GREEN_PIN);
+}
 
 void setBlueLed(bool value) {
 	setOutput(LED_BLUE_PIN, !value);
+}
+void toggleBlueLed(bool value) {
+	toggleOutput(LED_BLUE_PIN);
 }
 
 } // namespace debug

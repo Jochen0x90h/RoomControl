@@ -24,20 +24,11 @@ constexpr int TIMER_COUNT = 4;
 // ---
 
 constexpr int SPI_TASK_COUNT = 4;
-constexpr int SPI_SCK_PIN = PORT0 | 3;
-constexpr int SPI_MOSI_PIN = PORT0 | 2;
+constexpr int SPI_SCK_PIN = PORT0 | 19;
+constexpr int SPI_MOSI_PIN = PORT0 | 20;
 constexpr int SPI_MISO_PIN = PORT0 | 21; // also connected to display D/C#
-constexpr int SPI_CS_PIN = PORT0 | 19;
+constexpr int SPI_CS_PIN = PORT0 | 2;
 constexpr int SPI_CS_PINS[1] = {SPI_CS_PIN};
-
-
-// display
-// -------
-
-#define HAVE_SPI_DISPLAY
-constexpr int DISPLAY_CS_PIN = PORT0 | 20;
-constexpr int DISPLAY_WIDTH = 128;
-constexpr int DISPLAY_HEIGHT = 64;
 
 
 // bus

@@ -5,22 +5,23 @@
 #include <functional>
 
 /**
- * Display controller for SSD1309
+ * Controller for BME680 air sensor
  */
 class BME680 {
 public:
 	
 	/**
-	 * Constructor. Initializes the sensor and leaves it in disabled state. Calls onReady when finished
+	 * Constructor. Initializes the sensor and leaves it in disabled state.
+	 * @param onInitialized called when the sensor is initialized and setParameters() needs to be called
 	 */
-	BME680(std::function<void ()> onReady);
+	BME680(std::function<void ()> const &onInitialized);
 
 	~BME680();
 
 	/**
-	 * Returns the number of send tasks that are in progress
+	 * Returns true if a transfer is in progress
 	 */
-	int getSendCount() {return this->sendCount;}
+	bool isBusy() {return this->busy;}
 
 	/**
 	 * Set parameters. Sets initialized state and calls onReady when finished
@@ -31,14 +32,11 @@ public:
 	 * @param heaterTemperature heater temperature for gas sensor, 200 to 400 degrees
 	 * @param heaterDuration time between the beginning of the heat phase and the start of gas sensor resistance
 	 * 	conversion in milliseconds
+	 * @param onReady gets called when the parameterization is finished
 	 */
 	void setParameters(int temperatureOversampling, int pressureOversampling, int filter,
-		int humidityOversampling, int heaterTemperature, int heaterDuration);
-
-	/**
-	 * Returns true if the sensor is initialized
-	 */
-	bool isInitialized() {return this->initialized;}
+		int humidityOversampling, int heaterTemperature, int heaterDuration,
+		std::function<void ()> const &onReady);
 
 	/**
 	 * Start a measurement. Call readMeasurements() a second later
@@ -47,18 +45,34 @@ public:
 
 	/**
 	 * Read measurements from the sensor registers. Calls onReady when finished
+	 * @param onReady called when measurements are read
 	 */
-	void readMeasurements();
-
-	float getTemperature() {return this->temperature;}
-	float getPressure() {return this->pressure;}
-	float getHumidity() {return this->humidity;}
-	float getGasResistance() {return this->gasResistance;}
+	void readMeasurements(std::function<void ()> const &onReady);
 
 	/**
-	 * Called when the display is ready for the next action
+	 * Get current temperature
+	 * @return temperature in celsius
 	 */
-	std::function<void ()> onReady;
+	float getTemperature() {return this->temperature;}
+
+	/**
+	 * Get current pressure
+	 * @return pressure in ...
+	 */
+	float getPressure() {return this->pressure;}
+
+	/**
+	 * Get current humidity
+	 * @return humidity in percent
+	 */
+	float getHumidity() {return this->humidity;}
+
+	/**
+	 * Get current gas resistance
+	 * @return ras resistance in ohm
+	 */
+	float getGasResistance() {return this->gasResistance;}
+
 
 protected:
 
@@ -109,8 +123,8 @@ protected:
 
 	void onMeasurementsReady();
 	
-	
-	uint8_t sendCount = 0;
+	std::function<void ()> onReady;
+	bool busy;
 	
 	// read/write buffer
 	uint8_t buffer[16];
@@ -122,7 +136,6 @@ protected:
 	int8_t range_switching_error;
 	
 	uint8_t _74;
-	bool initialized = false;
 
 	// measurements
 	float temperature;

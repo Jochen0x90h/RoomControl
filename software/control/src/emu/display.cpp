@@ -42,7 +42,7 @@ void getDisplay(uint8_t *buffer) {
 void init() {
 }
 
-bool send(uint8_t const* data, int commandLength, int dataLength, std::function<void ()> onSent) {
+bool send(uint8_t const* data, int commandLength, int dataLength, std::function<void ()> const &onSent) {
 
 	// execute commands	
 	for (int i = 0; i < commandLength; ++i) {

@@ -3,6 +3,9 @@
 #include <util.hpp>
 
 
+constexpr int SIGNAL_PIN = 3;
+
+
 namespace bus {
 
 enum State {
@@ -21,7 +24,6 @@ int volatile txIndex;
 // receive buffer
 uint8_t *volatile rxData;
 int volatile rxLength;
-//uint8_t rxData[10];
 int volatile rxIndex;
 bool rxReady;
 std::function<void (int)> onRx = [](int) {};
@@ -55,8 +57,8 @@ void UARTE0_UART0_IRQHandler(void) {
 	}
 	if (NRF_UART0->EVENTS_RXDRDY) {
 		NRF_UART0->EVENTS_RXDRDY = 0;
-		toggleOutput(21);
-		//setOutput(21, true);
+		toggleOutput(SIGNAL_PIN);
+		//setOutput(SIGNAL_PIN, true);
 
 		if (bus::state == SYNC) {
 			// check if sync byte was received correctly
@@ -107,7 +109,7 @@ void UARTE0_UART0_IRQHandler(void) {
 			}				
 		}
 
-		//toggleOutput(21);
+		//toggleOutput(SIGNAL_PIN);
 	}
 }
 
@@ -138,9 +140,9 @@ void TIMER1_IRQHandler(void) {
 	
 			// expect receive of sync byte
 			bus::state = SYNC;
-			setOutput(21, false);			
+			setOutput(SIGNAL_PIN, false);			
 		} else {
-			//toggleOutput(21);
+			//toggleOutput(SIGNAL_PIN);
 					
 			// stop timer
 			NRF_TIMER1->TASKS_STOP = Trigger;
@@ -151,14 +153,14 @@ void TIMER1_IRQHandler(void) {
 			// now in request mode
 			bus::state = REQUEST;
 	
-	//		toggleOutput(21);
-			setOutput(21, true);
+	//		toggleOutput(SIGNAL_PIN);
+			setOutput(SIGNAL_PIN, true);
 		}
 	}
 }
 
 void init() {
-	configureOutput(21);
+	configureOutput(SIGNAL_PIN);
 	
 	// init uart
 	setOutput(BUS_TX_PIN, true);
@@ -183,7 +185,7 @@ void handle() {
 	if (rxReady) {
 		rxReady = false;
 		bus::onRx(bus::rxIndex);
-		setOutput(21, true);
+		setOutput(SIGNAL_PIN, true);
 	}
 	if (requestReady) {
 		requestReady = false;
@@ -192,7 +194,9 @@ void handle() {
 	}
 }
 
-void transfer(uint8_t const *txData, int txLength, uint8_t *rxData, int rxLength, std::function<void (int)> onRx) {
+void transfer(uint8_t const *txData, int txLength, uint8_t *rxData, int rxLength,
+	std::function<void (int)> const &onRx)
+{
 	// reset timer
 	NRF_TIMER1->TASKS_STOP = Trigger;
 	NRF_TIMER1->TASKS_CLEAR = Trigger;
@@ -226,7 +230,7 @@ void transfer(uint8_t const *txData, int txLength, uint8_t *rxData, int rxLength
 	bus::state = BREAK;
 }
 
-void setRequestHandler(std::function<void (uint8_t)> onRequest) {
+void setRequestHandler(std::function<void (uint8_t)> const &onRequest) {
 	bus::onRequest = onRequest;
 }
 

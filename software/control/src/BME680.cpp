@@ -1,6 +1,7 @@
 #include "BME680.hpp"
 #include <spi.hpp>
 #include <config.hpp>
+#include <assert.hpp>
 
 
 // https://github.com/BoschSensortec/BME680_driver
@@ -9,25 +10,24 @@
 #define READ(reg) ((reg) | 0x80)
 #define WRITE(reg) ((reg) & 0x7f)
 
-
 constexpr int CHIP_ID = 0x61;
 
 
-BME680::BME680(std::function<void ()> onReady)
-	: onReady(onReady)
+BME680::BME680(std::function<void ()> const &onInitialized)
+	: onReady(onInitialized)
 {
 	// read chip id
 	this->buffer[0] = READ(0xD0);
-	spi::transfer(AIR_SENSOR_CS_PIN, this->buffer, 1, this->buffer, 2, [this]() {init1();});
-	++this->sendCount;
+	this->busy = spi::transfer(AIR_SENSOR_CS_PIN, this->buffer, 1, this->buffer, 2, [this]() {init1();});
 }
 
 BME680::~BME680() {
 }
 
 void BME680::setParameters(int temperatureOversampling, int pressureOversampling, int filter,
-	int humidityOversampling, int heaterTemperature, int heaterDuration)
+	int humidityOversampling, int heaterTemperature, int heaterDuration, std::function<void ()> const &onReady)
 {
+	assert(!this->busy);
 	int i = 0;
 
 	// humidity oversampling
@@ -73,29 +73,33 @@ void BME680::setParameters(int temperatureOversampling, int pressureOversampling
 	this->buffer[i++] = (1 << 4) | 0;
 
 	// transfer
-	this->sendCount += spi::transfer(AIR_SENSOR_CS_PIN, this->buffer, i, nullptr, 0, [this]() {
-		--this->sendCount;
-		this->initialized = true;
-		//this->onReady();
+	this->onReady = onReady;
+	this->busy = spi::transfer(AIR_SENSOR_CS_PIN, this->buffer, i, nullptr, 0, [this]() {
+		this->busy = false;
+		this->onReady();
 	});
-	;
-	this->initialized = false;
 }
 
 void BME680::startMeasurement() {
+	assert(!this->busy);
 	this->buffer[0] = WRITE(0x74);
 	this->buffer[1] = this->_74 | 1; // forced mode
 
 	// transfer
-	this->sendCount += spi::transfer(AIR_SENSOR_CS_PIN, this->buffer, 2, nullptr, 0, [this]() {
-		--this->sendCount;
+	this->busy = spi::transfer(AIR_SENSOR_CS_PIN, this->buffer, 2, nullptr, 0, [this]() {
+		this->busy = false;
 		//this->onReady();
 	});
 }
 
-void BME680::readMeasurements() {
+void BME680::readMeasurements(std::function<void ()> const &onReady) {
+	assert(!this->busy);
 	this->buffer[0] = READ(0x1D);
-	this->sendCount += spi::transfer(AIR_SENSOR_CS_PIN, this->buffer, 1, this->buffer, 15, [this]() {onMeasurementsReady();});
+	
+	this->onReady = onReady;
+	this->busy = spi::transfer(AIR_SENSOR_CS_PIN, this->buffer, 1, this->buffer, 15, [this]() {
+		onMeasurementsReady();
+	});
 }
 
 void BME680::init1() {
@@ -136,29 +140,27 @@ void BME680::init5() {
 	this->res_heat_range = (this->buffer[1 + 0x02] >> 4) & 3;
 	this->range_switching_error = int8_t(this->buffer[1 + 0x04]) >> 4;
 
-	--this->sendCount;
+	this->busy = false;
 	this->onReady();
 }
 
-
 void BME680::onMeasurementsReady() {
-	uint8_t const *buff = this->buffer;
+	uint8_t const *buff = this->buffer + 1 - 0x1D;
 	
 	// state (5.3.5 Status registers)
-	bool newData = (buff[1] & (1 << 7)) != 0;
-	bool measuring = (buff[1] & (1 << 5)) != 0; // all values
-	bool gasMeasuring = (buff[1] & (1 << 6)) != 0; // only gas
-	int gasMeasurementIndex = buff[1] & 0x0f;
-	bool gasValid = (buff[14] & (1 << 5)) != 0;
-	bool gasHeaterStable = (buff[14] & (1 << 4)) != 0;
+	bool newData = (buff[0x1D] & (1 << 7)) != 0;
+	bool measuring = (buff[0x1D] & (1 << 5)) != 0; // all values
+	bool gasMeasuring = (buff[0x1D] & (1 << 6)) != 0; // only gas
+	int gasMeasurementIndex = buff[0x1D] & 0x0f;
+	bool gasValid = (buff[0x2B] & (1 << 5)) != 0;
+	bool gasHeaterStable = (buff[0x2B] & (1 << 4)) != 0;
 	
 	// measurements (5.3.4 Data registers)
-	int temperature = buff[5] * 4096 | buff[6] * 16 | buff[7] / 16;
-	int pressure = buff[2] * 4096 | buff[3] * 16 | buff[4] / 16;
-	int humidity = buff[8] * 256 | buff[9];
-	int gasResistance = buff[13] * 4 | buff[14] / 64;
-	int gasRange = buff[14] & 0x0f;
-	
+	int temperature = buff[0x22] * 4096 | buff[0x23] * 16 | buff[0x24] / 16;
+	int pressure = buff[0x1F] * 4096 | buff[0x20] * 16 | buff[0x21] / 16;
+	int humidity = buff[0x25] * 256 | buff[0x26];
+	int gasResistance = buff[0x2A] * 4 | buff[0x2B] / 64;
+	int gasRange = buff[0x2B] & 0x0f;
 	if (newData) {
 		// calculate temperature
 		float t_fine;
@@ -227,6 +229,6 @@ void BME680::onMeasurementsReady() {
 		}
 	}
 	
-	--this->sendCount;
+	this->busy = false;
 	this->onReady();
 }

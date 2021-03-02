@@ -26,6 +26,6 @@ ClockTime getTime();
  * Set callback for second tick
  * onElapsed called when a second has elapsed
  */
-void setSecondTick(std::function<void ()> onElapsed);
+void setSecondTick(std::function<void ()> const &onElapsed);
 
 } // namespace calendar

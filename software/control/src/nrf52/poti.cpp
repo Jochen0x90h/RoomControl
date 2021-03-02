@@ -59,7 +59,7 @@ void handle() {
 	}
 }
 
-void setHandler(std::function<void (int, bool)> onChanged) {
+void setHandler(std::function<void (int, bool)> const &onChanged) {
 	poti::onChanged = onChanged;
 
 	// quadrature decoder

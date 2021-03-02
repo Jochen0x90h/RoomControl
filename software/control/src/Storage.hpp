@@ -1,7 +1,7 @@
 #pragma once
 
 #include "flash.hpp"
-#include "assert.hpp"
+#include <assert.hpp>
 #include "defines.hpp"
 #include "util.hpp"
 
@@ -101,7 +101,7 @@ protected:
 		uint32_t **ramElements;
 
 		void enlarge(int count);
-		void shrink(int count);
+		void shrink(int index, int count);
 		bool hasSpace(void const *flashElement);
 		bool write(int index, void const *flashElement, void const *ramElement);
 		void erase(int index);

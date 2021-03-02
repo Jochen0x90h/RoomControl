@@ -40,7 +40,7 @@ constexpr EndpointType motionDetectorEndpoints[] = {
 
 
 LocalInterface::LocalInterface() : airSensor([this]() {onAirSensorInitialized();}), subscriptions{} {
-	measure();
+	//measure();
 }
 
 LocalInterface::~LocalInterface() {
@@ -83,7 +83,7 @@ void LocalInterface::subscribe(uint8_t &endpointId, DeviceId deviceId, uint8_t e
 	}
 }
 
-void LocalInterface::unsubscribe(uint8_t &endpointId) {
+void LocalInterface::unsubscribe(uint8_t &endpointId, DeviceId deviceId, uint8_t endpointIndex) {
 	if (endpointId != 0) {
 		--this->subscriptions[endpointId - 1];
 		endpointId = 0;
@@ -94,33 +94,25 @@ bool LocalInterface::send(uint8_t endpointId, uint8_t const *data, int length) {
 	return false;
 }
 
-void LocalInterface::setReceiveHandler(std::function<void (uint8_t, uint8_t const *, int)> onReceived) {
+void LocalInterface::setReceiveHandler(std::function<void (uint8_t, uint8_t const *, int)> const &onReceived) {
 	this->onReceived = onReceived;
 }
-
-void LocalInterface::measure() {
-	if (this->airSensor.isInitialized()) {
-		this->airSensor.startMeasurement();
-		timer::start(TIMER_INDEX, timer::getTime() + 1s, [this]() {readAirSensor();});
-	} else {
-		timer::start(TIMER_INDEX, timer::getTime() + 10s, [this]() {measure();});
-	}
-}
-
 
 void LocalInterface::onAirSensorInitialized() {
 	this->airSensor.setParameters(
 		2, 5, 2, // temperature and pressure oversampling and filter
 		1, // humidity oversampling
-		300, 100); // heater temperature and duration
+		300, 100, // heater temperature and duration
+		[this]() {measure();});
+}
 
-	// set onReady to getValues
-	this->airSensor.onReady = [this]() {airSensorGetValues();};
-
+void LocalInterface::measure() {
+	this->airSensor.startMeasurement();
+	timer::start(TIMER_INDEX, timer::getTime() + 1s, [this]() {readAirSensor();});
 }
 
 void LocalInterface::readAirSensor() {
-	this->airSensor.readMeasurements(); // calls airSensorGetValues() when ready
+	this->airSensor.readMeasurements([this]() {airSensorGetValues();});
 	timer::start(TIMER_INDEX, timer::getTime() + 9s, [this]() {measure();});
 }
 
@@ -129,7 +121,11 @@ void LocalInterface::airSensorGetValues() {
 	if (this->subscriptions[TEMPERATURE_SENSOR_ENDPOINT - 1] > 0) {
 		float temperature = this->airSensor.getTemperature();
 		
+		int k = int((temperature + 273.15f) * 20.0f + 0.5f);
+		
 		uint8_t t[2];
+		t[0] = k;
+		t[1] = k >> 8;
 		this->onReceived(TEMPERATURE_SENSOR_ENDPOINT, t, 2);
 	}
 	if (this->subscriptions[AIR_PRESSURE_SENSOR_ENDPOINT - 1] > 0) {

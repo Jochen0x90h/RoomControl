@@ -24,12 +24,13 @@ void handle();
  * @param rxLength maximum length of data to receive
  * @param onRx called when data was received on the bus (own transmit data and reply by a device). Zero length is error 
  */
-void transfer(uint8_t const *txData, int txLength, uint8_t *rxData, int rxLength, std::function<void (int)> onRx);
+void transfer(uint8_t const *txData, int txLength, uint8_t *rxData, int rxLength,
+	std::function<void (int)> const &onRx);
 
 /**
  * Set handler that gets called when a device requests to be queried
  * @param onRequest called when a device requests to be queried
  */ 
-void setRequestHandler(std::function<void (uint8_t)> onRequest);
+void setRequestHandler(std::function<void (uint8_t)> const &onRequest);
 
 } // namespace system

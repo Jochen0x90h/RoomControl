@@ -27,7 +27,8 @@ int states[array::size(endpointTypes)];
 
 std::chrono::steady_clock::time_point time;
 
-std::function<void (uint8_t)> onRequest;
+std::function<void (int)> onRx = [](int) {};
+std::function<void (uint8_t)> onRequest = [](uint8_t) {};
 
 
 void doGui(Gui &gui, int &id) {
@@ -121,7 +122,7 @@ void init() {
 void handle() {
 }
 
-void transfer(uint8_t const *txData, int txLength, uint8_t *rxData, int rxLength, std::function<void (int)> onRx) {
+void transfer(uint8_t const *txData, int txLength, uint8_t *rxData, int rxLength, std::function<void (int)> const &onRx) {
 	// always receive what we send
 	assert(rxLength >= txLength);
 	for (int i = 0; i < txLength; ++i)
@@ -227,10 +228,11 @@ void transfer(uint8_t const *txData, int txLength, uint8_t *rxData, int rxLength
 		++rxIndex;
 	}
 
-	asio::post(global::context, [onRx, rxIndex]() {onRx(rxIndex);});
+	bus::onRx = onRx;
+	asio::post(global::context, [rxIndex]() {bus::onRx(rxIndex);});
 }
 
-void setRequestHandler(std::function<void (uint8_t)> onRequest) {
+void setRequestHandler(std::function<void (uint8_t)> const &onRequest) {
 	bus::onRequest = onRequest;
 }
 

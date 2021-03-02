@@ -5,7 +5,7 @@
 
 
 BusInterface::BusInterface(std::function<void ()> onReady)
-	: onReady(onReady)
+	: onReady(onReady), referenceCounters{}
 {
 	// start first enumeration
 	this->endpointStarts[0] = 0;
@@ -56,10 +56,21 @@ void BusInterface::subscribe(uint8_t &endpointId, DeviceId deviceId, uint8_t end
 	}
 }
 
-void BusInterface::unsubscribe(uint8_t &endpointId) {
+void BusInterface::unsubscribe(uint8_t &endpointId, DeviceId deviceId, uint8_t endpointIndex) {
 	if (endpointId != 0) {
-		--this->referenceCounters[endpointId - (2 + this->deviceCount)];
-		endpointId = 0;
+		for (int deviceIndex = 0; deviceIndex < this->deviceCount; ++deviceIndex) {
+			if (deviceId == this->deviceIds[deviceIndex]) {
+				if (--this->referenceCounters[endpointId - (2 + this->deviceCount)] == 0) {
+					this->txData[0] = 2 + deviceIndex;
+					this->txData[1] = endpointIndex;
+					this->txData[2] = 0;
+					this->txData[3] = calcChecksum(txData, 3);
+					// todo: enqueue
+					bus::transfer(this->txData, 4, this->rxData, 10, [](int rxLength) {});
+				}
+				endpointId = 0;
+			}
+		}
 	}
 }
 
@@ -72,7 +83,7 @@ bool BusInterface::send(uint8_t endpointId, uint8_t const *data, int length) {
 	return true;
 }
 
-void BusInterface::setReceiveHandler(std::function<void (uint8_t, uint8_t const *, int)> onReceived) {
+void BusInterface::setReceiveHandler(std::function<void (uint8_t, uint8_t const *, int)> const &onReceived) {
 	this->onReceived = onReceived;
 }
 

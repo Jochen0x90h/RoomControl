@@ -35,12 +35,12 @@ struct EndpointInfo {
 
 constexpr EndpointInfo endpointInfos[] = {
 	{EndpointType::BINARY_SENSOR, "Binary Sensor", 0},
-	{EndpointType::BUTTON, "Button", 0},
-	{EndpointType::SWITCH, "Switch", 0},
-	{EndpointType::ROCKER, "Rocker", 2},
-	{EndpointType::RELAY, "Relay", 0},
-	{EndpointType::LIGHT, "Light", 0},
-	{EndpointType::BLIND, "Blind", 2},
+	{EndpointType::BUTTON, "Button Sensor", 0},
+	{EndpointType::SWITCH, "Switch Sensor", 0},
+	{EndpointType::ROCKER, "Rocker Sensor", 2},
+	{EndpointType::RELAY, "Relay Actuator", 0},
+	{EndpointType::LIGHT, "Light Actuator", 0},
+	{EndpointType::BLIND, "Blind Actuator", 2},
 	{EndpointType::TEMPERATURE_SENSOR, "Temperature Sensor", 0},
 	{EndpointType::AIR_PRESSURE_SENSOR, "Air Pressure Sensor", 0},
 	{EndpointType::AIR_HUMIDITY_SENSOR, "Air Humidity Sensor", 0},
@@ -205,6 +205,10 @@ RoomControl::RoomControl()
 	// subscribe to local devices
 	subscribeInterface(this->localInterface, this->localDevices);
 
+	this->localInterface.setReceiveHandler([this](uint8_t endpointId, uint8_t const *data, int length) {
+		onLocalReceived(endpointId, data, length);
+	});
+
 	// subscribe to mqtt broker (has to be repeated when connection to gateway is established because the broker does
 	// not store the topic names)
 	subscribeAll();
@@ -304,21 +308,31 @@ void RoomControl::onPublished(uint16_t topicId, uint8_t const *data, int length,
 	for (auto e : this->routes) {
 		RouteState const &routeState = *e.ram;
 		if (topicId == routeState.srcTopicId) {
-			std::cout << "route " << topicId << " -> " << routeState.dstTopicId << std::endl;
+			//std::cout << "route " << topicId << " -> " << routeState.dstTopicId << std::endl;
 			publish(routeState.dstTopicId, data, length, qos);
 		}
 	}
 	
 	// update devices and set next timeout
 	auto now = timer::getTime();
-	auto nextTimeout = updateDevices(now, 0, nullptr, topicId, message);
+	auto nextTimeout = updateDevices(now, 0, 0, nullptr, topicId, message);
 	timer::start(TIMER_INDEX, nextTimeout);
 }
 
 
+// LocalInterface
+// --------------
 
-// BusDevices
-// ----------
+void RoomControl::onLocalReceived(uint8_t endpointId, uint8_t const *data, int length) {
+	// update devices and set next timeout
+	auto now = timer::getTime();
+	auto nextTimeout = updateDevices(now, endpointId, 0, data, 0, String());
+	timer::start(TIMER_INDEX, nextTimeout);
+}
+
+
+// BusInterface
+// ------------
 
 void RoomControl::onBusReady() {
 	subscribeInterface(this->busInterface, this->busDevices);
@@ -331,7 +345,7 @@ void RoomControl::onBusReady() {
 void RoomControl::onBusReceived(uint8_t endpointId, uint8_t const *data, int length) {
 	// update devices and set next timeout
 	auto now = timer::getTime();
-	auto nextTimeout = updateDevices(now, endpointId, data, 0, String());
+	auto nextTimeout = updateDevices(now, 0, endpointId, data, 0, String());
 	timer::start(TIMER_INDEX, nextTimeout);
 }
 
@@ -345,7 +359,7 @@ void RoomControl::onBusReceived(uint8_t endpointId, uint8_t const *data, int len
 void RoomControl::onTimeout() {
 	auto now = timer::getTime();
 	//std::cout << "time: " << time.value << std::endl;
-	SystemTime nextTimeout = updateDevices(now, 0, nullptr, 0, String());
+	SystemTime nextTimeout = updateDevices(now, 0, 0, nullptr, 0, String());
 	//std::cout << "next: " << nextTimeout.value << std::endl;
 	timer::start(TIMER_INDEX, nextTimeout);
 }
@@ -450,7 +464,7 @@ void RoomControl::updateMenu(int delta, bool activated) {
 	
 	case LOCAL_DEVICES:
 		menu(delta, activated);
-		listDevices(this->localDevices, EDIT_LOCAL_DEVICE, ADD_LOCAL_DEVICE);
+		listDevices(this->localInterface, this->localDevices, EDIT_LOCAL_DEVICE, ADD_LOCAL_DEVICE);
 		break;
 	case EDIT_LOCAL_DEVICE:
 	case ADD_LOCAL_DEVICE:
@@ -466,7 +480,7 @@ void RoomControl::updateMenu(int delta, bool activated) {
 	
 	case BUS_DEVICES:
 		menu(delta, activated);
-		listDevices(this->busDevices, EDIT_BUS_DEVICE, ADD_BUS_DEVICE);
+		listDevices(this->busInterface, this->busDevices, EDIT_BUS_DEVICE, ADD_BUS_DEVICE);
 		break;
 	case EDIT_BUS_DEVICE:
 	case ADD_BUS_DEVICE:
@@ -573,6 +587,7 @@ void RoomControl::updateMenu(int delta, bool activated) {
 					unsubscribeTopic(e.ram->srcTopicId, topic.state());
 					
 					this->routes.erase(index);
+
 					pop();
 				}
 			}
@@ -1293,7 +1308,7 @@ void RoomControl::subscribeDevice(Storage::Element<Device, DeviceState> e) {
 
 	// subscribe to device topic (enum/<room>/<device>)
 	TopicBuffer topic = getRoomName() / device.getName();
-	subscribeTopic(e.ram->deviceTopicId, topic.enumeration(), QOS);
+	subscribeTopic(deviceState.deviceTopicId, topic.enumeration(), QOS);
 
 	// iterate over device components
 	ComponentIterator it(device, deviceState);
@@ -1320,7 +1335,8 @@ void RoomControl::subscribeDevice(Storage::Element<Device, DeviceState> e) {
 	}
 }
 
-SystemTime RoomControl::updateDevices(SystemTime time, uint8_t endpointId, uint8_t const *data,
+SystemTime RoomControl::updateDevices(SystemTime time,
+	uint8_t localEndpointId, uint8_t busEndpointId, uint8_t const *data,
 	uint16_t topicId, String message)
 {
 	// get duration since last update
@@ -1338,10 +1354,10 @@ SystemTime RoomControl::updateDevices(SystemTime time, uint8_t endpointId, uint8
 	// next timeout, may be decreased by a device that needs earlier timeout
 	SystemTime nextTimeout = this->nextReportTime;
 
-	nextTimeout = updateDevices(time, duration, reportChanging, this->localInterface, this->localDevices, endpointId,
-		data, topicId, message, nextTimeout);
-	nextTimeout = updateDevices(time, duration, reportChanging, this->busInterface, this->busDevices, endpointId,
-		data, topicId, message, nextTimeout);
+	nextTimeout = updateDevices(time, duration, reportChanging, this->localInterface, this->localDevices,
+		localEndpointId, data, topicId, message, nextTimeout);
+	nextTimeout = updateDevices(time, duration, reportChanging, this->busInterface, this->busDevices,
+		busEndpointId, data, topicId, message, nextTimeout);
 
 	return nextTimeout;
 }
@@ -1350,10 +1366,11 @@ SystemTime RoomControl::updateDevices(SystemTime time, SystemDuration duration, 
 	Interface &interface, Storage::Array<Device, DeviceState> &devices, uint8_t endpointId, uint8_t const *data,
 	uint16_t topicId, String message, SystemTime nextTimeout)
 {
-	// iterate over bus devices
+	// iterate over devices
 	for (auto e : devices) {
-		Device const &device = *e.flash;
-		DeviceState &deviceState = *e.ram;
+		bool replaced = e.flash == this->tempFor;
+		Device const &device = replaced ? this->temp.device : *e.flash;
+		DeviceState &deviceState = replaced ? this->tempState.device : *e.ram;
 		
 		// check for request to list attributes in this device
 		if (topicId == deviceState.deviceTopicId && message.empty()) {
@@ -1382,12 +1399,14 @@ SystemTime RoomControl::updateDevices(SystemTime time, SystemDuration duration, 
 			switch (component.type) {
 			case Device::Component::BUTTON:
 				if (d != nullptr) {
+					//std::cout << "button1 " << int(data[0]) << " " << int(d[0]) << std::endl;
 					// get button state
 					uint8_t value = (d[0] >> component.elementIndex) & 1;
 					if (value != state.flags) {
 						state.flags = value;
 						publish(state.statusTopicId, buttonStates[value], QOS);
 					}
+					//std::cout << "button2 " << int(data[0]) << " " << int(d[0]) << std::endl;
 				}
 				break;
 			case Device::Component::HOLD_BUTTON:
@@ -1419,6 +1438,8 @@ SystemTime RoomControl::updateDevices(SystemTime time, SystemDuration duration, 
 					if (d != nullptr) {
 						// get button state
 						uint8_t value = (d[0] >> component.elementIndex) & 1;
+//std::cout << "delay button " << int(value) << " " << int(state.flags) << std::endl;
+std::cout << "delay button " << int(data[0]) << " " << int(d[0]) << std::endl;
 						if (value != state.flags) {
 							uint8_t pressed = state.flags & 2;
 							state.flags = value;
@@ -1718,17 +1739,25 @@ SystemTime RoomControl::updateDevices(SystemTime time, SystemDuration duration, 
 				break;
 			case Device::Component::CELSIUS:
 				if (d != nullptr) {
+					auto &temperatureSensorState = state.cast<DeviceState::TemperatureSensor>();
+					uint16_t t = d[0] | (d[1] << 8);
+					temperatureSensorState.temperature = t;
+
 					// convert temperature from 1/20 K to 1/10 °C
-					int temperature = ((d[0] | d[1] << 8) - 5463) / 2;
-					StringBuffer<6> b = dec(temperature / 10) + '.' + dec(temperature % 10);
+					int celsius = (t - 5463) / 2; // subtract 273.15 * 20 and divide by 2
+					StringBuffer<6> b = dec(celsius / 10) + '.' + dec((celsius + 3000) % 10);
 					publish(state.statusTopicId, b, QOS);
 				}
 				break;
 			case Device::Component::FAHRENHEIT:
 				if (d != nullptr) {
+					auto &temperatureSensorState = state.cast<DeviceState::TemperatureSensor>();
+					uint16_t t = d[0] | (d[1] << 8);
+					temperatureSensorState.temperature = t;
+
 					// convert temperature from 1/20 K to 1/10 °F
-					int temperature = ((d[0] | d[1] << 8) - 5463) * 9 / 10 + 320;
-					StringBuffer<6> b = dec(temperature / 10) + '.' + dec(temperature % 10);
+					int fahrenheit = (t - 5463) * 9 / 10 + 320;
+					StringBuffer<6> b = dec(fahrenheit / 10) + '.' + dec((fahrenheit - 5000) % 10);
 					publish(state.statusTopicId, b, QOS);
 				}
 
@@ -1782,7 +1811,9 @@ bool RoomControl::isCompatible(EndpointType endpointType, Device::Component::Typ
 	return false;
 }
 
-void RoomControl::listDevices(Storage::Array<Device, DeviceState> &devices, MenuState editDevice, MenuState addDevice) {
+void RoomControl::listDevices(Interface &interface, Storage::Array<Device, DeviceState> &devices,
+	MenuState editDevice, MenuState addDevice)
+{
 	// list devices
 	for (auto e : devices) {
 		auto &device = *e.flash;
@@ -1790,12 +1821,41 @@ void RoomControl::listDevices(Storage::Array<Device, DeviceState> &devices, Menu
 		StringBuffer<24> b = device.getName();
 		if (entry(b)) {
 			// edit device
-			clone(this->temp.device, this->tempState.device, device, *e.ram);
+			clone(interface, this->temp.device, this->tempState.device, device, *e.ram);
+			this->tempFor = &device;
 			push(editDevice);
 		}
 	}
 
-	// add device
+	// add devices
+	Array<DeviceId> deviceIds = interface.getDevices();
+	for (DeviceId deviceId : deviceIds) {
+		bool found = false;
+		for (auto e : devices) {
+			auto &device = *e.flash;
+			if (device.deviceId == deviceId) {
+				found = true;
+				break;
+			}
+		}
+		if (!found) {
+			StringBuffer<24> b = "Add " + hex(deviceId);
+			if (entry(b)) {
+				Device &device = this->temp.device;
+				DeviceState &deviceState = this->tempState.device;
+				device.deviceId = deviceId;
+				device.setName(b.string().substring(4));
+				device.componentCount = 0;
+				deviceState.deviceTopicId = 0;
+				
+				// subscribe to device topic (enum/<room>/<device>)
+				TopicBuffer topic = getRoomName() / device.getName();
+				subscribeTopic(deviceState.deviceTopicId, topic.enumeration(), QOS);
+
+				push(addDevice);
+			}
+		}
+	}
 
 	if (entry("Exit"))
 		pop();
@@ -1830,10 +1890,61 @@ void RoomControl::editDevice(Interface &interface, Storage::Array<Device, Device
 		// device components that are associated with the current device endpoint
 		while (!it.atEnd() && it.getComponent().endpointIndex == endpointIndex) {
 			auto &component = it.getComponent();
+			auto &state = it.getState();
 			ComponentInfo const &componentInfo = componentInfos[component.type];
 
-			// menu entry for component
-			b = component.getName() + ": " + componentInfo.name;
+			// menu entry for compnent (component name and current state/value)
+			b = componentInfo.name + ": "; // component.getName()
+			switch (component.type) {
+			case Device::Component::BUTTON:
+			case Device::Component::HOLD_BUTTON:
+			case Device::Component::DELAY_BUTTON:
+				{
+					b += buttonStatesLong[state.flags & 1];
+				}
+				break;
+			case Device::Component::ROCKER:
+			case Device::Component::HOLD_ROCKER:
+				{
+					b += rockerStatesLong[state.flags & 3];
+				}
+				break;
+			case Device::Component::SWITCH:
+			case Device::Component::RELAY:
+			case Device::Component::TIME_RELAY:
+				{
+					b += switchStatesLong[state.flags & 1];
+				}
+				break;
+			case Device::Component::BLIND:
+				{
+					auto blind = component.cast<Device::Blind>();
+					auto blindState = state.cast<DeviceState::Blind>();
+					float pos = blindState.duration / blind.duration;
+					b += flt(pos, 1, (state.flags & 3) == 0 ? 3 : 2);
+				}
+				break;
+			case Device::Component::CELSIUS:
+				{
+					auto temperatureSensorState = state.cast<DeviceState::TemperatureSensor>();
+					uint16_t t = temperatureSensorState.temperature;
+
+					// convert temperature from 1/20 K to 1/10 °C
+					int celsius = (t - 5463) / 2; // subtract 273.15 * 20 and divide by 2
+					b += dec(celsius / 10) + '.' + dec((celsius + 3000) % 10) + " oC";
+				}
+				break;
+			case Device::Component::FAHRENHEIT:
+				{
+					auto temperatureSensorState = state.cast<DeviceState::TemperatureSensor>();
+					uint16_t t = temperatureSensorState.temperature;
+
+					// convert temperature from 1/20 K to 1/10 °F
+					int fahrenheit = (t - 5463) * 9 / 10 + 320;
+					b += dec(fahrenheit / 10) + '.' + dec((fahrenheit - 5000) % 10) + "oF";
+				}
+				break;
+			}
 			if (entry(b)) {
 				// set index
 				this->tempIndex = it.componentIndex;
@@ -1878,9 +1989,10 @@ void RoomControl::editDevice(Interface &interface, Storage::Array<Device, Device
 		// unsubscribe old command topics
 		if (index < devices.size()) {
 			auto e = devices[index];
-			destroy(*e.flash, *e.ram);
+			destroy(interface, *e.flash, *e.ram);
 		}
 		devices.write(index, &device, &deviceState);
+		this->tempFor = nullptr;
 		pop();
 	}
 	if (!add) {
@@ -1888,19 +2000,21 @@ void RoomControl::editDevice(Interface &interface, Storage::Array<Device, Device
 			int index = getThisIndex();
 
 			// unsubscribe new command topics
-			destroy(device, deviceState);
+			destroy(interface, device, deviceState);
 
 			// unsubscribe old command topics
 			auto e = devices[index];
-			destroy(*e.flash, *e.ram);
+			destroy(interface, *e.flash, *e.ram);
 			
 			this->routes.erase(getThisIndex());
+			this->tempFor = nullptr;
 			pop();
 		}
 	}
 	if (entry("Cancel")) {
 		// unsubscribe new command topics
-		destroy(device, deviceState);
+		destroy(interface, device, deviceState);
+		this->tempFor = nullptr;
 		pop();
 	}
 }
@@ -1933,13 +2047,13 @@ void RoomControl::editComponent(int delta, Interface &interface, bool add) {
 	editEnd[1] = b.length();
 	entry(b, edit > 0, editBegin[1], editEnd[1]);
 
-	// name
+	// component name (auto-generated)
 	b = "Name: " + component.getName();
 	label(b);
 
 	// element index
 	int step = componentInfo.elementIndexStep;
-	if (step != 0 && endpointInfo != nullptr && endpointInfo->elementCount >= 2) {
+	if (endpointInfo != nullptr && step < endpointInfo->elementCount) {
 		// edit element index
 		int edit = getEdit(1);
 		if (edit > 0) {
@@ -2084,7 +2198,7 @@ void RoomControl::editComponent(int delta, Interface &interface, bool add) {
 	}
 }
 
-void RoomControl::clone(Device &dstDevice, DeviceState &dstDeviceState,
+void RoomControl::clone(Interface &interface, Device &dstDevice, DeviceState &dstDeviceState,
 	Device const &srcDevice, DeviceState const &srcDeviceState)
 {
 	// copy device
@@ -2094,32 +2208,47 @@ void RoomControl::clone(Device &dstDevice, DeviceState &dstDeviceState,
 		array::copy(begin, end, reinterpret_cast<uint32_t const *>(&srcDevice));
 	}
 	
-	// copy state
+	// copy device state
 	{
 		auto begin = reinterpret_cast<uint32_t *>(&dstDeviceState);
 		auto end = begin + (srcDevice.getRamSize() >> 2);
 		array::copy(begin, end, reinterpret_cast<uint32_t const *>(&srcDeviceState));
 	}
 	
-	// dublicate subscriptions of command topics
+	// duplicate subscriptions to device topic
+	addSubscriptionReference(dstDeviceState.deviceTopicId);
+	
+	// duplicate subscriptions to interface and mptt (command topics)
 	for (ComponentIterator it(dstDevice, dstDeviceState); !it.atEnd(); it.next()) {
 		auto &component = it.getComponent();
 		auto &state = it.getState();
 
+		// subscription to interface
+		state.endpointId = 0;
+		interface.subscribe(state.endpointId, dstDevice.deviceId, component.endpointIndex);
+
+		// subscription to mqtt
 		if (state.is<DeviceState::CommandComponent>(component)) {
 			addSubscriptionReference(state.cast<DeviceState::CommandComponent>().commandTopicId);
 		}
 	}
 }
 
-void RoomControl::destroy(Device const &device, DeviceState &deviceState) {
+void RoomControl::destroy(Interface &interface, Device const &device, DeviceState &deviceState) {
 	TopicBuffer topic = getRoomName() / device.getName();
+
+	// unsubscribe from device topic (enum/<room>/<device>)
+	unsubscribeTopic(deviceState.deviceTopicId, topic.enumeration());
 
 	// destroy components
 	for (ComponentIterator it(device, deviceState); !it.atEnd(); it.next()) {
 		auto &component = it.getComponent();
 		auto &state = it.getState();
 		
+		// unsubscribe from interface
+		interface.unsubscribe(state.endpointId, device.deviceId, component.endpointIndex);
+		
+		// unsubscribe from mqtt
 		if (state.is<DeviceState::CommandComponent>(component)) {
 			StringBuffer<8> b = component.getName();
 			topic /= b;
@@ -2334,8 +2463,8 @@ void RoomControl::clone(Route &dstRoute, RouteState &dstRouteState,
 	array::copy(dst, dst + srcRoute.getFlashSize(), src);
 
 	// clone state
-	dstRouteState.srcTopicId = srcRouteState.srcTopicId;
-	addSubscriptionReference(dstRouteState.dstTopicId = srcRouteState.dstTopicId);
+	addSubscriptionReference(dstRouteState.srcTopicId = srcRouteState.srcTopicId);
+	dstRouteState.dstTopicId = srcRouteState.dstTopicId;
 }
 
 

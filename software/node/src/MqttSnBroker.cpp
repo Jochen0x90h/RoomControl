@@ -144,9 +144,14 @@ MqttSnBroker::Result MqttSnBroker::unsubscribeTopic(uint16_t &topicId, String to
 		return Result::INVALID_PARAMETER;
 	}
 
+	// check if not subscribed
+	if (topicId == 0)
+		return Result::OK;
+
 	// get topic by name
 	uint16_t newTopicId = getTopicId(topicFilter, false);
 	if (newTopicId == 0) {
+		// error topic not found
 		assert(false);
 		return Result::INVALID_PARAMETER;
 	}
@@ -154,8 +159,12 @@ MqttSnBroker::Result MqttSnBroker::unsubscribeTopic(uint16_t &topicId, String to
 	// assert that both topic ids are the same
 	assert(topicId == newTopicId);
 	
+	// get topic by id
 	TopicInfo &topic = getTopic(newTopicId);
-	
+
+	// assert that subscribe count is not zero
+	assert(topic.subscribeCount != 0);
+
 	// check subscription counter
 	if (--topic.subscribeCount == 0) {
 		// remove subscription of local client from flags

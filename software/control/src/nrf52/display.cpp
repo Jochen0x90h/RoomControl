@@ -10,7 +10,7 @@ void init() {
 	configureOutput(DISPLAY_CS_PIN);	
 }
 
-bool send(uint8_t const* data, int commandLength, int dataLength, std::function<void ()> onSent) {
+bool send(uint8_t const* data, int commandLength, int dataLength, std::function<void ()> const &onSent) {
 	// check if task list is full
 	if (spi::taskCount >= SPI_TASK_COUNT)
 		return false;

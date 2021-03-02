@@ -502,7 +502,11 @@ public:
 			SystemDuration duration;
 		};
 
-		using TemperatureSensor = Component;
+		struct TemperatureSensor : public Component {
+		
+			// last temperature measurement
+			uint16_t temperature;
+		};
 
 
 		DeviceState &operator =(const DeviceState &) = delete;
@@ -518,7 +522,8 @@ public:
 	void subscribeDevice(Storage::Element<Device, DeviceState> e);
 
 	// update all devices, handle time, endpoint events and topic events
-	SystemTime updateDevices(SystemTime time, uint8_t endpointId, uint8_t const *data,
+	SystemTime updateDevices(SystemTime time,
+		uint8_t localEndpointId, uint8_t busEndpointId, uint8_t const *data,
 		uint16_t topicId, String message);
 
 	// update devices for one interface
@@ -530,7 +535,8 @@ public:
 	static bool isCompatible(EndpointType endpointType, Device::Component::Type type);
 
 	// list devices menu
-	void listDevices(Storage::Array<Device, DeviceState> &devices, MenuState editDevice, MenuState addDevice);
+	void listDevices(Interface &interface, Storage::Array<Device, DeviceState> &devices,
+		MenuState editDevice, MenuState addDevice);
 
 	// edit device menu
 	void editDevice(Interface &interface, Storage::Array<Device, DeviceState> &devices, bool add,
@@ -540,11 +546,11 @@ public:
 	void editComponent(int delta, Interface &interface, bool add);
 
 	// clone device and its state (subscribe command topics)
-	void clone(Device &dstDevice, DeviceState &dstDeviceState,
+	void clone(Interface &interface, Device &dstDevice, DeviceState &dstDeviceState,
 		Device const &srcDevice, DeviceState const &srcDeviceState);
 
 	// destroy device (unsubscribe command topics)
-	void destroy(Device const &device, DeviceState &deviceState);
+	void destroy(Interface &interface, Device const &device, DeviceState &deviceState);
 
 
 	Storage::Array<Device, DeviceState> localDevices;
@@ -626,6 +632,9 @@ public:
 // LocalInterface
 // --------------
 
+	// called when a local device has sent data
+	void onLocalReceived(uint8_t endpointId, uint8_t const *data, int length);
+
 	// interface to locally connected devices
 	LocalInterface localInterface;
 
@@ -677,7 +686,10 @@ public:
 	struct RouteState {
 		RouteState &operator =(const RouteState &) = delete;
 
+		// source topic id (gets subscribed to receive messages)
 		uint16_t srcTopicId;
+		
+		// destination topic id (only registered to publish messages)
 		uint16_t dstTopicId;
 	};
 
@@ -944,6 +956,9 @@ public:
 		RouteState route;
 		TimerState timer;
 	} tempState;
+	
+	// the device that the temporary variable replaces
+	void const *tempFor = nullptr;
 	
 	// second level
 	int tempIndex;

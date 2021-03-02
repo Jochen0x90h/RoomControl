@@ -28,6 +28,6 @@ void handle();
  * @return true on success, false if busy with previous transfer
  */
 bool transfer(int csPin, uint8_t const *writeData, int writeLength, uint8_t *readData, int readLength,
-	std::function<void ()> onTransferred);
+	std::function<void ()> const &onTransferred);
 
 } // namespace spi

@@ -30,11 +30,11 @@ public:
 
 	void subscribe(uint8_t &endpointId, DeviceId deviceId, uint8_t endpointIndex) override;
 
-	void unsubscribe(uint8_t &endpointId) override;
+	void unsubscribe(uint8_t &endpointId, DeviceId deviceId, uint8_t endpointIndex) override;
 
 	bool send(uint8_t endpointId, uint8_t const *data, int length/*, std::function<void ()> onSent*/) override;
 	
-	void setReceiveHandler(std::function<void (uint8_t, uint8_t const *, int)> onReceived) override;
+	void setReceiveHandler(std::function<void (uint8_t, uint8_t const *, int)> const &onReceived) override;
 	
 	static uint8_t calcChecksum(const uint8_t *data, int length);
 

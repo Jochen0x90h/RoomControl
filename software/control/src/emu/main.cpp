@@ -276,6 +276,8 @@ int main(int argc, const char **argv) {
 		}
 	}
 
+	// subscribe devices after test data has been added
+	roomControl.subscribeInterface(roomControl.localInterface, roomControl.localDevices);
 	roomControl.subscribeAll();
 
 	// main loop

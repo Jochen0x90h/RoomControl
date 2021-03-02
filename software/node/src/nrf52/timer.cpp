@@ -80,7 +80,7 @@ SystemTime getTime() {
 	return systemTime;
 }
 
-void setHandler(int index, std::function<void ()> onTimeout) {
+void setHandler(int index, std::function<void ()> const &onTimeout) {
 	if (uint32_t(index) < uint32_t(TIMER_COUNT)) {
 		Timer &timer = timers[index];
 		timer.onTimeout = onTimeout;

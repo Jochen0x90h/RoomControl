@@ -41,7 +41,7 @@ public:
 	 * Unsubscribe from an endpoint on the bus
 	 * @param endpointId endpoint id, gets set to zero and the reference counter is decremented
 	 */
-	virtual void unsubscribe(uint8_t &endpointId) = 0;
+	virtual void unsubscribe(uint8_t &endpointId, DeviceId deviceId, uint8_t endpointIndex) = 0;
 
 	/**
 	 * Get number of transfers in progress
@@ -62,5 +62,5 @@ public:
 	 * Set handler that gets called when a message was received
 	 * @param onReceived called when data was received
 	 */
-	virtual void setReceiveHandler(std::function<void (uint8_t, uint8_t const *, int)> onReceived) = 0;
+	virtual void setReceiveHandler(std::function<void (uint8_t, uint8_t const *, int)> const &onReceived) = 0;
 };

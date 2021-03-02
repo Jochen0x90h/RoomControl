@@ -19,6 +19,9 @@ endif()
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address")
 set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=address")
 
+# define emulator flag
+add_definitions(-DEMU)
+
 
 # install conan dependencies if not done yet (CLion: use https://github.com/conan-io/conan-clion-plugin)
 if(${PROJECT_SOURCE_DIR}/conanfile.py IS_NEWER_THAN ${CMAKE_BINARY_DIR}/conanbuildinfo.cmake)
@@ -63,6 +66,7 @@ source_group(util FILES ${UTIL})
 
 # base code for nodes (control and gateway)
 set(NODE
+	node/src/assert.hpp
 	node/src/bus.hpp
 	node/src/emu/calendar.cpp
 	node/src/calendar.hpp
@@ -85,7 +89,6 @@ source_group(node FILES ${NODE})
 # room control software running on the nRF52840
 set(CONTROL
 	control/src/emu/main.cpp
-	control/src/emu/assert.hpp
 	control/src/BME680.cpp
 	control/src/BME680.hpp
 	control/src/BusInterface.cpp
