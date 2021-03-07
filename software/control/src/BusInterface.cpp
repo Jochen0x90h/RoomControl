@@ -4,12 +4,16 @@
 #include <bus.hpp>
 
 
-BusInterface::BusInterface(std::function<void ()> onReady)
-	: onReady(onReady), referenceCounters{}
+BusInterface::BusInterface(std::function<void ()> const &onSent,
+	std::function<void (uint8_t, uint8_t const *, int)> const &onReceived)
+	: onSent(onSent), onReceived(onReceived), referenceCounters{}
 {
 	// start first enumeration
 	this->endpointStarts[0] = 0;
 	enumerate();
+	
+	// set handler for read requests by devices
+	bus::setRequestHandler([this](uint32_t endpointId) {onRequest(endpointId);});
 }
 
 BusInterface::~BusInterface() {
@@ -39,13 +43,18 @@ void BusInterface::subscribe(uint8_t &endpointId, DeviceId deviceId, uint8_t end
 
 			if (endpointId == 0) {
 				++this->referenceCounters[newEndpointId - (2 + this->deviceCount)];
-			
-				this->txData[0] = 2 + deviceIndex;
-				this->txData[1] = endpointIndex;
-				this->txData[2] = newEndpointId;
-				this->txData[3] = calcChecksum(txData, 3);
-				// todo: enqueue
-				bus::transfer(this->txData, 4, this->rxData, 10, [](int rxLength) {});
+				if (this->txQueue.hasSpace(4)) {
+					auto tx = this->txQueue.add(false, 4);
+					tx.data[0] = 2 + deviceIndex;
+					tx.data[1] = endpointIndex;
+					tx.data[2] = newEndpointId;
+					tx.data[3] = calcChecksum(tx.data, 3);
+					
+					if (!this->busy) {
+						this->busy = true;
+						bus::transfer(tx.data, 4, this->rxData, 10, [this](int rxLength) {onTransferred(rxLength);});
+					}
+				}
 			} else {
 				assert(endpointId == newEndpointId);
 			}
@@ -61,12 +70,18 @@ void BusInterface::unsubscribe(uint8_t &endpointId, DeviceId deviceId, uint8_t e
 		for (int deviceIndex = 0; deviceIndex < this->deviceCount; ++deviceIndex) {
 			if (deviceId == this->deviceIds[deviceIndex]) {
 				if (--this->referenceCounters[endpointId - (2 + this->deviceCount)] == 0) {
-					this->txData[0] = 2 + deviceIndex;
-					this->txData[1] = endpointIndex;
-					this->txData[2] = 0;
-					this->txData[3] = calcChecksum(txData, 3);
-					// todo: enqueue
-					bus::transfer(this->txData, 4, this->rxData, 10, [](int rxLength) {});
+					if (this->txQueue.hasSpace(4)) {
+						auto tx = this->txQueue.add(false, 4);
+						tx.data[0] = 2 + deviceIndex;
+						tx.data[1] = endpointIndex;
+						tx.data[2] = 0;
+						tx.data[3] = calcChecksum(tx.data, 3);
+
+						if (!this->busy) {
+							this->busy = true;
+							bus::transfer(tx.data, 4, this->rxData, 10, [this](int rxLength) {onTransferred(rxLength);});
+						}
+					}
 				}
 				endpointId = 0;
 			}
@@ -74,28 +89,35 @@ void BusInterface::unsubscribe(uint8_t &endpointId, DeviceId deviceId, uint8_t e
 	}
 }
 
-bool BusInterface::send(uint8_t endpointId, uint8_t const *data, int length) {
-	// todo: buffer multiple sends
-	this->txData[0] = endpointId;
-	array::copy(this->txData + 1, this->txData + 1 + length, data);
-	this->txData[length + 1] = calcChecksum(this->txData, length + 1);
-	bus::transfer(this->txData, length + 2, this->rxData, 10, [](int rxLength) {});
-	return true;
-}
+void BusInterface::send(uint8_t endpointId, uint8_t const *data, int length) {
+	if (endpointId > 2 + this->deviceCount && this->txQueue.hasSpace(length + 2)) {
+		auto tx = this->txQueue.add(false, length + 2);
+		tx.data[0] = endpointId;
+		array::copy(tx.data + 1, tx.data + 1 + length, data);
+		tx.data[length + 1] = calcChecksum(tx.data, length + 1);
 
-void BusInterface::setReceiveHandler(std::function<void (uint8_t, uint8_t const *, int)> const &onReceived) {
-	this->onReceived = onReceived;
+		if (!this->busy) {
+			this->busy = true;
+			bus::transfer(tx.data, tx.length, this->rxData, 10, [this](int rxLength) {onTransferred(rxLength);});
+		}
+	}
 }
 
 void BusInterface::enumerate() {
-	int endpointStart = this->endpointStarts[this->deviceCount];
+	if (this->deviceCount < MAX_DEVICE_COUNT) {
+		int endpointStart = this->endpointStarts[this->deviceCount];
 
-	// start next enumeration
-	this->txData[0] = 0;
-	int rxLength = array::size(this->endpointTypes) - endpointStart;
-	bus::transfer(this->txData, 1, this->endpointTypes + endpointStart, rxLength, [this](int rxLength) {
-		onEnumerated(rxLength);
-	});
+		// start next enumeration
+		uint8_t *txData = this->txQueue.data();
+		txData[0] = 0;
+		int rxLength = array::size(this->endpointTypes) - endpointStart;
+		bus::transfer(txData, 1, this->endpointTypes + endpointStart, rxLength, [this](int rxLength) {
+			onEnumerated(rxLength);
+		});
+	} else {
+		// maximum device count reached: Assume that we are finished
+		this->onSent();
+	}
 }
 
 void BusInterface::onEnumerated(int rxLength) {
@@ -108,8 +130,8 @@ void BusInterface::onEnumerated(int rxLength) {
 		// error or no more devices (we don't know if the devices just didn't "hear" the enumerate request)
 		if (this->retryCount >= 3) {
 			// assume that we are finished
-			bus::setRequestHandler([this](uint32_t endpointId) {this->onRequest(endpointId);});
-			this->onReady();
+			this->retryCount = 0;
+			this->onSent();
 		} else {
 			// try again
 			++this->retryCount;
@@ -140,35 +162,63 @@ void BusInterface::onEnumerated(int rxLength) {
 	
 		// set device endpoint
 		int txIndex = 0;
-		this->txData[txIndex++] = 1;
-		this->txData[txIndex++] = deviceId;
-		this->txData[txIndex++] = deviceId >> 8;
-		this->txData[txIndex++] = deviceId >> 16;
-		this->txData[txIndex++] = deviceId >> 24;
-		this->txData[txIndex++] = 2 + deviceIndex;
-		this->txData[txIndex] = calcChecksum(this->txData, txIndex);
+		uint8_t *txData = this->txQueue.data();
+		txData[txIndex++] = 1;
+		txData[txIndex++] = deviceId;
+		txData[txIndex++] = deviceId >> 8;
+		txData[txIndex++] = deviceId >> 16;
+		txData[txIndex++] = deviceId >> 24;
+		txData[txIndex++] = 2 + deviceIndex;
+		txData[txIndex] = calcChecksum(txData, txIndex);
 		++txIndex;
-		bus::transfer(this->txData, txIndex, this->rxData, 10, [this](int rxLength) {
+		bus::transfer(txData, txIndex, this->rxData, 10, [this](int rxLength) {
 			enumerate();
 		});
 	}
 }
 
-void BusInterface::onRequest(uint8_t endpointId) {
-	// todo: enqueue
-	// read endpoint that requested to be read
-	this->txData[0] = endpointId;
-	bus::transfer(this->txData, 1, this->rxData, 10, [this](int rxLength) {
-		// check if we received at least the endpoint id and the checksum
-		if (rxLength >= 2) {
-			// check checksum of received data
-			if (this->rxData[rxLength - 1] == calcChecksum(this->rxData, rxLength - 1)) {
-				// callback with received data
-				uint8_t endpointId = this->rxData[0];
-				this->onReceived(endpointId, &this->rxData[1], rxLength - 2);
-			}
+void BusInterface::onTransferred(int rxLength) {
+	auto tx = this->txQueue.back();
+	
+	// todo check if transfer was successful
+	if (rxLength < 2 || this->rxData[rxLength - 1] != calcChecksum(this->rxData, rxLength - 1)) {
+		// transfer failed
+	
+		// retry several times
+		if (this->retryCount < 3) {
+			++this->retryCount;
+			bus::transfer(tx.data, tx.length, this->rxData, 10, [this](int rxLength) {onTransferred(rxLength);});
+			return;
+		} else {
+			// todo: report error
 		}
-	});
+	} else if (tx.info) {
+		// this was a read request
+		uint8_t endpointId = this->rxData[0];
+		this->onReceived(endpointId, &this->rxData[1], rxLength - 2);
+	}
+	this->retryCount = 0;
+	
+	// remove transferred message from queue
+	this->txQueue.remove();
+
+	// check if more to transfer
+	if (!this->txQueue.empty()) {
+		auto tx = this->txQueue.back();
+		bus::transfer(tx.data, tx.length, this->rxData, 10, [this](int rxLength) {onTransferred(rxLength);});
+	} else {
+		this->busy = false;
+		this->onSent();
+	}
+}
+
+void BusInterface::onRequest(uint8_t endpointId) {
+	auto tx = this->txQueue.add(true, 1);
+	tx.data[0] = endpointId;
+
+	// gets called when no bus transfer is in progress
+	this->busy = true;
+	bus::transfer(tx.data, 1, this->rxData, 10, [this](int rxLength) {onTransferred(rxLength);});
 }
 
 

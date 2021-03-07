@@ -38,6 +38,12 @@ constexpr int BUS_TX_PIN = PORT0 | 3;
 constexpr int BUS_RX_PIN = PORT0 | 2;
 
 
+// usb
+// ---
+
+constexpr int USB_ENDPOINT_COUNT = 3;
+
+
 // debug
 // -----
 

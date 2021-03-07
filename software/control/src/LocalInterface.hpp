@@ -11,7 +11,7 @@ class LocalInterface : public Interface {
 public:
 	static constexpr int TIMER_INDEX = LOCAL_DEVICES_TIMER_INDEX;
 
-	LocalInterface();
+	LocalInterface(std::function<void (uint8_t, uint8_t const *, int)> const &onReceived);
 
 	~LocalInterface() override;
 	
@@ -23,10 +23,8 @@ public:
 
 	void unsubscribe(uint8_t &endpointId, DeviceId deviceId, uint8_t endpointIndex) override;
 
-	bool send(uint8_t endpointId, uint8_t const *data, int length) override;
+	void send(uint8_t endpointId, uint8_t const *data, int length) override;
 	
-	void setReceiveHandler(std::function<void (uint8_t, uint8_t const *, int)> const &onReceived) override;
-
 protected:
 
 	void onAirSensorInitialized();
@@ -36,8 +34,9 @@ protected:
 	void readAirSensor();
 	void airSensorGetValues();
 
+	std::function<void (uint8_t, uint8_t const *, int)> onReceived;
+
 	BME680 airSensor;
 
 	uint8_t subscriptions[10];
-	std::function<void (uint8_t, uint8_t const *, int)> onReceived;
 };

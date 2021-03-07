@@ -30,7 +30,7 @@ void toggleGreenLed() {
 void setBlueLed(bool value) {
 	setOutput(LED_BLUE_PIN, !value);
 }
-void toggleBlueLed(bool value) {
+void toggleBlueLed() {
 	toggleOutput(LED_BLUE_PIN);
 }
 

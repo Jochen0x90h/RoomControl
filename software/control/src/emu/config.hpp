@@ -32,8 +32,3 @@ constexpr int FERAM_CS_PIN = 1;
 
 constexpr int DISPLAY_WIDTH = 128;
 constexpr int DISPLAY_HEIGHT = 64;
-
-
-// bus and radio devices
-// ---------------------
-constexpr int MAX_DEVICE_COUNT = 64;

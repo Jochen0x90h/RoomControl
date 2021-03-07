@@ -1,5 +1,7 @@
 #pragma once
 
+#include <stdint.h>
+
 #define getOffset(Type, member) intptr_t(&((Type*)nullptr)->member)
 
 constexpr int min(int x, int y) {return x < y ? x : y;}
@@ -23,32 +25,32 @@ constexpr T *end(T (&array)[N]) {return array + N;}
 template <typename T, int N>
 constexpr T const *end(const T (&array)[N]) {return array + N;}
 
-template <typename T>
-void insert(T *array, T *end, int count = 1) {
-	T *it = end - count;
-	while (it > array) {
+template <typename It>
+void insert(It begin, It end, int count = 1) {
+	It it = end - count;
+	while (it > begin) {
 		--it;
-		it[count] = it[0];
+		it[count] = *it;
 	}
 }
 
-template <typename T>
-void erase(T *array, T *end, int count = 1) {
-	for (T *it = array + count; it < end; ++it) {
-		it[-count] = it[0];
+template <typename It>
+void erase(It begin, It end, int count = 1) {
+	for (It it = begin + count; it < end; ++it) {
+		it[-count] = *it;
 	}
 }
 
 template <typename OutputIt, typename T>
-void fill(OutputIt first, OutputIt last, const T &value) {
-	for (OutputIt it = first; it < last; ++it) {
+void fill(OutputIt begin, OutputIt end, const T &value) {
+	for (OutputIt it = begin; it < end; ++it) {
 		*it = value;
 	}
 }
 
 template <typename OutputIt, typename InputIt>
-void copy(OutputIt first, OutputIt last, InputIt src) {
-	for (OutputIt it = first; it < last; ++it, ++src) {
+void copy(OutputIt begin, OutputIt end, InputIt src) {
+	for (OutputIt it = begin; it < end; ++it, ++src) {
 		*it = *src;
 	}
 }
@@ -66,3 +68,25 @@ constexpr void copy(const char (&src)[N], char (&dst)[M]) {
 constexpr int align4(int size) {
 	return (size + 3) & ~3;
 }
+
+
+template <int N>
+struct UIntBase {
+	using Type = uint32_t;
+};
+template <>
+struct UIntBase<1> {
+	using Type = uint8_t;
+};
+template <>
+struct UIntBase<2> {
+	using Type = uint16_t;
+};
+
+/**
+ * Unsigned integer that adapts to given number of values
+ * @tparam N number of values the integer can represent
+ */
+template <int N>
+struct UInt : public UIntBase<(N > 256 ? (N > 65536 ? 4 : 2) : 1)> {
+};

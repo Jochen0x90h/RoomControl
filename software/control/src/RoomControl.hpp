@@ -626,6 +626,9 @@ public:
 // Interface
 // ---------
 
+	// subscribe a device to an interface
+	void subscribeInterface(Interface &interface, Storage::Element<Device, DeviceState> e);
+	
 	void subscribeInterface(Interface &interface, Storage::Array<Device, DeviceState> &devices);
 
 
@@ -643,16 +646,20 @@ public:
 // ------------
 
 	// called when bus interface has finished enumerating the devices
-	void onBusReady();
+	//void onBusReady();
+
+	// called after enumeration of bus devices or when send queue became empty
+	void onBusSent();
 
 	// called when a device connected to the bus has sent data
 	void onBusReceived(uint8_t endpointId, uint8_t const *data, int length);
 
-	//void onBusSent() override;
 
 	// interface to devices connected via bus
 	BusInterface busInterface;
-
+	
+	// startup: Index of device to subscribe when onBusSent() gets called
+	int busSubscribeIndex = 0;
 
 // Routes
 // ------

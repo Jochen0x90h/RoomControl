@@ -191,7 +191,8 @@ ValueInfo valueInfos[] = {
 RoomControl::RoomControl()
 	: storage(0, FLASH_PAGE_COUNT, room, localDevices, busDevices, routes, timers)
 	, display([this]() {onDisplayReady();})
-	, busInterface([this]() {onBusReady();})
+	, localInterface([this](uint8_t endpointId, uint8_t const *data, int length) {onLocalReceived(endpointId, data, length);})
+	, busInterface([this]() {onBusSent();}, [this](uint8_t endpointId, uint8_t const *data, int length) {onBusReceived(endpointId, data, length);})
 {
 	timer::setHandler(TIMER_INDEX, [this]() {onTimeout();});
 	calendar::setSecondTick([this]() {onSecondElapsed();});
@@ -205,9 +206,9 @@ RoomControl::RoomControl()
 	// subscribe to local devices
 	subscribeInterface(this->localInterface, this->localDevices);
 
-	this->localInterface.setReceiveHandler([this](uint8_t endpointId, uint8_t const *data, int length) {
-		onLocalReceived(endpointId, data, length);
-	});
+	//this->localInterface.setReceivedHandler([this](uint8_t endpointId, uint8_t const *data, int length) {
+	//	onLocalReceived(endpointId, data, length);
+	//});
 
 	// subscribe to mqtt broker (has to be repeated when connection to gateway is established because the broker does
 	// not store the topic names)
@@ -264,12 +265,12 @@ void RoomControl::onError(int error, mqttsn::MessageType messageType) {
 //todo: prevent recursion by enqueuing also messages to local client
 void RoomControl::onPublished(uint16_t topicId, uint8_t const *data, int length, int8_t qos, bool retain) {
 	String message(data, length);
-
+/*
 	std::cout << "onPublished " << topicId << " message " << message << " qos " << int(qos);
 	if (retain)
 		std::cout << " retain";
 	std::cout << std::endl;
-
+*/
 
 	// topic list of house, room or device (depending on topicDepth)
 	if (topicId == this->selectedTopicId && !message.empty()) {
@@ -333,13 +334,23 @@ void RoomControl::onLocalReceived(uint8_t endpointId, uint8_t const *data, int l
 
 // BusInterface
 // ------------
-
+/*
 void RoomControl::onBusReady() {
 	subscribeInterface(this->busInterface, this->busDevices);
 	
-	this->busInterface.setReceiveHandler([this](uint8_t endpointId, uint8_t const *data, int length) {
+	this->busInterface.setReceivedHandler([this](uint8_t endpointId, uint8_t const *data, int length) {
 		onBusReceived(endpointId, data, length);
 	});
+}
+*/
+
+void RoomControl::onBusSent() {
+	// check if more devices have to be subscribed
+	while (!this->busInterface.isBusy() && this->busSubscribeIndex < this->busDevices.size()) {
+		//std::cout << "subscribe bus device " << this->busSubscribeIndex << std::endl;
+		subscribeInterface(this->busInterface, this->busDevices[this->busSubscribeIndex]);
+		++this->busSubscribeIndex;
+	}
 }
 
 void RoomControl::onBusReceived(uint8_t endpointId, uint8_t const *data, int length) {
@@ -349,8 +360,6 @@ void RoomControl::onBusReceived(uint8_t endpointId, uint8_t const *data, int len
 	timer::start(TIMER_INDEX, nextTimeout);
 }
 
-//void RoomControl::onBusSent() {
-//}
 
 	
 // SystemTimer
@@ -2347,6 +2356,34 @@ void RoomControl::ComponentEditor::next() {
 // Interface
 // ---------
 
+void RoomControl::subscribeInterface(Interface &interface, Storage::Element<Device, DeviceState> e) {
+	Device const &device = *e.flash;
+	DeviceState &deviceState = *e.ram;
+
+	// get list of endpoints (is empty if device not found)
+	Array<EndpointType> endpoints = interface.getEndpoints(device.deviceId);
+	
+	// iterate over device components
+	ComponentIterator it(device, deviceState);
+	while (!it.atEnd()) {
+		auto &component = it.getComponent();
+		auto &state = it.getState();
+
+		// subscribe component to device endpoint
+		int endpointIndex = component.endpointIndex;
+		if (endpointIndex < endpoints.length) {
+			// check endpoint type compatibility
+			if (isCompatible(endpoints[endpointIndex], component.type)) {
+				// subscribe
+				interface.subscribe(state.endpointId, device.deviceId, endpointIndex);
+			}
+		}
+		
+		// next component
+		it.next();
+	}
+}
+
 void RoomControl::subscribeInterface(Interface &interface, Storage::Array<Device, DeviceState> &devices) {
 	for (auto e : devices) {
 		Device const &device = *e.flash;
@@ -2373,41 +2410,6 @@ void RoomControl::subscribeInterface(Interface &interface, Storage::Array<Device
 			it.next();
 		}
 	}
-
-
-/*
-	for (DeviceId deviceId : interface.getDevices()) {
-		// check if the device is registered
-		for (auto e : devices) {
-			Device const &device = *e.flash;
-			DeviceState &deviceState = *e.ram;
-		
-			if (device.deviceId == deviceId) {
-				// found device, now subscribe to endpoints
-				Array<EndpointType> endpoints = interface.getEndpoints(deviceId);
-				
-				ComponentIterator it(device, deviceState);
-				while (!it.atEnd()) {
-					auto &component = it.getComponent();
-					auto &state = it.getState();
-
-					int endpointIndex = component.endpointIndex;
-					if (endpointIndex < endpoints.length) {
-						// check endpoint type compatibility
-						if (isCompatible(endpoints[endpointIndex], component.type)) {
-							// subscribe
-							interface.subscribe(state.endpointId, deviceId, endpointIndex);
-						}
-					}
-					
-					// next element
-					it.next();
-				}
-				break;
-			}
-		}
-	}
-*/
 }
 
 

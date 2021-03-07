@@ -50,17 +50,11 @@ public:
 	//int getSendCount() {return this->transferCount;}
 
 	/**
-	 * Send a message to a device
+	 * Send a message to a device. Can be called multiple times in a row. When all messages are sent, onSent gets called
 	 * @param endpointId receiver of the message
 	 * @param data message data
 	 * @param length message length, maximum is 8
-	 * @return true if successful, false if
 	 */
-	virtual bool send(uint8_t endpointId, uint8_t const *data, int length/*, std::function<void ()> onSent*/) = 0;
+	virtual void send(uint8_t endpointId, uint8_t const *data, int length) = 0;
 	
-	/**
-	 * Set handler that gets called when a message was received
-	 * @param onReceived called when data was received
-	 */
-	virtual void setReceiveHandler(std::function<void (uint8_t, uint8_t const *, int)> const &onReceived) = 0;
 };

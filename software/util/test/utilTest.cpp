@@ -1,8 +1,9 @@
-#include "StringBuffer.hpp"
-#include "TopicBuffer.hpp"
 #include "ArrayList.hpp"
+#include "Queue.hpp"
+#include "StringBuffer.hpp"
 #include "StringSet.hpp"
 #include "SystemTime.hpp"
+#include "TopicBuffer.hpp"
 #include <gtest/gtest.h>
 #include <random>
 
@@ -10,6 +11,13 @@
 // test utility functions and classes
 
 constexpr String strings[] = {"a", "bar", "bar2", "foo", "foo2", "foobar", "foobar2", "z"};
+
+TEST(utilTest, UInt) {
+	static_assert(sizeof(UInt<256>::Type) == 1);
+	static_assert(sizeof(UInt<257>::Type) == 2);
+	static_assert(sizeof(UInt<65536>::Type) == 2);
+	static_assert(sizeof(UInt<65537>::Type) == 4);
+}
 
 TEST(utilTest, String) {
 	for (int j = 0; j < std::size(strings); ++j) {
@@ -171,6 +179,55 @@ TEST(testUtil, SystemTime) {
 	EXPECT_EQ(e3, SystemTime{0x00020010});
 }
 
+TEST(testUtil, Queue) {
+	using Q = Queue<int, 32, 256>;
+	Q queue;
+
+	EXPECT_TRUE(queue.hasSpace(255));
+	EXPECT_FALSE(queue.hasSpace(256));
+	
+	auto e1 = queue.add(0, 128);
+	EXPECT_TRUE(queue.hasSpace(127));
+	EXPECT_FALSE(queue.hasSpace(128));
+	EXPECT_EQ(e1.data, queue.data());
+	queue.remove();
+
+	auto e2 = queue.add(0, 128);
+	EXPECT_TRUE(queue.hasSpace(127));
+	EXPECT_FALSE(queue.hasSpace(128));
+	EXPECT_EQ(e2.data, queue.data() + 128);
+	queue.remove();
+
+	
+	// add some entries
+	for (int i = 0; i < 5; ++i) {
+		auto e1 = queue.add(i, i);
+		std::fill(e1.data, e1.data + e1.length, uint8_t(i));
+	}
+
+	// add and remove many entries
+	for (int i = 5; i < 105; ++i) {
+		auto e1 = queue.add(i, i & 15);
+		std::fill(e1.data, e1.data + e1.length, uint8_t(i));
+
+		auto e2 = queue.back();
+		EXPECT_EQ(e2.info, i - 5);
+		EXPECT_EQ(e2.length, (i - 5) & 15);
+		for (int i = 0; i < e2.length; ++i) {
+			EXPECT_EQ(e2.data[i], e2.info);
+		}
+		
+		queue.remove();
+	}
+
+	// remove last entries
+	for (int i = 0; i < 5; ++i) {
+		queue.remove();
+	}
+	
+	// now queue must be empty again
+	EXPECT_TRUE(queue.empty());
+}
 
 
 int main(int argc, char **argv) {

@@ -39,8 +39,10 @@ constexpr EndpointType motionDetectorEndpoints[] = {
 };
 
 
-LocalInterface::LocalInterface() : airSensor([this]() {onAirSensorInitialized();}), subscriptions{} {
-	//measure();
+LocalInterface::LocalInterface(std::function<void (uint8_t, uint8_t const *, int)> const &onReceived)
+	: onReceived(onReceived)
+	, airSensor([this]() {onAirSensorInitialized();}), subscriptions{}
+{
 }
 
 LocalInterface::~LocalInterface() {
@@ -90,12 +92,7 @@ void LocalInterface::unsubscribe(uint8_t &endpointId, DeviceId deviceId, uint8_t
 	}
 }
 
-bool LocalInterface::send(uint8_t endpointId, uint8_t const *data, int length) {
-	return false;
-}
-
-void LocalInterface::setReceiveHandler(std::function<void (uint8_t, uint8_t const *, int)> const &onReceived) {
-	this->onReceived = onReceived;
+void LocalInterface::send(uint8_t endpointId, uint8_t const *data, int length) {
 }
 
 void LocalInterface::onAirSensorInitialized() {

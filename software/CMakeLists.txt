@@ -54,6 +54,7 @@ set(UTIL
 	util/src/convert.hpp
 	util/src/defines.hpp
 	util/src/optional.hpp
+	util/src/Queue.hpp
 	util/src/String.hpp
 	util/src/StringBuffer.hpp
 	util/src/StringOperators.hpp

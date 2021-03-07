@@ -3,15 +3,16 @@
 #include "SystemTime.hpp"
 #include <functional>
 
+
 namespace timer {
 
 /**
- * Initialze the system
+ * Initialze the timer
  */
 void init();
 
 /**
- * Wait for event and handle system events 
+ * Wait for event and handle timer events 
  */
 void handle();
 
