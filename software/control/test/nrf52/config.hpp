@@ -3,7 +3,6 @@
 // pins for nRF52840 MDK USB Dongle, https://wiki.makerdiary.com/nrf52840-mdk-usb-dongle/
 constexpr int PORT0 = 0;
 constexpr int PORT1 = 32;
-constexpr int Disconnected = 0xffffffff;
 
 
 // timer
@@ -34,7 +33,6 @@ constexpr int SPI_CS_PINS[2] = {AIR_SENSOR_CS_PIN, FERAM_CS_PIN};
 // display
 // -------
 
-#define HAVE_SPI_DISPLAY
 constexpr int DISPLAY_CS_PIN = PORT0 | 3;
 constexpr int DISPLAY_WIDTH = 128;
 constexpr int DISPLAY_HEIGHT = 64;

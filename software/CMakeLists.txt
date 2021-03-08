@@ -174,7 +174,18 @@ install(TARGETS emulator
 
 
 
-# enable testing, adds a target to run all tests
+# host for usbTest on device (command line tool)
+add_executable(usbTestHost
+	node/test/usbTestHost.cpp
+)
+#include_directories(usbTestHost )
+conan_target_link_libraries(usbTestHost)
+
+
+
+# unit tests
+
+# enable testing, adds a target to run all unit tests
 enable_testing()
 
 # util test (GTest)

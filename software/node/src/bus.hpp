@@ -20,12 +20,12 @@ void handle();
  * Send data on the bus, cancels any running transfer
  * @param txData data to transmit
  * @param txLength length of data to transmit
- * @param rxData data to receive
+ * @param rxData data to receive, always receives own transmit data before reply by a device
  * @param rxLength maximum length of data to receive
- * @param onRx called when data was received on the bus (own transmit data and reply by a device). Zero length is error 
+ * @param onTransferred called when data was transferred. Zero length is error 
  */
 void transfer(uint8_t const *txData, int txLength, uint8_t *rxData, int rxLength,
-	std::function<void (int)> const &onRx);
+	std::function<void (int)> const &onTransferred);
 
 /**
  * Set handler that gets called when a device requests to be queried

@@ -11,11 +11,14 @@
 // get bitfield
 #define G(reg, field) (((reg) & field##_Msk) >> field##_Pos)
 
-// all task triggers have the value 1
+// all tasks have the same trigger value
 constexpr int Trigger = 1;
 
-// all events have the value 1
+// all events have the same generated value
 constexpr int Generated = 1;
+
+// all ports have the same disconnected value
+constexpr int Disconnected = 0xffffffff;
 
 
 // wait for event

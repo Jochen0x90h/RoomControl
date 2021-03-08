@@ -26,7 +26,7 @@ uint8_t *volatile rxData;
 int volatile rxLength;
 int volatile rxIndex;
 bool rxReady;
-std::function<void (int)> onRx = [](int) {};
+std::function<void (int)> onTransferred;
 
 // request buffer
 uint8_t requestData[1];
@@ -49,7 +49,7 @@ void UARTE0_UART0_IRQHandler(void) {
 		if (txIndex < bus::txLength) {
 			// send next byte
 			NRF_UART0->TXD = bus::txData[txIndex];
-			bus::txIndex = txIndex + 1;				
+			bus::txIndex = txIndex + 1;
 		} else {
 			// stop transmit
 			NRF_UART0->TASKS_STOPTX = Trigger;
@@ -101,7 +101,7 @@ void UARTE0_UART0_IRQHandler(void) {
 			int requestIndex = bus::requestIndex;
 			if (requestIndex < array::size(bus::requestData)) {
 				bus::requestData[requestIndex] = NRF_UART0->RXD;
-				bus::requestIndex = requestIndex + 1;			
+				bus::requestIndex = requestIndex + 1;
 				if (requestIndex == array::size(bus::requestData)) {
 					// indicate that requests are ready
 					bus::requestReady = true;
@@ -140,7 +140,7 @@ void TIMER1_IRQHandler(void) {
 	
 			// expect receive of sync byte
 			bus::state = SYNC;
-			setOutput(SIGNAL_PIN, false);			
+			setOutput(SIGNAL_PIN, false);
 		} else {
 			//toggleOutput(SIGNAL_PIN);
 					
@@ -184,7 +184,7 @@ void init() {
 void handle() {
 	if (rxReady) {
 		rxReady = false;
-		bus::onRx(bus::rxIndex);
+		bus::onTransferred(bus::rxIndex);
 		setOutput(SIGNAL_PIN, true);
 	}
 	if (requestReady) {
@@ -195,8 +195,10 @@ void handle() {
 }
 
 void transfer(uint8_t const *txData, int txLength, uint8_t *rxData, int rxLength,
-	std::function<void (int)> const &onRx)
+	std::function<void (int)> const &onTransferred)
 {
+	bus::onTransferred = onTransferred;
+
 	// reset timer
 	NRF_TIMER1->TASKS_STOP = Trigger;
 	NRF_TIMER1->TASKS_CLEAR = Trigger;
@@ -206,7 +208,7 @@ void transfer(uint8_t const *txData, int txLength, uint8_t *rxData, int rxLength
 	NRF_UART0->TASKS_STOPTX = Trigger;
 	NRF_UART0->ENABLE = 0;
 	NRF_UART0->INTENCLR = 0xffffffff;
-	NRF_UART0->PSEL.TXD = Disconnected;	
+	NRF_UART0->PSEL.TXD = Disconnected;
 	NRF_UART0->BAUDRATE = N(UARTE_BAUDRATE_BAUDRATE, Baud1M);
 	NRF_UART0->ENABLE = N(UART_ENABLE_ENABLE, Enabled);
 
@@ -220,7 +222,6 @@ void transfer(uint8_t const *txData, int txLength, uint8_t *rxData, int rxLength
 	bus::rxLength = rxLength;
 	bus::rxIndex = 0;
 	bus::rxReady = false;
-	bus::onRx = onRx;
 
 	// generate break: 13 bit times, 677us
 	setOutput(BUS_TX_PIN, false);

@@ -3,7 +3,6 @@
 // pins for nRF52840 MDK USB Dongle, https://wiki.makerdiary.com/nrf52840-mdk-usb-dongle/
 constexpr int PORT0 = 0;
 constexpr int PORT1 = 32;
-constexpr int Disconnected = 0xffffffff;
 
 
 // flash
