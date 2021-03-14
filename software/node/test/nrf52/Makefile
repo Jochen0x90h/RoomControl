@@ -1,5 +1,5 @@
 PROJECT_NAME     := FunctionTest
-TARGETS          := timerTest spiTest busTest usbTest
+TARGETS          := timerTest spiTest busTest usbTest radioTest
 OUTPUT_DIRECTORY := build
 TEMPLATE_PATH    := ../../src/nrf52/system
 #VERBOSE          := 1
@@ -23,6 +23,9 @@ SRC_FILES_busTest += ../busTest.cpp
 SRC_FILES_busTest += ../../src/nrf52/bus.cpp
 SRC_FILES_usbTest += ../usbTest.cpp
 SRC_FILES_usbTest += ../../src/nrf52/usb.cpp
+SRC_FILES_radioTest += ../radioTest.cpp
+SRC_FILES_radioTest += ../../src/nrf52/radio.cpp
+SRC_FILES_radioTest += ../../src/nrf52/usb.cpp
 
 # Libraries
 LIB_FILES +=

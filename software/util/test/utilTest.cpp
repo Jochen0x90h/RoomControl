@@ -228,10 +228,3 @@ TEST(testUtil, Queue) {
 	// now queue must be empty again
 	EXPECT_TRUE(queue.empty());
 }
-
-
-int main(int argc, char **argv) {
-	testing::InitGoogleTest(&argc, argv);
-	int success = RUN_ALL_TESTS();	
-	return success;
-}

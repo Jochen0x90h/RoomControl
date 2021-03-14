@@ -52,6 +52,9 @@ set(UTIL
 	util/src/Bitmap.hpp
 	util/src/convert.cpp
 	util/src/convert.hpp
+	util/src/crypt.cpp
+	util/src/crypt.hpp
+	util/src/DataBuffer.hpp
 	util/src/defines.hpp
 	util/src/optional.hpp
 	util/src/Queue.hpp
@@ -65,6 +68,16 @@ set(UTIL
 )
 source_group(util FILES ${UTIL})
 
+# system independent utilities
+set(TINYCRYPT
+	util/src/tinycrypt/aes.h
+	util/src/tinycrypt/aes_encrypt.c
+	util/src/tinycrypt/constants.h
+	util/src/tinycrypt/utils.c
+	util/src/tinycrypt/utils.h
+)
+source_group(util/tinycrypt FILES ${TINYCRYPT})
+
 # base code for nodes (control and gateway)
 set(NODE
 	node/src/assert.hpp
@@ -74,16 +87,16 @@ set(NODE
 	node/src/ClockTime.hpp
 	node/src/emu/flash.cpp
 	node/src/flash.hpp
-	node/src/spi.hpp
-	node/src/emu/timer.cpp
-	node/src/timer.hpp
+	node/src/emu/global.cpp
+	node/src/emu/global.hpp
 	node/src/MqttSnClient.cpp
 	node/src/MqttSnClient.hpp
 	node/src/MqttSnBroker.cpp
 	node/src/MqttSnBroker.hpp
+	node/src/spi.hpp
 	node/src/SystemTime.hpp
-	node/src/emu/global.cpp
-	node/src/emu/global.hpp
+	node/src/emu/timer.cpp
+	node/src/timer.hpp
 )
 source_group(node FILES ${NODE})
 
@@ -134,6 +147,7 @@ source_group(glad FILES ${GLAD})
 # emulator executable
 add_executable(emulator
 	${UTIL}
+	${TINYCRYPT}
 	${NODE}
 	${CONTROL}
 	${GLAD}
@@ -178,8 +192,17 @@ install(TARGETS emulator
 add_executable(usbTestHost
 	node/test/usbTestHost.cpp
 )
-#include_directories(usbTestHost )
 conan_target_link_libraries(usbTestHost)
+
+
+
+# test green power devices, e.g. PTM215Z (command line tool, needs radioTest on device)
+add_executable(greenPowerTest
+	node/test/greenPowerTest.cpp
+	${UTIL}
+	${TINYCRYPT}
+)
+conan_target_link_libraries(greenPowerTest)
 
 
 
@@ -190,8 +213,11 @@ enable_testing()
 
 # util test (GTest)
 add_executable(utilTest
+	util/test/main.cpp
 	util/test/utilTest.cpp
+	util/test/cryptTest.cpp
 	${UTIL}
+	${TINYCRYPT}
 )
 conan_target_link_libraries(utilTest)
 add_test(NAME utilTest
