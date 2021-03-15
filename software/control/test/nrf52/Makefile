@@ -1,36 +1,30 @@
 PROJECT_NAME     := FunctionTest
-TARGETS          := potiTest displayTest BME680Test
+TARGETS          := bme680Test
 OUTPUT_DIRECTORY := build
-TEMPLATE_PATH    := ../../../node/src/nrf52/system
+TEMPLATE_PATH    := ../../../system/src/nrf52/system
 #VERBOSE          := 1
 
 
 # Include folders
-INC_FOLDERS += ../../src ../../../node/src .
+INC_FOLDERS += . ../../src ../../../node/src ../../../system/src ../../../util/src
 
 # Source files common to all targets
 SRC_FILES += $(TEMPLATE_PATH)/gcc_startup_nrf52840.S
 SRC_FILES += $(TEMPLATE_PATH)/system_nrf52840.c
-SRC_FILES += ../../../node/src/nrf52/timer.cpp
-SRC_FILES += ../../../node/src/nrf52/calendar.cpp
-SRC_FILES += ../../../node/src/nrf52/debug.cpp
+SRC_FILES += ../../../system/src/nrf52/timer.cpp
+SRC_FILES += ../../../system/src/nrf52/debug.cpp
 
 # Target specific source files
-SRC_FILES_potiTest += ../potiTest.cpp
-SRC_FILES_potiTest += ../../src/nrf52/poti.cpp
-SRC_FILES_displayTest += ../displayTest.cpp
-SRC_FILES_displayTest += ../../../node/src/nrf52/spi.cpp
-SRC_FILES_displayTest += ../../src/nrf52/display.cpp
-SRC_FILES_BME680Test += ../BME680Test.cpp
-SRC_FILES_BME680Test += ../../src/BME680.cpp
-SRC_FILES_BME680Test += ../../../node/src/nrf52/spi.cpp
+SRC_FILES_bme680Test += ../bme680Test.cpp
+SRC_FILES_bme680Test += ../../src/BME680.cpp
+SRC_FILES_bme680Test += ../../../system/src/nrf52/spi.cpp
 
 # Libraries
 LIB_FILES +=
 LIB_FILES += -lc -lnosys -lm -lstdc++ # add standard libs at end so that their symbols get found
 
 # Linker script
-LINKER_SCRIPT := ../../../node/src/nrf52/link.ld
+LINKER_SCRIPT := ../../../system/src/nrf52/link.ld
 
 # C flags common to all targets
 #CFLAGS += -Og -g3 # debug

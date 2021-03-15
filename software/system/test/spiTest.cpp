@@ -6,7 +6,7 @@
 uint8_t spiData[] = {0x0f};
 
 void transferSpi() {
-	spi::transfer(SPI_CS_PIN, spiData, 1, nullptr, 0, []() {transferSpi();});
+	spi::transfer(SPI_CS1_PIN, spiData, 1, nullptr, 0, []() {transferSpi();});
 }
 
 bool blink = false;

@@ -1,6 +1,6 @@
 #include "../spi.hpp"
 #include "spi.hpp"
-#include <nrf52/global.hpp>
+#include "global.hpp"
 
 
 namespace spi {

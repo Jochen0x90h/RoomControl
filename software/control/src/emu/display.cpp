@@ -1,4 +1,4 @@
-#include "../display.hpp"
+#include <display.hpp>
 #include <emu/global.hpp>
 #include <config.hpp>
 

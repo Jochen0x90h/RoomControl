@@ -1,6 +1,6 @@
 #include "../poti.hpp"
-#include <timer.hpp>
-#include <nrf52/global.hpp>
+#include "timer.hpp"
+#include "global.hpp"
 
 
 namespace poti {

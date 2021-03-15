@@ -1,6 +1,6 @@
 #include "../display.hpp"
-#include <nrf52/spi.hpp> // internal interface
-#include <nrf52/global.hpp>
+#include "spi.hpp" // internal interface
+#include "global.hpp"
 
 
 namespace display {

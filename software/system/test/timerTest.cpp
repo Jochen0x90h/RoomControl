@@ -1,26 +1,24 @@
 #include <timer.hpp>
-#include <calendar.hpp>
 #include <debug.hpp>
 
 
 void setTimer0() {
 	debug::toggleRedLed();
-	timer::start(0, timer::getTime() + 1s, []() {setTimer0();});	
+	timer::start(0, timer::getTime() + 1s, []() {setTimer0();});
 }
 
 void setTimer1() {
 	debug::toggleGreenLed();
-	timer::start(1, timer::getTime() + 5s + 500ms, []() {setTimer1();});	
+	timer::start(1, timer::getTime() + 5s + 500ms, []() {setTimer1();});
 }
 
 void setTimer2() {
 	debug::toggleBlueLed();
-	timer::start(2, timer::getTime() + 3s + 333ms, []() {setTimer2();});	
+	timer::start(2, timer::getTime() + 3s + 333ms, []() {setTimer2();});
 }
 
 int main(void) {
 	timer::init();
-	calendar::init();
 	debug::init();
 	
 	setTimer0();
@@ -29,6 +27,5 @@ int main(void) {
 	
 	while (true) {
 		timer::handle();
-		calendar::handle();
 	}
 }

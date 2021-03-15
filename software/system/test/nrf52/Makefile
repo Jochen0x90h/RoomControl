@@ -1,5 +1,5 @@
 PROJECT_NAME     := FunctionTest
-TARGETS          := timerTest spiTest busTest usbTest radioTest
+TARGETS          := timerTest spiTest busTest usbTest radioTest potiTest displayTest
 OUTPUT_DIRECTORY := build
 TEMPLATE_PATH    := ../../src/nrf52/system
 #VERBOSE          := 1
@@ -12,7 +12,6 @@ INC_FOLDERS += . ../../src ../../../util/src
 SRC_FILES += $(TEMPLATE_PATH)/gcc_startup_nrf52840.S
 SRC_FILES += $(TEMPLATE_PATH)/system_nrf52840.c
 SRC_FILES += ../../src/nrf52/timer.cpp
-SRC_FILES += ../../src/nrf52/calendar.cpp
 SRC_FILES += ../../src/nrf52/debug.cpp
 
 # Target specific source files
@@ -26,13 +25,18 @@ SRC_FILES_usbTest += ../../src/nrf52/usb.cpp
 SRC_FILES_radioTest += ../radioTest.cpp
 SRC_FILES_radioTest += ../../src/nrf52/radio.cpp
 SRC_FILES_radioTest += ../../src/nrf52/usb.cpp
+SRC_FILES_potiTest += ../potiTest.cpp
+SRC_FILES_potiTest += ../../src/nrf52/poti.cpp
+SRC_FILES_displayTest += ../displayTest.cpp
+SRC_FILES_displayTest += ../../src/nrf52/spi.cpp
+SRC_FILES_displayTest += ../../src/nrf52/display.cpp
 
 # Libraries
 LIB_FILES +=
 LIB_FILES += -lc -lnosys -lm -lstdc++ # add standard libs at end so that their symbols get found
 
 # Linker script
-LINKER_SCRIPT := ../../../node/src/nrf52/link.ld
+LINKER_SCRIPT := ../../src/nrf52/link.ld
 
 # C flags common to all targets
 #CFLAGS += -Og -g3 # debug

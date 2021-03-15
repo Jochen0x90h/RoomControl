@@ -48,6 +48,7 @@ add_definitions(-DDEBUG)
 set(UTIL
 	util/src/Array.hpp
 	util/src/ArrayList.hpp
+	util/src/assert.hpp
 	util/src/Bitmap.cpp
 	util/src/Bitmap.hpp
 	util/src/convert.cpp
@@ -78,25 +79,32 @@ set(TINYCRYPT
 )
 source_group(util/tinycrypt FILES ${TINYCRYPT})
 
+# system
+set(SYSTEM
+	system/src/bus.hpp
+	system/src/emu/calendar.cpp
+	system/src/calendar.hpp
+	system/src/ClockTime.hpp
+	system/src/display.hpp
+	system/src/emu/flash.cpp
+	system/src/flash.hpp
+	system/src/emu/global.cpp
+	system/src/emu/global.hpp
+	system/src/emu/poti.cpp
+	system/src/poti.hpp
+	system/src/spi.hpp
+	system/src/SystemTime.hpp
+	system/src/emu/timer.cpp
+	system/src/timer.hpp
+)
+source_group(system FILES ${SYSTEM})
+
 # base code for nodes (control and gateway)
 set(NODE
-	node/src/assert.hpp
-	node/src/bus.hpp
-	node/src/emu/calendar.cpp
-	node/src/calendar.hpp
-	node/src/ClockTime.hpp
-	node/src/emu/flash.cpp
-	node/src/flash.hpp
-	node/src/emu/global.cpp
-	node/src/emu/global.hpp
 	node/src/MqttSnClient.cpp
 	node/src/MqttSnClient.hpp
 	node/src/MqttSnBroker.cpp
 	node/src/MqttSnBroker.hpp
-	node/src/spi.hpp
-	node/src/SystemTime.hpp
-	node/src/emu/timer.cpp
-	node/src/timer.hpp
 )
 source_group(node FILES ${NODE})
 
@@ -111,7 +119,6 @@ set(CONTROL
 	control/src/emu/config.hpp
 	control/src/Device.hpp
 	control/src/emu/display.cpp
-	control/src/display.hpp
 	control/src/Font.cpp
 	control/src/Font.hpp
 	control/src/emu/Gui.cpp
@@ -122,8 +129,6 @@ set(CONTROL
 	control/src/LocalInterface.hpp
 	control/src/emu/Network.cpp
 	control/src/emu/Network.hpp
-	control/src/emu/poti.cpp
-	control/src/poti.hpp
 	control/src/RoomControl.cpp
 	control/src/RoomControl.hpp
 	control/src/emu/spi.cpp
@@ -148,6 +153,7 @@ source_group(glad FILES ${GLAD})
 add_executable(emulator
 	${UTIL}
 	${TINYCRYPT}
+	${SYSTEM}
 	${NODE}
 	${CONTROL}
 	${GLAD}
@@ -156,6 +162,7 @@ include_directories(emulator
 	control/src/emu
 	control/src
 	node/src
+	system/src
 	util/src
 	glad
 )
@@ -190,7 +197,7 @@ install(TARGETS emulator
 
 # host for usbTest on device (command line tool)
 add_executable(usbTestHost
-	node/test/usbTestHost.cpp
+	system/test/usbTestHost.cpp
 )
 conan_target_link_libraries(usbTestHost)
 

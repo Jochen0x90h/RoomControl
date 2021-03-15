@@ -16,7 +16,7 @@ void writeDisplay() {
 uint8_t spiData[] = {0x0f, 0x7f, 0x00};
 
 void transferSpi() {
-	spi::transfer(AIR_SENSOR_CS_PIN, spiData, 3, nullptr, 0, []() {transferSpi();});
+	spi::transfer(SPI_CS1_PIN, spiData, 3, nullptr, 0, []() {transferSpi();});
 }
 
 bool blink = false;

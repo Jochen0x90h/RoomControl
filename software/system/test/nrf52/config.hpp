@@ -26,8 +26,9 @@ constexpr int SPI_TASK_COUNT = 4;
 constexpr int SPI_SCK_PIN = PORT0 | 19;
 constexpr int SPI_MOSI_PIN = PORT0 | 20;
 constexpr int SPI_MISO_PIN = PORT0 | 21; // also connected to display D/C#
-constexpr int SPI_CS_PIN = PORT0 | 2;
-constexpr int SPI_CS_PINS[1] = {SPI_CS_PIN};
+constexpr int SPI_CS1_PIN = PORT0 | 2;
+constexpr int SPI_CS2_PIN = PORT0 | 3;
+constexpr int SPI_CS_PINS[2] = {SPI_CS1_PIN, SPI_CS2_PIN};
 
 
 // bus
@@ -41,6 +42,19 @@ constexpr int BUS_RX_PIN = PORT0 | 2;
 // ---
 
 constexpr int USB_ENDPOINT_COUNT = 3;
+
+
+// poti
+// ----
+constexpr int POTI_A_PIN = PORT0 | 4;
+constexpr int POTI_B_PIN = PORT0 | 5;
+constexpr int BUTTON_PIN = PORT0 | 6;
+
+
+// display
+// -------
+
+constexpr int DISPLAY_CS_PIN = PORT0 | 3;
 
 
 // debug
