@@ -205,7 +205,7 @@ void Gui::RockerWidget::release() {
 	this->state = 0;
 }
 
-/*
+
 // Gui::DoubleRockerWidget
 
 Gui::DoubleRockerWidget::~DoubleRockerWidget() {
@@ -218,7 +218,7 @@ void Gui::DoubleRockerWidget::touch(bool first, float x, float y) {
 void Gui::DoubleRockerWidget::release() {
 	this->state = 0;
 }
-*/
+
 
 // Gui
 
@@ -276,7 +276,7 @@ Gui::Gui() {
 		"}\n");
 	this->rockerUp = this->rockerRender->getUniformLocation("up");
 	this->rockerDown = this->rockerRender->getUniformLocation("down");
-/*
+
 	// double rocker switch
 	this->doubleRockerRender = new Render("#version 330\n"
 		"uniform float a0;\n"
@@ -293,7 +293,7 @@ Gui::Gui() {
 	this->doubleRockerA1 = this->doubleRockerRender->getUniformLocation("a1");
 	this->doubleRockerB0 = this->doubleRockerRender->getUniformLocation("b0");
 	this->doubleRockerB1 = this->doubleRockerRender->getUniformLocation("b1");
-*/
+
 	// temperature sensor
 	this->temperatureTexture = createTexture(TEMPERATURE_BITMAP_WIDTH, tahoma_8pt.height);
 
@@ -525,7 +525,7 @@ int Gui::rocker(int id) {
 
 	return activated ? state : -1;
 }
-/*
+
 int Gui::doubleRocker(int id) {
 	float const w = 0.1f;
 	float const h = 0.1f;
@@ -550,7 +550,7 @@ int Gui::doubleRocker(int id) {
 
 	return activated ? state : -1;
 }
-*/
+
 int Gui::temperatureSensor(int id) {
 	float const w = 0.1f;
 	float const h = 0.1f;

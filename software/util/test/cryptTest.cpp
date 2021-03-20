@@ -24,8 +24,8 @@ TEST(cryptTest, security01) {
 	AesKey aesKey;
 	setKey(aesKey, key);
 
-	bool result1 = crypt(deviceId, counter, header1, array::size(header1), message1, 0, 2, aesKey);
-	bool result2 = crypt(deviceId, counter, header2, array::size(header2), message2, 0, 2, aesKey);
+	bool result1 = decrypt(deviceId, counter, header1, array::size(header1), message1, 0, 2, aesKey);
+	bool result2 = decrypt(deviceId, counter, header2, array::size(header2), message2, 0, 2, aesKey);
 	EXPECT_TRUE(result1);
 	EXPECT_TRUE(result2);
 }
@@ -42,7 +42,7 @@ TEST(cryptTest, security10) {
 	AesKey aesKey;
 	setKey(aesKey, key);
 
-	bool result = crypt(deviceId, counter, header, array::size(header), message, 0, 4, aesKey);
+	bool result = decrypt(deviceId, counter, header, array::size(header), message, 0, 4, aesKey);
 	EXPECT_TRUE(result);
 }
 
@@ -57,6 +57,18 @@ TEST(cryptTest, security11) {
 	AesKey aesKey;
 	setKey(aesKey, key);
 
-	bool result = crypt(deviceId, counter, header, array::size(header), message, 1, 4, aesKey);
+	bool result = decrypt(deviceId, counter, header, array::size(header), message, 1, 4, aesKey);
 	EXPECT_TRUE(result);
+	EXPECT_EQ(message[0], 0x20);
+	EXPECT_EQ(message[1], 0);
+	EXPECT_EQ(message[2], 0);
+	EXPECT_EQ(message[3], 0);
+	EXPECT_EQ(message[4], 0);
+
+	encrypt(deviceId, counter, header, array::size(header), message, 1, 4, aesKey);
+	EXPECT_EQ(message[0], 0x83);
+	EXPECT_EQ(message[1], 0x5F);
+	EXPECT_EQ(message[2], 0x1A);
+	EXPECT_EQ(message[3], 0x30);
+	EXPECT_EQ(message[4], 0x34);
 }

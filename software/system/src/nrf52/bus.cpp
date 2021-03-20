@@ -32,7 +32,7 @@ std::function<void (int)> onTransferred;
 uint8_t requestData[1];
 int volatile requestIndex;
 bool requestReady;
-std::function<void (uint8_t)> onRequest = [](uint8_t) {};
+std::function<void (uint8_t)> onRequest;
 
 
 extern "C" {
@@ -189,7 +189,8 @@ void handle() {
 	}
 	if (requestReady) {
 		requestReady = false;
-		bus::onRequest(bus::requestData[0]);//, bus::requestIndex);
+		if (bus::onRequest)
+			bus::onRequest(bus::requestData[0]);//, bus::requestIndex);
 		bus::requestIndex = 0;
 	}
 }

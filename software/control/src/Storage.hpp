@@ -14,22 +14,24 @@ public:
 	static constexpr int MAX_ELEMENT_COUNT = 256;
 	static constexpr int RAM_SIZE = 16384;
 
+
+	Storage(Storage const &) = delete;
+
 	/**
-	 * Constructor
+	 * Constructor. First call this constructor, then constructors of arrays and then init()
 	 * @param pageStart first flash page to use
 	 * @param pageCount number of flash pages to use
-	 * @param arrays arrays that aremanaged by this flash storage
 	 */
-	template <typename... Arrays>
-	Storage(uint8_t pageStart, uint8_t pageCount, Arrays&... arrays) {
+	Storage(uint8_t pageStart, uint8_t pageCount) {
 		pageCount >>= 1;
 		this->pageStart = pageStart;
 		this->pageCount = pageCount;
-
-		add(arrays...);
-		
-		init();
 	}
+
+	/**
+	 * Initialize Storage
+	 */
+	void init();
 
 	/**
 	 * Return true if there is space available for the requested size
@@ -108,6 +110,18 @@ protected:
 		void move(int oldIndex, int newIndex);
 	};
 
+	// get flash element size
+	template <typename F>
+	static int flashSize(const void *flashElement) {
+		return reinterpret_cast<const F*>(flashElement)->getFlashSize();
+	}
+
+	// get ram element size
+	template <typename F>
+	static int ramSize(const void *flashElement) {
+		return reinterpret_cast<const F*>(flashElement)->getRamSize();
+	}
+
 public:
 
 	template <typename F, typename R>
@@ -133,17 +147,45 @@ public:
 	template <typename F, typename R>
 	class Array {
 	public:
-		using FLASH = F;
-		using RAM = R;
+		// type that is stored in flash (e.g. permanent configuration)
+		using FlashType = F;
+		
+		// type that is stored in ram (e.g. current state)
+		using RamType = R;
 
+
+		Array(const Array &) = delete;
+
+		/**
+		 * Constructor. Needs a storage object that manages this array in flash and ram memory
+		 * @param storage storage object
+		 */
+		Array(Storage &storage) {
+			static_assert(sizeof(FlashType) <= FLASH_PAGE_SIZE - flashAlign(sizeof(FlashHeader)));
+			
+			this->data.storage = &storage;
+			this->data.next = storage.first;
+			storage.first = &this->data;
+			this->data.index = storage.arrayCount++;
+			this->data.count = 0;
+			this->data.flashSize = &flashSize<FlashType>;
+			this->data.ramSize = &ramSize<FlashType>;
+			this->data.flashElements = storage.flashElements;
+			this->data.ramElements = storage.ramElements;
+		}
+
+		/**
+		 * Returns number of elements in the array
+		 * @return number of elements
+		 */
 		int size() const {
 			return this->data.count;
 		}
 				
-		Element<F, R> operator[](int index) const {
+		Element<FlashType, RamType> operator[](int index) const {
 			assert(index >= 0 && index < this->data.count);
-			const FLASH *f = reinterpret_cast<const FLASH*>(this->data.flashElements[index]);
-			RAM *r = reinterpret_cast<RAM*>(this->data.ramElements[index]);
+			FlashType const *f = reinterpret_cast<const FlashType*>(this->data.flashElements[index]);
+			RamType *r = reinterpret_cast<RamType*>(this->data.ramElements[index]);
 			return {f, r};
 		}
 
@@ -152,7 +194,7 @@ public:
 		 * @param flashElement element to test
 		 * @return true if space is available
 		 */
-		bool hasSpace(FLASH const *flashElement) {
+		bool hasSpace(FlashType const *flashElement) {
 			return this->data.hasSpace(flashElement);
 		}
 
@@ -164,7 +206,7 @@ public:
 		 * @param ramElement element to store in ram, can be nullptr
 		 * @return true if successful, false if out of memory
 		 */
-		bool write(int index, FLASH const *flashElement, RAM *ramElement = nullptr) {
+		bool write(int index, FlashType const *flashElement, RamType *ramElement = nullptr) {
 			assert(index >= 0 && index <= this->data.count);
 			return this->data.write(index, flashElement, ramElement);
 		}
@@ -188,11 +230,11 @@ public:
 			this->data.move(index, newIndex);
 		}
 		
-		Iterator<F, R> begin() const {
+		Iterator<FlashType, RamType> begin() const {
 			return {this->data.flashElements, this->data.ramElements};
 			
 		}
-		Iterator<F, R> end() const {
+		Iterator<FlashType, RamType> end() const {
 			return {this->data.flashElements + this->data.count, this->data.ramElements + this->data.count};
 		}
 /*
@@ -232,44 +274,6 @@ public:
 		
 protected:
 	
-	// get flash element size
-	template <typename F>
-	static int flashSize(const void *flashElement) {
-		return reinterpret_cast<const F*>(flashElement)->getFlashSize();
-	}
-
-   // get ram element size
-   template <typename F>
-   static int ramSize(const void *flashElement) {
-	   return reinterpret_cast<const F*>(flashElement)->getRamSize();
-   }
-
-	// add array to be managed by this storage
-	template <typename T>
-	void add(T &array) {
-		static_assert(sizeof(typename T::FLASH) <= FLASH_PAGE_SIZE - flashAlign(sizeof(FlashHeader)));
-		
-		array.data.storage = this;
-		array.data.next = this->first;
-		this->first = &array.data;
-		array.data.index = this->arrayCount++;
-		array.data.count = 0;
-		array.data.flashSize = &flashSize<typename T::FLASH>;
-		array.data.ramSize = &ramSize<typename T::FLASH>;
-		array.data.flashElements = this->flashElements;
-		array.data.ramElements = this->ramElements;
-	}
-
-	// add multiple arrays to be managed by this storage
-	template <typename T, typename... Arrays>
-	void add(T &array, Arrays&... arrays) {
-		add(array);
-		add(arrays...);
-	}
-
-	// initialize Storage
-	void init();
-
 	void switchFlashRegions();
 
 	void ramInsert(uint32_t **ramElement, int sizeChange);

@@ -72,7 +72,7 @@ static const UsbConfiguration configurationDescriptor = {
 };
 
 
-
+/*
 void receive() {
 	radio::setReceiveHandler([](uint8_t const *data) {
 		int length = 1 + data[0] - 2; // crc is not in data
@@ -85,6 +85,7 @@ void receive() {
 		receive();
 	});
 }
+*/
 
 int main(void) {
 	debug::init();
@@ -106,10 +107,19 @@ int main(void) {
 			usb::enableEndpoints(1 | (1 << 1), 1 | (1 << 2)); 			
 		
 			// wait until we receive a packet
-			receive();
+			//receive();
 		});
 		
 	//radio::setChannel(15);
+
+	// add a receive handler to the radio
+	radio::addReceiveHandler([](uint8_t const *data) {
+		int length = 1 + data[0] - 2; // crc is not in data
+		
+		usb::send(1, data, length, []() {
+			debug::toggleBlueLed();
+		});	
+	});
 	
 	while (true) {
 		timer::handle();

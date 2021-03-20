@@ -14,13 +14,16 @@ public:
 	LocalInterface(std::function<void (uint8_t, uint8_t const *, int)> const &onReceived);
 
 	~LocalInterface() override;
-	
-	Array<DeviceId> getDevices() override;
-	
+
+	void setCommissioning(bool enabled) override;
+
+	int getDeviceCount() override;
+	DeviceId getDeviceId(int index) override;
+
+	//Array<DeviceId> getDevices() override;
 	Array<EndpointType> getEndpoints(DeviceId deviceId) override;
 
 	void subscribe(uint8_t &endpointId, DeviceId deviceId, uint8_t endpointIndex) override;
-
 	void unsubscribe(uint8_t &endpointId, DeviceId deviceId, uint8_t endpointIndex) override;
 
 	void send(uint8_t endpointId, uint8_t const *data, int length) override;

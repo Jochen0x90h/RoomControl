@@ -1,20 +1,24 @@
 #include "../calendar.hpp"
 #include "global.hpp"
+#include <config.hpp>
 
 
 namespace calendar {
 
-inline void nop() {}
-
 asio::deadline_timer *timer;
-std::function<void ()> onSecondElapsed = nop;
+std::function<void ()> onSecond[CALENDAR_SECOND_HANDLER_COUNT];
 
 void setTimeout(boost::posix_time::ptime utc) {
 	calendar::timer->expires_at(utc);
 	calendar::timer->async_wait([] (boost::system::error_code error) {
 		if (!error) {
-			calendar::onSecondElapsed();
-			
+			//calendar::onSecondElapsed();
+			// call second handlers
+			for (auto const &h : calendar::onSecond) {
+				if (h)
+					h();
+			}
+
 			// set next timeout in one second
 			auto utc = boost::date_time::second_clock<boost::posix_time::ptime>::universal_time();
 			setTimeout(utc + boost::posix_time::seconds(1));
@@ -43,8 +47,19 @@ ClockTime getTime() {
 	return ClockTime(weekDay, hours, minutes, seconds);
 }
 
-void setSecondTick(std::function<void ()> const &onElapsed) {
-	calendar::onSecondElapsed = onElapsed;
+int8_t addSecondHandler(std::function<void ()> const &onSecond) {
+	// handler must not be null
+	assert(onSecond);
+	for (int i = 0; i < CALENDAR_SECOND_HANDLER_COUNT; ++i) {
+		if (!calendar::onSecond[i]) {
+			calendar::onSecond[i] = onSecond;
+			return i;
+		}
+	}
+	
+	// error: handler array is full
+	assert(false);
+	return -1;
 }
 
 } // namespace system

@@ -20,6 +20,12 @@ constexpr int CONTROL_TIMER_INDEX = 2;
 constexpr int LOCAL_DEVICES_TIMER_INDEX = 3;
 
 
+// calendar
+// --------
+
+constexpr int CALENDAR_SECOND_HANDLER_COUNT = 1;
+
+
 // spi
 // ---
 
@@ -32,3 +38,10 @@ constexpr int FERAM_CS_PIN = 1;
 
 constexpr int DISPLAY_WIDTH = 128;
 constexpr int DISPLAY_HEIGHT = 64;
+
+
+// radio
+// -----
+
+constexpr int RADIO_MAX_PAYLOAD_LENGTH = 125; // payload length without leading length byte
+constexpr int RADIO_RECEIVE_HANDLER_COUNT = 1;

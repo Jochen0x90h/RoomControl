@@ -1,14 +1,15 @@
 #include "../radio.hpp"
 #include "global.hpp"
+#include <assert.hpp>
 //#include <debug.hpp>
 
 
 namespace radio {
 
-std::function<void (uint8_t const *)> onReceived;
 std::function<void ()> onSent;
+std::function<void (uint8_t const *)> onReceived[RADIO_RECEIVE_HANDLER_COUNT];
 
-uint8_t receiveBuffer[128] __attribute__((aligned(4)));
+uint8_t receiveBuffer[1 + RADIO_MAX_PAYLOAD_LENGTH] __attribute__((aligned(4)));
 
 
 void init() {
@@ -30,7 +31,7 @@ void init() {
 		| V(RADIO_PCNF0_LFLEN, 8) // LENGTH is 8 bit
 		| V(RADIO_PCNF0_S1LEN, 0); // no S1
 	NRF_RADIO->PCNF1 =
-		V(RADIO_PCNF1_MAXLEN, 125) // maximum length of PAYLOAD
+		V(RADIO_PCNF1_MAXLEN, RADIO_MAX_PAYLOAD_LENGTH) // maximum length of PAYLOAD
 		| N(RADIO_PCNF1_ENDIAN, Little); // little endian
 
 	// set interrupt flags
@@ -64,7 +65,11 @@ void handle() {
 		// clear pending interrupt flag at peripheral
 		NRF_RADIO->EVENTS_END = 0;
 	
-		radio::onReceived(receiveBuffer);
+		// call receive handlers
+		for (auto const &h : radio::onReceived) {
+			if (h)
+				h(receiveBuffer);
+		}
 		
 		// start receive
 		NRF_RADIO->TASKS_START = Trigger;
@@ -84,10 +89,18 @@ bool send(uint8_t const* data, std::function<void ()> const &onSent) {
 	return true;
 }
 
-void setReceiveHandler(std::function<void (uint8_t const *)> const &onReceived) {
-	radio::onReceived = onReceived;
+int8_t addReceiveHandler(std::function<void (uint8_t const *)> const &onReceived) {
+	assert(onReceived);
+	for (int i = 0; i < RADIO_RECEIVE_HANDLER_COUNT; ++i) {
+		if (!radio::onReceived[i]) {
+			radio::onReceived[i] = onReceived;
+			return i;
+		}
+	}
 
-
+	// error: handler array is full
+	assert(false);
+	return -1;
 }
 
 } // namespace radio

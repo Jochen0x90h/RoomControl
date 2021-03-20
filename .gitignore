@@ -1,9 +1,5 @@
 build*/
 cmake-build*/
-*.d
-*.bin
-*.elf
-generated.*.ld
 __pycache__/
 
 # CLion

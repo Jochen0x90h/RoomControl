@@ -92,6 +92,7 @@ set(SYSTEM
 	system/src/emu/global.hpp
 	system/src/emu/poti.cpp
 	system/src/poti.hpp
+	system/src/radio.hpp
 	system/src/spi.hpp
 	system/src/SystemTime.hpp
 	system/src/emu/timer.cpp
@@ -129,6 +130,9 @@ set(CONTROL
 	control/src/LocalInterface.hpp
 	control/src/emu/Network.cpp
 	control/src/emu/Network.hpp
+	control/src/emu/radio.cpp
+	control/src/RadioInterface.cpp
+	control/src/RadioInterface.hpp
 	control/src/RoomControl.cpp
 	control/src/RoomControl.hpp
 	control/src/emu/spi.cpp

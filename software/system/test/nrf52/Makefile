@@ -1,5 +1,5 @@
 PROJECT_NAME     := FunctionTest
-TARGETS          := timerTest spiTest busTest usbTest radioTest potiTest displayTest
+TARGETS          := timerTest calendarTest spiTest busTest usbTest radioTest potiTest displayTest
 OUTPUT_DIRECTORY := build
 TEMPLATE_PATH    := ../../src/nrf52/system
 #VERBOSE          := 1
@@ -16,6 +16,8 @@ SRC_FILES += ../../src/nrf52/debug.cpp
 
 # Target specific source files
 SRC_FILES_timerTest += ../timerTest.cpp
+SRC_FILES_calendarTest += ../../src/nrf52/calendar.cpp
+SRC_FILES_calendarTest += ../calendarTest.cpp
 SRC_FILES_spiTest += ../spiTest.cpp
 SRC_FILES_spiTest += ../../src/nrf52/spi.cpp
 SRC_FILES_busTest += ../busTest.cpp

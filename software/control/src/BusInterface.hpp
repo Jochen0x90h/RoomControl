@@ -1,7 +1,6 @@
 #pragma once
 
 #include <Interface.hpp>
-#include <Array.hpp>
 #include <Queue.hpp>
 #include <config.hpp>
 
@@ -29,17 +28,21 @@ public:
 		std::function<void (uint8_t, uint8_t const *, int)> const &onReceived);
 
 	~BusInterface() override;
-	
+
+	void setCommissioning(bool enabled) override;
+
+	int getDeviceCount() override;
+	DeviceId getDeviceId(int index) override;
+
 	/**
 	 * Get list of devices connected to the bus. Is not valid before onReady() gets called
 	 * @return list of device ids
 	 */
-	Array<DeviceId> getDevices() override;
+	//Array<DeviceId> getDevices() override;
 	
 	Array<EndpointType> getEndpoints(DeviceId deviceId) override;
 
 	void subscribe(uint8_t &endpointId, DeviceId deviceId, uint8_t endpointIndex) override;
-
 	void unsubscribe(uint8_t &endpointId, DeviceId deviceId, uint8_t endpointIndex) override;
 
 	void send(uint8_t endpointId, uint8_t const *data, int length) override;
@@ -57,21 +60,25 @@ private:
 	// called when an endpoint wants to be read
 	void onRequest(uint8_t endpointId);
 	
+	
 	std::function<void ()> onSent;
 	std::function<void (uint8_t, uint8_t const *, int)> onReceived;
+
+	uint8_t retryCount = 0;
 
 	// enumeration
 	DeviceId deviceIds[MAX_DEVICE_COUNT];
 	int deviceCount = 0;
 	uint8_t endpointTypes[MAX_ENDPOINT_COUNT + 5 + 1];
 	uint8_t endpointStarts[MAX_DEVICE_COUNT + 1];
-	uint8_t retryCount = 0;
 	
-	// endpoints
+	// endpoint refrence counters
 	uint8_t referenceCounters[MAX_ENDPOINT_COUNT];
 	
-	// message send/receive
+	// transmit qeueue
 	Queue<bool, MAX_SEND_COUNT, SEND_BUFFER_SIZE> txQueue;
 	bool busy = false;
+	
+	// receive data
 	uint8_t rxData[1 + MAX_MESSAGE_SIZE + 1]; // endpoint id, message, checksum
 };

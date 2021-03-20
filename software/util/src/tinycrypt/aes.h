@@ -65,6 +65,8 @@ typedef struct tc_aes_key_sched_struct {
 	unsigned int words[Nb*(Nr+1)];
 } *TCAesKeySched_t;
 
+typedef struct tc_aes_key_sched_struct const *ConstTCAesKeySched_t;
+
 /**
  *  @brief Set AES-128 encryption key
  *  Uses key k to initialize s
@@ -91,7 +93,7 @@ int tc_aes128_set_encrypt_key(TCAesKeySched_t s, const uint8_t *k);
  *  @param s IN -- initialized AES key schedule
  */
 int tc_aes_encrypt(uint8_t *out, const uint8_t *in, 
-		   const TCAesKeySched_t s);
+		   const ConstTCAesKeySched_t s);
 
 /**
  *  @brief Set the AES-128 decryption key

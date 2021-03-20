@@ -53,10 +53,10 @@ public:
 	int rocker(int id);
 
 	/**
-	 * Add a virtual double rocker switch like PTM 216Z
+	 * Add a virtual double rocker switch
 	 * @return button state or -1 when no event
 	 */
-	//int doubleRocker(int id);
+	int doubleRocker(int id);
 
 	/**
 	 * Add a virtual temperature sensor
@@ -236,7 +236,7 @@ protected:
 	GLint rockerUp;
 	GLint rockerDown;
 
-/*
+
 	// double rocker
 	class DoubleRockerWidget : public Widget {
 	public:
@@ -257,7 +257,7 @@ protected:
 	GLint doubleRockerA1;
 	GLint doubleRockerB0;
 	GLint doubleRockerB1;
-*/
+
 
 	// temperature sensor
 	GLuint temperatureTexture;

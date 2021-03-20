@@ -23,9 +23,10 @@ void handle();
 ClockTime getTime();
 
 /**
- * Set callback for second tick
- * onElapsed called when a second has elapsed
+ * Set callback that gets called once per second
+ * @param onSecond called when a second has elapsed, must not be null
+ * @return id of handler to be able to remove it later
  */
-void setSecondTick(std::function<void ()> const &onElapsed);
+int8_t addSecondHandler(std::function<void ()> const &onSecond);
 
 } // namespace calendar

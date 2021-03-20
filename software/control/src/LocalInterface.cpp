@@ -1,5 +1,6 @@
 #include "LocalInterface.hpp"
 #include <timer.hpp>
+#include <util.hpp>
 
 
 // device id's
@@ -7,7 +8,7 @@ constexpr int BME680_ID = 0x00000001;
 constexpr int BRIGHTNESS_SENSOR_ID = 0x00000002;
 constexpr int MOTION_DETECTOR_ID = 0x00000003;
 
-// endpoint id's
+// endpoint indices
 constexpr int BME680_ENDPOINTS = 1;
 constexpr int TEMPERATURE_SENSOR_ENDPOINT = BME680_ENDPOINTS + 0;
 constexpr int AIR_PRESSURE_SENSOR_ENDPOINT = BME680_ENDPOINTS + 1;
@@ -48,9 +49,23 @@ LocalInterface::LocalInterface(std::function<void (uint8_t, uint8_t const *, int
 LocalInterface::~LocalInterface() {
 }
 
+void LocalInterface::setCommissioning(bool enabled) {
+}
+
+int LocalInterface::getDeviceCount() {
+	return array::size(deviceIds);
+}
+
+DeviceId LocalInterface::getDeviceId(int index) {
+	assert(index >= 0 && index < array::size(deviceIds));
+	return deviceIds[index];
+}
+
+/*
 Array<DeviceId> LocalInterface::getDevices() {
 	return deviceIds;
 }
+ */
 
 Array<EndpointType> LocalInterface::getEndpoints(DeviceId deviceId) {
 	switch (deviceId) {

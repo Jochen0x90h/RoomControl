@@ -30,6 +30,12 @@ std::chrono::steady_clock::time_point time;
 std::function<void (int)> onRx = [](int) {};
 std::function<void (uint8_t)> onRequest = [](uint8_t) {};
 
+inline void request(uint8_t endpointId) {
+	if (bus::onRequest) {
+		bus::onRequest(endpointId);
+		//asio::post(global::context, [endpointId]() {bus::onRequest(endpointId);});
+	}
+}
 
 void doGui(Gui &gui, int &id) {
 
@@ -54,7 +60,7 @@ void doGui(Gui &gui, int &id) {
 						int value = gui.button(id++);
 						if (value != -1) {
 							state = value;
-							asio::post(global::context, [endpointId]() {bus::onRequest(endpointId);});
+							request(endpointId);
 						}
 					}
 					break;
@@ -64,7 +70,7 @@ void doGui(Gui &gui, int &id) {
 						int value = gui.switcher(id++);
 						if (value != -1) {
 							state = value;
-							asio::post(global::context, [endpointId]() {bus::onRequest(endpointId);});
+							request(endpointId);
 						}
 					}
 					break;
@@ -74,7 +80,7 @@ void doGui(Gui &gui, int &id) {
 						int value = gui.rocker(id++);
 						if (value != -1) {
 							state = value;
-							asio::post(global::context, [endpointId]() {bus::onRequest(endpointId);});
+							request(endpointId);
 						}
 					}
 					break;
@@ -104,8 +110,7 @@ void doGui(Gui &gui, int &id) {
 						int temperature = gui.temperatureSensor(id++);
 						if (temperature != -1) {
 							state = temperature;
-							//onBusReceived(state.endpointId, data, 2);
-							asio::post(global::context, [endpointId]() {bus::onRequest(endpointId);});
+							request(endpointId);
 						}
 					}
 				}
@@ -136,7 +141,7 @@ void transfer(uint8_t const *txData, int txLength, uint8_t *rxData, int rxLength
 	
 	uint8_t endpointId = txData[0];
 	if (endpointId == 0) {
-		// get next device id and descriptor (next device that has not an endpoint yet)
+		// commissioning: get next device id and descriptor (next device that has not an endpoint yet)
 		for (int i = 0; i < array::size(bus::deviceIds); ++i) {
 			if (bus::endpointIds[array::size(endpointTypes) + i] == 0) {
 				uint32_t deviceId = bus::deviceIds[i];
@@ -171,7 +176,7 @@ void transfer(uint8_t const *txData, int txLength, uint8_t *rxData, int rxLength
 			if (bus::endpointIds[i] == endpointId) {
 				int &state = states[i];
 				if (i < array::size(endpointTypes)) {
-					// read / write data
+					// read/write data from/to an endpoint
 					EndpointType type = endpointTypes[i];
 					
 					switch (type) {
@@ -210,7 +215,7 @@ void transfer(uint8_t const *txData, int txLength, uint8_t *rxData, int rxLength
 						break;
 					}
 				} else {
-					// subscribe / unsubscribe topic
+					// subscribe/unsubscribe to/from an endpoint
 					int deviceIndex = i - array::size(endpointTypes);
 					uint8_t endpointIndex = txData[1];
 					uint8_t endpointId = txData[2]; // 0 to unsubscribe

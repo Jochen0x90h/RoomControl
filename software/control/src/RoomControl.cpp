@@ -189,13 +189,17 @@ ValueInfo valueInfos[] = {
 // -----------
 
 RoomControl::RoomControl()
-	: storage(0, FLASH_PAGE_COUNT, room, localDevices, busDevices, routes, timers)
+	: storage(0, FLASH_PAGE_COUNT)
+	, room(storage), localDevices(storage), busDevices(storage), radioDevices(storage), routes(storage), timers(storage)
 	, display([this]() {onDisplayReady();})
 	, localInterface([this](uint8_t endpointId, uint8_t const *data, int length) {onLocalReceived(endpointId, data, length);})
 	, busInterface([this]() {onBusSent();}, [this](uint8_t endpointId, uint8_t const *data, int length) {onBusReceived(endpointId, data, length);})
+	, radioInterface(storage, [this](uint8_t endpointId, uint8_t const *data, int length) {onRadioReceived(endpointId, data, length);})
 {
+	this->storage.init();
+
 	timer::setHandler(TIMER_INDEX, [this]() {onTimeout();});
-	calendar::setSecondTick([this]() {onSecondElapsed();});
+	calendar::addSecondHandler([this]() {onSecondElapsed();});
 	poti::setHandler([this](int delta, bool activated) {onPotiChanged(delta, activated);});
 
 	if (this->room.size() == 0) {
@@ -205,10 +209,6 @@ RoomControl::RoomControl()
 	
 	// subscribe to local devices
 	subscribeInterface(this->localInterface, this->localDevices);
-
-	//this->localInterface.setReceivedHandler([this](uint8_t endpointId, uint8_t const *data, int length) {
-	//	onLocalReceived(endpointId, data, length);
-	//});
 
 	// subscribe to mqtt broker (has to be repeated when connection to gateway is established because the broker does
 	// not store the topic names)
@@ -222,6 +222,7 @@ RoomControl::RoomControl()
 }
 
 RoomControl::~RoomControl() {
+	// unregister second handler not needed because RoomControl lives forever
 }
 
 // UpLink
@@ -316,7 +317,7 @@ void RoomControl::onPublished(uint16_t topicId, uint8_t const *data, int length,
 	
 	// update devices and set next timeout
 	auto now = timer::getTime();
-	auto nextTimeout = updateDevices(now, 0, 0, nullptr, topicId, message);
+	auto nextTimeout = updateDevices(now, 0, 0, 0, nullptr, topicId, message);
 	timer::start(TIMER_INDEX, nextTimeout);
 }
 
@@ -327,7 +328,7 @@ void RoomControl::onPublished(uint16_t topicId, uint8_t const *data, int length,
 void RoomControl::onLocalReceived(uint8_t endpointId, uint8_t const *data, int length) {
 	// update devices and set next timeout
 	auto now = timer::getTime();
-	auto nextTimeout = updateDevices(now, endpointId, 0, data, 0, String());
+	auto nextTimeout = updateDevices(now, endpointId, 0, 0, data, 0, String());
 	timer::start(TIMER_INDEX, nextTimeout);
 }
 
@@ -356,7 +357,18 @@ void RoomControl::onBusSent() {
 void RoomControl::onBusReceived(uint8_t endpointId, uint8_t const *data, int length) {
 	// update devices and set next timeout
 	auto now = timer::getTime();
-	auto nextTimeout = updateDevices(now, 0, endpointId, data, 0, String());
+	auto nextTimeout = updateDevices(now, 0, endpointId, 0, data, 0, String());
+	timer::start(TIMER_INDEX, nextTimeout);
+}
+
+
+// RadioInterface
+// --------------
+
+void RoomControl::onRadioReceived(uint8_t endpointId, uint8_t const *data, int length) {
+	// update devices and set next timeout
+	auto now = timer::getTime();
+	auto nextTimeout = updateDevices(now, 0, 0, endpointId, data, 0, String());
 	timer::start(TIMER_INDEX, nextTimeout);
 }
 
@@ -368,7 +380,7 @@ void RoomControl::onBusReceived(uint8_t endpointId, uint8_t const *data, int len
 void RoomControl::onTimeout() {
 	auto now = timer::getTime();
 	//std::cout << "time: " << time.value << std::endl;
-	SystemTime nextTimeout = updateDevices(now, 0, 0, nullptr, 0, String());
+	SystemTime nextTimeout = updateDevices(now, 0, 0, 0, nullptr, 0, String());
 	//std::cout << "next: " << nextTimeout.value << std::endl;
 	timer::start(TIMER_INDEX, nextTimeout);
 }
@@ -460,8 +472,14 @@ void RoomControl::updateMenu(int delta, bool activated) {
 
 		if (entry("Local Devices"))
 			push(LOCAL_DEVICES);
-		if (entry("Bus Devices"))
+		if (entry("Bus Devices")) {
+			this->busInterface.setCommissioning(true);
 			push(BUS_DEVICES);
+		}
+		if (entry("Radio Devices")) {
+			this->radioInterface.setCommissioning(true);
+			push(RADIO_DEVICES);
+		}
 		if (entry("Routes"))
 			push(ROUTES);
 		if (entry("Timers"))
@@ -497,11 +515,26 @@ void RoomControl::updateMenu(int delta, bool activated) {
 		editDevice(this->busInterface, this->busDevices, this->menuState == ADD_BUS_DEVICE,
 			EDIT_BUS_COMPONENT, ADD_BUS_COMPONENT);
 		break;
-		
 	case EDIT_BUS_COMPONENT:
 	case ADD_BUS_COMPONENT:
 		menu(delta, activated);
 		editComponent(delta, this->busInterface, this->menuState == ADD_BUS_COMPONENT);
+		break;
+
+	case RADIO_DEVICES:
+		menu(delta, activated);
+		listDevices(this->radioInterface, this->radioDevices, EDIT_RADIO_DEVICE, ADD_RADIO_DEVICE);
+		break;
+	case EDIT_RADIO_DEVICE:
+	case ADD_RADIO_DEVICE:
+		menu(delta, activated);
+		editDevice(this->radioInterface, this->radioDevices, this->menuState == ADD_RADIO_DEVICE,
+			EDIT_RADIO_COMPONENT, ADD_RADIO_COMPONENT);
+		break;
+	case EDIT_RADIO_COMPONENT:
+	case ADD_RADIO_COMPONENT:
+		menu(delta, activated);
+		editComponent(delta, this->radioInterface, this->menuState == ADD_RADIO_COMPONENT);
 		break;
 
 	case ROUTES:
@@ -1345,7 +1378,7 @@ void RoomControl::subscribeDevice(Storage::Element<Device, DeviceState> e) {
 }
 
 SystemTime RoomControl::updateDevices(SystemTime time,
-	uint8_t localEndpointId, uint8_t busEndpointId, uint8_t const *data,
+	uint8_t localEndpointId, uint8_t busEndpointId, uint8_t radioEndpointId, uint8_t const *data,
 	uint16_t topicId, String message)
 {
 	// get duration since last update
@@ -1367,6 +1400,8 @@ SystemTime RoomControl::updateDevices(SystemTime time,
 		localEndpointId, data, topicId, message, nextTimeout);
 	nextTimeout = updateDevices(time, duration, reportChanging, this->busInterface, this->busDevices,
 		busEndpointId, data, topicId, message, nextTimeout);
+	nextTimeout = updateDevices(time, duration, reportChanging, this->radioInterface, this->radioDevices,
+		radioEndpointId, data, topicId, message, nextTimeout);
 
 	return nextTimeout;
 }
@@ -1836,9 +1871,10 @@ void RoomControl::listDevices(Interface &interface, Storage::Array<Device, Devic
 		}
 	}
 
-	// add devices
-	Array<DeviceId> deviceIds = interface.getDevices();
-	for (DeviceId deviceId : deviceIds) {
+	// menu entries to add missing devices
+	int deviceCount = interface.getDeviceCount();
+	for (int deviceIndex = 0; deviceIndex < deviceCount; ++deviceIndex) {
+		DeviceId deviceId = interface.getDeviceId(deviceIndex);
 		bool found = false;
 		for (auto e : devices) {
 			auto &device = *e.flash;
@@ -1866,8 +1902,10 @@ void RoomControl::listDevices(Interface &interface, Storage::Array<Device, Devic
 		}
 	}
 
-	if (entry("Exit"))
+	if (entry("Exit")) {
+		interface.setCommissioning(false);
 		pop();
+	}
 }
 
 void RoomControl::editDevice(Interface &interface, Storage::Array<Device, DeviceState> &devices, bool add,

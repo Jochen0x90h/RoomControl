@@ -1,9 +1,11 @@
 #include "../calendar.hpp"
 #include "global.hpp"
+#include <assert.hpp>
+
 
 namespace calendar {
 
-std::function<void ()> onSecondElapsed = []() {};
+std::function<void ()> onSecond[CALENDAR_SECOND_HANDLER_COUNT];
 uint8_t seconds = 0;
 uint8_t minutes = 0;
 uint8_t hours = 0;
@@ -36,7 +38,11 @@ void handle() {
 			}
 		}
 	
-		calendar::onSecondElapsed();
+		// call second handlers
+		for (auto const &h : calendar::onSecond) {
+			if (h)
+				h();
+		}
 	}
 }
 
@@ -44,8 +50,18 @@ ClockTime getTime() {
 	return ClockTime(calendar::weekday, calendar::hours, calendar::minutes, calendar::seconds);
 }
 
-void setSecondTick(std::function<void ()> const &onElapsed) {
-	calendar::onSecondElapsed = onElapsed;
+int8_t addSecondHandler(std::function<void ()> const &onSecond) {
+	assert(onSecond);
+	for (int i = 0; i < CALENDAR_SECOND_HANDLER_COUNT; ++i) {
+		if (!calendar::onSecond[i]) {
+			calendar::onSecond[i] = onSecond;
+			return i;
+		}
+	}
+	
+	// error: handler array is full
+	assert(false);
+	return -1;
 }
 
 } // namespace calendar

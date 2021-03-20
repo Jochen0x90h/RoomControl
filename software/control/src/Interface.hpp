@@ -17,17 +17,36 @@ public:
 	virtual ~Interface();
 	
 	/**
+	 * Set the interface into commissioning mode so that new devices can be added
+	 * @param enabled true to enable
+	 */
+	virtual void setCommissioning(bool enabled) = 0;
+	
+	/**
+	 * Get number of devices connected to this interface
+	 */
+	virtual int getDeviceCount() = 0;
+	
+	/**
+	 * Get device id by index
+	 * @param index index of device
+	 * @return device id
+	 */
+	virtual DeviceId getDeviceId(int index) = 0;
+	
+	/**
 	 * Get list of devices connected to this interface
 	 * @return list of device ids
 	 */
-	virtual Array<DeviceId> getDevices() = 0;
+	//virtual Array<DeviceId> getDevices() = 0;
 	
 	/**
 	 * Get list of endpoints for a device
-	 * @param deviceId id device
+	 * @param deviceId device id
 	 * @return list of endpoints
 	 */
 	virtual Array<EndpointType> getEndpoints(DeviceId deviceId) = 0;
+	//virtual Array<EndpointType> getEndpoints(int index) = 0;
 
 	/**
 	 * Subscribe to an endpoint on the bus

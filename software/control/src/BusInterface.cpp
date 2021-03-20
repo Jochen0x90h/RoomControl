@@ -19,8 +19,16 @@ BusInterface::BusInterface(std::function<void ()> const &onSent,
 BusInterface::~BusInterface() {
 }
 
-Array<DeviceId> BusInterface::getDevices() {
-	return Array(this->deviceIds, this->deviceCount);
+void BusInterface::setCommissioning(bool enabled) {
+}
+
+int BusInterface::getDeviceCount() {
+	return this->deviceCount;
+}
+
+DeviceId BusInterface::getDeviceId(int index) {
+	assert(index >= 0 && index < this->deviceCount);
+	return this->deviceIds[index];
 }
 
 Array<EndpointType> BusInterface::getEndpoints(DeviceId deviceId) {
@@ -36,13 +44,13 @@ Array<EndpointType> BusInterface::getEndpoints(DeviceId deviceId) {
 
 void BusInterface::subscribe(uint8_t &endpointId, DeviceId deviceId, uint8_t endpointIndex) {
 	for (int deviceIndex = 0; deviceIndex < this->deviceCount; ++deviceIndex) {
-		if (deviceId == this->deviceIds[deviceIndex]) {
+		if (this->deviceIds[deviceIndex] == deviceId) {
 			int start = this->endpointStarts[deviceIndex];
 
-			int newEndpointId = 2 + this->deviceCount + start + endpointIndex;
+			int newEndpointId = 2 + MAX_DEVICE_COUNT + start + endpointIndex;
 
 			if (endpointId == 0) {
-				++this->referenceCounters[newEndpointId - (2 + this->deviceCount)];
+				++this->referenceCounters[newEndpointId - (2 + MAX_DEVICE_COUNT)];
 				if (this->txQueue.hasSpace(4)) {
 					auto tx = this->txQueue.add(false, 4);
 					tx.data[0] = 2 + deviceIndex;
@@ -68,13 +76,16 @@ void BusInterface::subscribe(uint8_t &endpointId, DeviceId deviceId, uint8_t end
 void BusInterface::unsubscribe(uint8_t &endpointId, DeviceId deviceId, uint8_t endpointIndex) {
 	if (endpointId != 0) {
 		for (int deviceIndex = 0; deviceIndex < this->deviceCount; ++deviceIndex) {
-			if (deviceId == this->deviceIds[deviceIndex]) {
-				if (--this->referenceCounters[endpointId - (2 + this->deviceCount)] == 0) {
+			if (this->deviceIds[deviceIndex] == deviceId) {
+				int referenceCounterIndex = endpointId - (2 + MAX_DEVICE_COUNT);
+				assert(referenceCounterIndex >= 0 && referenceCounterIndex < MAX_ENDPOINT_COUNT);
+				assert(this->referenceCounters[referenceCounterIndex] > 0);
+				if (--this->referenceCounters[referenceCounterIndex] == 0) {
 					if (this->txQueue.hasSpace(4)) {
 						auto tx = this->txQueue.add(false, 4);
 						tx.data[0] = 2 + deviceIndex;
 						tx.data[1] = endpointIndex;
-						tx.data[2] = 0;
+						tx.data[2] = 0; // zero as new endpoint id means unsubscribe
 						tx.data[3] = calcChecksum(tx.data, 3);
 
 						if (!this->busy) {

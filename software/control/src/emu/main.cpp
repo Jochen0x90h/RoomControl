@@ -3,6 +3,7 @@
 #include <flash.hpp>
 #include <spi.hpp>
 #include <display.hpp>
+#include <radio.hpp>
 #include <iostream>
 #include <fstream>
 #include <vector>
@@ -19,6 +20,9 @@ namespace display {
 	void getDisplay(uint8_t *buffer);
 }
 namespace bus {
+  void doGui(Gui &gui, int &id);
+}
+namespace radio {
   void doGui(Gui &gui, int &id);
 }
 
@@ -203,11 +207,12 @@ int main(int argc, const char **argv) {
 	global::local = asio::ip::udp::endpoint(asio::ip::udp::v6(), 1337);
 	global::upLink = asio::ip::udp::endpoint(localhost, 47193);
 
-	// init drivers
+	// init emulated drivers
 	timer::init();
 	calendar::init();
 	spi::init();
 	display::init();
+	radio::init();
 
 	// the room control application
 	RoomControl roomControl;
@@ -328,6 +333,9 @@ int main(int argc, const char **argv) {
 			
 			// bus devices
 			bus::doGui(gui, id);
+
+			// radio devices
+			radio::doGui(gui, id);
 		}
 		
 		// swap render buffer to screen

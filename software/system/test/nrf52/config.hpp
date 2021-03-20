@@ -19,6 +19,12 @@ constexpr int FLASH_WRITE_ALIGN = 4;
 constexpr int TIMER_COUNT = 4;
 
 
+// calendar
+// --------
+
+constexpr int CALENDAR_SECOND_HANDLER_COUNT = 1;
+
+
 // spi
 // ---
 
@@ -56,6 +62,13 @@ constexpr int BUTTON_PIN = PORT0 | 6;
 
 constexpr int DISPLAY_CS_PIN = PORT0 | 3;
 
+
+// radio
+// -----
+
+constexpr int RADIO_MAX_PAYLOAD_LENGTH = 125; // payload length without leading length byte
+constexpr int RADIO_SEND_TASK_COUNT = 1;
+constexpr int RADIO_RECEIVE_HANDLER_COUNT = 1;
 
 // debug
 // -----

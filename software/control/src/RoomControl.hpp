@@ -2,6 +2,7 @@
 
 #include "LocalInterface.hpp"
 #include "BusInterface.hpp"
+#include "RadioInterface.hpp"
 #include <Bitmap.hpp>
 #include <StringBuffer.hpp>
 #include <StringSet.hpp>
@@ -97,13 +98,20 @@ public:
 		EDIT_LOCAL_COMPONENT,
 		ADD_LOCAL_COMPONENT,
 
-		// devices connected by bus
+		// bus devices
 		BUS_DEVICES,
 		EDIT_BUS_DEVICE,
 		ADD_BUS_DEVICE,
 		EDIT_BUS_COMPONENT,
 		ADD_BUS_COMPONENT,
 		
+		// radio devices
+		RADIO_DEVICES,
+		EDIT_RADIO_DEVICE,
+		ADD_RADIO_DEVICE,
+		EDIT_RADIO_COMPONENT,
+		ADD_RADIO_COMPONENT,
+
 		// connections
 		ROUTES,
 		EDIT_ROUTE,
@@ -523,7 +531,7 @@ public:
 
 	// update all devices, handle time, endpoint events and topic events
 	SystemTime updateDevices(SystemTime time,
-		uint8_t localEndpointId, uint8_t busEndpointId, uint8_t const *data,
+		uint8_t localEndpointId, uint8_t busEndpointId, uint8_t radioEndpointId, uint8_t const *data,
 		uint16_t topicId, String message);
 
 	// update devices for one interface
@@ -555,7 +563,7 @@ public:
 
 	Storage::Array<Device, DeviceState> localDevices;
 	Storage::Array<Device, DeviceState> busDevices;
-	//using DeviceElement = Storage::Element<Device, DeviceState>;
+	Storage::Array<Device, DeviceState> radioDevices;
 
 	// next time for reporting changing values
 	SystemTime nextReportTime;
@@ -660,6 +668,18 @@ public:
 	
 	// startup: Index of device to subscribe when onBusSent() gets called
 	int busSubscribeIndex = 0;
+
+
+// RadioInterface
+// --------------
+
+	// called when a device connected via radio has sent data
+	void onRadioReceived(uint8_t endpointId, uint8_t const *data, int length);
+
+
+	// interface to devices connected via radio
+	RadioInterface radioInterface;
+
 
 // Routes
 // ------

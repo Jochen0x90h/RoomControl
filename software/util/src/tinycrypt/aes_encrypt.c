@@ -155,7 +155,7 @@ static inline void shift_rows(uint8_t *s)
 	(void) _copy(s, sizeof(t), t, sizeof(t));
 }
 
-int tc_aes_encrypt(uint8_t *out, const uint8_t *in, const TCAesKeySched_t s)
+int tc_aes_encrypt(uint8_t *out, const uint8_t *in, const ConstTCAesKeySched_t s)
 {
 	uint8_t state[Nk*Nb];
 	unsigned int i;

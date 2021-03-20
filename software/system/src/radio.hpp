@@ -31,8 +31,9 @@ bool send(uint8_t const *data, std::function<void ()> const &onSent);
 
 /**
  * Set handler that gets called when data was received
- * @param onReceived called when data was received
+ * @param onReceived called when data was received, must not be null
+ * @return id of handler to be able to remove it later
  */
-void setReceiveHandler(std::function<void (uint8_t const *)> const &onReceived);
+int8_t addReceiveHandler(std::function<void (uint8_t *)> const &onReceived);
 
 } // namespace radio
