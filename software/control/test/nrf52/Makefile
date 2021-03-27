@@ -11,13 +11,16 @@ INC_FOLDERS += . ../../src ../../../node/src ../../../system/src ../../../util/s
 # Source files common to all targets
 SRC_FILES += $(TEMPLATE_PATH)/gcc_startup_nrf52840.S
 SRC_FILES += $(TEMPLATE_PATH)/system_nrf52840.c
-SRC_FILES += ../../../system/src/nrf52/timer.cpp
+SRC_FILES += ../../../system/src/nrf52/loop.cpp
 SRC_FILES += ../../../system/src/nrf52/debug.cpp
 
 # Target specific source files
 SRC_FILES_bme680Test += ../bme680Test.cpp
 SRC_FILES_bme680Test += ../../src/BME680.cpp
+SRC_FILES_bme680Test += ../../../system/src/nrf52/timer.cpp
 SRC_FILES_bme680Test += ../../../system/src/nrf52/spi.cpp
+SRC_FILES_bme680Test += ../../../system/src/nrf52/usb.cpp
+SRC_FILES_bme680Test += ../../../util/src/convert.cpp
 
 # Libraries
 LIB_FILES +=

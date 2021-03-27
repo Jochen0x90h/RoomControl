@@ -1,7 +1,8 @@
 #include "../radio.hpp"
+#include "loop.hpp"
 #include "global.hpp"
 #include <assert.hpp>
-//#include <debug.hpp>
+#include <debug.hpp>
 
 
 namespace radio {
@@ -11,6 +12,42 @@ std::function<void (uint8_t const *)> onReceived[RADIO_RECEIVE_HANDLER_COUNT];
 
 uint8_t receiveBuffer[1 + RADIO_MAX_PAYLOAD_LENGTH] __attribute__((aligned(4)));
 
+
+// event loop handler chain
+loop::Handler nextHandler;
+void handle() {
+	if (isInterruptPending(RADIO_IRQn)) {
+		if (NRF_RADIO->EVENTS_RXREADY) {
+			// clear pending interrupt flag at peripheral
+			NRF_RADIO->EVENTS_RXREADY = 0;
+			
+			// set receive buffer
+			NRF_RADIO->PACKETPTR = intptr_t(radio::receiveBuffer);
+			
+			// start receive
+			NRF_RADIO->TASKS_START = Trigger; // -> END
+		}
+		if (NRF_RADIO->EVENTS_END) {
+			// clear pending interrupt flag at peripheral
+			NRF_RADIO->EVENTS_END = 0;
+	
+			// call receive handlers
+			for (auto const &h : radio::onReceived) {
+				if (h)
+					h(receiveBuffer);
+			}
+			
+			// start receive again
+			NRF_RADIO->TASKS_START = Trigger;
+		}
+		
+		// clear pending interrupt flag at NVIC
+		clearInterrupt(RADIO_IRQn);
+	}
+	
+	// call next handler in chain
+	radio::nextHandler();
+}
 
 void init() {
 	// set modulation mode
@@ -44,39 +81,9 @@ NRF_RADIO->FREQUENCY = V(RADIO_FREQUENCY_FREQUENCY, 2405 + 5 * (15 - 11) - 2400)
 
 	// enable receiver
 	NRF_RADIO->TASKS_RXEN = Trigger; // -> RXREADY
-}
 
-void handle() {
-	if (!isInterruptPending(RADIO_IRQn))
-		return;
-
-	if (NRF_RADIO->EVENTS_RXREADY) {
-		// clear pending interrupt flag at peripheral
-		NRF_RADIO->EVENTS_RXREADY = 0;
-		
-		// set receive buffer
-		NRF_RADIO->PACKETPTR = intptr_t(radio::receiveBuffer);
-		
-		// start receive
-		NRF_RADIO->TASKS_START = Trigger; // -> END
-		
-	}
-	if (NRF_RADIO->EVENTS_END) {
-		// clear pending interrupt flag at peripheral
-		NRF_RADIO->EVENTS_END = 0;
-	
-		// call receive handlers
-		for (auto const &h : radio::onReceived) {
-			if (h)
-				h(receiveBuffer);
-		}
-		
-		// start receive
-		NRF_RADIO->TASKS_START = Trigger;
-	}
-	
-	// clear pending interrupt flag at NVIC
-	clearInterrupt(RADIO_IRQn);
+	// add to event loop handler chain
+	radio::nextHandler = loop::addHandler(handle);
 }
 
 void setChannel(int channel) {
@@ -89,18 +96,18 @@ bool send(uint8_t const* data, std::function<void ()> const &onSent) {
 	return true;
 }
 
-int8_t addReceiveHandler(std::function<void (uint8_t const *)> const &onReceived) {
+uint8_t addReceiveHandler(std::function<void (uint8_t const *)> const &onReceived) {
 	assert(onReceived);
 	for (int i = 0; i < RADIO_RECEIVE_HANDLER_COUNT; ++i) {
 		if (!radio::onReceived[i]) {
 			radio::onReceived[i] = onReceived;
-			return i;
+			return i + 1;
 		}
 	}
 
 	// error: handler array is full
 	assert(false);
-	return -1;
+	return 0;
 }
 
 } // namespace radio

@@ -1,12 +1,17 @@
 #include "../timer.hpp"
-#include "global.hpp"
+#include "loop.hpp"
 #include <config.hpp>
 
 
 namespace timer {
 
-asio::steady_timer *timers[TIMER_COUNT];
-std::function<void ()> onTimeouts[4];
+struct Timer {
+	asio::steady_timer *timer = nullptr;
+	std::function<void ()> onTimeout;
+};
+
+Timer timers[TIMER_COUNT];
+
 
 std::chrono::steady_clock::time_point toChronoTime(SystemTime time) {
 	auto now = std::chrono::steady_clock::now();
@@ -16,12 +21,6 @@ std::chrono::steady_clock::time_point toChronoTime(SystemTime time) {
 }
 
 void init() {
-	for (asio::steady_timer *&timer : timers) {
-		timer = new asio::steady_timer(global::context);
-	}
-}
-
-void handle() {
 }
 
 SystemTime getTime() {
@@ -30,26 +29,47 @@ SystemTime getTime() {
 	return {uint32_t(us.count() * 128 / 125000)};
 }
 
-void setHandler(int index, std::function<void ()> const &onTimeout) {
-	if (uint32_t(index) < uint32_t(TIMER_COUNT)) {
-		timer::onTimeouts[index] = onTimeout;
+uint8_t allocate() {
+	for (uint8_t i = 0; i < TIMER_COUNT; ++i) {
+		Timer &timer = timer::timers[i];
+		if (timer.timer == nullptr) {
+			timer.timer = new asio::steady_timer(loop::context);
+			return i + 1;
+		}
 	}
+	
+	// error: timer array is full
+	assert(false);
+	return 0;
 }
 
-void start(int index, SystemTime time) {
-	if (uint32_t(index) < uint32_t(TIMER_COUNT)) {
-		timer::timers[index]->expires_at(toChronoTime(time));
-		timer::timers[index]->async_wait([index] (boost::system::error_code error) {
-			if (!error) {
-				timer::onTimeouts[index]();
-			}
-		});
-	}
+void setHandler(uint8_t id, std::function<void ()> const &onTimeout) {
+	int index = id - 1;
+	assert(index >= 0 && index < TIMER_COUNT);
+	Timer &timer = timer::timers[index];
+	assert(timer.timer != nullptr);
+	timer.onTimeout = onTimeout;
 }
 
-void stop(int index) {
-	if (uint32_t(index) < uint32_t(TIMER_COUNT))
-		timer::timers[index]->cancel();
+void start(uint8_t id, SystemTime time) {
+	int index = id - 1;
+	assert(index >= 0 && index < TIMER_COUNT);
+	Timer &timer = timer::timers[index];
+	assert(timer.timer != nullptr);
+	timer.timer->expires_at(toChronoTime(time));
+	timer.timer->async_wait([&timer] (boost::system::error_code error) {
+		if (!error && timer.onTimeout) {
+			timer.onTimeout();
+		}
+	});
+}
+
+void stop(uint8_t id) {
+	int index = id - 1;
+	assert(index >= 0 && index < TIMER_COUNT);
+	Timer &timer = timer::timers[index];
+	assert(timer.timer != nullptr);
+	timer.timer->cancel();
 }
 
 } // namespace timer

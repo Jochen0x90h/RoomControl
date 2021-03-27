@@ -2,6 +2,7 @@
 #include <spi.hpp>
 #include <display.hpp>
 #include <debug.hpp>
+#include <loop.hpp>
 
 
 uint8_t displayCommand[] = {0x55, 0x55};
@@ -19,20 +20,13 @@ void transferSpi() {
 	spi::transfer(SPI_CS1_PIN, spiData, 3, nullptr, 0, []() {transferSpi();});
 }
 
-bool blink = false;
-
 int main(void) {
-	timer::init();
 	spi::init();
 	display::init();
 	debug::init();
 
 	writeDisplay();
 	transferSpi();
-		
-	while (true) {
-		timer::handle();
-		spi::handle();
-		display::handle();
-	}
+
+	loop::run();		
 }

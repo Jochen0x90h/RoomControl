@@ -12,11 +12,6 @@ namespace display {
 void init();
 
 /**
- * Handle display events. Depends on SPI, also call spi::handle()
- */
-inline void handle() {}
-
-/**
  * Enable Vcc of display
  */
 inline void enableVcc(bool enable) {}

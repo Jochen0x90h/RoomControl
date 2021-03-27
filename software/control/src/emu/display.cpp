@@ -1,5 +1,5 @@
 #include <display.hpp>
-#include <emu/global.hpp>
+#include <emu/loop.hpp>
 #include <config.hpp>
 
 
@@ -88,7 +88,7 @@ bool send(uint8_t const* data, int commandLength, int dataLength, std::function<
 	}
 	
 	// notify that we are ready
-	asio::post(global::context, onSent);
+	asio::post(loop::context, onSent);
 	
 	return true;
 }

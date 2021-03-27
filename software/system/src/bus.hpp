@@ -12,11 +12,6 @@ namespace bus {
 void init();
 
 /**
- * Handle bus events
- */
-void handle();
-
-/**
  * Send data on the bus, cancels any running transfer
  * @param txData data to transmit
  * @param txLength length of data to transmit

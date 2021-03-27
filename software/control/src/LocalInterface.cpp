@@ -44,6 +44,8 @@ LocalInterface::LocalInterface(std::function<void (uint8_t, uint8_t const *, int
 	: onReceived(onReceived)
 	, airSensor([this]() {onAirSensorInitialized();}), subscriptions{}
 {
+	// allocate a timer
+	this->timerId = timer::allocate();
 }
 
 LocalInterface::~LocalInterface() {
@@ -120,12 +122,12 @@ void LocalInterface::onAirSensorInitialized() {
 
 void LocalInterface::measure() {
 	this->airSensor.startMeasurement();
-	timer::start(TIMER_INDEX, timer::getTime() + 1s, [this]() {readAirSensor();});
+	timer::start(this->timerId, timer::getTime() + 1s, [this]() {readAirSensor();});
 }
 
 void LocalInterface::readAirSensor() {
 	this->airSensor.readMeasurements([this]() {airSensorGetValues();});
-	timer::start(TIMER_INDEX, timer::getTime() + 9s, [this]() {measure();});
+	timer::start(this->timerId, timer::getTime() + 9s, [this]() {measure();});
 }
 
 void LocalInterface::airSensorGetValues() {

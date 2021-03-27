@@ -1,25 +1,28 @@
-#include <timer.hpp>
 #include <poti.hpp>
+#include <timer.hpp>
 #include <debug.hpp>
+#include <loop.hpp>
 
 
 bool blink = false;
 
 int main(void) {
+	loop::init();
 	timer::init();
 	poti::init();
 	debug::init();	
 	
 	poti::setHandler([](int d, bool activated) {
-		debug::setRedLed(d & 1);
-		debug::setGreenLed(d & 2);
-		debug::setBlueLed(d & 4);
-		if (activated)
-			debug::setGreenLed(blink = !blink);		
+		if (!activated) {
+			debug::setRedLed(d & 1);
+			debug::setGreenLed(d & 2);
+			debug::setBlueLed(d & 4);
+		} else {
+			debug::setRedLed(false);
+			debug::toggleGreenLed();
+			debug::setBlueLed(false);
+		}
 	});	
-			
-	while (true) {
-		timer::handle();
-		poti::handle();
-	}
+
+	loop::run();	
 }

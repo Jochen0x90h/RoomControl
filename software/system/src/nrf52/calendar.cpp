@@ -1,4 +1,5 @@
 #include "../calendar.hpp"
+#include "loop.hpp"
 #include "global.hpp"
 #include <assert.hpp>
 
@@ -11,12 +12,8 @@ uint8_t minutes = 0;
 uint8_t hours = 0;
 uint8_t weekday = 0;
 
-void init() {
-	// use channel 1 of RTC0 which always gets started in system::init()
-	NRF_RTC0->INTENSET = N(RTC_INTENSET_COMPARE1, Set);
-	NRF_RTC0->CC[1] = (NRF_RTC0->COUNTER + 16384 + 256) & ~16383;
-}
-
+// event loop handler chain
+loop::Handler nextHandler;
 void handle() {
 	if (NRF_RTC0->EVENTS_COMPARE[1]) {
 		// clear pending interrupt flags at peripheral and NVIC
@@ -44,24 +41,38 @@ void handle() {
 				h();
 		}
 	}
+	
+	// call next handler in chain
+	calendar::nextHandler();
+}
+
+void init() {
+	// use channel 1 of RTC0
+	NRF_RTC0->CC[1] = (NRF_RTC0->COUNTER + 16384 + 256) & ~16383;
+	NRF_RTC0->INTENSET = N(RTC_INTENSET_COMPARE1, Set);
+	NRF_RTC0->PRESCALER = 1; // 16384Hz
+	NRF_RTC0->TASKS_START = Trigger;
+
+	// add to event loop handler chain
+	calendar::nextHandler = loop::addHandler(handle);
 }
 
 ClockTime getTime() {
 	return ClockTime(calendar::weekday, calendar::hours, calendar::minutes, calendar::seconds);
 }
 
-int8_t addSecondHandler(std::function<void ()> const &onSecond) {
+uint8_t addSecondHandler(std::function<void ()> const &onSecond) {
 	assert(onSecond);
 	for (int i = 0; i < CALENDAR_SECOND_HANDLER_COUNT; ++i) {
 		if (!calendar::onSecond[i]) {
 			calendar::onSecond[i] = onSecond;
-			return i;
+			return i + 1;
 		}
 	}
 	
 	// error: handler array is full
 	assert(false);
-	return -1;
+	return 0;
 }
 
 } // namespace calendar

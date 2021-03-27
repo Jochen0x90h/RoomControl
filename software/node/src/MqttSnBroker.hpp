@@ -10,8 +10,6 @@
  */
 class MqttSnBroker : public MqttSnClient {
 public:
-	static constexpr int TIMER_INDEX = BROKER_TIMER_INDEX;
-
 	// maximum number of remote clients that can connect
 	static constexpr int MAX_CLIENT_COUNT = 31;
 	static constexpr int LOCAL_CLIENT_INDEX = MAX_CLIENT_COUNT;
@@ -303,6 +301,8 @@ private:
 	void sendDisconnect(uint16_t clientId);
 	
 
+	uint8_t timerId;
+	
 	// clients
 	ClientInfo clients[MAX_CLIENT_COUNT];
 	

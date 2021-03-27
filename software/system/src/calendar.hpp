@@ -7,14 +7,9 @@
 namespace calendar {
 
 /**
- * Initialze the clock
+ * Initialze the calendar and wall clock
  */
 void init();
-
-/**
- * Handle clock events
- */
-void handle();
 
 /**
  * Get current wall clock time including weekday
@@ -27,6 +22,6 @@ ClockTime getTime();
  * @param onSecond called when a second has elapsed, must not be null
  * @return id of handler to be able to remove it later
  */
-int8_t addSecondHandler(std::function<void ()> const &onSecond);
+uint8_t addSecondHandler(std::function<void ()> const &onSecond);
 
 } // namespace calendar

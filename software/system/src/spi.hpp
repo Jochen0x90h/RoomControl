@@ -13,11 +13,6 @@ namespace spi {
 void init();
 
 /**
- * Handle SPI events
- */
-void handle();
-
-/**
  * Transfer data to/from SPI device
  * @param csPin pin that is connected to the chip select pin of the device
  * @param writeData data to write, must be in ram, not in flash

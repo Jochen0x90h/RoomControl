@@ -5,7 +5,8 @@ constexpr int8_t min(int8_t x, int8_t y) {return x < y ? x : y;}
 
 
 MqttSnBroker::MqttSnBroker() {
-	timer::setHandler(TIMER_INDEX, [this]() {onDownTimeout();});
+	this->timerId = timer::allocate();
+	timer::setHandler(this->timerId, [this]() {onDownTimeout();});
 
 	// init clients
 	for (int i = 0; i < MAX_CLIENT_COUNT; ++i) {
@@ -934,11 +935,11 @@ void MqttSnBroker::sendCurrentMessage() {
 				this->sendMessagesTail = current + 1;
 
 			// set timer for idle ping to keep the connection alive
-			timer::start(TIMER_INDEX, now + KEEP_ALIVE_INTERVAL);
+			timer::start(this->timerId, now + KEEP_ALIVE_INTERVAL);
 		} else {
 			// start retransmission timeout
 			if (this->sendMessagesClientIndex == 0)
-				timer::start(TIMER_INDEX, now + RETRANSMISSION_INTERVAL);
+				timer::start(this->timerId, now + RETRANSMISSION_INTERVAL);
 		}
 	}
 
@@ -996,7 +997,7 @@ void MqttSnBroker::resend() {
 	data[1] = flags;
 
 	// start timeout, either for retransmission or idle ping
-	timer::start(TIMER_INDEX, timer::getTime() + RETRANSMISSION_INTERVAL);
+	timer::start(this->timerId, timer::getTime() + RETRANSMISSION_INTERVAL);
 }
 
 void MqttSnBroker::removeSentMessage(uint16_t msgId, uint16_t clientIndex) {
@@ -1052,11 +1053,11 @@ void MqttSnBroker::removeSentMessage(uint16_t msgId, uint16_t clientIndex) {
 				resend();
 		} else {
 			// wait until next message has to be resent
-			timer::start(TIMER_INDEX, info.sentTime + RETRANSMISSION_INTERVAL);
+			timer::start(this->timerId, info.sentTime + RETRANSMISSION_INTERVAL);
 		}
 	} else {
 		// set timer for idle ping to keep the connection alive
-		timer::start(TIMER_INDEX, now + KEEP_ALIVE_INTERVAL);
+		timer::start(this->timerId, now + KEEP_ALIVE_INTERVAL);
 	}
 }
 

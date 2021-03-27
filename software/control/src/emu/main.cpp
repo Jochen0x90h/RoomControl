@@ -1,9 +1,10 @@
 #include "RoomControl.hpp"
 #include "Gui.hpp"
 #include <flash.hpp>
-#include <spi.hpp>
+#include <emu/spi.hpp>
 #include <display.hpp>
 #include <radio.hpp>
+#include <emu/loop.hpp>
 #include <iostream>
 #include <fstream>
 #include <vector>
@@ -14,7 +15,15 @@
 
 // emulator drivers
 namespace spi {
-	void doGui(Gui &gui, int &id);
+	void setTemperature(float celsius);
+	
+	void doGui(Gui &gui, int &id) {
+		// air sensor
+		int temperature = gui.temperatureSensor(id++);
+		if (temperature != -1)
+			setTemperature(temperature / 20.0f - 273.15f);
+		gui.newLine();
+	}
 }
 namespace display {
 	void getDisplay(uint8_t *buffer);
@@ -295,9 +304,9 @@ int main(int argc, const char **argv) {
 		glfwPollEvents();
 
 		// process emulated system events
-		global::context.poll();
-		if (global::context.stopped())
-			global::context.reset();
+		loop::context.poll();
+		if (loop::context.stopped())
+			loop::context.reset();
 
 		// mouse
 		gui.doMouse(window);

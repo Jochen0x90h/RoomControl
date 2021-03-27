@@ -38,6 +38,12 @@ constexpr int DISPLAY_WIDTH = 128;
 constexpr int DISPLAY_HEIGHT = 64;
 
 
+// usb
+// ---
+
+constexpr int USB_ENDPOINT_COUNT = 3;
+
+
 // debug
 // -----
 

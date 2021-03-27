@@ -1,4 +1,5 @@
 #include "Network.hpp"
+#include <emu/loop.hpp>
 #include <iostream>
 
 
@@ -8,10 +9,10 @@ inline uint16_t getUShort(uint8_t const *buffer) {
 
 
 Network::Network()
-	: emulatorSocket(global::context, global::local)
+	: emulatorSocket(loop::context, global::local)
 {
 	// post onConnectedUp() into event loop
-	boost::asio::post(global::context, [this] {
+	asio::post(loop::context, [this] {
 		onUpConnected();
 	});
 	

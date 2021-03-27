@@ -2,7 +2,7 @@
 #include <BusInterface.hpp>
 #include <Gui.hpp>
 #include <util.hpp>
-#include <emu/global.hpp>
+#include <emu/loop.hpp>
 #include <iostream>
 
 
@@ -234,7 +234,7 @@ void transfer(uint8_t const *txData, int txLength, uint8_t *rxData, int rxLength
 	}
 
 	bus::onRx = onRx;
-	asio::post(global::context, [rxIndex]() {bus::onRx(rxIndex);});
+	asio::post(loop::context, [rxIndex]() {bus::onRx(rxIndex);});
 }
 
 void setRequestHandler(std::function<void (uint8_t)> const &onRequest) {

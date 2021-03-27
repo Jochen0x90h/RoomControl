@@ -11,7 +11,7 @@ RadioInterface::RadioInterface(Storage &storage, std::function<void (uint8_t, ui
 	, onReceived(onReceived)
 {
 	// set handler for read requests by devices
-	radio::addReceiveHandler([this](uint8_t *data) {onRx(data);});
+	radio::addReceiveHandler([this](uint8_t const *data) {onRx(data);});
 }
 
 RadioInterface::~RadioInterface() {
@@ -88,9 +88,9 @@ void RadioInterface::unsubscribe(uint8_t &endpointId, DeviceId deviceId, uint8_t
 void RadioInterface::send(uint8_t endpointId, uint8_t const *data, int length) {
 }
 
-void RadioInterface::onRx(uint8_t *data) {
+void RadioInterface::onRx(uint8_t const *data) {
 	// mac header
-	uint8_t *mac = data + 1;
+	uint8_t const *mac = data + 1;
 	uint16_t macFrameControl = mac[0] | (mac[1] << 8);
 	uint16_t destinationPanId = mac[3] | (mac[4] << 8);
 	uint16_t destinationAddress = mac[5] | (mac[6] << 8);
@@ -107,9 +107,9 @@ void RadioInterface::onRx(uint8_t *data) {
 	// Security header (0, 1 or 4 byte counter)
 	// NWK payload (optionally encrypted)
 	// MIC (0, 2 or 4 byte message integrity code)
-	uint8_t *frame = data + 8;
+	uint8_t const *frame = data + 8;
 	int frameLength = length - 8;
-	uint8_t *d = frame;
+	uint8_t const *d = frame;
 	int l = frameLength;
 
 	uint8_t frameControl = d[0];
@@ -175,11 +175,11 @@ void RadioInterface::onRx(uint8_t *data) {
 				uint32_t counter = mac[2];
 
 				// header starts at mac sequence number
-				uint8_t *header = mac + 2;
+				uint8_t const *header = mac + 2;
 				int headerLength = length - 2 - 2; // 2 for mac frame control at beginning, 2 for mic at end
 
 				// decrypt and check
-				if (!decrypt(deviceId, counter, header, headerLength, header + headerLength, 0, 2, device.aesKey)) {
+				if (!decrypt(nullptr, deviceId, counter, header, headerLength, header + headerLength, 0, 2, device.aesKey)) {
 					//printf("error while decrypting message!\n");
 					return;
 				}
@@ -193,11 +193,11 @@ void RadioInterface::onRx(uint8_t *data) {
 				uint32_t counter = d[0] | (d[1] << 8) | (d[2] << 16) | (d[3] << 24);
 				
 				// header starts at frame (frameControl) and either includes payload (level 2) or not (level 3)
-				uint8_t *header = frame;
+				uint8_t const *header = frame;
 				int headerLength = securityLevel == 2 ? frameLength - 4 : d + 4 - frame;
 
 				// decrypt and check
-				if (!decrypt(deviceId, counter, header, headerLength, header + headerLength,
+				if (!decrypt(nullptr, deviceId, counter, header, headerLength, header + headerLength,
 					frameLength - 4 - headerLength, 4, device.aesKey)) {
 					//printf("error while decrypting message!\n");
 					return;
@@ -244,7 +244,7 @@ void RadioInterface::onRx(uint8_t *data) {
 	}
 }
 
-void RadioInterface::commission(uint32_t deviceId, uint8_t *data, int length) {
+void RadioInterface::commission(uint32_t deviceId, uint8_t const *data, int length) {
 	if (length < 27)
 		return;
 	
@@ -254,7 +254,7 @@ void RadioInterface::commission(uint32_t deviceId, uint8_t *data, int length) {
 	
 	// A.4.2.1.1 Commissioning
 	
-	uint8_t *d = data;
+	uint8_t const *d = data;
 	int l = length;
 	
 	// device type
@@ -310,9 +310,6 @@ void RadioInterface::commission(uint32_t deviceId, uint8_t *data, int length) {
 		bool counterPresent = extendedOptions & 0x80;
 	
 		if (keyPresent) {
-			uint8_t *key = d;
-			d += 16;
-			l -= 16;
 			if (keyEncrypted) {
 				// decrypt key
 				//setKey(aesKey, defaultKey);
@@ -323,18 +320,24 @@ void RadioInterface::commission(uint32_t deviceId, uint8_t *data, int length) {
 				header[1] = deviceId >> 8;
 				header[2] = deviceId >> 16;
 				header[3] = deviceId >> 24;
-				if (!decrypt(deviceId, deviceId, header, 4, key, 16, 4, defaultAesKey)) {
+				uint8_t key[16];
+				if (!decrypt(key, deviceId, deviceId, header, 4, d, 16, 4, defaultAesKey)) {
 					//printf("error while decrypting key!\n");
 					return;
-				}
-				
+				}				
+				setKey(device.aesKey, key);
+
 				// skip MIC
 				d += 4;
 				l -= 4;
+			} else {
+				// set key
+				uint8_t const *key = d;
+				setKey(device.aesKey, key);
 			}
-			
-			// set key
-			setKey(device.aesKey, key);
+			d += 16;
+			l -= 16;
+
 /*
 			printf("key: ");
 			for (int i = 0; i < 16; ++i) {

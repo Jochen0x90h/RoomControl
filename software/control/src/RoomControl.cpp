@@ -198,7 +198,8 @@ RoomControl::RoomControl()
 {
 	this->storage.init();
 
-	timer::setHandler(TIMER_INDEX, [this]() {onTimeout();});
+	this->timerId = timer::allocate();
+	timer::setHandler(this->timerId, [this]() {onTimeout();});
 	calendar::addSecondHandler([this]() {onSecondElapsed();});
 	poti::setHandler([this](int delta, bool activated) {onPotiChanged(delta, activated);});
 
@@ -318,7 +319,7 @@ void RoomControl::onPublished(uint16_t topicId, uint8_t const *data, int length,
 	// update devices and set next timeout
 	auto now = timer::getTime();
 	auto nextTimeout = updateDevices(now, 0, 0, 0, nullptr, topicId, message);
-	timer::start(TIMER_INDEX, nextTimeout);
+	timer::start(this->timerId, nextTimeout);
 }
 
 
@@ -329,7 +330,7 @@ void RoomControl::onLocalReceived(uint8_t endpointId, uint8_t const *data, int l
 	// update devices and set next timeout
 	auto now = timer::getTime();
 	auto nextTimeout = updateDevices(now, endpointId, 0, 0, data, 0, String());
-	timer::start(TIMER_INDEX, nextTimeout);
+	timer::start(this->timerId, nextTimeout);
 }
 
 
@@ -358,7 +359,7 @@ void RoomControl::onBusReceived(uint8_t endpointId, uint8_t const *data, int len
 	// update devices and set next timeout
 	auto now = timer::getTime();
 	auto nextTimeout = updateDevices(now, 0, endpointId, 0, data, 0, String());
-	timer::start(TIMER_INDEX, nextTimeout);
+	timer::start(this->timerId, nextTimeout);
 }
 
 
@@ -369,7 +370,7 @@ void RoomControl::onRadioReceived(uint8_t endpointId, uint8_t const *data, int l
 	// update devices and set next timeout
 	auto now = timer::getTime();
 	auto nextTimeout = updateDevices(now, 0, 0, endpointId, data, 0, String());
-	timer::start(TIMER_INDEX, nextTimeout);
+	timer::start(this->timerId, nextTimeout);
 }
 
 
@@ -382,7 +383,7 @@ void RoomControl::onTimeout() {
 	//std::cout << "time: " << time.value << std::endl;
 	SystemTime nextTimeout = updateDevices(now, 0, 0, 0, nullptr, 0, String());
 	//std::cout << "next: " << nextTimeout.value << std::endl;
-	timer::start(TIMER_INDEX, nextTimeout);
+	timer::start(this->timerId, nextTimeout);
 }
 
 

@@ -13,7 +13,6 @@
 class RadioInterface : public Interface {
 public:
 	static constexpr int MAX_DEVICE_COUNT = 64;
-	//static constexpr int MAX_ENDPOINT_COUNT = 128;
 
 
 	/**
@@ -41,9 +40,9 @@ public:
 
 private:
 	
-	void onRx(uint8_t *data);
+	void onRx(uint8_t const *data);
 
-	void commission(uint32_t deviceId, uint8_t *data, int length);
+	void commission(uint32_t deviceId, uint8_t const *data, int length);
 
 
 	struct Device {

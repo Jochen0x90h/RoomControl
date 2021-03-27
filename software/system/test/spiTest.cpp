@@ -1,5 +1,6 @@
 #include <timer.hpp>
 #include <spi.hpp>
+#include <loop.hpp>
 #include <debug.hpp>
 
 
@@ -12,14 +13,11 @@ void transferSpi() {
 bool blink = false;
 
 int main(void) {
-	timer::init();
+	loop::init();
 	spi::init();
 	debug::init();
 
 	transferSpi();
-		
-	while (true) {
-		timer::handle();
-		spi::handle();
-	}
+	
+	loop::run();
 }

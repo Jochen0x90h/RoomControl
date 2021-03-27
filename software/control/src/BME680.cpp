@@ -97,7 +97,7 @@ void BME680::readMeasurements(std::function<void ()> const &onReady) {
 	this->buffer[0] = READ(0x1D);
 	
 	this->onReady = onReady;
-	this->busy = spi::transfer(AIR_SENSOR_CS_PIN, this->buffer, 1, this->buffer, 15, [this]() {
+	this->busy = spi::transfer(AIR_SENSOR_CS_PIN, this->buffer, 1, this->buffer, 16, [this]() {
 		onMeasurementsReady();
 	});
 }
@@ -107,21 +107,21 @@ void BME680::init1() {
 	if (this->buffer[1] == CHIP_ID) {
 		// read calibration parameters 1
 		this->buffer[0] = READ(0x8A);
-		spi::transfer(AIR_SENSOR_CS_PIN, this->buffer, 1, &this->par.cmd1, 0xA1 - 0x8A, [this]() {init2();});
+		spi::transfer(AIR_SENSOR_CS_PIN, this->buffer, 1, &this->par.cmd1, 1 + 0xA1 - 0x8A, [this]() {init2();});
 	}
 }
 
 void BME680::init2() {
 	// read calibration parameters 2
 	this->buffer[0] = READ(0xE1);
-	spi::transfer(AIR_SENSOR_CS_PIN, this->buffer, 1, &this->par.cmd2, 0xEF - 0xE1, [this]() {init3();});
+	spi::transfer(AIR_SENSOR_CS_PIN, this->buffer, 1, &this->par.cmd2, 1 + 0xEF - 0xE1, [this]() {init3();});
 }
 
 void BME680::init3() {
 	// fix calibration parameters h1 and h2
-	uint8_t e2 = (this->par.h2 >> 8) & 0xf0;
-	this->par.h1 = (this->par._E3 << 8) | e2;
-	this->par.h2 = (this->par.h2 << 8) | e2;
+	uint8_t e2 = this->par.h2 >> 8;
+	this->par.h1 = (this->par._E3 << 4) | (e2 & 0x0f);
+	this->par.h2 = ((this->par.h2 << 4) & 0xff0) | (e2 >> 4);
 	
 	// switch register bank
 	this->buffer[0] = WRITE(0x73);
@@ -136,9 +136,11 @@ void BME680::init4() {
 }
 
 void BME680::init5() {
-	this->res_heat_val = int8_t(this->buffer[1 + 0x00]);
-	this->res_heat_range = (this->buffer[1 + 0x02] >> 4) & 3;
-	this->range_switching_error = int8_t(this->buffer[1 + 0x04]) >> 4;
+	uint8_t const *buff = this->buffer + 1;
+
+	this->res_heat_val = int8_t(buff[0x00]);
+	this->res_heat_range = (buff[0x02] >> 4) & 3;
+	this->range_switching_error = int8_t(buff[0x04]) >> 4;
 
 	this->busy = false;
 	this->onReady();
@@ -166,8 +168,8 @@ void BME680::onMeasurementsReady() {
 		float t_fine;
 		{
 			float var1 = (temperature / 16384.0f - this->par.t1 / 1024.0f) * this->par.t2;
-			float var2 = (temperature / 131072.0f - this->par.t1 / 8192.0f) *
-				(temperature / 131072.0f - this->par.t1 / 8192.0f) * this->par.t3 * 16.0f;
+			float x = temperature / 131072.0f - this->par.t1 / 8192.0f;
+			float var2 = x * x * this->par.t3 * 16.0f;
 			t_fine = var1 + var2;
 			this->temperature = t_fine / 5120.0f;
 		}

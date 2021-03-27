@@ -1,5 +1,5 @@
 #include "../calendar.hpp"
-#include "global.hpp"
+#include "loop.hpp"
 #include <config.hpp>
 
 
@@ -28,7 +28,7 @@ void setTimeout(boost::posix_time::ptime utc) {
 
 
 void init() {
-	calendar::timer = new asio::deadline_timer(global::context);
+	calendar::timer = new asio::deadline_timer(loop::context);
 	auto utc = boost::date_time::second_clock<boost::posix_time::ptime>::universal_time();
 	setTimeout(utc);
 }
@@ -47,19 +47,19 @@ ClockTime getTime() {
 	return ClockTime(weekDay, hours, minutes, seconds);
 }
 
-int8_t addSecondHandler(std::function<void ()> const &onSecond) {
+uint8_t addSecondHandler(std::function<void ()> const &onSecond) {
 	// handler must not be null
 	assert(onSecond);
 	for (int i = 0; i < CALENDAR_SECOND_HANDLER_COUNT; ++i) {
 		if (!calendar::onSecond[i]) {
 			calendar::onSecond[i] = onSecond;
-			return i;
+			return i + 1;
 		}
 	}
 	
 	// error: handler array is full
 	assert(false);
-	return -1;
+	return 0;
 }
 
 } // namespace system

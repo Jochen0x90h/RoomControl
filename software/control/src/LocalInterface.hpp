@@ -9,7 +9,7 @@
  */
 class LocalInterface : public Interface {
 public:
-	static constexpr int TIMER_INDEX = LOCAL_DEVICES_TIMER_INDEX;
+	//static constexpr int TIMER_INDEX = LOCAL_DEVICES_TIMER_INDEX;
 
 	LocalInterface(std::function<void (uint8_t, uint8_t const *, int)> const &onReceived);
 
@@ -38,6 +38,7 @@ protected:
 	void airSensorGetValues();
 
 	std::function<void (uint8_t, uint8_t const *, int)> onReceived;
+	uint8_t timerId;
 
 	BME680 airSensor;
 

@@ -1,7 +1,7 @@
-#include <timer.hpp>
 #include <usb.hpp>
 #include <radio.hpp>
 #include <debug.hpp>
+#include <loop.hpp>
 #include <util.hpp>
 
 
@@ -12,7 +12,7 @@ static const usb::DeviceDescriptor deviceDescriptor = {
 	.bcdUSB = 0x0200, // USB 2.0
 	.bDeviceClass = 0xff, // no class
 	.bDeviceSubClass = 0xff,
-	.bDeviceProtocol = 0xff,
+	.bDeviceProtocol = 0, // 0 = binary, 1 = text
 	.bMaxPacketSize0 = 64, // max packet size for endpoint 0
 	.idVendor = 0x1915, // Nordic Semoconductor
 	.idProduct = 0x1337,
@@ -27,8 +27,7 @@ static const usb::DeviceDescriptor deviceDescriptor = {
 struct UsbConfiguration {
 	struct usb::ConfigDescriptor config;
 	struct usb::InterfaceDescriptor interface;
-	struct usb::EndpointDescriptor endpoint1;
-	struct usb::EndpointDescriptor endpoint2;
+	struct usb::EndpointDescriptor endpoints[2];
 } __attribute__((packed));
 
 static const UsbConfiguration configurationDescriptor = {
@@ -47,13 +46,13 @@ static const UsbConfiguration configurationDescriptor = {
 		.bDescriptorType = usb::DESCRIPTOR_INTERFACE,
 		.bInterfaceNumber = 0,
 		.bAlternateSetting = 0,
-		.bNumEndpoints = 2,
+		.bNumEndpoints = array::size(configurationDescriptor.endpoints),
 		.bInterfaceClass = 0xff, // no class
 		.bInterfaceSubClass = 0xff,
 		.bInterfaceProtocol = 0xff,
 		.iInterface = 0
 	},
-	.endpoint1 = {
+	.endpoints = {{
 		.bLength = sizeof(usb::EndpointDescriptor),
 		.bDescriptorType = usb::DESCRIPTOR_ENDPOINT,
 		.bEndpointAddress = usb::IN | 1, // in 1 (tx)
@@ -61,35 +60,19 @@ static const UsbConfiguration configurationDescriptor = {
 		.wMaxPacketSize = 64,
 		.bInterval = 1 // polling interval
 	},
-	.endpoint2 = {
+	{
 		.bLength = sizeof(usb::EndpointDescriptor),
 		.bDescriptorType = usb::DESCRIPTOR_ENDPOINT,
 		.bEndpointAddress = usb::OUT | 2, // out 2 (rx)
 		.bmAttributes = usb::ENDPOINT_BULK,
 		.wMaxPacketSize = 64,
 		.bInterval = 1 // polling interval
-	}
+	}}
 };
 
 
-/*
-void receive() {
-	radio::setReceiveHandler([](uint8_t const *data) {
-		int length = 1 + data[0] - 2; // crc is not in data
-		
-		usb::send(1, data, length, []() {
-			debug::toggleBlueLed();
-		});	
-		
-		// wait until we receive the next packet
-		receive();
-	});
-}
-*/
-
 int main(void) {
-	debug::init();
-	timer::init();
+	loop::init();
 	radio::init();
 	usb::init(
 		[](usb::DescriptorType descriptorType) {
@@ -103,12 +86,10 @@ int main(void) {
 			}
 		},
 		[](uint8_t bConfigurationValue) {
-			// enable bulk endpoints in 1 and out 2 (keep control endpoint 0 enabled)
+			// enable bulk endpoints in 1 and out 2 (keep control endpoint 0 enabled in both directions)
 			usb::enableEndpoints(1 | (1 << 1), 1 | (1 << 2)); 			
-		
-			// wait until we receive a packet
-			//receive();
 		});
+	debug::init();
 		
 	//radio::setChannel(15);
 
@@ -121,9 +102,5 @@ int main(void) {
 		});	
 	});
 	
-	while (true) {
-		timer::handle();
-		radio::handle();
-		usb::handle();
-	}
+	loop::run();
 }

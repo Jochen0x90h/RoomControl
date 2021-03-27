@@ -1,5 +1,5 @@
-#include "../spi.hpp"
 #include "spi.hpp"
+#include "loop.hpp"
 #include "global.hpp"
 
 
@@ -9,6 +9,65 @@ Task tasks[SPI_TASK_COUNT];
 int taskHead = 0;
 int taskTail = 0;
 int taskCount = 0;
+
+// event loop handler chain
+loop::Handler nextHandler;
+void handle() {
+	if (NRF_SPIM3->EVENTS_END) {
+		// clear pending interrupt flags at peripheral and NVIC
+		NRF_SPIM3->EVENTS_END = 0;
+		clearInterrupt(SPIM3_IRQn);			
+
+		// disable SPI
+		NRF_SPIM3->ENABLE = 0;
+
+		// get current task
+		Task const &task = spi::tasks[spi::taskTail];
+		if (task.readData == 1) {
+			// restore MISO pin
+			NRF_SPIM3->PSELDCX = Disconnected;
+			NRF_SPIM3->PSEL.MISO = SPI_MISO_PIN;
+			//configureInputWithPullUp(SPI_MISO_PIN); // done automatically
+		}
+		spi::taskTail = (spi::taskTail == SPI_TASK_COUNT - 1) ? 0 : spi::taskTail + 1;
+		--spi::taskCount;
+		
+		// transfer pending tasks
+		if (spi::taskCount > 0)
+			transfer();
+
+		task.onTransferred();			
+	}
+	
+	// call next handler in chain
+	spi::nextHandler();
+}
+
+void init() {
+	configureOutput(SPI_SCK_PIN);
+	setOutput(SPI_MOSI_PIN, true);
+	configureOutput(SPI_MOSI_PIN);
+	setOutput(SPI_MISO_PIN, true);
+	configureInputWithPullUp(SPI_MISO_PIN);
+	
+	// set cs pins to outputs and high to disable devices
+	for (int csPin : SPI_CS_PINS) {
+		setOutput(csPin, true);
+		configureOutput(csPin);
+	}
+
+	NRF_SPIM3->INTENSET = N(SPIM_INTENSET_END, Set);
+	NRF_SPIM3->PSEL.SCK = SPI_SCK_PIN;
+	NRF_SPIM3->PSEL.MOSI = SPI_MOSI_PIN;
+	NRF_SPIM3->PSEL.MISO = SPI_MISO_PIN;
+	NRF_SPIM3->FREQUENCY = N(SPIM_FREQUENCY_FREQUENCY, M1);
+	NRF_SPIM3->CONFIG = N(SPIM_CONFIG_CPOL, ActiveHigh)
+		| N(SPIM_CONFIG_CPHA, Leading)
+		| N(SPIM_CONFIG_ORDER, MsbFirst);
+
+	// add to event loop handler chain
+	spi::nextHandler = loop::addHandler(handle);
+}
 
 Task &allocateTask() {
 	Task &task = spi::tasks[spi::taskHead];
@@ -47,58 +106,6 @@ void transfer() {
 	// enable and start
 	NRF_SPIM3->ENABLE = N(SPIM_ENABLE_ENABLE, Enabled);
 	NRF_SPIM3->TASKS_START = Trigger;
-}
-
-
-void init() {
-	configureOutput(SPI_SCK_PIN);
-	setOutput(SPI_MOSI_PIN, true);
-	configureOutput(SPI_MOSI_PIN);
-	setOutput(SPI_MISO_PIN, true);
-	configureInputWithPullUp(SPI_MISO_PIN);
-	
-	// set cs pins to outputs and high to disable devices
-	for (int csPin : SPI_CS_PINS) {
-		setOutput(csPin, true);
-		configureOutput(csPin);
-	}
-
-	NRF_SPIM3->INTENSET = N(SPIM_INTENSET_END, Set);
-	NRF_SPIM3->PSEL.SCK = SPI_SCK_PIN;
-	NRF_SPIM3->PSEL.MOSI = SPI_MOSI_PIN;
-	NRF_SPIM3->PSEL.MISO = SPI_MISO_PIN;
-	NRF_SPIM3->FREQUENCY = N(SPIM_FREQUENCY_FREQUENCY, M1);
-	NRF_SPIM3->CONFIG = N(SPIM_CONFIG_CPOL, ActiveHigh)
-		| N(SPIM_CONFIG_CPHA, Leading)
-		| N(SPIM_CONFIG_ORDER, MsbFirst);
-}
-
-void handle() {
-	if (NRF_SPIM3->EVENTS_END) {
-		// clear pending interrupt flags at peripheral and NVIC
-		NRF_SPIM3->EVENTS_END = 0;
-		clearInterrupt(SPIM3_IRQn);			
-
-		// disable SPI
-		NRF_SPIM3->ENABLE = 0;
-
-		// get current task
-		Task const &task = spi::tasks[spi::taskTail];
-		if (task.readData == 1) {
-			// restore MISO pin
-			NRF_SPIM3->PSELDCX = Disconnected;
-			NRF_SPIM3->PSEL.MISO = SPI_MISO_PIN;
-			//configureInputWithPullUp(SPI_MISO_PIN); // done automatically
-		}
-		spi::taskTail = (spi::taskTail == SPI_TASK_COUNT - 1) ? 0 : spi::taskTail + 1;
-		--spi::taskCount;
-		
-		// transfer pending tasks
-		if (spi::taskCount > 0)
-			transfer();
-
-		task.onTransferred();			
-	}
 }
 
 bool transfer(int csPin, uint8_t const *writeData, int writeLength, uint8_t *readData, int readLength,

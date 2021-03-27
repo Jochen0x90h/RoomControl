@@ -106,8 +106,6 @@ inline void setUShort(uint8_t *buffer, uint16_t value) {
  */
 class MqttSnClient : public Network {
 public:
-	static constexpr int TIMER_INDEX = CLIENT_TIMER_INDEX;
-
 	// Port the MQTT-SN client binds to
 	//static constexpr int CLIENT_PORT = 47194;
 
@@ -408,6 +406,9 @@ private:
 
 	// remove sent message with given id from message queue
 	Message removeSentMessage(uint16_t msgId, mqttsn::MessageType type);
+	
+	
+	uint8_t timerId;
 	
 	// state
 	State state = State::STOPPED;

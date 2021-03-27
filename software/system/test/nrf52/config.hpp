@@ -16,6 +16,7 @@ constexpr int FLASH_WRITE_ALIGN = 4;
 
 // timer
 // -----
+
 constexpr int TIMER_COUNT = 4;
 
 

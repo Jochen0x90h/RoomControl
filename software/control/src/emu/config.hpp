@@ -14,10 +14,6 @@ constexpr int FLASH_WRITE_ALIGN = 4;
 // -----
 
 constexpr int TIMER_COUNT = 4;
-constexpr int CLIENT_TIMER_INDEX = 0;
-constexpr int BROKER_TIMER_INDEX = 1;
-constexpr int CONTROL_TIMER_INDEX = 2;
-constexpr int LOCAL_DEVICES_TIMER_INDEX = 3;
 
 
 // calendar

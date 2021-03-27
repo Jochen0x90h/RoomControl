@@ -1,17 +1,14 @@
-#include <timer.hpp>
 #include <calendar.hpp>
 #include <debug.hpp>
+#include <loop.hpp>
 
 
 int main(void) {
-	timer::init();
+	loop::init();
 	calendar::init();
 	debug::init();
 	
 	calendar::addSecondHandler([]() {debug::toggleBlueLed();});
-	
-	while (true) {
-		timer::handle();
-		calendar::handle();
-	}
+
+	loop::run();	
 }

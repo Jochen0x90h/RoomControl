@@ -1,6 +1,6 @@
-#include <timer.hpp>
 #include <usb.hpp>
 #include <debug.hpp>
+#include <loop.hpp>
 #include <util.hpp>
 
 
@@ -26,8 +26,7 @@ static const usb::DeviceDescriptor deviceDescriptor = {
 struct UsbConfiguration {
 	struct usb::ConfigDescriptor config;
 	struct usb::InterfaceDescriptor interface;
-	struct usb::EndpointDescriptor endpoint1;
-	struct usb::EndpointDescriptor endpoint2;
+	struct usb::EndpointDescriptor endpoints[2];
 } __attribute__((packed));
 
 static const UsbConfiguration configurationDescriptor = {
@@ -46,13 +45,13 @@ static const UsbConfiguration configurationDescriptor = {
 		.bDescriptorType = usb::DESCRIPTOR_INTERFACE,
 		.bInterfaceNumber = 0,
 		.bAlternateSetting = 0,
-		.bNumEndpoints = 2,
+		.bNumEndpoints = array::size(configurationDescriptor.endpoints),
 		.bInterfaceClass = 0xff, // no class
 		.bInterfaceSubClass = 0xff,
 		.bInterfaceProtocol = 0xff,
 		.iInterface = 0
 	},
-	.endpoint1 = {
+	.endpoints = {{
 		.bLength = sizeof(usb::EndpointDescriptor),
 		.bDescriptorType = usb::DESCRIPTOR_ENDPOINT,
 		.bEndpointAddress = usb::IN | 1, // in 1 (tx)
@@ -60,14 +59,14 @@ static const UsbConfiguration configurationDescriptor = {
 		.wMaxPacketSize = 64,
 		.bInterval = 1 // polling interval
 	},
-	.endpoint2 = {
+	{
 		.bLength = sizeof(usb::EndpointDescriptor),
 		.bDescriptorType = usb::DESCRIPTOR_ENDPOINT,
 		.bEndpointAddress = usb::OUT | 2, // out 2 (rx)
 		.bmAttributes = usb::ENDPOINT_BULK,
 		.wMaxPacketSize = 64,
 		.bInterval = 1 // polling interval
-	}
+	}}
 };
 
 
@@ -89,7 +88,7 @@ void receive() {
 		if (error)
 			debug::setRedLed(true);
 
-		// send received data
+		// send received data back to host
 		for (int i = 0; i < length; ++i) {
 			sendData[i] = receiveData[i];
 		}
@@ -103,7 +102,7 @@ void receive() {
 }
 
 int main(void) {
-	timer::init();
+	loop::init();
 	usb::init(
 		[](usb::DescriptorType descriptorType) {
 			switch (descriptorType) {
@@ -124,8 +123,5 @@ int main(void) {
 		});
 	debug::init();
 		
-	while (true) {
-		timer::handle();
-		usb::handle();
-	}
+	loop::run();
 }

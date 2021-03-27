@@ -1,9 +1,17 @@
 #include "../bus.hpp"
+#include "loop.hpp"
 #include "global.hpp"
 #include <util.hpp>
 
-
-constexpr int SIGNAL_PIN = 3;
+// debug
+/*
+#define initSignal() configureOutput(3)
+#define setSignal(value) setOutput(3, value)
+#define toggleSignal() toggleOutput(3)
+*/
+#define initSignal()
+#define setSignal(value)
+#define toggleSignal()
 
 
 namespace bus {
@@ -34,6 +42,49 @@ int volatile requestIndex;
 bool requestReady;
 std::function<void (uint8_t)> onRequest;
 
+// event loop handler chain
+loop::Handler nextHandler;
+void handle() {
+	if (rxReady) {
+		rxReady = false;
+		bus::onTransferred(bus::rxIndex);
+		setSignal(true);
+	}
+	if (requestReady) {
+		requestReady = false;
+		if (bus::onRequest)
+			bus::onRequest(bus::requestData[0]);//, bus::requestIndex);
+		bus::requestIndex = 0;
+	}
+	
+	// call next handler in chain
+	bus::nextHandler();	
+}
+
+void init() {
+	initSignal();
+	
+	// init uart
+	setOutput(BUS_TX_PIN, true);
+	configureOutput(BUS_TX_PIN);
+	configureInputWithPullUp(BUS_RX_PIN);
+	//NRF_UART0->PSEL.TXD = BUS_TX_PIN;
+	NRF_UART0->PSEL.RXD = BUS_RX_PIN;
+	NRF_UART0->CONFIG = N(UART_CONFIG_STOP, One) | N(UART_CONFIG_PARITY, Excluded);
+	//NRF_UART0->INTENSET = N(UART_INTENSET_TXDRDY, Set) | N(UART_INTENSET_RXDRDY, Set);
+	enableInterrupt(UARTE0_UART0_IRQn);
+
+	// init timer
+	NRF_TIMER1->MODE = N(TIMER_MODE_MODE, Timer);
+	NRF_TIMER1->BITMODE = N(TIMER_BITMODE_BITMODE, 32Bit);
+	NRF_TIMER1->PRESCALER = 4; // 1MHz
+	NRF_TIMER1->CC[0] = 1250;
+	NRF_TIMER1->INTENSET = N(TIMER_INTENSET_COMPARE0, Set);
+	enableInterrupt(TIMER1_IRQn);
+
+	// add to event loop handler chain
+	bus::nextHandler = loop::addHandler(handle);
+}
 
 extern "C" {
 	void UARTE0_UART0_IRQHandler(void);
@@ -57,8 +108,8 @@ void UARTE0_UART0_IRQHandler(void) {
 	}
 	if (NRF_UART0->EVENTS_RXDRDY) {
 		NRF_UART0->EVENTS_RXDRDY = 0;
-		toggleOutput(SIGNAL_PIN);
-		//setOutput(SIGNAL_PIN, true);
+		toggleSignal();
+		//setSignal(true);
 
 		if (bus::state == SYNC) {
 			// check if sync byte was received correctly
@@ -109,7 +160,7 @@ void UARTE0_UART0_IRQHandler(void) {
 			}				
 		}
 
-		//toggleOutput(SIGNAL_PIN);
+		//toggleSignal();
 	}
 }
 
@@ -140,9 +191,9 @@ void TIMER1_IRQHandler(void) {
 	
 			// expect receive of sync byte
 			bus::state = SYNC;
-			setOutput(SIGNAL_PIN, false);
+			setSignal(false);
 		} else {
-			//toggleOutput(SIGNAL_PIN);
+			//toggleSignal();
 					
 			// stop timer
 			NRF_TIMER1->TASKS_STOP = Trigger;
@@ -153,45 +204,9 @@ void TIMER1_IRQHandler(void) {
 			// now in request mode
 			bus::state = REQUEST;
 	
-	//		toggleOutput(SIGNAL_PIN);
-			setOutput(SIGNAL_PIN, true);
+	//		toggleSignal();
+			setSignal(true);
 		}
-	}
-}
-
-void init() {
-	configureOutput(SIGNAL_PIN);
-	
-	// init uart
-	setOutput(BUS_TX_PIN, true);
-	configureOutput(BUS_TX_PIN);
-	configureInputWithPullUp(BUS_RX_PIN);
-	//NRF_UART0->PSEL.TXD = BUS_TX_PIN;
-	NRF_UART0->PSEL.RXD = BUS_RX_PIN;
-	NRF_UART0->CONFIG = N(UART_CONFIG_STOP, One) | N(UART_CONFIG_PARITY, Excluded);
-	//NRF_UART0->INTENSET = N(UART_INTENSET_TXDRDY, Set) | N(UART_INTENSET_RXDRDY, Set);
-	enableInterrupt(UARTE0_UART0_IRQn);
-
-	// init timer
-	NRF_TIMER1->MODE = N(TIMER_MODE_MODE, Timer);
-	NRF_TIMER1->BITMODE = N(TIMER_BITMODE_BITMODE, 32Bit);
-	NRF_TIMER1->PRESCALER = 4; // 1MHz
-	NRF_TIMER1->CC[0] = 1250;
-	NRF_TIMER1->INTENSET = N(TIMER_INTENSET_COMPARE0, Set);
-	enableInterrupt(TIMER1_IRQn);
-}
-
-void handle() {
-	if (rxReady) {
-		rxReady = false;
-		bus::onTransferred(bus::rxIndex);
-		setOutput(SIGNAL_PIN, true);
-	}
-	if (requestReady) {
-		requestReady = false;
-		if (bus::onRequest)
-			bus::onRequest(bus::requestData[0]);//, bus::requestIndex);
-		bus::requestIndex = 0;
 	}
 }
 
@@ -236,4 +251,4 @@ void setRequestHandler(std::function<void (uint8_t)> const &onRequest) {
 	bus::onRequest = onRequest;
 }
 
-} // namespace radio
+} // namespace bus

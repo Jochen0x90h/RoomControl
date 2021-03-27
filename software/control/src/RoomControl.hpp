@@ -19,8 +19,6 @@
  */
 class RoomControl : public MqttSnBroker {
 public:
-	static constexpr int TIMER_INDEX = 2;
-
 	// maximum number of mqtt routes
 	static constexpr int MAX_ROUTE_COUNT = 32;
 	
@@ -59,11 +57,13 @@ public:
 	void onPublished(uint16_t topicId, uint8_t const *data, int length, int8_t qos, bool retain) override;
 	
 
-// SystemTimer
-// -----------
+// Timer
+// -----
 		
 	void onTimeout();
 
+	uint8_t timerId;
+	
 
 // Display
 // -------

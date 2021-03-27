@@ -11,16 +11,18 @@ INC_FOLDERS += . ../../src ../../../util/src
 # Source files common to all targets
 SRC_FILES += $(TEMPLATE_PATH)/gcc_startup_nrf52840.S
 SRC_FILES += $(TEMPLATE_PATH)/system_nrf52840.c
-SRC_FILES += ../../src/nrf52/timer.cpp
+SRC_FILES += ../../src/nrf52/loop.cpp
 SRC_FILES += ../../src/nrf52/debug.cpp
 
 # Target specific source files
+SRC_FILES_timerTest += ../../src/nrf52/timer.cpp
 SRC_FILES_timerTest += ../timerTest.cpp
 SRC_FILES_calendarTest += ../../src/nrf52/calendar.cpp
 SRC_FILES_calendarTest += ../calendarTest.cpp
 SRC_FILES_spiTest += ../spiTest.cpp
 SRC_FILES_spiTest += ../../src/nrf52/spi.cpp
 SRC_FILES_busTest += ../busTest.cpp
+SRC_FILES_busTest += ../../src/nrf52/timer.cpp
 SRC_FILES_busTest += ../../src/nrf52/bus.cpp
 SRC_FILES_usbTest += ../usbTest.cpp
 SRC_FILES_usbTest += ../../src/nrf52/usb.cpp
@@ -28,6 +30,7 @@ SRC_FILES_radioTest += ../radioTest.cpp
 SRC_FILES_radioTest += ../../src/nrf52/radio.cpp
 SRC_FILES_radioTest += ../../src/nrf52/usb.cpp
 SRC_FILES_potiTest += ../potiTest.cpp
+SRC_FILES_potiTest += ../../src/nrf52/timer.cpp
 SRC_FILES_potiTest += ../../src/nrf52/poti.cpp
 SRC_FILES_displayTest += ../displayTest.cpp
 SRC_FILES_displayTest += ../../src/nrf52/spi.cpp

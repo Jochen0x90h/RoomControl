@@ -18,14 +18,14 @@ TEST(cryptTest, security01) {
 	static uint8_t const header2[] = {0x02, 0xFF, 0xFF, 0xFF, 0xFF, 0x8C, 0x08, 0x21, 0x43, 0x65, 0x87, 0x20};
 
 	// message (only contains the MIC)
-	uint8_t message1[] = {0x61, 0x02};
-	uint8_t message2[] = {0xB7, 0x55};
+	static uint8_t const message1[] = {0x61, 0x02};
+	static uint8_t const message2[] = {0xB7, 0x55};
 
 	AesKey aesKey;
 	setKey(aesKey, key);
 
-	bool result1 = decrypt(deviceId, counter, header1, array::size(header1), message1, 0, 2, aesKey);
-	bool result2 = decrypt(deviceId, counter, header2, array::size(header2), message2, 0, 2, aesKey);
+	bool result1 = decrypt(nullptr, deviceId, counter, header1, array::size(header1), message1, 0, 2, aesKey);
+	bool result2 = decrypt(nullptr, deviceId, counter, header2, array::size(header2), message2, 0, 2, aesKey);
 	EXPECT_TRUE(result1);
 	EXPECT_TRUE(result2);
 }
@@ -37,12 +37,12 @@ TEST(cryptTest, security10) {
 	static uint8_t const header[] = {0x8C, 0x30, 0x21, 0x43, 0x65, 0x87, 0x02, 0x00, 0x00, 0x00, 0x20};
 	
 	// message (only contains the MIC)
-	uint8_t message[] = {0xAD, 0x69, 0xA9, 0x78};
+	static uint8_t const message[] = {0xAD, 0x69, 0xA9, 0x78};
 
 	AesKey aesKey;
 	setKey(aesKey, key);
 
-	bool result = decrypt(deviceId, counter, header, array::size(header), message, 0, 4, aesKey);
+	bool result = decrypt(nullptr, deviceId, counter, header, array::size(header), message, 0, 4, aesKey);
 	EXPECT_TRUE(result);
 }
 
@@ -52,23 +52,29 @@ TEST(cryptTest, security11) {
 	static uint8_t const header[] = {0x8C, 0x38, 0x21, 0x43, 0x65, 0x87, 0x02, 0x00, 0x00, 0x00};
 	
 	// message (payload and MIC)
-	uint8_t message[] = {0x83, 0x5F, 0x1A, 0x30, 0x34};
+	static uint8_t const message[] = {0x83, 0x5F, 0x1A, 0x30, 0x34};
+
+	uint8_t decrypted[1];
+	uint8_t encrypted[5];
 
 	AesKey aesKey;
 	setKey(aesKey, key);
 
-	bool result = decrypt(deviceId, counter, header, array::size(header), message, 1, 4, aesKey);
+	bool result = decrypt(decrypted, deviceId, counter, header, array::size(header), message, 1, 4, aesKey);
 	EXPECT_TRUE(result);
-	EXPECT_EQ(message[0], 0x20);
-	EXPECT_EQ(message[1], 0);
-	EXPECT_EQ(message[2], 0);
-	EXPECT_EQ(message[3], 0);
-	EXPECT_EQ(message[4], 0);
+	EXPECT_EQ(decrypted[0], 0x20);
 
-	encrypt(deviceId, counter, header, array::size(header), message, 1, 4, aesKey);
-	EXPECT_EQ(message[0], 0x83);
-	EXPECT_EQ(message[1], 0x5F);
-	EXPECT_EQ(message[2], 0x1A);
-	EXPECT_EQ(message[3], 0x30);
-	EXPECT_EQ(message[4], 0x34);
+	encrypt(encrypted, deviceId, counter, header, array::size(header), decrypted, 1, 4, aesKey);
+	EXPECT_EQ(encrypted[0], 0x83);
+	EXPECT_EQ(encrypted[1], 0x5F);
+	EXPECT_EQ(encrypted[2], 0x1A);
+	EXPECT_EQ(encrypted[3], 0x30);
+	EXPECT_EQ(encrypted[4], 0x34);
+}
+
+
+int main(int argc, char **argv) {
+	testing::InitGoogleTest(&argc, argv);
+	int success = RUN_ALL_TESTS();	
+	return success;
 }

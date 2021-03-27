@@ -1,6 +1,6 @@
 #pragma once
 
-#include <functional>
+#include "../spi.hpp"
 
 
 // internal interface if spi

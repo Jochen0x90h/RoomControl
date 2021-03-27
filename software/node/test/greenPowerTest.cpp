@@ -34,13 +34,13 @@ void printDefaultKey() {
 	printf("}};\n");
 }
 
-void commission(uint32_t deviceId, uint8_t *data, int length, AesKey &aesKey) {
+void commission(uint32_t deviceId, uint8_t const *data, int length, AesKey &aesKey) {
 	if (length < 27)
 		return;
 	
 	// A.4.2.1.1 Commissioning
 	
-	uint8_t *d = data;
+	uint8_t const *d = data;
 	int l = length;
 	
 	// device type
@@ -79,9 +79,6 @@ void commission(uint32_t deviceId, uint8_t *data, int length, AesKey &aesKey) {
 		bool counterPresent = extendedOptions & 0x80;
 	
 		if (keyPresent) {
-			uint8_t *key = d;//data + 3;
-			d += 16;
-			l -= 16;
 			if (keyEncrypted) {
 				// Green Power A.1.5.3.3.3
 				uint8_t header[4];
@@ -89,24 +86,29 @@ void commission(uint32_t deviceId, uint8_t *data, int length, AesKey &aesKey) {
 				header[1] = deviceId >> 8;
 				header[2] = deviceId >> 16;
 				header[3] = deviceId >> 24;
-				if (!decrypt(deviceId, deviceId, header, 4, key, 16, 4, defaultAesKey)) {
+				uint8_t key[16];
+				if (!decrypt(key, deviceId, deviceId, header, 4, d, 16, 4, defaultAesKey)) {
 					printf("error while decrypting key!\n");
 					return;
 				}
 				
+				// skip key
+				d += 16;
+				l -= 16;
+
 				// skip MIC
 				d += 4;
 				l -= 4;
-			}
-			
-			// set key
-			setKey(aesKey, key);
 
-			printf("key: ");
-			for (int i = 0; i < 16; ++i) {
-				printf("%02x ", key[i]);
+				// set key
+				setKey(aesKey, key);
+	
+				printf("key: ");
+				for (int i = 0; i < 16; ++i) {
+					printf("%02x ", key[i]);
+				}
+				printf("\n");
 			}
-			printf("\n");
 		}
 		if (counterPresent) {
 			uint32_t counter = d[0] | (d[1] << 8) | (d[2] << 16) | (d[3] << 24);
@@ -171,14 +173,16 @@ int main(void) {
 				//printf("set alternate setting %d\n", ret);
 
 				// loop
-				printf("waiting for commissioning message (press A0 for 7 seconds)\n");
+				printf("waiting for commissioning message (press A0 for 7 seconds, then A1 and B0 to commission PTM215Z)\n");
 				uint8_t data[128] = {};
 				int length;
 				AesKey aesKey;
 				while (true) {
 					// receive from device (we get back the same data that we sent)
 					ret = libusb_bulk_transfer(handle, USB_IN | 1, data, 128, &length, 0);
-					
+					if (ret < 0)
+						break;
+
 					// packet
 					printf("%d: ", length);
 					for (int i = 0; i < length; ++i) {
@@ -187,7 +191,7 @@ int main(void) {
 					printf("\n");
 					
 					if (length >= 9) {
-						uint8_t *mac = data + 1;
+						uint8_t const *mac = data + 1;
 
 						// frame
 						// -----
@@ -195,9 +199,9 @@ int main(void) {
 						// Security header (0, 1 or 4 byte counter)
 						// NWK payload (optionally encrypted)
 						// MIC (0, 2 or 4 byte message integrity code)
-						uint8_t *frame = data + 8;
+						uint8_t const *frame = data + 8;
 						int frameLength = length - 8;
-						uint8_t *d = frame;
+						uint8_t const *d = frame;
 						int l = frameLength;
 
 						uint8_t frameControl = d[0];
@@ -248,11 +252,11 @@ int main(void) {
 								uint32_t counter = mac[2];
 
 								// header starts at mac sequence number
-								uint8_t *header = mac + 2;
+								uint8_t const *header = mac + 2;
 								int headerLength = length - 2 - 2; // 2 for mac frame control at beginning, 2 for mic at end
 
 								// decrypt and check
-								if (!decrypt(deviceId, counter, header, headerLength, header + headerLength, 0, 2, aesKey)) {
+								if (!decrypt(nullptr, deviceId, counter, header, headerLength, header + headerLength, 0, 2, aesKey)) {
 									printf("error while decrypting message!\n");
 									continue;
 								}
@@ -266,11 +270,11 @@ int main(void) {
 								uint32_t counter = d[0] | (d[1] << 8) | (d[2] << 16) | (d[3] << 24);
 								
 								// header starts at frame (frameControl) and either includes payload (level 2) or not (level 3)
-								uint8_t *header = frame;
+								uint8_t const *header = frame;
 								int headerLength = securityLevel == 2 ? frameLength - 4 : d + 4 - frame;
 
 								// decrypt and check
-								if (!decrypt(deviceId, counter, header, headerLength, header + headerLength,
+								if (!decrypt(nullptr, deviceId, counter, header, headerLength, header + headerLength,
 									frameLength - 4 - headerLength, 4, aesKey)) {
 									printf("error while decrypting message!\n");
 									continue;
@@ -293,13 +297,12 @@ int main(void) {
 						}
 					}
 				}
+				printf("error: %d\n", ret);
 			}
 		}
 	}
-
-
 	libusb_free_device_list(devs, 1);
-
 	libusb_exit(NULL);
 	return 0;
 }
+

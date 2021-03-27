@@ -26,20 +26,20 @@ public:
 
 	StringBuffer &operator +=(char ch) {
 		if (this->index < L)
-			this->data[this->index++] = ch;
+			this->buffer[this->index++] = ch;
 		#ifdef DEBUG
-		this->data[this->index] = 0;
+		this->buffer[this->index] = 0;
 		#endif
 		return *this;
 	}
 
 	StringBuffer &operator +=(const String &str) {
-		char *dst = this->data + this->index;
+		char *dst = this->buffer + this->index;
 		int l = min(str.length, L - this->index);
 		array::copy(dst, dst + l, str.begin());
 		this->index += l;
 		#ifdef DEBUG
-		this->data[this->index] = 0;
+		this->buffer[this->index] = 0;
 		#endif
 		return *this;
 	}
@@ -49,12 +49,12 @@ public:
 		uint32_t value = dec.value;
 		if (dec.value < 0) {
 			if (this->index < L)
-				this->data[this->index++] = '-';
+				this->buffer[this->index++] = '-';
 			value = -dec.value;
 		}
-		this->index += toString(value, this->data + this->index, L - this->index, dec.digitCount);
+		this->index += toString(value, this->buffer + this->index, L - this->index, dec.digitCount);
 		#ifdef DEBUG
-		this->data[this->index] = 0;
+		this->buffer[this->index] = 0;
 		#endif
 		return *this;
 	}
@@ -65,18 +65,18 @@ public:
 
 	template <typename T>
 	StringBuffer &operator +=(Hex<T> hex) {
-		this->index += hexToString(hex.value, this->data + this->index, L - this->index, hex.digitCount);
+		this->index += hexToString(hex.value, this->buffer + this->index, L - this->index, hex.digitCount);
 		#ifdef DEBUG
-		this->data[this->index] = 0;
+		this->buffer[this->index] = 0;
 		#endif
 		return *this;
 	}
 	
 	StringBuffer &operator +=(Flt flt) {
-		this->index += toString(flt.value, this->data + this->index, L - this->index, flt.digitCount,
+		this->index += toString(flt.value, this->buffer + this->index, L - this->index, flt.digitCount,
 			flt.decimalCount);
 		#ifdef DEBUG
-		this->data[this->index] = 0;
+		this->buffer[this->index] = 0;
 		#endif
 		return *this;
 	}
@@ -87,20 +87,22 @@ public:
 		return (*this) += plus.b;
 	}
 
-	char operator [](int index) const {return this->data[index];}
-	char &operator [](int index) {return this->data[index];}
+	char operator [](int index) const {return this->buffer[index];}
+	char &operator [](int index) {return this->buffer[index];}
+
+	char const *data() const {return this->buffer;}
 
 	operator String() {
-		return {this->data, this->index};
+		return {this->buffer, this->index};
 	}
 	String string() const {
-		return {this->data, this->index};
+		return {this->buffer, this->index};
 	}
 
 	void clear() {
 		this->index = 0;
 		#ifdef DEBUG
-		this->data[0] = 0;
+		this->buffer[0] = 0;
 		#endif
 	}
 
@@ -111,16 +113,16 @@ public:
 	void resize(int length) {
 		this->index = length;
 		#ifdef DEBUG
-		this->data[this->index] = 0;
+		this->buffer[this->index] = 0;
 		#endif
 	}
 
 protected:
 
 	#ifdef DEBUG
-	char data[L + 1];
+	char buffer[L + 1];
 	#else
-	char data[L];
+	char buffer[L];
 	#endif
 	uint8_t index;
 };

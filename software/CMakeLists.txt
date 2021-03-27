@@ -53,10 +53,9 @@ set(UTIL
 	util/src/Bitmap.hpp
 	util/src/convert.cpp
 	util/src/convert.hpp
-	util/src/crypt.cpp
-	util/src/crypt.hpp
-	util/src/DataBuffer.hpp
 	util/src/defines.hpp
+	util/src/Font.cpp
+	util/src/Font.hpp
 	util/src/optional.hpp
 	util/src/Queue.hpp
 	util/src/String.hpp
@@ -69,15 +68,22 @@ set(UTIL
 )
 source_group(util FILES ${UTIL})
 
-# system independent utilities
-set(TINYCRYPT
-	util/src/tinycrypt/aes.h
-	util/src/tinycrypt/aes_encrypt.c
-	util/src/tinycrypt/constants.h
-	util/src/tinycrypt/utils.c
-	util/src/tinycrypt/utils.h
+# encrypt/decrypt functions
+set(CRYPT
+	crypt/src/crypt.cpp
+	crypt/src/crypt.hpp
+	crypt/src/DataBuffer.hpp
 )
-source_group(util/tinycrypt FILES ${TINYCRYPT})
+set(TINYCRYPT
+	crypt/src/tinycrypt/aes.h
+	crypt/src/tinycrypt/aes_encrypt.c
+	crypt/src/tinycrypt/constants.h
+	crypt/src/tinycrypt/utils.c
+	crypt/src/tinycrypt/utils.h
+)
+source_group(crypt FILES ${CRYPT})
+source_group(crypt/tinycrypt FILES ${TINYCRYPT})
+list(APPEND CRYPT ${TINYCRYPT})
 
 # system
 set(SYSTEM
@@ -85,11 +91,16 @@ set(SYSTEM
 	system/src/emu/calendar.cpp
 	system/src/calendar.hpp
 	system/src/ClockTime.hpp
+	system/src/emu/debug.cpp
+	system/src/debug.hpp
 	system/src/display.hpp
 	system/src/emu/flash.cpp
 	system/src/flash.hpp
 	system/src/emu/global.cpp
 	system/src/emu/global.hpp
+	system/src/emu/loop.cpp
+	system/src/emu/loop.hpp
+	system/src/loop.hpp
 	system/src/emu/poti.cpp
 	system/src/poti.hpp
 	system/src/radio.hpp
@@ -97,6 +108,8 @@ set(SYSTEM
 	system/src/SystemTime.hpp
 	system/src/emu/timer.cpp
 	system/src/timer.hpp
+	system/src/emu/usb.cpp
+	system/src/usb.hpp
 )
 source_group(system FILES ${SYSTEM})
 
@@ -111,7 +124,6 @@ source_group(node FILES ${NODE})
 
 # room control software running on the nRF52840
 set(CONTROL
-	control/src/emu/main.cpp
 	control/src/BME680.cpp
 	control/src/BME680.hpp
 	control/src/BusInterface.cpp
@@ -120,8 +132,6 @@ set(CONTROL
 	control/src/emu/config.hpp
 	control/src/Device.hpp
 	control/src/emu/display.cpp
-	control/src/Font.cpp
-	control/src/Font.hpp
 	control/src/emu/Gui.cpp
 	control/src/emu/Gui.hpp
 	control/src/Interface.cpp
@@ -155,18 +165,21 @@ source_group(glad FILES ${GLAD})
 
 # emulator executable
 add_executable(emulator
+	control/src/emu/main.cpp
 	${UTIL}
-	${TINYCRYPT}
+	${CRYPT}
 	${SYSTEM}
 	${NODE}
 	${CONTROL}
 	${GLAD}
 )
-include_directories(emulator
+target_include_directories(emulator
+	PRIVATE
 	control/src/emu
 	control/src
 	node/src
 	system/src
+	crypt/src
 	util/src
 	glad
 )
@@ -188,7 +201,8 @@ install(TARGETS emulator
 #	control/src/emu/Network.cpp
 #	control/src/emu/Network.hpp
 #)
-#include_directories(brokerTest
+#target_include_directories(brokerTest
+#	PRIVATE
 #	control/src/emu
 #	control/src
 #	node/src
@@ -211,27 +225,100 @@ conan_target_link_libraries(usbTestHost)
 add_executable(greenPowerTest
 	node/test/greenPowerTest.cpp
 	${UTIL}
-	${TINYCRYPT}
+	${CRYPT}
+)
+target_include_directories(greenPowerTest
+	PRIVATE
+	crypt/src
+	util/src
 )
 conan_target_link_libraries(greenPowerTest)
 
 
 
-# unit tests
+# test for BME680
+add_executable(bme680Test
+	control/test/bme680Test.cpp
+	${UTIL}
+	${SYSTEM}
+	control/src/BME680.cpp
+	control/src/BME680.hpp
+	control/src/emu/spi.cpp
+)
+target_include_directories(bme680Test
+	PRIVATE
+	control/test/emu
+	control/src
+	system/src
+	util/src
+)
+conan_target_link_libraries(bme680Test)
+
+
+
+# terminal for tests that output text or binary data
+add_executable(terminal
+	node/test/terminal.cpp
+)
+target_include_directories(terminal
+	PRIVATE
+	crypt/src
+	util/src
+)
+conan_target_link_libraries(terminal)
+
+
+# unit tests (GTest)
 
 # enable testing, adds a target to run all unit tests
 enable_testing()
 
-# util test (GTest)
+# util test
 add_executable(utilTest
-	util/test/main.cpp
 	util/test/utilTest.cpp
-	util/test/cryptTest.cpp
 	${UTIL}
-	${TINYCRYPT}
+)
+target_include_directories(utilTest
+	PRIVATE
+	util/src
 )
 conan_target_link_libraries(utilTest)
 add_test(NAME utilTest
 	COMMAND utilTest --gtest_output=xml:report.xml
+	#WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/../testdata
+)
+
+# crypt test
+add_executable(cryptTest
+	crypt/test/cryptTest.cpp
+	#${UTIL}
+	${CRYPT}
+)
+target_include_directories(cryptTest
+	PRIVATE
+	crypt/src
+	util/src
+)
+conan_target_link_libraries(cryptTest)
+add_test(NAME cryptTest
+	COMMAND cryptTest --gtest_output=xml:report.xml
+	#WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/../testdata
+)
+
+# system test
+add_executable(systemTest
+	system/test/systemTest.cpp
+	${UTIL}
+	${SYSTEM}
+)
+target_include_directories(systemTest
+	PRIVATE
+	system/test/emu
+	system/src
+	util/src
+)
+conan_target_link_libraries(systemTest)
+add_test(NAME systemTest
+	COMMAND systemTest --gtest_output=xml:report.xml
 	#WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/../testdata
 )

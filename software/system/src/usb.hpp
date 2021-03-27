@@ -29,7 +29,7 @@ enum EndpointType {
 	ENDPOINT_INTERRUPT = 3
 };
 
-// control request type  
+// control request type
 enum RequestType {
 	REQUEST_TYPE_MASK = (0x03 << 5),
 	REQUEST_TYPE_STANDARD = (0x00 << 5),
@@ -107,21 +107,13 @@ struct EndpointDescriptor {
 /**
  * Initialze USB
  */
-void init(
-	std::function<Array<uint8_t> (DescriptorType)> const &getDescriptor,
+void init(std::function<Array<uint8_t> (DescriptorType)> const &getDescriptor,
 	std::function<void (uint8_t)> const &onSetConfiguration);
-
-/**
- * Handle USB events 
- */
-void handle();
-
 
 /**
  * Enable endpoints. Can be done in onSetConfiguration. Endpoint 0 should stay enabled
  */
 void enableEndpoints(uint8_t inFlags, uint8_t outFlags);
-
 
 /**
  * Send data over an endpoint (IN transfer)
@@ -131,7 +123,7 @@ void enableEndpoints(uint8_t inFlags, uint8_t outFlags);
  * @param onSent called when finished sending
  * @return true on success, false if busy with previous send
  */
-bool send(int endpoint, uint8_t const *data, int length, std::function<void ()> const &onSent);
+bool send(int endpoint, void const *data, int length, std::function<void ()> const &onSent);
 
 /**
  * Receive data over an endpoint (OUT transfer)
@@ -140,6 +132,6 @@ bool send(int endpoint, uint8_t const *data, int length, std::function<void ()> 
  * @param maxLength maximum length of data to receive
  * @param onReceived called when data was received
  */
-bool receive(int endpoint, uint8_t const *data, int maxLength, std::function<void (int)> const &onReceived);
+bool receive(int endpoint, void *data, int maxLength, std::function<void (int)> const &onReceived);
 
 } // namespace usb

@@ -12,11 +12,6 @@ namespace radio {
 void init();
 
 /**
- * Handle radio events
- */
-void handle();
-
-/**
  * Set radio channel
  */
 void setChannel(int channel);
@@ -34,6 +29,6 @@ bool send(uint8_t const *data, std::function<void ()> const &onSent);
  * @param onReceived called when data was received, must not be null
  * @return id of handler to be able to remove it later
  */
-int8_t addReceiveHandler(std::function<void (uint8_t *)> const &onReceived);
+uint8_t addReceiveHandler(std::function<void (uint8_t const *)> const &onReceived);
 
 } // namespace radio
