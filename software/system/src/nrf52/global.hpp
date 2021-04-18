@@ -67,13 +67,34 @@ inline void configureInputWithPullDown(int pin) {
 		| N(GPIO_PIN_CNF_PULL, Pulldown);
 }
 
+
+enum class Drive {
+	S0S1 = 0, // Standard '0', standard '1'
+	H0S1 = 1, // High drive '0', standard '1'
+	S0H1 = 2, // Standard '0', high drive '1'
+	H0H1 = 3, // High drive '0', high drive '1'
+	D0S1 = 4, // Disconnect '0' standard '1' (normally used for wired-or connections)
+	D0H1 = 5, // Disconnect '0', high drive '1' (normally used for wired-or connections)
+	S0D1 = 6, // Standard '0', disconnect '1' (normally used for wired-and connections)
+	H0D1 = 7, // High drive '0', disconnect '1' (normally used for wired-and connections)
+};
+
 // configure a gpio as output
 inline void configureOutput(int pin) {
 	auto p = pin >= PORT1 ? NRF_P1 : NRF_P0;
 	p->PIN_CNF[pin & 31] = N(GPIO_PIN_CNF_DIR, Output)
-		| N(GPIO_PIN_CNF_INPUT, Disconnect)
+		| N(GPIO_PIN_CNF_INPUT, Connect)
 		| N(GPIO_PIN_CNF_PULL, Disabled)
 		| N(GPIO_PIN_CNF_DRIVE, S0S1);
+}
+
+// configure gpio drive for use by a peripheral an connected to an analog signal, therefore disconnect input
+inline void configureDrive(int pin, Drive drive = Drive::S0S1) {
+	auto p = pin >= PORT1 ? NRF_P1 : NRF_P0;
+	p->PIN_CNF[pin & 31] = N(GPIO_PIN_CNF_DIR, Input)
+		| N(GPIO_PIN_CNF_INPUT, Disconnect)
+		| N(GPIO_PIN_CNF_PULL, Disabled)
+		| V(GPIO_PIN_CNF_DRIVE, int(drive));
 }
 
 // set output value

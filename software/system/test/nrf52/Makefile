@@ -1,5 +1,5 @@
 PROJECT_NAME     := FunctionTest
-TARGETS          := timerTest calendarTest spiTest busTest usbTest radioTest potiTest displayTest
+TARGETS          := timerTest calendarTest spiTest busTest radioTest usbTest potiTest displayTest #motionDetectorTest
 OUTPUT_DIRECTORY := build
 TEMPLATE_PATH    := ../../src/nrf52/system
 #VERBOSE          := 1
@@ -35,6 +35,8 @@ SRC_FILES_potiTest += ../../src/nrf52/poti.cpp
 SRC_FILES_displayTest += ../displayTest.cpp
 SRC_FILES_displayTest += ../../src/nrf52/spi.cpp
 SRC_FILES_displayTest += ../../src/nrf52/display.cpp
+#SRC_FILES_motionDetectorTest += ../motionDetectorTest.cpp
+#SRC_FILES_motionDetectorTest += ../../src/nrf52/motionDetector.cpp
 
 # Libraries
 LIB_FILES +=

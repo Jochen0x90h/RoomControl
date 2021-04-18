@@ -6,7 +6,7 @@
 namespace poti {
 
 /**
- * Initialze the digital potentiometer
+ * Initialize the digital potentiometer with button
  */
 void init();
 

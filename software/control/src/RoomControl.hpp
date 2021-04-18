@@ -538,6 +538,9 @@ public:
 	SystemTime updateDevices(SystemTime time, SystemDuration duration, bool reportChanging,
 		Interface &interface, Storage::Array<Device, DeviceState> &devices, uint8_t endpointId, uint8_t const *data,
 		uint16_t topicId, String message, SystemTime nextTimeout);
+	//SystemTime updateDevice(SystemTime time, SystemDuration duration, bool reportChanging,
+	//	Interface &interface, Device const &device, DeviceState &deviceState, uint8_t endpointId, uint8_t const *data,
+	//	uint16_t topicId, String message, SystemTime nextTimeout);
 
 	// check compatibility between device endpoint and device element
 	static bool isCompatible(EndpointType endpointType, Device::Component::Type type);

@@ -7,7 +7,7 @@
 namespace bus {
 
 /**
- * Initialze the bus
+ * Initialize the bus
  */
 void init();
 

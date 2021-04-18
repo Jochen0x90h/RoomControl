@@ -1,6 +1,6 @@
 #pragma once
 
-#include <Array.hpp>
+#include <Data.hpp>
 #include <cstdint>
 #include <functional>
 
@@ -105,9 +105,9 @@ struct EndpointDescriptor {
 
 
 /**
- * Initialze USB
+ * Initialize USB
  */
-void init(std::function<Array<uint8_t> (DescriptorType)> const &getDescriptor,
+void init(std::function<Data (DescriptorType)> const &getDescriptor,
 	std::function<void (uint8_t)> const &onSetConfiguration);
 
 /**

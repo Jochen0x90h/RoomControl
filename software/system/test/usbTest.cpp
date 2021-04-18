@@ -11,7 +11,7 @@ static const usb::DeviceDescriptor deviceDescriptor = {
 	.bcdUSB = 0x0200, // USB 2.0
 	.bDeviceClass = 0xff, // no class
 	.bDeviceSubClass = 0xff,
-	.bDeviceProtocol = 0xff,
+	.bDeviceProtocol = 0, // 0 = binary, 1 = text
 	.bMaxPacketSize0 = 64, // max packet size for endpoint 0
 	.idVendor = 0x1915, // Nordic Semoconductor
 	.idProduct = 0x1337,
@@ -107,11 +107,11 @@ int main(void) {
 		[](usb::DescriptorType descriptorType) {
 			switch (descriptorType) {
 			case usb::DESCRIPTOR_DEVICE:
-				return Array<uint8_t>(reinterpret_cast<uint8_t const *>(&deviceDescriptor), sizeof(deviceDescriptor));
+				return Data(deviceDescriptor);
 			case usb::DESCRIPTOR_CONFIGURATION:
-				return Array<uint8_t>(reinterpret_cast<uint8_t const *>(&configurationDescriptor), sizeof(configurationDescriptor));
+				return Data(configurationDescriptor);
 			default:
-				return Array<uint8_t>();
+				return Data();
 			}
 		},
 		[](uint8_t bConfigurationValue) {

@@ -45,6 +45,14 @@ constexpr int BUS_TX_PIN = PORT0 | 3;
 constexpr int BUS_RX_PIN = PORT0 | 2;
 
 
+// radio
+// -----
+
+constexpr int RADIO_MAX_PAYLOAD_LENGTH = 125; // payload length without leading length byte
+constexpr int RADIO_SEND_TASK_COUNT = 1;
+constexpr int RADIO_RECEIVE_HANDLER_COUNT = 1;
+
+
 // usb
 // ---
 
@@ -64,12 +72,18 @@ constexpr int BUTTON_PIN = PORT0 | 6;
 constexpr int DISPLAY_CS_PIN = PORT0 | 3;
 
 
-// radio
-// -----
+// motion detector
+// ---------------
 
-constexpr int RADIO_MAX_PAYLOAD_LENGTH = 125; // payload length without leading length byte
-constexpr int RADIO_SEND_TASK_COUNT = 1;
-constexpr int RADIO_RECEIVE_HANDLER_COUNT = 1;
+//constexpr int MOTION_DETECTOR_DELTA_SIGMA_PIN = PORT0 | 3;
+//constexpr int MOTION_DETECTOR_COMPARATOR_INPUT = 0; // analog input
+//constexpr int MOTION_DETECTOR_COMPARATOR_PIN = PORT0 | 2;
+
+constexpr int MOTION_DETECTOR_PIR_PIN = PORT0 | 2;
+constexpr int MOTION_DETECTOR_PIR_INPUT = 0;
+constexpr int MOTION_DETECTOR_TRACKER_PIN = PORT0 | 3;
+constexpr int MOTION_DETECTOR_TRACKER_INPUT = 1;
+
 
 // debug
 // -----

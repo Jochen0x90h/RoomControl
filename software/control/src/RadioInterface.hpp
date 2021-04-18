@@ -8,12 +8,10 @@
 
 /**
  * Devices connected by radio using IEEE 802.15.4 standard
- * Emulator implementation uses virtual devices on user interface
  */
 class RadioInterface : public Interface {
 public:
 	static constexpr int MAX_DEVICE_COUNT = 64;
-
 
 	/**
 	 * Constructor
@@ -40,16 +38,22 @@ public:
 
 private:
 	
-	void onRx(uint8_t const *data);
+	void onRx(uint8_t *data, int length);
 
-	void commission(uint32_t deviceId, uint8_t const *data, int length);
+	void commission(uint32_t deviceId, uint8_t *d, uint8_t const *end);
 
-
+	// commissioned device
 	struct Device {
+		// device id
 		uint32_t deviceId;
+		
+		// AES key of device
 		AesKey aesKey;
+		
+		// device type from commissioning message
 		uint8_t deviceType;
 	
+		// endpoints derived from device type (zero terminated list)
 		EndpointType endpointTypes[4];
 	
 		/**
@@ -69,7 +73,6 @@ private:
 		 * @return number of endpoints
 		 */
 		int getEndpointCount() const;
-		
 	};
 
 	struct DeviceState{
@@ -90,6 +93,5 @@ private:
 	bool commissioning = false;
 
 	// endpoint reference counters
-	//uint8_t referenceCounters[MAX_ENDPOINT_COUNT];
 	uint8_t nextEndpointId = 1;
 };

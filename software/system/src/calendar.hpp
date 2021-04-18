@@ -7,7 +7,7 @@
 namespace calendar {
 
 /**
- * Initialze the calendar and wall clock
+ * Initialize the calendar and wall clock
  */
 void init();
 

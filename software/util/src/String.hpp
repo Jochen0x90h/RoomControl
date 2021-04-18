@@ -7,15 +7,6 @@
 #include <iostream>
 #endif
 
-// helper classes for distinguishing between fixed size array and c-string
-struct False {};
-struct True {};
-
-template <typename T>
-struct IsArray : False {};
-  
-template <typename T, int N>
-struct IsArray<T[N]> : True {};
 
 constexpr int getLength(char const *str, False) {
 	int length = 0;

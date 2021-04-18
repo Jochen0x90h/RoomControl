@@ -13,7 +13,7 @@
 #define setSignal(value)
 #define toggleSignal()
 
-
+// resources: NRF_UART0, NRF_TIMER1
 namespace bus {
 
 enum State {

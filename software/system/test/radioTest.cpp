@@ -3,6 +3,7 @@
 #include <debug.hpp>
 #include <loop.hpp>
 #include <util.hpp>
+#include <config.hpp>
 
 
 // device descriptor
@@ -70,6 +71,7 @@ static const UsbConfiguration configurationDescriptor = {
 	}}
 };
 
+uint8_t buffer[RADIO_MAX_PAYLOAD_LENGTH] __attribute__((aligned(4)));
 
 int main(void) {
 	loop::init();
@@ -78,11 +80,11 @@ int main(void) {
 		[](usb::DescriptorType descriptorType) {
 			switch (descriptorType) {
 			case usb::DESCRIPTOR_DEVICE:
-				return Array<uint8_t>(reinterpret_cast<uint8_t const *>(&deviceDescriptor), sizeof(deviceDescriptor));
+				return Data(deviceDescriptor);
 			case usb::DESCRIPTOR_CONFIGURATION:
-				return Array<uint8_t>(reinterpret_cast<uint8_t const *>(&configurationDescriptor), sizeof(configurationDescriptor));
+				return Data(configurationDescriptor);
 			default:
-				return Array<uint8_t>();
+				return Data();
 			}
 		},
 		[](uint8_t bConfigurationValue) {
@@ -94,10 +96,9 @@ int main(void) {
 	//radio::setChannel(15);
 
 	// add a receive handler to the radio
-	radio::addReceiveHandler([](uint8_t const *data) {
-		int length = 1 + data[0] - 2; // crc is not in data
-		
-		usb::send(1, data, length, []() {
+	radio::addReceiveHandler([](uint8_t *data, int length) {		
+		array::copy(buffer, buffer + length, data);
+		usb::send(1, buffer, length, []() {
 			debug::toggleBlueLed();
 		});	
 	});

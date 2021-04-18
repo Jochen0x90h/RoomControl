@@ -183,14 +183,28 @@ int main(int argc, const char **argv) {
 	glfwSetErrorCallback(errorCallback);
 	if (!glfwInit())
 		exit(EXIT_FAILURE);
-	
+
+	// window size
+	int width = 800;
+	int height = 800;
+
+	// scale window size on linux, is done automatically on mac
+#ifdef __linux__
+	GLFWmonitor* monitor = glfwGetPrimaryMonitor();
+	float xScale, yScale;
+	glfwGetMonitorContentScale(monitor, &xScale, &yScale);
+
+	width = int(width * xScale);
+	height = int(height * yScale);
+#endif
+
 	// create GLFW window and OpenGL 3.3 Core context
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
 	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 	glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
 	//glfwWindowHint(GLFW_COCOA_RETINA_FRAMEBUFFER, GL_TRUE);
-	GLFWwindow *window = glfwCreateWindow(800, 800, "RoomControl", NULL, NULL);
+	GLFWwindow *window = glfwCreateWindow(width, height, "RoomControl", NULL, NULL);
 	if (!window) {
 		glfwTerminate();
 		exit(EXIT_FAILURE);

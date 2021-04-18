@@ -7,7 +7,7 @@
 // usb overview: https://www.beyondlogic.org/usbnutshell/usb5.shtml
 namespace usb {
 
-std::function<Array<uint8_t> (DescriptorType)> getDescriptor;
+std::function<Data (DescriptorType)> getDescriptor;
 std::function<void (uint8_t)> onSetConfiguration;
 
 // endpoint 0
@@ -15,14 +15,15 @@ uint8_t ep0Buffer[64] __attribute__((aligned(4)));
 uint8_t const *ep0Data;
 int ep0SendLength = 0;
 
-void ep0Send(uint8_t const *data, int length) {
+void ep0Send(void const *data, int length) {
+	auto d = reinterpret_cast<uint8_t const *>(data);
 	int l = min(length, 64);
-	array::copy(ep0Buffer, ep0Buffer + l, data);
+	array::copy(ep0Buffer, ep0Buffer + l, d);
 	NRF_USBD->EPIN[0].PTR = intptr_t(ep0Buffer);
 	NRF_USBD->EPIN[0].MAXCNT = l;
 	NRF_USBD->TASKS_STARTEPIN[0] = Trigger;
 
-	ep0Data = data;
+	ep0Data = d;
 	ep0SendLength = length;
 }
 
@@ -87,11 +88,11 @@ void handle() {
 					// get descriptor
 					auto descriptorType = DescriptorType(NRF_USBD->WVALUEH);
 					
-					Array<uint8_t> descriptor = usb::getDescriptor(descriptorType);
-					if (descriptor.length > 0) {
+					Data descriptor = usb::getDescriptor(descriptorType);
+					if (descriptor.size > 0) {
 						// send descriptor
 						int wLength = (NRF_USBD->WLENGTHH << 8) | NRF_USBD->WLENGTHL;
-						int size = min(descriptor.length, wLength);
+						int size = min(descriptor.size, wLength);
 						ep0Send(descriptor.data, size);
 					} else {
 						// unsupported descriptor type: stall
@@ -224,7 +225,7 @@ void handle() {
 	usb::nextHandler();
 }
 
-void init(std::function<Array<uint8_t> (DescriptorType)> const &getDescriptor,
+void init(std::function<Data (DescriptorType)> const &getDescriptor,
 	std::function<void (uint8_t)> const &onSetConfiguration)
 {
 	usb::getDescriptor = getDescriptor;

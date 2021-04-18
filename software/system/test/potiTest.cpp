@@ -4,8 +4,6 @@
 #include <loop.hpp>
 
 
-bool blink = false;
-
 int main(void) {
 	loop::init();
 	timer::init();

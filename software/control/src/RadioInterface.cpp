@@ -11,14 +11,14 @@ RadioInterface::RadioInterface(Storage &storage, std::function<void (uint8_t, ui
 	, onReceived(onReceived)
 {
 	// set handler for read requests by devices
-	radio::addReceiveHandler([this](uint8_t const *data) {onRx(data);});
+	radio::addReceiveHandler([this](uint8_t *data, int length) {onRx(data, length);});
 }
 
 RadioInterface::~RadioInterface() {
 }
 
 void RadioInterface::setCommissioning(bool enabled) {
-	this->commissioning = enabled;
+	this->commissioning = enabled && this->devices.size() < MAX_DEVICE_COUNT;
 }
 
 int RadioInterface::getDeviceCount() {
@@ -88,43 +88,43 @@ void RadioInterface::unsubscribe(uint8_t &endpointId, DeviceId deviceId, uint8_t
 void RadioInterface::send(uint8_t endpointId, uint8_t const *data, int length) {
 }
 
-void RadioInterface::onRx(uint8_t const *data) {
+void RadioInterface::onRx(uint8_t *data, int length) {
+	uint8_t *d = data;
+	uint8_t const *end = data + length;
+	
 	// mac header
-	uint8_t const *mac = data + 1;
+	uint8_t *mac = d;
+	d += 7;
 	uint16_t macFrameControl = mac[0] | (mac[1] << 8);
 	uint16_t destinationPanId = mac[3] | (mac[4] << 8);
 	uint16_t destinationAddress = mac[5] | (mac[6] << 8);
 	
 	// check if data frame, broadcast destination and no source
-	if (macFrameControl != 0x0801 || destinationPanId != 0xffff || destinationAddress != 0xffff)
+	if (d >= end || macFrameControl != 0x0801 || destinationPanId != 0xffff || destinationAddress != 0xffff)
 		return;
-		
-	int length = data[0] - 2 + 1;
-
+	
 	// frame
 	// -----
 	// NWK header (frame control)
 	// Security header (0, 1 or 4 byte counter)
 	// NWK payload (optionally encrypted)
 	// MIC (0, 2 or 4 byte message integrity code)
-	uint8_t const *frame = data + 8;
-	int frameLength = length - 8;
-	uint8_t const *d = frame;
-	int l = frameLength;
+	uint8_t *frame = d;
 
 	uint8_t frameControl = d[0];
-
-	// protocol version
-	int version = (frameControl >> 2) & 7;
-	
 	++d;
-	--l;
+	int protocolVersion = (frameControl >> 2) & 7;
+	bool extendedFlag = frameControl & 0x80;
+
+	if (protocolVersion != 3)
+		return;
 
 	int applicationId = 0;
 	int securityLevel = 0;
 	int keyType = 0;
-	if (frameControl & 0x80) {
+	if (extendedFlag) {
 		uint8_t extendedFrameControl = d[0];
+		++d;
 		
 		// application id
 		applicationId = extendedFrameControl & 3;
@@ -140,23 +140,15 @@ void RadioInterface::onRx(uint8_t const *data) {
 		// 0: none
 		// 1: network key
 		keyType = extendedFrameControl >> 5;
-		
-		++d;
-		--l;
 	}
-
-	// check if space for deviceId, command and mic
-	if (version != 3 && l < 4 + 1 + 4)
-		return;
 	
 	uint32_t deviceId = d[0] | (d[1] << 8) | (d[2] << 16) | (d[3] << 24);
 	//printf("deviceId: %08x\n", deviceId);
 	d += 4;
-	l -= 4;
 
-	if (this->commissioning && securityLevel == 0 && d[0] == 0xe0 && this->devices.size() < MAX_DEVICE_COUNT) {
+	if (this->commissioning && securityLevel == 0 && d[0] == 0xe0) {
 		// commissioning
-		commission(deviceId, d + 1, l - 1);
+		commission(deviceId, d + 1, end);
 		return;
 	}
 
@@ -167,49 +159,63 @@ void RadioInterface::onRx(uint8_t const *data) {
 			DeviceState &state = *e.ram;
 						
 			if (securityLevel == 1) {
-				// length must be at least 1 (counter) + 1 (command) + 2 (MIC)
-				if (l < 1 + 1 + 2)
-					return;
+				// security level 1: 1 byte counter, 2 byte mic
 
 				// security counter (use mac sequence number)
 				uint32_t counter = mac[2];
 
-				// header starts at mac sequence number
-				uint8_t const *header = mac + 2;
-				int headerLength = length - 2 - 2; // 2 for mac frame control at beginning, 2 for mic at end
+				// nonce
+				GreenPowerNonce nonce(deviceId, counter);
 
+				// header starts at mac sequence number and includes also payload
+				uint8_t const *header = mac + 2;
+				int micLength = 2;
+				int headerLength = end - micLength - header;
+				if (headerLength < 1)
+					return;
+					
 				// decrypt and check
-				if (!decrypt(nullptr, deviceId, counter, header, headerLength, header + headerLength, 0, 2, device.aesKey)) {
+				if (!decrypt(nullptr, nonce, header, headerLength, header + headerLength, 0, micLength, device.aesKey)) {
 					//printf("error while decrypting message!\n");
 					return;
 				}
-				l -= 2;
+				
+				// remove mic from end
+				end -= 2;
 			} else if (securityLevel >= 2) {
-				// length must be at least 4 (counter) + 1 (command) + 4 (MIC)
-				if (l < 4 + 1 + 4)
-					return;
-
+				// security levels 2 and 3: 4 byte counter, 4 byte mic
+				
 				// security counter
 				uint32_t counter = d[0] | (d[1] << 8) | (d[2] << 16) | (d[3] << 24);
-				
-				// header starts at frame (frameControl) and either includes payload (level 2) or not (level 3)
-				uint8_t const *header = frame;
-				int headerLength = securityLevel == 2 ? frameLength - 4 : d + 4 - frame;
+				d += 4;
 
-				// decrypt and check
-				if (!decrypt(nullptr, deviceId, counter, header, headerLength, header + headerLength,
-					frameLength - 4 - headerLength, 4, device.aesKey)) {
+				// nonce
+				GreenPowerNonce nonce(deviceId, counter);
+
+				// header starts at frame (frameControl) and either includes payload (level 2) or not (level 3)
+				uint8_t *header = frame;
+				int micLength = 4;
+				int headerAndPayloadLength = end - micLength - header;
+				int headerLength = securityLevel == 2 ? headerAndPayloadLength : d - header;
+				if (headerLength < 1)
+					return;
+
+				uint8_t *message = header + headerLength;
+				int payloadLength = headerAndPayloadLength - headerLength;
+
+				// decrypt in-place and check
+				if (!decrypt(message, nonce, header, headerLength, message, payloadLength, micLength, device.aesKey)) {
 					//printf("error while decrypting message!\n");
 					return;
 				}
-					
-				d += 4;
-				l -= 8;
+
+				// remove mic from end
+				end -= 4;
 			}
 
 			switch (device.deviceType) {
 			case 0x02:
-				{
+				if (d < end) {
 					int endpointIndex = -1;
 					uint8_t data = 0;
 					int command = d[0];
@@ -244,24 +250,18 @@ void RadioInterface::onRx(uint8_t const *data) {
 	}
 }
 
-void RadioInterface::commission(uint32_t deviceId, uint8_t const *data, int length) {
-	if (length < 27)
-		return;
-	
+void RadioInterface::commission(uint32_t deviceId, uint8_t *d, uint8_t const *end) {
 	Device device;
 	device.deviceId = deviceId;
 	DeviceState deviceState = {};
 	
 	// A.4.2.1.1 Commissioning
-	
-	uint8_t const *d = data;
-	int l = length;
-	
+		
 	// device type
 	// 0x02: on/off switch
 	device.deviceType = d[0];
 	++d;
-	--l;
+
 	device.endpointTypes[0] = EndpointType(0);
 	switch (device.deviceType) {
 	case 0x02:
@@ -270,25 +270,24 @@ void RadioInterface::commission(uint32_t deviceId, uint8_t const *data, int leng
 		device.endpointTypes[1] = EndpointType::ROCKER;
 		device.endpointTypes[2] = EndpointType(0);
 		break;
-	case 0x07:
+	//case 0x07:
 		// generic switch, PTM216Z
 		
-		break;
+		//break;
+	default:
+		// unknown device type
+		return;
 	}
 	
-	// check if device type is known
-	if (device.endpointTypes[0] == EndpointType(0))
-		return;
-
 	// options
 	uint8_t options = d[0];
 	++d;
-	--l;
-	bool incrementalCounter = options & 1;
-	if (options & 0x80) {
+	bool incrementalCounterFlag = options & 1;
+	bool extendedFlag = options & 0x80;
+	
+	if (extendedFlag) {
 		uint8_t extendedOptions = d[0];
 		++d;
-		--l;
 
 		// security level for messages
 		// 0: none
@@ -301,58 +300,50 @@ void RadioInterface::commission(uint32_t deviceId, uint8_t const *data, int leng
 		int keyType = (extendedOptions >> 2) & 7;
 		
 		// 128 bit (16 byte) key follows
-		bool keyPresent = extendedOptions & 0x20;
+		bool keyFlag = extendedOptions & 0x20;
 		
 		// key is encrypted and additional 4 byte MIC follows
-		bool keyEncrypted = extendedOptions & 0x40;
+		bool keyEncryptedFlag = extendedOptions & 0x40;
 		
 		// current value of security counter follows
-		bool counterPresent = extendedOptions & 0x80;
+		bool counterFlag = extendedOptions & 0x80;
 	
-		if (keyPresent) {
-			if (keyEncrypted) {
-				// decrypt key
-				//setKey(aesKey, defaultKey);
+		if (keyFlag) {
+			uint8_t *key = d;
+			if (keyEncryptedFlag) {
+				// decrypt key, Green Power A.1.5.3.3.3
+				
+				// nonce
+				GreenPowerNonce nonce(deviceId, deviceId);
 
-				// Green Power A.1.5.3.3.3
-				uint8_t header[4];
-				header[0] = deviceId;
-				header[1] = deviceId >> 8;
-				header[2] = deviceId >> 16;
-				header[3] = deviceId >> 24;
-				uint8_t key[16];
-				if (!decrypt(key, deviceId, deviceId, header, 4, d, 16, 4, defaultAesKey)) {
+				// construct a header containing the device id
+				DataBuffer<4> header;
+				header.setLittleEndianInt32(0, deviceId);
+
+				if (!decrypt(key, nonce, header.data, 4, d, 16, 4, defaultAesKey)) {
 					//printf("error while decrypting key!\n");
 					return;
 				}				
-				setKey(device.aesKey, key);
 
-				// skip MIC
-				d += 4;
-				l -= 4;
+				// skip key and MIC
+				d += 16 + 4;
 			} else {
-				// set key
-				uint8_t const *key = d;
-				setKey(device.aesKey, key);
+				// skip key
+				d += 16;
 			}
-			d += 16;
-			l -= 16;
-
-/*
-			printf("key: ");
-			for (int i = 0; i < 16; ++i) {
-				printf("%02x ", key[i]);
-			}
-			printf("\n");
-*/
+			
+			// set key for device
+			setKey(device.aesKey, key);
 		}
-		if (counterPresent) {
+		if (counterFlag) {
 			deviceState.counter = d[0] | (d[1] << 8) | (d[2] << 16) | (d[3] << 24);
 			d += 4;
-			l -= 4;
 			//printf("counter: %08x\n", counter);
 		}
 	}
+
+	if (d > end)
+		return;
 
 	// check if device already exists
 	for (auto e : this->devices) {

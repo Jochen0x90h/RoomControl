@@ -6,6 +6,7 @@
 #include <iostream>
 
 
+// emulator implementation of bus uses virtual devices on user interface
 namespace bus {
 
 // list of emulated devices
@@ -219,8 +220,8 @@ void transfer(uint8_t const *txData, int txLength, uint8_t *rxData, int rxLength
 					int deviceIndex = i - array::size(endpointTypes);
 					uint8_t endpointIndex = txData[1];
 					uint8_t endpointId = txData[2]; // 0 to unsubscribe
-					int topicIndex = endpointStarts[deviceIndex] + endpointIndex;
-					bus::endpointIds[topicIndex] = endpointId;
+					int globalEndpointIndex = endpointStarts[deviceIndex] + endpointIndex;
+					bus::endpointIds[globalEndpointIndex] = endpointId;
 				}
 				break;
 			}

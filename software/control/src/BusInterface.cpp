@@ -20,6 +20,10 @@ BusInterface::~BusInterface() {
 }
 
 void BusInterface::setCommissioning(bool enabled) {
+	if (enabled) {
+		// enumerate auto-commissioning devices
+		
+	}
 }
 
 int BusInterface::getDeviceCount() {

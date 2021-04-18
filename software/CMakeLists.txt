@@ -53,6 +53,7 @@ set(UTIL
 	util/src/Bitmap.hpp
 	util/src/convert.cpp
 	util/src/convert.hpp
+	util/src/Data.hpp
 	util/src/defines.hpp
 	util/src/Font.cpp
 	util/src/Font.hpp
@@ -73,6 +74,8 @@ set(CRYPT
 	crypt/src/crypt.cpp
 	crypt/src/crypt.hpp
 	crypt/src/DataBuffer.hpp
+	crypt/src/hash.cpp
+	crypt/src/hash.hpp
 )
 set(TINYCRYPT
 	crypt/src/tinycrypt/aes.h
@@ -256,16 +259,30 @@ conan_target_link_libraries(bme680Test)
 
 
 
-# terminal for tests that output text or binary data
+# terminal for tests that output text or binary data via usb
 add_executable(terminal
-	node/test/terminal.cpp
+	tools/src/terminal.cpp
 )
 target_include_directories(terminal
 	PRIVATE
-	crypt/src
 	util/src
 )
 conan_target_link_libraries(terminal)
+
+
+
+# radio packet sniffer that can write .pcap files and analyze packets
+add_executable(sniffer
+	tools/src/sniffer.cpp
+	${CRYPT}
+)
+target_include_directories(sniffer
+	PRIVATE
+	util/src
+	crypt/src
+)
+conan_target_link_libraries(sniffer)
+
 
 
 # unit tests (GTest)

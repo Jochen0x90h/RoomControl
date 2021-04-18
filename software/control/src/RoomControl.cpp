@@ -1412,11 +1412,18 @@ SystemTime RoomControl::updateDevices(SystemTime time, SystemDuration duration, 
 	uint16_t topicId, String message, SystemTime nextTimeout)
 {
 	// iterate over devices
-	for (auto e : devices) {
-		bool replaced = e.flash == this->tempFor;
-		Device const &device = replaced ? this->temp.device : *e.flash;
-		DeviceState &deviceState = replaced ? this->tempState.device : *e.ram;
-		
+	int deviceCount = devices.size();
+	int extendedCount = deviceCount + (this->tempFor == &devices ? 1 : 0);
+	for (int deviceIndex = 0; deviceIndex < extendedCount; ++deviceIndex) {
+		// check if there is a device being edited
+		Storage::Element<Device, DeviceState> e;
+		if (deviceIndex == deviceCount || this->tempFor == devices[deviceIndex].flash)
+			e = {&this->temp.device, &this->tempState.device};
+		else
+			e = devices[deviceIndex];
+		Device const &device = *e.flash;
+		DeviceState &deviceState = *e.ram;
+
 		// check for request to list attributes in this device
 		if (topicId == deviceState.deviceTopicId && message.empty()) {
 			for (ComponentIterator it(device, deviceState); !it.atEnd(); it.next()) {
@@ -1867,6 +1874,8 @@ void RoomControl::listDevices(Interface &interface, Storage::Array<Device, Devic
 		if (entry(b)) {
 			// edit device
 			clone(interface, this->temp.device, this->tempState.device, device, *e.ram);
+			
+			// indicate that the device is being edited
 			this->tempFor = &device;
 			push(editDevice);
 		}
@@ -1898,6 +1907,8 @@ void RoomControl::listDevices(Interface &interface, Storage::Array<Device, Devic
 				TopicBuffer topic = getRoomName() / device.getName();
 				subscribeTopic(deviceState.deviceTopicId, topic.enumeration(), QOS);
 
+				// indicate that a new device is being edited by letting tempFor point to the device array
+				this->tempFor = &devices;
 				push(addDevice);
 			}
 		}

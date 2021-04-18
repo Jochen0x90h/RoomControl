@@ -7,7 +7,7 @@
 namespace radio {
 
 /**
- * Initialze the radio
+ * Initialize the radio
  */
 void init();
 
@@ -29,6 +29,6 @@ bool send(uint8_t const *data, std::function<void ()> const &onSent);
  * @param onReceived called when data was received, must not be null
  * @return id of handler to be able to remove it later
  */
-uint8_t addReceiveHandler(std::function<void (uint8_t const *)> const &onReceived);
+uint8_t addReceiveHandler(std::function<void (uint8_t *, int)> const &onReceived);
 
 } // namespace radio

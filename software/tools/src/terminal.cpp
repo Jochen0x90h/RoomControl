@@ -1,11 +1,9 @@
 #include <stdio.h>
 #include <libusb.h>
 #include <util.hpp>
-#include <crypt.hpp>
-#include <DataBuffer.hpp>
 
 
-// test for PTM215Z, is a usb host and needs radioSniffer on the device
+// prints everything that comes via usb from the device, e.g. radioTest or bme680Test
 
 
 // transfer direction
@@ -72,7 +70,7 @@ int main(void) {
 						printf("%s\n", data);
 					} else {
 						// binary
-						printf("%d: ", length);
+						printf("%d:\n", length);
 						for (int i = 0; i < length; ++i) {
 							if ((i & 15) == 0) {
 								if (i != 0)
@@ -80,7 +78,8 @@ int main(void) {
 							} else {
 								printf(", ");
 							}
-							printf("0x%02x", data[i]);
+							printf("%02x", data[i]);
+							//printf("0x%02x", data[i]);
 						}
 						printf("\n");
 					}

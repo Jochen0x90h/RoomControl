@@ -6,7 +6,7 @@
 
 namespace poti {
 
-std::function<void (int, bool)> onChanged;;
+std::function<void (int, bool)> onChanged;
 int acc = 0;
 bool buttonState = false;
 uint32_t counter;

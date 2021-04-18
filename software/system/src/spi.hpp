@@ -8,7 +8,7 @@
 namespace spi {
 
 /**
- * Initialze SPI
+ * Initialize SPI
  */
 void init();
 

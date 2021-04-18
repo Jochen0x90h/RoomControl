@@ -7,7 +7,24 @@
 
 /**
  * Bus for connecting devices using wires
- * Emulator implementation uses virtual devices on user interface
+ *
+ * Protocol is based on LIN physical layer and uses 19200 baud
+ * Frame format:
+ * - BREAK, SYNC, <1 byte endpoint id>, <payload>, <8 bit crc>
+ * - todo: BREAK, SYNC, <1 byte endpoint id>, <1 byte security counter>, <encrypted payload>, <2 byte authentication>
+ * - First three components always sent by master, remaining components sent by endpoint in master or slave
+ * Manual Commissioning:
+ * - When a slave wants to be commissioned, it sends endpoint id 0 as a request
+ * - Continue with procedure of auto commissioning when the master is in commissioning mode
+ * Auto Commissioning:
+ * - Master sends endpoint id 0, slaves reply with their device id followed by a list of endpoint types. A CAN-style
+ *   arbitration ensures that only one slave "survives", all other slaves retreat.
+ * - Master assigns an endpoint to the device by sending endpoint id 1 followed by the device id and the assigned
+ *   device endpoint id
+ * Endpoint subscription:
+ * - Master sends endpoint id of device, the endpoint index to subscribe and the new endpoint id
+ * Endpoint unsubscription
+ * - Master sends endpoint id of device, the endpoint index to unsubscribe and 0 as new endpoint id
  */
 class BusInterface : public Interface {
 public:

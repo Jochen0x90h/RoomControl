@@ -7,7 +7,7 @@
 namespace display {
 
 /**
- * Initialze display. Depends on SPI, also call spi::init()
+ * Initialize display. Depends on SPI, also call spi::init()
  */
 void init();
 

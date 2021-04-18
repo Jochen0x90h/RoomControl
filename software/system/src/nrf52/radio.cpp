@@ -8,9 +8,10 @@
 namespace radio {
 
 std::function<void ()> onSent;
-std::function<void (uint8_t const *)> onReceived[RADIO_RECEIVE_HANDLER_COUNT];
+std::function<void (uint8_t *, int)> onReceived[RADIO_RECEIVE_HANDLER_COUNT];
 
-uint8_t receiveBuffer[1 + RADIO_MAX_PAYLOAD_LENGTH] __attribute__((aligned(4)));
+// todo: multiple receive buffers in a queue
+uint8_t receiveBuffer[1 + RADIO_MAX_PAYLOAD_LENGTH];
 
 
 // event loop handler chain
@@ -34,7 +35,7 @@ void handle() {
 			// call receive handlers
 			for (auto const &h : radio::onReceived) {
 				if (h)
-					h(receiveBuffer);
+					h(radio::receiveBuffer + 1, radio::receiveBuffer[0] - 2); // crc not included
 			}
 			
 			// start receive again
@@ -96,7 +97,7 @@ bool send(uint8_t const* data, std::function<void ()> const &onSent) {
 	return true;
 }
 
-uint8_t addReceiveHandler(std::function<void (uint8_t const *)> const &onReceived) {
+uint8_t addReceiveHandler(std::function<void (uint8_t *, int)> const &onReceived) {
 	assert(onReceived);
 	for (int i = 0; i < RADIO_RECEIVE_HANDLER_COUNT; ++i) {
 		if (!radio::onReceived[i]) {

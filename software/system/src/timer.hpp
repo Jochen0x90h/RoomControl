@@ -7,7 +7,7 @@
 namespace timer {
 
 /**
- * Initialze the timer
+ * Initialize the timer
  */
 void init();
 

@@ -5,6 +5,7 @@
 #include <debug.hpp>
 #include <loop.hpp>
 #include <StringBuffer.hpp>
+#include <Data.hpp>
 
 
 
@@ -126,7 +127,7 @@ void read(BME680 &sensor) {
 	//getRegisters();
 	sensor.readMeasurements([&sensor]() {getValues(sensor);});
 	
-	timer::start(timerId, timer::getTime() + 9s, [&sensor]() {measure(sensor);});
+	timer::start(timerId, timer::getTime() + 59s, [&sensor]() {measure(sensor);});
 }
 
 void getValues(BME680 &sensor) {
@@ -152,11 +153,11 @@ int main(void) {
 		[](usb::DescriptorType descriptorType) {
 			switch (descriptorType) {
 			case usb::DESCRIPTOR_DEVICE:
-				return Array<uint8_t>(reinterpret_cast<uint8_t const *>(&deviceDescriptor), sizeof(deviceDescriptor));
+				return Data(deviceDescriptor);
 			case usb::DESCRIPTOR_CONFIGURATION:
-				return Array<uint8_t>(reinterpret_cast<uint8_t const *>(&configurationDescriptor), sizeof(configurationDescriptor));
+				return Data(configurationDescriptor);
 			default:
-				return Array<uint8_t>();
+				return Data();
 			}
 		},
 		[](uint8_t bConfigurationValue) {

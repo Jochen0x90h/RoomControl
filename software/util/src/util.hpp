@@ -8,6 +8,17 @@ constexpr int min(int x, int y) {return x < y ? x : y;}
 constexpr int max(int x, int y) {return x > y ? x : y;}
 
 
+// helper classes for distinguishing between fixed size array and c-string
+struct False {};
+struct True {};
+
+template <typename T>
+struct IsArray : False {};
+  
+template <typename T, int N>
+struct IsArray<T[N]> : True {};
+
+
 namespace array {
 
 template <typename T, int N>

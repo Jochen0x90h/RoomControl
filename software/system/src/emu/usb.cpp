@@ -6,12 +6,12 @@ namespace usb {
 
 bool text;
 
-void init(std::function<Array<uint8_t> (DescriptorType)> const &getDescriptor,
+void init(std::function<Data (DescriptorType)> const &getDescriptor,
 	std::function<void (uint8_t)> const &onSetConfiguration)
 {
 	// get device descriptor
-	auto deviceDescriptor = reinterpret_cast<DeviceDescriptor const *>(getDescriptor(DESCRIPTOR_DEVICE).data);
-	usb::text = deviceDescriptor->bDeviceProtocol == 1;
+	auto &deviceDescriptor = getDescriptor(DESCRIPTOR_DEVICE).cast<DeviceDescriptor>();
+	usb::text = deviceDescriptor.bDeviceProtocol == 1;
 	
 	// set configuration
 	onSetConfiguration(1);

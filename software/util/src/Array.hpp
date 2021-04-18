@@ -3,7 +3,7 @@
 #include <assert.hpp>
 
 /**
- * Array, only references the data
+ * Array wrapper, only references the data
  * @tparam T array element
  */
 template <typename T>
