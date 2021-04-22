@@ -19,6 +19,15 @@ endif()
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address")
 set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=address")
 
+# set rpath so that shared libraries are searched in ../lib
+if (APPLE)
+	set(CMAKE_INSTALL_RPATH "@executable_path/../lib")
+else()
+	set(CMAKE_INSTALL_RPATH "\$ORIGIN/../lib")
+endif()
+set(CMAKE_BUILD_WITH_INSTALL_RPATH ON)
+
+
 # define emulator flag
 add_definitions(-DEMU)
 

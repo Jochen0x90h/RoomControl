@@ -1,36 +1,36 @@
-.PHONY: release test debug reldeb install upload clean
+.PHONY: release debug install upload
 
-REFERENCE := $(shell python3 -c 'from conanfile import get_reference; print(get_reference())' 2>/dev/null)
+# name of conan package
+NAME := $(shell python3 -c 'from conanfile import Project; print(Project.name)')
 
-all: debug release
+# get version from git branch or tag
+left := (
+right := )
+BRANCH := $(shell git tag -l --points-at HEAD)
+ifeq ($(BRANCH),)
+	BRANCH := $(shell git rev-parse --abbrev-ref HEAD)
+endif
+VERSION := $(subst /,-,$(subst $(left),_,$(subst $(right),_,$(BRANCH))))
 
-# build release and export conan package
+# default target
+all: release debug
+
+# build release and run unit tests
+release: export CONAN_RUN_TESTS = 1
 release:
-	conan install conanfile.py --install-folder build --update
-	conan export-pkg . $(REFERENCE) --build-folder build -f
+	conan create . $(VERSION)@
 
-# run tests
-test:
-	cd build && make test
-
-# build debug and export conan package
+# build debug and run unit tests
+debug: export CONAN_RUN_TESTS = 1
 debug:
-	conan install conanfile.py --install-folder build-debug --profile Debug --update
-	conan export-pkg . $(REFERENCE) --build-folder build-debug --profile Debug -f
-
-# build release with debug info
-reldeb:
-	conan install conanfile.py --install-folder build-reldeb --options debug=True --update
-	conan export-pkg . $(REFERENCE) --build-folder build-reldeb --options debug=True -f
+	conan create --profile Debug . $(VERSION)@
 
 # install to ~/.local
+install: export CONAN_INSTALL_PREFIX = ${HOME}/.local
 install:
-	conan install conanfile.py --install-folder build --update
-	conan package . --build-folder build --package-folder "${HOME}/.local"
+	conan install $(NAME)/$(VERSION)@
 
-# upload package to conan repository
+# upload to artifact repository
 upload:
-	conan upload $(REFERENCE) --all --force
-
-clean:
-	rm -rf build build-debug build-reldeb
+	conan upload $(NAME)/$(VERSION)@
+	conan upload --profile Debug $(NAME)/$(VERSION)@
