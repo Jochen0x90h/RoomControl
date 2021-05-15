@@ -25,7 +25,7 @@ TEST(cryptTest, security01) {
 	AesKey aesKey;
 	setKey(aesKey, key);
 
-	GreenPowerNonce nonce(deviceId, counter);
+	Nonce nonce(deviceId, counter);
 	bool result1 = decrypt(nullptr, nonce, header1, array::size(header1), message1, 0, 2, aesKey);
 	bool result2 = decrypt(nullptr, nonce, header2, array::size(header2), message2, 0, 2, aesKey);
 	EXPECT_TRUE(result1);
@@ -44,7 +44,7 @@ TEST(cryptTest, security10) {
 	AesKey aesKey;
 	setKey(aesKey, key);
 
-	GreenPowerNonce nonce(deviceId, counter);
+	Nonce nonce(deviceId, counter);
 	bool result = decrypt(nullptr, nonce, header, array::size(header), message, 0, 4, aesKey);
 	EXPECT_TRUE(result);
 }
@@ -60,7 +60,7 @@ TEST(cryptTest, security11) {
 	AesKey aesKey;
 	setKey(aesKey, key);
 
-	GreenPowerNonce nonce(deviceId, counter);
+	Nonce nonce(deviceId, counter);
 
 	uint8_t decrypted[1];
 	bool result = decrypt(decrypted, nonce, header, array::size(header), message, 1, 4, aesKey);

@@ -47,12 +47,24 @@ bool decrypt(uint8_t *result, DataBuffer<13> const &nonce, uint8_t const *header
 	uint8_t const *message, int payloadLength, int micLength, AesKey const &aesKey);
 
 
-class GreenPowerNonce : public DataBuffer<13> {
+class Nonce : public DataBuffer<13> {
 public:
-	GreenPowerNonce(uint32_t deviceId, uint32_t counter) {
+	/**
+	 * Constructor
+	 */
+	Nonce(uint8_t const *sourceAddress, uint32_t frameCounter, uint8_t securityControl) {
+		setData(0, sourceAddress, 8);
+		setLittleEndianInt32(8, frameCounter);
+		setInt8(12, securityControl);
+	}
+
+	/**
+	 * Constructor for Green Power nonce
+	 */
+	Nonce(uint32_t deviceId, uint32_t frameCounter) {
 		setLittleEndianInt32(0, deviceId);
 		setLittleEndianInt32(4, deviceId);
-		setLittleEndianInt32(8, counter);
+		setLittleEndianInt32(8, frameCounter);
 		setInt8(12, 0x05);
 	}
 };

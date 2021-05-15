@@ -193,7 +193,7 @@ void BusInterface::onEnumerated(int rxLength) {
 }
 
 void BusInterface::onTransferred(int rxLength) {
-	auto tx = this->txQueue.back();
+	auto tx = this->txQueue.get();
 	
 	// todo check if transfer was successful
 	if (rxLength < 2 || this->rxData[rxLength - 1] != calcChecksum(this->rxData, rxLength - 1)) {
@@ -219,7 +219,7 @@ void BusInterface::onTransferred(int rxLength) {
 
 	// check if more to transfer
 	if (!this->txQueue.empty()) {
-		auto tx = this->txQueue.back();
+		auto tx = this->txQueue.get();
 		bus::transfer(tx.data, tx.length, this->rxData, 10, [this](int rxLength) {onTransferred(rxLength);});
 	} else {
 		this->busy = false;

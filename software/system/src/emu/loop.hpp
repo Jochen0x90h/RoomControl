@@ -8,6 +8,6 @@ namespace asio = boost::asio;
 namespace loop {
 
 // io context (event loop for asynchronous input/output)
-extern asio::io_service context;
+extern asio::io_context context;
 
 } // namespace loop

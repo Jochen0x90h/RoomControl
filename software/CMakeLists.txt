@@ -63,6 +63,7 @@ set(UTIL
 	util/src/convert.cpp
 	util/src/convert.hpp
 	util/src/Data.hpp
+	util/src/DataQueue.hpp
 	util/src/defines.hpp
 	util/src/Font.cpp
 	util/src/Font.hpp
@@ -116,6 +117,8 @@ set(SYSTEM
 	system/src/emu/poti.cpp
 	system/src/poti.hpp
 	system/src/radio.hpp
+	system/src/emu/rng.cpp
+	system/src/rng.hpp
 	system/src/spi.hpp
 	system/src/SystemTime.hpp
 	system/src/emu/timer.cpp
@@ -233,21 +236,6 @@ conan_target_link_libraries(usbTestHost)
 
 
 
-# test green power devices, e.g. PTM215Z (command line tool, needs radioTest on device)
-add_executable(greenPowerTest
-	node/test/greenPowerTest.cpp
-	${UTIL}
-	${CRYPT}
-)
-target_include_directories(greenPowerTest
-	PRIVATE
-	crypt/src
-	util/src
-)
-conan_target_link_libraries(greenPowerTest)
-
-
-
 # test for BME680
 add_executable(bme680Test
 	control/test/bme680Test.cpp
@@ -280,7 +268,7 @@ conan_target_link_libraries(terminal)
 
 
 
-# radio packet sniffer that can write .pcap files and analyze packets
+# radio packet sniffer that can write .pcap files and analyze packets (needs radioTest on device)
 add_executable(sniffer
 	tools/src/sniffer.cpp
 	${CRYPT}

@@ -1,4 +1,5 @@
 #include "ArrayList.hpp"
+#include "DataQueue.hpp"
 #include "Queue.hpp"
 #include "StringBuffer.hpp"
 #include "StringSet.hpp"
@@ -11,11 +12,130 @@
 
 constexpr String strings[] = {"a", "bar", "bar2", "foo", "foo2", "foobar", "foobar2", "z"};
 
-TEST(utilTest, UInt) {
-	static_assert(sizeof(UInt<256>::Type) == 1);
-	static_assert(sizeof(UInt<257>::Type) == 2);
-	static_assert(sizeof(UInt<65536>::Type) == 2);
-	static_assert(sizeof(UInt<65537>::Type) == 4);
+
+TEST(utilTest, ArrayList) {
+	std::mt19937 gen(1337); // standard mersenne_twister_engine seeded with 1337
+	std::uniform_int_distribution<> distrib(0, array::size(strings) - 1);
+	for (int count = 1; count < 7; ++count) {
+		for (int round = 0; round < count * count; ++round) {
+			ArrayList<String, 20> list;
+			
+			// add elements to list
+			for (int i = 0; i < count; ++i) {
+				// pick random string
+				String s = strings[distrib(gen)];
+				
+				// determine where to insert
+				int index = list.binaryLowerBound(s);
+				
+				// check if already exists
+				if (index >= list.size() || !(list[index] == s)) {
+					// insert into list
+					list.insert(index, s);
+				}
+			}
+			
+			// print list
+			/*
+			std::cout << std::endl;
+			for (String s : list) {
+				std::cout << s << std::endl;
+			}*/
+			
+			// check if the list contains unique sorted elements
+			for (int i = 0; i < list.size() - 1; ++i) {
+				EXPECT_TRUE(list[i] < list[i + 1]);
+			}
+		}
+	}
+}
+
+TEST(utilTest, DataQueue) {
+	using Q = DataQueue<int, 32, 256>;
+	Q queue;
+
+	EXPECT_TRUE(queue.hasSpace(255));
+	EXPECT_FALSE(queue.hasSpace(256));
+	
+	auto e1 = queue.add(0, 128);
+	EXPECT_TRUE(queue.hasSpace(127));
+	EXPECT_FALSE(queue.hasSpace(128));
+	EXPECT_EQ(e1.data, queue.data());
+	queue.remove();
+
+	auto e2 = queue.add(0, 128);
+	EXPECT_TRUE(queue.hasSpace(127));
+	EXPECT_FALSE(queue.hasSpace(128));
+	EXPECT_EQ(e2.data, queue.data() + 128);
+	queue.remove();
+
+	
+	// add some entries
+	for (int i = 0; i < 5; ++i) {
+		auto e1 = queue.add(i, i);
+		std::fill(e1.data, e1.data + e1.length, uint8_t(i));
+	}
+
+	// add and remove many entries
+	for (int i = 5; i < 105; ++i) {
+		auto e1 = queue.add(i, i & 15);
+		std::fill(e1.data, e1.data + e1.length, uint8_t(i));
+
+		auto e2 = queue.get();
+		EXPECT_EQ(e2.info, i - 5);
+		EXPECT_EQ(e2.length, (i - 5) & 15);
+		for (int i = 0; i < e2.length; ++i) {
+			EXPECT_EQ(e2.data[i], e2.info);
+		}
+		
+		queue.remove();
+	}
+
+	// remove last entries
+	for (int i = 0; i < 5; ++i) {
+		queue.remove();
+	}
+	
+	// now queue must be empty again
+	EXPECT_TRUE(queue.empty());
+}
+
+TEST(utilTest, Queue) {
+	using Q = Queue<int, 4>;
+	Q queue;
+	
+	// check if initially empty
+	EXPECT_TRUE(queue.empty());
+	
+	// add and remove one element
+	queue.add() = 5;
+	EXPECT_EQ(queue.get(), 5);
+	queue.remove();
+	EXPECT_TRUE(queue.empty());
+
+	// add elements until queue is full
+	int i = 0;
+	int &head = queue.getHead();
+	while (!queue.full()) {
+		queue.add() = 1000 + i;
+		++i;
+	}
+	EXPECT_EQ(i, 4);
+	EXPECT_EQ(queue.count(), 4);
+	EXPECT_EQ(head, 1000);
+
+	// remove one element
+	queue.remove();
+	EXPECT_FALSE(queue.empty());
+	EXPECT_FALSE(queue.full());
+	EXPECT_EQ(queue.count(), 3);
+	EXPECT_EQ(queue.get(), 1000 + 1);
+	
+	// clear and "resurrect" first element (is used in radio driver)
+	queue.clear();
+	queue.increment();
+	EXPECT_EQ(queue.count(), 1);
+	EXPECT_EQ(queue.get(), 1000 + 1);
 }
 
 TEST(utilTest, String) {
@@ -26,7 +146,7 @@ TEST(utilTest, String) {
 	}
 }
 
-TEST(testUtil, StringBuffer) {
+TEST(utilTest, StringBuffer) {
 	int i = *parseInt("-50");
 	EXPECT_EQ(i, -50);
 	float f = *parseFloat("50.99");
@@ -66,7 +186,7 @@ TEST(testUtil, StringBuffer) {
 }
 
 
-TEST(testUtil, TopicBuffer) {
+TEST(utilTest, TopicBuffer) {
 	TopicBuffer t = String();
 	EXPECT_EQ(t.string(), String());
 	
@@ -91,46 +211,9 @@ TEST(testUtil, TopicBuffer) {
 	EXPECT_EQ(t.string(), String());
 }
 
-TEST(testUtil, ArrayList) {
-	std::mt19937 gen(1337); //Standard mersenne_twister_engine seeded with 1337
-	std::uniform_int_distribution<> distrib(0, array::size(strings) - 1);
-	for (int count = 1; count < 7; ++count) {
-		for (int round = 0; round < count * count; ++round) {
-			ArrayList<String, 20> list;
-			
-			// add elements to list
-			for (int i = 0; i < count; ++i) {
-				// pick random string
-				String s = strings[distrib(gen)];
-				
-				// determine where to insert
-				int index = list.binaryLowerBound(s);
-				
-				// check if already exists
-				if (index >= list.size() || !(list[index] == s)) {
-					// insert into list
-					list.insert(index, s);
-				}
-			}
-			
-			// print list
-			/*
-			std::cout << std::endl;
-			for (String s : list) {
-				std::cout << s << std::endl;
-			}*/
-			
-			// check if the list contains unique sorted elements
-			for (int i = 0; i < list.size() - 1; ++i) {
-				EXPECT_TRUE(list[i] < list[i + 1]);
-			}
-		}
-	}
-}
-
-TEST(testUtil, StringSet) {
+TEST(utilTest, StringSet) {
 	// test StringSet
-	std::mt19937 gen(1337); //Standard mersenne_twister_engine seeded with 1337
+	std::mt19937 gen(1337); // standard mersenne_twister_engine seeded with 1337
 	std::uniform_int_distribution<> distrib(0, array::size(strings) - 1);
 	for (int count = 1; count < 7; ++count) {
 		for (int round = 0; round < count * count; ++round) {
@@ -158,54 +241,11 @@ TEST(testUtil, StringSet) {
 	}
 }
 
-TEST(testUtil, Queue) {
-	using Q = Queue<int, 32, 256>;
-	Q queue;
-
-	EXPECT_TRUE(queue.hasSpace(255));
-	EXPECT_FALSE(queue.hasSpace(256));
-	
-	auto e1 = queue.add(0, 128);
-	EXPECT_TRUE(queue.hasSpace(127));
-	EXPECT_FALSE(queue.hasSpace(128));
-	EXPECT_EQ(e1.data, queue.data());
-	queue.remove();
-
-	auto e2 = queue.add(0, 128);
-	EXPECT_TRUE(queue.hasSpace(127));
-	EXPECT_FALSE(queue.hasSpace(128));
-	EXPECT_EQ(e2.data, queue.data() + 128);
-	queue.remove();
-
-	
-	// add some entries
-	for (int i = 0; i < 5; ++i) {
-		auto e1 = queue.add(i, i);
-		std::fill(e1.data, e1.data + e1.length, uint8_t(i));
-	}
-
-	// add and remove many entries
-	for (int i = 5; i < 105; ++i) {
-		auto e1 = queue.add(i, i & 15);
-		std::fill(e1.data, e1.data + e1.length, uint8_t(i));
-
-		auto e2 = queue.back();
-		EXPECT_EQ(e2.info, i - 5);
-		EXPECT_EQ(e2.length, (i - 5) & 15);
-		for (int i = 0; i < e2.length; ++i) {
-			EXPECT_EQ(e2.data[i], e2.info);
-		}
-		
-		queue.remove();
-	}
-
-	// remove last entries
-	for (int i = 0; i < 5; ++i) {
-		queue.remove();
-	}
-	
-	// now queue must be empty again
-	EXPECT_TRUE(queue.empty());
+TEST(utilTest, UInt) {
+	static_assert(sizeof(UInt<256>::Type) == 1);
+	static_assert(sizeof(UInt<257>::Type) == 2);
+	static_assert(sizeof(UInt<65536>::Type) == 2);
+	static_assert(sizeof(UInt<65537>::Type) == 4);
 }
 
 

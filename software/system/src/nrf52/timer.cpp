@@ -8,9 +8,15 @@ namespace timer {
 
 SystemTime systemTime;
 
+enum State : uint8_t {
+	NOT_ALLOCATED = 0,
+	STOPPED = 1,
+	RUNNING = 2
+};
+
 struct Timer {
-	// state: 0 = not allocated, 1 = stopped, 2 = running
-	uint8_t state = 0;
+	// state
+	State state = NOT_ALLOCATED;
 	
 	// timeout time
 	SystemTime time;
@@ -19,33 +25,40 @@ struct Timer {
 	std::function<void ()> onTimeout;
 };
 
+// list of timers
 Timer timers[TIMER_COUNT];
+
+// next timeout of a timer in the list
 SystemTime next;
+
 
 // event loop handler chain
 loop::Handler nextHandler;
 void handle() {
 	if (NRF_RTC0->EVENTS_COMPARE[0]) {
 		do {
-			auto activate = next;
+			auto timeout = timer::next;
 			next.value += 0x80000;
-			for (Timer &timer : timers) {
+			for (Timer &t : timers) {
 				// check if timer is running
-				if (timer.state == 2) {
-					if (timer.time == activate) {
-						// activate this timer
-						timer.state = 1;
-						if (timer.onTimeout)
-							timer.onTimeout();
+				if (t.state == RUNNING) {
+					// check if timeout time reached
+					if (t.time == timeout) {
+						// stop timer
+						t.state = STOPPED;
+						
+						// call handler
+						if (t.onTimeout)
+							t.onTimeout();
 					} else {
 						// check if this timer is the next to elapse
-						if (timer.time < next)
-							next = timer.time;
+						if (t.time < timer::next)
+							timer::next = t.time;
 					}
 				}
 			}
-			NRF_RTC0->CC[0] = next.value << 4;
-		} while (getTime() >= next);
+			NRF_RTC0->CC[0] = timer::next.value << 4;
+		} while (getTime() >= timer::next);
 
 		// clear pending interrupt flags at peripheral and NVIC
 		NRF_RTC0->EVENTS_COMPARE[0] = 0;
@@ -77,9 +90,9 @@ SystemTime getTime() {
 
 uint8_t allocate() {
 	for (uint8_t i = 0; i < TIMER_COUNT; ++i) {
-		Timer &timer = timer::timers[i];
-		if (timer.state == 0) {
-			timer.state = 1;
+		Timer &t = timer::timers[i];
+		if (t.state == NOT_ALLOCATED) {
+			t.state = STOPPED;
 			return i + 1;
 		}
 	}
@@ -90,27 +103,29 @@ uint8_t allocate() {
 }
 
 void setHandler(uint8_t id, std::function<void ()> const &onTimeout) {
-	int index = id - 1;
-	assert(index >= 0 && index < TIMER_COUNT);
-	Timer &timer = timer::timers[index];
-	assert(timer.state > 0);
-	timer.onTimeout = onTimeout;
+	uint8_t index = id - 1;
+	assert(index < TIMER_COUNT);
+	Timer &t = timer::timers[index];
+	assert(t.state != NOT_ALLOCATED);
+	t.onTimeout = onTimeout;
 }
 
 void start(uint8_t id, SystemTime time) {
-	int index = id - 1;
-	assert(index >= 0 && index < TIMER_COUNT);
-	Timer &timer = timer::timers[index];
-	assert(timer.state > 0);
+	uint8_t index = id - 1;
+	assert(index < TIMER_COUNT);
+	Timer &t = timer::timers[index];
+	assert(t.state != NOT_ALLOCATED);
 
-	// set state to running and timeout time
-	timer.state = 2;
-	timer.time = time;
+	// set state to running
+	t.state = RUNNING;
+	
+	// set timeout time
+	t.time = time;
 		
 	// check if this timer is the next to elapse
-	if (time < next) {
-		next = time;
-		NRF_RTC0->CC[0] = next.value << 4;
+	if (time < timer::next) {
+		timer::next = time;
+		NRF_RTC0->CC[0] = timer::next.value << 4;
 	}
 
 	// check if timeout already elapsed
@@ -120,13 +135,13 @@ void start(uint8_t id, SystemTime time) {
 }
 
 void stop(uint8_t id) {
-	int index = id - 1;
-	assert(index >= 0 && index < TIMER_COUNT);
-	Timer &timer = timer::timers[index];
-	assert(timer.state > 0);
+	uint8_t index = id - 1;
+	assert(index < TIMER_COUNT);
+	Timer &t = timer::timers[index];
+	assert(t.state != NOT_ALLOCATED);
 
 	// set state to stopped
-	timer.state = 1;
+	t.state = STOPPED;
 }
 
 } // namespace timer

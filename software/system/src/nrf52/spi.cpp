@@ -5,10 +5,8 @@
 
 namespace spi {
 
-Task tasks[SPI_TASK_COUNT];
-int taskHead = 0;
-int taskTail = 0;
-int taskCount = 0;
+// queue of pending transfers
+Queue<Transfer, SPI_TRANSFER_QUEUE_LENGTH> transferQueue;
 
 // event loop handler chain
 loop::Handler nextHandler;
@@ -21,22 +19,22 @@ void handle() {
 		// disable SPI
 		NRF_SPIM3->ENABLE = 0;
 
-		// get current task
-		Task const &task = spi::tasks[spi::taskTail];
-		if (task.readData == 1) {
+		// get current transfer
+		Transfer const &transfer = spi::transferQueue.get();
+		if (transfer.readData == 1) {
 			// restore MISO pin
 			NRF_SPIM3->PSELDCX = Disconnected;
 			NRF_SPIM3->PSEL.MISO = SPI_MISO_PIN;
-			//configureInputWithPullUp(SPI_MISO_PIN); // done automatically
+			//configureInputWithPullUp(SPI_MISO_PIN); // done automatically by hardware
 		}
-		spi::taskTail = (spi::taskTail == SPI_TASK_COUNT - 1) ? 0 : spi::taskTail + 1;
-		--spi::taskCount;
+		spi::transferQueue.remove();
 		
-		// transfer pending tasks
-		if (spi::taskCount > 0)
-			transfer();
+		// handle pending transfers
+		if (!spi::transferQueue.empty())
+			startTransfer();
 
-		task.onTransferred();			
+		// callback to user code
+		transfer.onTransferred();			
 	}
 	
 	// call next handler in chain
@@ -69,38 +67,31 @@ void init() {
 	spi::nextHandler = loop::addHandler(handle);
 }
 
-Task &allocateTask() {
-	Task &task = spi::tasks[spi::taskHead];
-	spi::taskHead = (spi::taskHead == SPI_TASK_COUNT - 1) ? 0 : spi::taskHead + 1;
-	++spi::taskCount;
-	return task;
-}
-
-void transfer() {
-	Task const &task = spi::tasks[spi::taskTail];
+void startTransfer() {
+	Transfer const &transfer = spi::transferQueue.get();
 	
 	// set CS pin
-	NRF_SPIM3->PSEL.CSN = task.csPin;
+	NRF_SPIM3->PSEL.CSN = transfer.csPin;
 
 	// set write data
-	NRF_SPIM3->TXD.PTR = task.writeData;
-	NRF_SPIM3->TXD.MAXCNT = task.writeLength;
+	NRF_SPIM3->TXD.PTR = transfer.writeData;
+	NRF_SPIM3->TXD.MAXCNT = transfer.writeLength;
 	
-	// check if this is a write-only task for display
-	if (task.readData == 1) {
+	// check if this is a write-only transfer for display
+	if (transfer.readData == 1) {
 		// configure MISO pin as D/C# pin and set D/C# count
 		NRF_SPIM3->PSEL.MISO = Disconnected;
 		NRF_SPIM3->PSELDCX = SPI_MISO_PIN;
-		//configureOutput(SPI_MISO_PIN); // done automatically
-		NRF_SPIM3->DCXCNT = task.readLength;
+		//configureOutput(SPI_MISO_PIN); // done automatically by hardware
+		NRF_SPIM3->DCXCNT = transfer.readLength;
 	
 		// no read data
 		NRF_SPIM3->RXD.PTR = 0;
 		NRF_SPIM3->RXD.MAXCNT = 0;
 	} else {
 		// set read data
-		NRF_SPIM3->RXD.PTR = task.readData;
-		NRF_SPIM3->RXD.MAXCNT = task.readLength;
+		NRF_SPIM3->RXD.PTR = transfer.readData;
+		NRF_SPIM3->RXD.MAXCNT = transfer.readLength;
 	}
 		
 	// enable and start
@@ -111,21 +102,21 @@ void transfer() {
 bool transfer(int csPin, uint8_t const *writeData, int writeLength, uint8_t *readData, int readLength,
 	std::function<void ()> const &onTransferred)
 {
-	// check if task list is full
-	if (spi::taskCount >= SPI_TASK_COUNT)
+	// check if transfer queue is full
+	if (spi::transferQueue.full())
 		return false;
 
-	Task &task = allocateTask();
-	task.csPin = csPin;
-	task.writeData = intptr_t(writeData);
-	task.writeLength = writeLength;
-	task.readData = intptr_t(readData);
-	task.readLength = readLength;
-	task.onTransferred = onTransferred;
+	Transfer &transfer = spi::transferQueue.add();
+	transfer.csPin = csPin;
+	transfer.writeData = intptr_t(writeData);
+	transfer.writeLength = writeLength;
+	transfer.readData = intptr_t(readData);
+	transfer.readLength = readLength;
+	transfer.onTransferred = onTransferred;
 
 	// transfer immediately if SPI is idle
 	if (!NRF_SPIM3->ENABLE)
-		transfer();
+		startTransfer();
 
 	return true;
 }

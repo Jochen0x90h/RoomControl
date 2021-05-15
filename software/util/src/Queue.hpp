@@ -1,113 +1,128 @@
 #pragma once
 
-#include <assert.hpp>
-#include <util.hpp>
+#include "util.hpp"
+#include "assert.hpp"
 
 
 /**
- * Queue for elements with data
- * @tparam T custom info for each element
- * @tparam N maximum number of queue elements
- * @tparam M size of data buffer
+ * Queue with fixed size where elements can be added at the head and taken out at the tail
+ *
+ * Example when count() is 3:
+ *  get()     getHead()
+ *   v           v
+ * _____________....
+ * | 0 | 1 | 2 | 3 : -> add(), increment()
+ * -------------....
  */
-template <typename T, int N, int M>
-struct Queue {
+template <typename Element, int N>
+class Queue {
 public:
-
-	struct Element {
-		T &info;
-		uint8_t *data;
-		int length;
-	};
+	/**
+	 * Check if the queue is empty
+	 * @return true if queue is empty
+	 */
+	bool empty() const {return this->c == 0;}
+	bool empty() const volatile {return this->c == 0;}
 
 	/**
-	 * Check if the queue has space for a new element with given data length
-	 * @param length data length
+	 * Check if the queue is full
+	 * @return true if queue is full
 	 */
-	bool hasSpace(int length) {
-		// check if elements array is full
-		if (this->entryCount >= N)
-			return false;
-			
-		// check if there is space in the data buffer
-		if (this->entryCount > 0) {
-			int head = this->bufferHead;
-			int tail = this->entries[this->entryTail].offset;
-			
-			if (head < tail) {
-				// head behind tail
-				return tail - head > length;
-			} else {
-				// head ahead of tail
-				return M - head >= length + (tail == 0) || tail > length;
-			}
-		}
-		return length < M;
+	bool full() const {return this->c >= N;}
+	bool full() const volatile {return this->c >= N;}
+
+	/**
+	 * Get number of elements in queue
+	 * @return number of elements
+	 */
+	int count() const {return this->c;}
+	int count() const volatile {return this->c;}
+
+	/**
+	 * Get the element at the tail of the queue
+	 * @return element at tail
+	 */
+	Element &get() {
+		return this->elements[this->tail];
+	}
+	Element &get() volatile {
+		return const_cast<Element &>(this->elements[this->tail]);
 	}
 	
-	Element add(T const &info, int length) {
-		assert(hasSpace(length));
+	/**
+	 * Get the element at the head of the queue
+	 * @return head element of the queue
+	 */
+	Element &getHead() {
+		assert(this->c < N);
 		
-		// set head to next element
-		this->entryHead = this->entryHead == N - 1 ? 0 : this->entryHead + 1;
-		++this->entryCount;
+		int head = this->tail + this->c;
+		return this->elements[head >= N ? head - N : head];
+	}
+   Element &getHead() volatile {
+		assert(this->c < N);
 
-		Entry &entry = this->entries[this->entryHead];
-		entry.info = info;
-		
-		if (this->bufferHead + length > M)
-			this->bufferHead = 0;
+		int head = this->tail + this->c;
+		return const_cast<Element &>(this->elements[head >= N ? head - N : head]);
+   }
 
-		entry.offset = this->bufferHead;
-		entry.length = length;
-
-		this->bufferHead += length;
-				
-		return {entry.info, &this->buffer[entry.offset], entry.length};
+	/**
+	* Add a new element to the head of the queue and return previous head
+	* @return previous head element of the queue
+	*/
+	Element &add() {
+		assert(this->c < N);
+		int head = this->tail + this->c++;
+		return this->elements[head >= N ? head - N : head];
+	}
+	Element &add() volatile {
+		assert(this->c < N);
+		int head = this->tail + this->c++;
+		return const_cast<Element &>(this->elements[head >= N ? head - N : head]);
+	}
+	
+	/**
+	 * Increment the head of the queue (after the head was written using getHead())
+	 */
+	void increment() {
+		assert(this->c < N);
+		++this->c;
+	}
+	void increment() volatile {
+		assert(this->c < N);
+		++this->c;
 	}
 
 	/**
-	 * Remove last element
+	 * Remove the element at tail and make the next element the current element
 	 */
 	void remove() {
-		assert(this->entryCount > 0);
-		
-		Entry &entry = this->entries[this->entryTail];
-		
-		// set tail to next element
-		this->entryTail = this->entryTail == N - 1 ? 0 : this->entryTail + 1;
-		--this->entryCount;
+		assert(this->c > 0);
+		int tail = this->tail + 1;
+		this->tail = tail == N ? 0 : tail;
+		--this->c;
 	}
-
-	bool empty() const {return this->entryCount == 0;}
-
-	Element front() {
-		Entry &entry = this->entries[this->entryHead];
-		return {entry.info, &this->buffer[entry.offset], entry.length};
+	void remove() volatile {
+		assert(this->c > 0);
+		int tail = this->tail + 1;
+		this->tail = tail == N ? 0 : tail;
+		--this->c;
 	}
-	Element back() {
-		Entry &entry = this->entries[this->entryTail];
-		return {entry.info, &this->buffer[entry.offset], entry.length};
-	}
-
-	// get data buffer, can be used as temp buffer when the queue is not in use
-	uint8_t *data() {return this->buffer;}
+	
+	/**
+	 * Clear the queue
+	 */
+	void clear() {this->c = 0;}
+	void clear() volatile {this->c = 0;}
 
 protected:
 
-	struct Entry {
-		typename UInt<M>::Type offset;
-		typename UInt<M>::Type length;
-		T info;
-	};
-
-	// entries
-	Entry entries[N];
-	typename UInt<N>::Type entryHead = N - 1;
-	typename UInt<N>::Type entryTail = 0;
-	typename UInt<N>::Type entryCount = 0;
-
-	// data buffer
-	uint8_t buffer[M];
-	typename UInt<M>::Type bufferHead = 0;
+	// queue elements
+	Element elements[N];
+	
+	// queue tail where elements are taken out
+	typename UInt<N>::Type tail = 0;
+	
+	// number of elements in queue
+	typename UInt<N + 1>::Type c = 0;
 };

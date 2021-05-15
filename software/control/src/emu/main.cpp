@@ -236,6 +236,8 @@ int main(int argc, const char **argv) {
 	spi::init();
 	display::init();
 	radio::init();
+	radio::start(15); // start on channel 15
+	radio::enableReceiver(true); // enable baseband decoder
 
 	// the room control application
 	RoomControl roomControl;

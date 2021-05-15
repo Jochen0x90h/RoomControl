@@ -1,3 +1,5 @@
+#include <timer.hpp>
+#include <rng.hpp>
 #include <usb.hpp>
 #include <debug.hpp>
 #include <loop.hpp>
@@ -26,7 +28,7 @@ static const usb::DeviceDescriptor deviceDescriptor = {
 struct UsbConfiguration {
 	struct usb::ConfigDescriptor config;
 	struct usb::InterfaceDescriptor interface;
-	struct usb::EndpointDescriptor endpoints[2];
+	struct usb::EndpointDescriptor endpoints[1];
 } __attribute__((packed));
 
 static const UsbConfiguration configurationDescriptor = {
@@ -58,52 +60,26 @@ static const UsbConfiguration configurationDescriptor = {
 		.bmAttributes = usb::ENDPOINT_BULK,
 		.wMaxPacketSize = 64,
 		.bInterval = 1 // polling interval
-	},
-	{
-		.bLength = sizeof(usb::EndpointDescriptor),
-		.bDescriptorType = usb::DESCRIPTOR_ENDPOINT,
-		.bEndpointAddress = usb::OUT | 2, // out 2 (rx)
-		.bmAttributes = usb::ENDPOINT_BULK,
-		.wMaxPacketSize = 64,
-		.bInterval = 1 // polling interval
 	}}
 };
 
 
 
-uint8_t sendData[128] __attribute__((aligned(4)));
-uint8_t receiveData[128] __attribute__((aligned(4)));
+uint8_t timer1;
+uint8_t sendData[16] __attribute__((aligned(4)));
 
-
-void receive() {
-	// wait until the host sends data
-	usb::receive(2, receiveData, array::size(receiveData), [](int length) {
-		//debug::toggleGreenLed();
-
-		// check received data
-		bool error = false;
-		for (int i = 0; i < length; ++i) {
-			if (receiveData[i] != length + i)
-				error = true;
-		}
-		if (error)
-			debug::setRedLed(true);
-
-		// send received data back to host
-		for (int i = 0; i < length; ++i) {
-			sendData[i] = receiveData[i];
-		}
-		usb::send(1, sendData, length, []() {
-			debug::toggleBlueLed();
-		});
+void setTimer1() {
+	for (int i = 0; i < array::size(sendData); ++i)
+		sendData[i] = rng::get8();
 		
-		// receive from usb host again
-		receive();
-	});
+	usb::send(1, sendData, array::size(sendData), []() {debug::toggleBlueLed();});
+	timer::start(timer1, timer::getTime() + 1s, []() {setTimer1();});
 }
 
 int main(void) {
 	loop::init();
+	timer::init();
+	rng::init();
 	usb::init(
 		[](usb::DescriptorType descriptorType) {
 			switch (descriptorType) {
@@ -116,13 +92,14 @@ int main(void) {
 			}
 		},
 		[](uint8_t bConfigurationValue) {
-			// enable bulk endpoints in 1 and out 2 (keep control endpoint 0 enabled)
-			usb::enableEndpoints(1 | (1 << 1), 1 | (1 << 2)); 			
-		
-			// start to receive from usb host
-			receive();
+			// enable bulk endpoints in 1 (keep control endpoint 0 enabled)
+			usb::enableEndpoints(1 | (1 << 1), 1); 			
+
+			setTimer1();
 		});
 	debug::init();
+
+	timer1 = timer::allocate();
 		
 	loop::run();
 }

@@ -106,6 +106,8 @@ struct EndpointDescriptor {
 
 /**
  * Initialize USB
+ * @param callback for obtaining descriptors
+ * @param callback for setting the configuration (libusb_set_configuration() on host), always called from event loop
  */
 void init(std::function<Data (DescriptorType)> const &getDescriptor,
 	std::function<void (uint8_t)> const &onSetConfiguration);

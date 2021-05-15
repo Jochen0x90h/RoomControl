@@ -22,16 +22,56 @@ public:
 	 * @param pageStart first flash page to use
 	 * @param pageCount number of flash pages to use
 	 */
-	Storage(uint8_t pageStart, uint8_t pageCount) {
+/*	Storage(uint8_t pageStart, uint8_t pageCount) {
 		pageCount >>= 1;
 		this->pageStart = pageStart;
 		this->pageCount = pageCount;
+	}*/
+	
+	/**
+	 * Constructor
+	 * @param pageStart first flash page to use
+	 * @param pageCount number of flash pages to use
+	 * @param arrays arrays that use this flash storage
+	 */
+	template <typename... Arrays>
+	Storage(uint8_t pageStart, uint8_t pageCount, Arrays&... arrays) {
+		pageCount >>= 1;
+		this->pageStart = pageStart;
+		this->pageCount = pageCount;
+
+		add(arrays...);
+		
+		init();
+	}
+
+protected:
+
+	template <typename T>
+	void add(T &array) {
+		array.data.storage = this;
+		array.data.next = this->first;
+		this->first = &array.data;
+		array.data.index = this->arrayCount++;
+		array.data.count = 0;
+		array.data.flashSize = &flashSize<typename T::FlashType>;
+		array.data.ramSize = &ramSize<typename T::FlashType>;
+		array.data.flashElements = this->flashElements;
+		array.data.ramElements = this->ramElements;
+	}
+
+	template <typename T, typename... Arrays>
+	void add(T &array, Arrays&... arrays) {
+		add(array);
+		add(arrays...);
 	}
 
 	/**
 	 * Initialize Storage
 	 */
 	void init();
+
+public:
 
 	/**
 	 * Return true if there is space available for the requested size
@@ -153,15 +193,17 @@ public:
 		// type that is stored in ram (e.g. current state)
 		using RamType = R;
 
+		static_assert(sizeof(FlashType) <= FLASH_PAGE_SIZE - flashAlign(sizeof(FlashHeader)));
 
+		
+		Array() = default;
 		Array(const Array &) = delete;
 
 		/**
 		 * Constructor. Needs a storage object that manages this array in flash and ram memory
 		 * @param storage storage object
 		 */
-		Array(Storage &storage) {
-			static_assert(sizeof(FlashType) <= FLASH_PAGE_SIZE - flashAlign(sizeof(FlashHeader)));
+/*		Array(Storage &storage) {
 			
 			this->data.storage = &storage;
 			this->data.next = storage.first;
@@ -172,6 +214,14 @@ public:
 			this->data.ramSize = &ramSize<FlashType>;
 			this->data.flashElements = storage.flashElements;
 			this->data.ramElements = storage.ramElements;
+		}*/
+
+		/**
+		 * Returns true if the array is empty
+		 * @return true if empty
+		 */
+		bool empty() const {
+			return this->data.count == 0;
 		}
 
 		/**

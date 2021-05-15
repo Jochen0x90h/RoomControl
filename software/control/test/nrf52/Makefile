@@ -1,33 +1,35 @@
-PROJECT_NAME     := FunctionTest
+PROJECT_NAME     := ControlTest
 TARGETS          := bme680Test
 OUTPUT_DIRECTORY := build
-TEMPLATE_PATH    := ../../../system/src/nrf52/system
+UTIL_PATH        := ../../../util/src
+SYSTEM_PATH      := ../../../system/src
+TEMPLATE_PATH    := $(SYSTEM_PATH)/nrf52/system
 #VERBOSE          := 1
 
 
 # Include folders
-INC_FOLDERS += . ../../src ../../../node/src ../../../system/src ../../../util/src
+INC_FOLDERS += . ../../src ../../../node/src $(SYSTEM_PATH) $(UTIL_PATH)
 
 # Source files common to all targets
 SRC_FILES += $(TEMPLATE_PATH)/gcc_startup_nrf52840.S
 SRC_FILES += $(TEMPLATE_PATH)/system_nrf52840.c
-SRC_FILES += ../../../system/src/nrf52/loop.cpp
-SRC_FILES += ../../../system/src/nrf52/debug.cpp
+SRC_FILES += $(SYSTEM_PATH)/nrf52/loop.cpp
+SRC_FILES += $(SYSTEM_PATH)/nrf52/debug.cpp
 
 # Target specific source files
 SRC_FILES_bme680Test += ../bme680Test.cpp
 SRC_FILES_bme680Test += ../../src/BME680.cpp
-SRC_FILES_bme680Test += ../../../system/src/nrf52/timer.cpp
-SRC_FILES_bme680Test += ../../../system/src/nrf52/spi.cpp
-SRC_FILES_bme680Test += ../../../system/src/nrf52/usb.cpp
-SRC_FILES_bme680Test += ../../../util/src/convert.cpp
+SRC_FILES_bme680Test += $(SYSTEM_PATH)/nrf52/timer.cpp
+SRC_FILES_bme680Test += $(SYSTEM_PATH)/nrf52/spi.cpp
+SRC_FILES_bme680Test += $(SYSTEM_PATH)/nrf52/usb.cpp
+SRC_FILES_bme680Test += $(UTIL_PATH)/convert.cpp
 
 # Libraries
 LIB_FILES +=
 LIB_FILES += -lc -lnosys -lm -lstdc++ # add standard libs at end so that their symbols get found
 
 # Linker script
-LINKER_SCRIPT := ../../../system/src/nrf52/link.ld
+LINKER_SCRIPT := $(SYSTEM_PATH)/nrf52/link.ld
 
 # C flags common to all targets
 #CFLAGS += -Og -g3 # debug

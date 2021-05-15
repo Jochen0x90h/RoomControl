@@ -9,7 +9,10 @@
 #define N(field, value) (field##_##value << field##_Pos)
 
 // get bitfield
-#define G(reg, field) (((reg) & field##_Msk) >> field##_Pos)
+#define GET(reg, field) (((reg) & field##_Msk) >> field##_Pos)
+
+// test if a bitfield has a given named value
+#define TEST(reg, field, value) (((reg) & field##_Msk) == (field##_##value << field##_Pos))
 
 // all tasks have the same trigger value
 constexpr int Trigger = 1;

@@ -1,14 +1,14 @@
 #pragma once
 
 #include "../spi.hpp"
+#include <Queue.hpp>
+#include <config.hpp>
 
 
 // internal interface if spi
 namespace spi {
 
-extern int taskCount;
-
-struct Task {
+struct Transfer {
 	int csPin;
 	
 	intptr_t writeData;
@@ -17,12 +17,10 @@ struct Task {
 	int readLength;
 	
 	std::function<void ()> onTransferred;
-	
-	Task() : onTransferred([]() {}) {}
 };
 
-Task &allocateTask();
+extern Queue<Transfer, SPI_TRANSFER_QUEUE_LENGTH> transferQueue;
 
-void transfer();
+void startTransfer();
 
 } // namespace spi

@@ -1,6 +1,7 @@
 #pragma once
 
-// pins for nRF52840 MDK USB Dongle, https://wiki.makerdiary.com/nrf52840-mdk-usb-dongle/
+// note: pins defined in this file are for nRF52840 MDK USB Dongle, https://wiki.makerdiary.com/nrf52840-mdk-usb-dongle/
+
 constexpr int PORT0 = 0;
 constexpr int PORT1 = 32;
 
@@ -29,7 +30,7 @@ constexpr int CALENDAR_SECOND_HANDLER_COUNT = 1;
 // spi
 // ---
 
-constexpr int SPI_TASK_COUNT = 4;
+constexpr int SPI_TRANSFER_QUEUE_LENGTH = 4;
 constexpr int SPI_SCK_PIN = PORT0 | 19;
 constexpr int SPI_MOSI_PIN = PORT0 | 20;
 constexpr int SPI_MISO_PIN = PORT0 | 21; // also connected to display D/C#
@@ -48,9 +49,10 @@ constexpr int BUS_RX_PIN = PORT0 | 2;
 // radio
 // -----
 
-constexpr int RADIO_MAX_PAYLOAD_LENGTH = 125; // payload length without leading length byte
-constexpr int RADIO_SEND_TASK_COUNT = 1;
-constexpr int RADIO_RECEIVE_HANDLER_COUNT = 1;
+constexpr int RADIO_CONTEXT_COUNT = 2;
+constexpr int RADIO_MAX_PAYLOAD_LENGTH = 125; // payload length without leading length byte and trailing crc
+constexpr int RADIO_RECEIVE_QUEUE_LENGTH = 2;
+constexpr int RADIO_SEND_QUEUE_LENGTH = 2;
 
 
 // usb

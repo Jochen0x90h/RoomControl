@@ -39,5 +39,5 @@ constexpr int DISPLAY_HEIGHT = 64;
 // radio
 // -----
 
-constexpr int RADIO_MAX_PAYLOAD_LENGTH = 125; // payload length without leading length byte
-constexpr int RADIO_RECEIVE_HANDLER_COUNT = 1;
+constexpr int RADIO_CONTEXT_COUNT = 2;
+constexpr int RADIO_MAX_PAYLOAD_LENGTH = 125; // payload length without leading length byte and trailing crc

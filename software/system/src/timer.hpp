@@ -16,10 +16,11 @@ void init();
  * @return current time
  */
 SystemTime getTime();
+inline SystemTime now() {return getTime();}
 
 /**
  * Allocate a timer
- * @return timer id
+ * @return timer id (not zero)
  */
 uint8_t allocate();
 

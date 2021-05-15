@@ -189,14 +189,14 @@ ValueInfo valueInfos[] = {
 // -----------
 
 RoomControl::RoomControl()
-	: storage(0, FLASH_PAGE_COUNT)
-	, room(storage), localDevices(storage), busDevices(storage), radioDevices(storage), routes(storage), timers(storage)
+	: storage(0, FLASH_PAGE_COUNT, room, localDevices, busDevices, radioDevices, routes, timers, radioInterface.coordinator, radioInterface.devices)
+	//, room(storage), localDevices(storage), busDevices(storage), radioDevices(storage), routes(storage), timers(storage)
 	, display([this]() {onDisplayReady();})
 	, localInterface([this](uint8_t endpointId, uint8_t const *data, int length) {onLocalReceived(endpointId, data, length);})
 	, busInterface([this]() {onBusSent();}, [this](uint8_t endpointId, uint8_t const *data, int length) {onBusReceived(endpointId, data, length);})
-	, radioInterface(storage, [this](uint8_t endpointId, uint8_t const *data, int length) {onRadioReceived(endpointId, data, length);})
+	, radioInterface(/*storage,*/ [this](uint8_t endpointId, uint8_t const *data, int length) {onRadioReceived(endpointId, data, length);})
 {
-	this->storage.init();
+	//this->storage.init();
 
 	this->timerId = timer::allocate();
 	timer::setHandler(this->timerId, [this]() {onTimeout();});
@@ -302,6 +302,10 @@ void RoomControl::onPublished(uint16_t topicId, uint8_t const *data, int length,
 		}
 		for (int i = 0; i < this->busDevices.size(); ++i) {
 			auto e = this->busDevices[i];
+			publish(roomState.roomTopicId, e.flash->getName(), QOS);
+		}
+		for (int i = 0; i < this->radioDevices.size(); ++i) {
+			auto e = this->radioDevices[i];
 			publish(roomState.roomTopicId, e.flash->getName(), QOS);
 		}
 		return;

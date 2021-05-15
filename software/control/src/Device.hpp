@@ -6,7 +6,7 @@
 /**
  * Device id type
  */
-using DeviceId = uint32_t;
+using DeviceId = uint64_t;
 
 
 /**

@@ -11,21 +11,21 @@ void init() {
 }
 
 bool send(uint8_t const* data, int commandLength, int dataLength, std::function<void ()> const &onSent) {
-	// check if task list is full
-	if (spi::taskCount >= SPI_TASK_COUNT)
+	// check if transfer queue is full
+	if (spi::transferQueue.full())
 		return false;
 	
-	spi::Task &task = spi::allocateTask();
-	task.csPin = DISPLAY_CS_PIN;
-	task.writeData = intptr_t(data);
-	task.writeLength = commandLength + dataLength;
-	task.readData = 1; // used to detect display tasks
-	task.readLength = commandLength; // use readDataLength to store length of command part
-	task.onTransferred = onSent;
+	spi::Transfer &transfer = spi::transferQueue.add();
+	transfer.csPin = DISPLAY_CS_PIN;
+	transfer.writeData = intptr_t(data);
+	transfer.writeLength = commandLength + dataLength;
+	transfer.readData = 1; // used to detect display tasks
+	transfer.readLength = commandLength; // use readDataLength to store length of command part
+	transfer.onTransferred = onSent;
 
 	// transfer immediately if SPI is idle
 	if (!NRF_SPIM3->ENABLE)
-		spi::transfer();
+		spi::startTransfer();
 
 	return true;
 }

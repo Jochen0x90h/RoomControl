@@ -55,7 +55,7 @@ int main(void) {
 				//printf("set alternate setting %d\n", ret);
 
 				// loop
-				printf("waiting for binary or text input from device ...\n");
+				printf("waiting for input from %s device ...\n", text ? "text" : "binary");
 				uint8_t data[257] = {};
 				int length;
 				while (true) {

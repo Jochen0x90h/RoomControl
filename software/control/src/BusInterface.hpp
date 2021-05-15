@@ -1,7 +1,7 @@
 #pragma once
 
 #include <Interface.hpp>
-#include <Queue.hpp>
+#include <DataQueue.hpp>
 #include <config.hpp>
 
 
@@ -93,7 +93,7 @@ private:
 	uint8_t referenceCounters[MAX_ENDPOINT_COUNT];
 	
 	// transmit qeueue
-	Queue<bool, MAX_SEND_COUNT, SEND_BUFFER_SIZE> txQueue;
+	DataQueue<bool, MAX_SEND_COUNT, SEND_BUFFER_SIZE> txQueue;
 	bool busy = false;
 	
 	// receive data

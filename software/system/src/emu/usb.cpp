@@ -1,4 +1,5 @@
 #include "../usb.hpp"
+#include "loop.hpp"
 #include <stdio.h>
 
 
@@ -14,7 +15,7 @@ void init(std::function<Data (DescriptorType)> const &getDescriptor,
 	usb::text = deviceDescriptor.bDeviceProtocol == 1;
 	
 	// set configuration
-	onSetConfiguration(1);
+	loop::context.post([onSetConfiguration]() {onSetConfiguration(1);});
 }
 
 void enableEndpoints(uint8_t inFlags, uint8_t outFlags) {

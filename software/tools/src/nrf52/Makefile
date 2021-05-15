@@ -1,8 +1,8 @@
-PROJECT_NAME     := SystemTest
-TARGETS          := timerTest calendarTest spiTest displayTest busTest radioSendTest usbTest potiTest rngTest #motionDetectorTest
+PROJECT_NAME     := Tools
+TARGETS          := radioDevice
 OUTPUT_DIRECTORY := build
 UTIL_PATH        := ../../../util/src
-SYSTEM_PATH      := ../../src
+SYSTEM_PATH      := ../../../system/src
 TEMPLATE_PATH    := $(SYSTEM_PATH)/nrf52/system
 #VERBOSE          := 1
 
@@ -17,33 +17,10 @@ SRC_FILES += $(SYSTEM_PATH)/nrf52/loop.cpp
 SRC_FILES += $(SYSTEM_PATH)/nrf52/debug.cpp
 
 # Target specific source files
-SRC_FILES_timerTest += $(SYSTEM_PATH)/nrf52/timer.cpp
-SRC_FILES_timerTest += ../timerTest.cpp
-SRC_FILES_calendarTest += $(SYSTEM_PATH)/nrf52/calendar.cpp
-SRC_FILES_calendarTest += ../calendarTest.cpp
-SRC_FILES_spiTest += ../spiTest.cpp
-SRC_FILES_spiTest += ../../src/nrf52/spi.cpp
-SRC_FILES_displayTest += ../displayTest.cpp
-SRC_FILES_displayTest += $(SYSTEM_PATH)/nrf52/spi.cpp
-SRC_FILES_displayTest += $(SYSTEM_PATH)/nrf52/display.cpp
-SRC_FILES_busTest += ../busTest.cpp
-SRC_FILES_busTest += $(SYSTEM_PATH)/nrf52/timer.cpp
-SRC_FILES_busTest += $(SYSTEM_PATH)/nrf52/bus.cpp
-SRC_FILES_usbTest += ../usbTest.cpp
-SRC_FILES_usbTest += $(SYSTEM_PATH)/nrf52/usb.cpp
-SRC_FILES_radioSendTest += ../radioSendTest.cpp
-SRC_FILES_radioSendTest += $(SYSTEM_PATH)/nrf52/timer.cpp
-SRC_FILES_radioSendTest += $(SYSTEM_PATH)/nrf52/rng.cpp
-SRC_FILES_radioSendTest += $(SYSTEM_PATH)/nrf52/radio.cpp
-SRC_FILES_potiTest += ../potiTest.cpp
-SRC_FILES_potiTest += $(SYSTEM_PATH)/nrf52/timer.cpp
-SRC_FILES_potiTest += $(SYSTEM_PATH)/nrf52/poti.cpp
-SRC_FILES_rngTest += ../rngTest.cpp
-SRC_FILES_rngTest += $(SYSTEM_PATH)/nrf52/timer.cpp
-SRC_FILES_rngTest += $(SYSTEM_PATH)/nrf52/usb.cpp
-SRC_FILES_rngTest += $(SYSTEM_PATH)/nrf52/rng.cpp
-#SRC_FILES_motionDetectorTest += ../motionDetectorTest.cpp
-#SRC_FILES_motionDetectorTest += $(SYSTEM_PATH)/nrf52/motionDetector.cpp
+SRC_FILES_radioDevice += ../radioDevice.cpp
+SRC_FILES_radioDevice += $(SYSTEM_PATH)/nrf52/usb.cpp
+SRC_FILES_radioDevice += $(SYSTEM_PATH)/nrf52/rng.cpp
+SRC_FILES_radioDevice += $(SYSTEM_PATH)/nrf52/radio.cpp
 
 # Libraries
 LIB_FILES +=

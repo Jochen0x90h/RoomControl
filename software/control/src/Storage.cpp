@@ -436,7 +436,7 @@ void Storage::init() {
 		arrayData = arrayData->next;
 	};
 	
-	// write "end" pointer behint last ram element pointer
+	// write "end" pointer behind last ram element pointer
 	ramElements[0] = ram;
 	
 	// clear ram
