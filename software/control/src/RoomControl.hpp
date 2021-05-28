@@ -62,8 +62,9 @@ public:
 		
 	void onTimeout();
 
-	uint8_t timerId;
-	
+	// timer index
+	static int const timerIndex = TIMER_ROOM_CONTROL;
+
 
 // Display
 // -------

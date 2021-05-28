@@ -1,5 +1,5 @@
 #include "system/nrf.h"
-#include <config.hpp>
+#include <sysConfig.hpp>
 
 
 // construct bitfield from value

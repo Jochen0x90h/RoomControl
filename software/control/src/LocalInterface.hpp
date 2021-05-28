@@ -37,8 +37,11 @@ protected:
 	void readAirSensor();
 	void airSensorGetValues();
 
+	
+	// timer index
+	static int const timerIndex = TIMER_LOCAL_INTERFACE;
+
 	std::function<void (uint8_t, uint8_t const *, int)> onReceived;
-	uint8_t timerId;
 
 	BME680 airSensor;
 

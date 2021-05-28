@@ -1,6 +1,6 @@
 #include <display.hpp>
 #include <emu/loop.hpp>
-#include <config.hpp>
+#include <appConfig.hpp>
 
 
 namespace display {
@@ -17,10 +17,11 @@ bool displayInverse = false;
 bool displayEnabled = false;
 uint8_t display[DISPLAY_WIDTH * DISPLAY_HEIGHT / 8];
 
+// get dipslay contents into an 8 bit grayscale image
 void getDisplay(uint8_t *buffer) {
-	uint8_t foreground = !displayEnabled ? 0 : displayContrast;
-	uint8_t background = (!displayEnabled || displayOn) ? foreground : (48 * displayContrast) / 255;
-	if (displayInverse)
+	uint8_t foreground = !display::displayEnabled ? 0 : display::displayContrast;
+	uint8_t background = (!display::displayEnabled || display::displayOn) ? foreground : (48 * display::displayContrast) / 255;
+	if (display::displayInverse)
 		std::swap(foreground, background);	
 	
 	int width = DISPLAY_WIDTH;

@@ -1,4 +1,3 @@
-#include <timer.hpp>
 #include <spi.hpp>
 #include <display.hpp>
 #include <debug.hpp>
@@ -17,7 +16,7 @@ void writeDisplay() {
 uint8_t spiData[] = {0x0f, 0x7f, 0x00};
 
 void transferSpi() {
-	spi::transfer(SPI_CS1_PIN, spiData, 3, nullptr, 0, []() {transferSpi();});
+	spi::transfer(0, spiData, 3, nullptr, 0, []() {transferSpi();});
 }
 
 int main(void) {

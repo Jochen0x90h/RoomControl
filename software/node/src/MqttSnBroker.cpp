@@ -5,8 +5,7 @@ constexpr int8_t min(int8_t x, int8_t y) {return x < y ? x : y;}
 
 
 MqttSnBroker::MqttSnBroker() {
-	this->timerId = timer::allocate();
-	timer::setHandler(this->timerId, [this]() {onDownTimeout();});
+	timer::setHandler(this->timerIndex, [this]() {onDownTimeout();});
 
 	// init clients
 	for (int i = 0; i < MAX_CLIENT_COUNT; ++i) {
@@ -925,7 +924,7 @@ void MqttSnBroker::sendCurrentMessage() {
 	data[1] = flags;
 
 	// set sent time
-	auto now = timer::getTime();
+	auto now = timer::now();
 	info.sentTime = now;
 
 	if (current == this->sendMessagesTail) {
@@ -935,11 +934,11 @@ void MqttSnBroker::sendCurrentMessage() {
 				this->sendMessagesTail = current + 1;
 
 			// set timer for idle ping to keep the connection alive
-			timer::start(this->timerId, now + KEEP_ALIVE_INTERVAL);
+			timer::start(this->timerIndex, now + KEEP_ALIVE_INTERVAL);
 		} else {
 			// start retransmission timeout
 			if (this->sendMessagesClientIndex == 0)
-				timer::start(this->timerId, now + RETRANSMISSION_INTERVAL);
+				timer::start(this->timerIndex, now + RETRANSMISSION_INTERVAL);
 		}
 	}
 
@@ -997,7 +996,7 @@ void MqttSnBroker::resend() {
 	data[1] = flags;
 
 	// start timeout, either for retransmission or idle ping
-	timer::start(this->timerId, timer::getTime() + RETRANSMISSION_INTERVAL);
+	timer::start(this->timerIndex, timer::now() + RETRANSMISSION_INTERVAL);
 }
 
 void MqttSnBroker::removeSentMessage(uint16_t msgId, uint16_t clientIndex) {
@@ -1041,7 +1040,7 @@ void MqttSnBroker::removeSentMessage(uint16_t msgId, uint16_t clientIndex) {
 	}
 	this->sendMessagesTail = tail;
 
-	auto now = timer::getTime();
+	auto now = timer::now();
 	if (tail < this->sendMessagesCurrent) {
 		// get next message
 		MessageInfo &info = this->sendMessages[tail];
@@ -1053,11 +1052,11 @@ void MqttSnBroker::removeSentMessage(uint16_t msgId, uint16_t clientIndex) {
 				resend();
 		} else {
 			// wait until next message has to be resent
-			timer::start(this->timerId, info.sentTime + RETRANSMISSION_INTERVAL);
+			timer::start(this->timerIndex, info.sentTime + RETRANSMISSION_INTERVAL);
 		}
 	} else {
 		// set timer for idle ping to keep the connection alive
-		timer::start(this->timerId, now + KEEP_ALIVE_INTERVAL);
+		timer::start(this->timerIndex, now + KEEP_ALIVE_INTERVAL);
 	}
 }
 

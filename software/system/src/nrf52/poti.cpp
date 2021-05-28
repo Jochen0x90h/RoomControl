@@ -34,7 +34,7 @@ void handle() {
 		
 		// debounce filter
 		bool b = !getInput(BUTTON_PIN);
-		uint32_t c = timer::getTime().value;		
+		uint32_t c = timer::now().value;		
 		bool activated = !poti::buttonState;
 		if (activated) {
 			if (c - poti::counter > 100 && poti::onChanged)

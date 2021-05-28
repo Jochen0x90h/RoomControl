@@ -10,8 +10,7 @@ static MqttSnClient::Udp6Endpoint const broadcast = {
 */
 
 MqttSnClient::MqttSnClient() {
-	this->timerId = timer::allocate();
-	timer::setHandler(this->timerId, [this]() {onUpTimeout();});
+	timer::setHandler(this->timerIndex, [this]() {onUpTimeout();});
 }
 
 MqttSnClient::~MqttSnClient() {
@@ -279,7 +278,7 @@ void MqttSnClient::onUpReceived(uint8_t const *data, int length) {
 				{
 				case mqttsn::ReturnCode::ACCEPTED:
 					// set timer for idle ping to keep the connection alive
-					timer::start(this->timerId, timer::getTime() + KEEP_ALIVE_INTERVAL);
+					timer::start(this->timerIndex, timer::now() + KEEP_ALIVE_INTERVAL);
 
 					// now we are connected to the gateway
 					this->state = State::CONNECTED;
@@ -306,14 +305,14 @@ void MqttSnClient::onUpReceived(uint8_t const *data, int length) {
 			switch (this->state) {
 			case State::WAITING_FOR_SLEEP:
 				// sent by the gateway in response to a sleep request
-				timer::stop(this->timerId);
+				timer::stop(this->timerIndex);
 				this->state = State::ASLEEP;
 				onSleep();
 				break;
 			default:
 				// sent by the gateway in response to a disconnect request
 				// or the gateway has dropped our connection for some reason
-				timer::stop(this->timerId);
+				timer::stop(this->timerIndex);
 				this->state = State::STOPPED;
 				onDisconnected();
 			}
@@ -610,7 +609,7 @@ void MqttSnClient::sendCurrentMessage() {
 	upSend(this->sendBuffer + info.offset, info.length);
 
 	// set sent time
-	SystemTime now = timer::getTime();
+	SystemTime now = timer::now();
 	info.sentTime = now;
 
 	if (current == this->sendMessagesTail) {
@@ -619,10 +618,10 @@ void MqttSnClient::sendCurrentMessage() {
 			this->sendMessagesTail = current + 1;
 		
 			// set timer for idle ping to keep the connection alive
-			timer::start(this->timerId, now + KEEP_ALIVE_INTERVAL);
+			timer::start(this->timerIndex, now + KEEP_ALIVE_INTERVAL);
 		} else {
 			// start retransmission timeout
-			timer::start(this->timerId, now + RETRANSMISSION_INTERVAL);
+			timer::start(this->timerIndex, now + RETRANSMISSION_INTERVAL);
 		}
 	}
 
@@ -640,11 +639,11 @@ void MqttSnClient::resend() {
 	upSend(this->sendBuffer + info.offset, info.length);
 
 	// set sent time
-	SystemTime now = timer::getTime();
+	SystemTime now = timer::now();
 	info.sentTime = now;
 
 	// start retransmission timeout
-	timer::start(this->timerId, now + RETRANSMISSION_INTERVAL);
+	timer::start(this->timerIndex, now + RETRANSMISSION_INTERVAL);
 }
 
 void MqttSnClient::setTopicId(uint16_t msgId, uint16_t topicId) {
@@ -696,7 +695,7 @@ MqttSnClient::Message MqttSnClient::removeSentMessage(uint16_t msgId, mqttsn::Me
 	this->sendMessagesTail = tail;
 	
 	// start timeout for next message or keep alive
-	SystemTime now = timer::getTime();
+	SystemTime now = timer::now();
 	if (tail < this->sendMessagesCurrent) {
 		// get next message
 		MessageInfo &info = this->sendMessages[tail];
@@ -709,11 +708,11 @@ MqttSnClient::Message MqttSnClient::removeSentMessage(uint16_t msgId, mqttsn::Me
 				resend();
 		} else {
 			// wait until it has to be resent
-			timer::start(this->timerId, retransmissionTime);
+			timer::start(this->timerIndex, retransmissionTime);
 		}
 	} else {
 		// set timer for idle ping to keep the connection alive
-		timer::start(this->timerId, now + KEEP_ALIVE_INTERVAL);
+		timer::start(this->timerIndex, now + KEEP_ALIVE_INTERVAL);
 	}
 	
 	return m;

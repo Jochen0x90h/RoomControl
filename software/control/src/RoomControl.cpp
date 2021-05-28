@@ -196,11 +196,8 @@ RoomControl::RoomControl()
 	, busInterface([this]() {onBusSent();}, [this](uint8_t endpointId, uint8_t const *data, int length) {onBusReceived(endpointId, data, length);})
 	, radioInterface(/*storage,*/ [this](uint8_t endpointId, uint8_t const *data, int length) {onRadioReceived(endpointId, data, length);})
 {
-	//this->storage.init();
-
-	this->timerId = timer::allocate();
-	timer::setHandler(this->timerId, [this]() {onTimeout();});
-	calendar::addSecondHandler([this]() {onSecondElapsed();});
+	timer::setHandler(this->timerIndex, [this]() {onTimeout();});
+	calendar::setSecondHandler(CALENDAR_ROOM_CONTROL, [this]() {onSecondElapsed();});
 	poti::setHandler([this](int delta, bool activated) {onPotiChanged(delta, activated);});
 
 	if (this->room.size() == 0) {
@@ -216,7 +213,7 @@ RoomControl::RoomControl()
 	subscribeAll();
 	
 	// start device update
-	auto now = timer::getTime();
+	auto now = timer::now();
 	this->lastUpdateTime = now;
 	this->nextReportTime = now;
 	onTimeout();
@@ -321,9 +318,9 @@ void RoomControl::onPublished(uint16_t topicId, uint8_t const *data, int length,
 	}
 	
 	// update devices and set next timeout
-	auto now = timer::getTime();
+	auto now = timer::now();
 	auto nextTimeout = updateDevices(now, 0, 0, 0, nullptr, topicId, message);
-	timer::start(this->timerId, nextTimeout);
+	timer::start(this->timerIndex, nextTimeout);
 }
 
 
@@ -332,9 +329,9 @@ void RoomControl::onPublished(uint16_t topicId, uint8_t const *data, int length,
 
 void RoomControl::onLocalReceived(uint8_t endpointId, uint8_t const *data, int length) {
 	// update devices and set next timeout
-	auto now = timer::getTime();
+	auto now = timer::now();
 	auto nextTimeout = updateDevices(now, endpointId, 0, 0, data, 0, String());
-	timer::start(this->timerId, nextTimeout);
+	timer::start(this->timerIndex, nextTimeout);
 }
 
 
@@ -361,9 +358,9 @@ void RoomControl::onBusSent() {
 
 void RoomControl::onBusReceived(uint8_t endpointId, uint8_t const *data, int length) {
 	// update devices and set next timeout
-	auto now = timer::getTime();
+	auto now = timer::now();
 	auto nextTimeout = updateDevices(now, 0, endpointId, 0, data, 0, String());
-	timer::start(this->timerId, nextTimeout);
+	timer::start(this->timerIndex, nextTimeout);
 }
 
 
@@ -372,9 +369,9 @@ void RoomControl::onBusReceived(uint8_t endpointId, uint8_t const *data, int len
 
 void RoomControl::onRadioReceived(uint8_t endpointId, uint8_t const *data, int length) {
 	// update devices and set next timeout
-	auto now = timer::getTime();
+	auto now = timer::now();
 	auto nextTimeout = updateDevices(now, 0, 0, endpointId, data, 0, String());
-	timer::start(this->timerId, nextTimeout);
+	timer::start(this->timerIndex, nextTimeout);
 }
 
 
@@ -383,11 +380,11 @@ void RoomControl::onRadioReceived(uint8_t endpointId, uint8_t const *data, int l
 // -----------
 		
 void RoomControl::onTimeout() {
-	auto now = timer::getTime();
+	auto now = timer::now();
 	//std::cout << "time: " << time.value << std::endl;
 	SystemTime nextTimeout = updateDevices(now, 0, 0, 0, nullptr, 0, String());
 	//std::cout << "next: " << nextTimeout.value << std::endl;
-	timer::start(this->timerId, nextTimeout);
+	timer::start(this->timerIndex, nextTimeout);
 }
 
 
@@ -431,7 +428,7 @@ void RoomControl::updateMenu(int delta, bool activated) {
 	this->bitmap.clear();
 
 	// toast
-	if (!this->buffer.empty() && timer::getTime() - this->toastTime < 3s) {
+	if (!this->buffer.empty() && timer::now() - this->toastTime < 3s) {
 		String text = this->buffer;
 		int y = 10;
 		int len = tahoma_8pt.calcWidth(text, 1);
@@ -444,7 +441,7 @@ void RoomControl::updateMenu(int delta, bool activated) {
 	case IDLE:
 		{
 			// get current clock time
-			auto now = calendar::getTime();
+			auto now = calendar::now();
 						
 			// display weekday and clock time
 			StringBuffer<16> b = weekdays[now.getWeekday()] + "  "
@@ -1898,7 +1895,7 @@ void RoomControl::listDevices(Interface &interface, Storage::Array<Device, Devic
 			}
 		}
 		if (!found) {
-			StringBuffer<24> b = "Add " + hex(deviceId);
+			StringBuffer<24> b = "Add " + hex(deviceId, deviceId <= 0xffffffff ? 8 : 16);
 			if (entry(b)) {
 				Device &device = this->temp.device;
 				DeviceState &deviceState = this->tempState.device;
@@ -2707,7 +2704,7 @@ void RoomControl::onSecondElapsed() {
 	}
 
 	// check for timer event
-	auto now = calendar::getTime();
+	auto now = calendar::now();
 	if (now.getSeconds() == 0) {
 		int minutes = now.getMinutes();
 		int hours = now.getHours();

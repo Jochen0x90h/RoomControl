@@ -1,23 +1,18 @@
 #include <stdio.h>
 #include <libusb.h>
 #include <util.hpp>
+#include <crypt.hpp>
+#include <hash.hpp>
+#include <radioDefs.hpp>
+#include <usbDefs.hpp>
 #include <array>
 #include <string>
 #include <chrono>
-#include <crypt.hpp>
-#include <hash.hpp>
 #include <boost/filesystem.hpp>
 
 // logs ieee 802.15.4 traffic to a .pcap file
 
-
 namespace fs = boost::filesystem;
-
-// transfer direction
-enum UsbDirection {
-	USB_OUT = 0, // to device
-	USB_IN = 0x80 // to host
-};
 
 // header of pcap file
 struct PcapHeader {
@@ -37,27 +32,6 @@ struct PcapPacket {
 	uint32_t incl_len;       // number of octets of packet saved in file
 	uint32_t orig_len;       // actual length of packet
 	uint8_t data[128];
-};
-
-
-enum class IeeeFrameType {
-	BEACON = 0,
-	DATA = 1,
-	ACK = 2,
-	COMMAND = 3
-};
-
-enum class IeeeAddressingMode {
-	NONE = 0,
-	SHORT = 2,
-	LONG = 3
-};
-
-enum class IeeeCommand {
-	ASSOCIATION_REQUEST = 1,
-	ASSOCIATION_RESPONSE = 2,
-	DATA_REQUEST = 4,
-	BEACON_REQUEST = 7,
 };
 
 enum class ZigbeeNetworkFrameType {
@@ -91,6 +65,7 @@ enum class ZigbeeKeyIdentifier {
 enum class ZigbeeNetworkCommand {
 	ROUTE_REQUEST = 1,
 	LEAVE = 4,
+	REJOIN_REQUEST = 6,
 	LINK_STATUS = 8
 };
 
@@ -405,6 +380,9 @@ void dissectZigbee(uint8_t *d, uint8_t const *end) {
 			case ZigbeeNetworkCommand::LEAVE:
 				printf("Leave\n");
 				break;
+			case ZigbeeNetworkCommand::REJOIN_REQUEST:
+				printf("Rejoin Request\n");
+				break;
 			case ZigbeeNetworkCommand::LINK_STATUS:
 				printf("Link Status\n");
 				break;
@@ -633,31 +611,31 @@ void dissectGreenPower(uint8_t const *mac, uint8_t *d, uint8_t const *end) {
 	// MIC (0, 2 or 4 byte message integrity code)
 	uint8_t *frame = d;
 
-	uint8_t frameControl = d[0];
+	// frame control
+	bool extendedFlag = (d[0] & 0x80) != 0;
 	++d;
-	bool extendedFlag = frameControl & 0x80;
 
+	// extended frame conrol
 	int applicationId = 0;
 	int securityLevel = 0;
-	int keyType = 0;
+	int securityKeyFlag = false;
 	if (extendedFlag) {
-		uint8_t extendedFrameControl = d[0];
-		++d;
-
 		// application id
-		applicationId = extendedFrameControl & 3;
+		applicationId = d[0] & 3;
 		
 		// security level
 		// 0: none
 		// 1: 1 byte counter and 2 byte MIC
 		// 2: 4 byte counter + 4 byte MIC
 		// 3: encryption + 4 byte counter + 4 byte MIC
-		securityLevel = (extendedFrameControl >> 3) & 3;
+		securityLevel = (d[0] >> 3) & 3;
 		
-		// security key type
+		// security key
 		// 0: none
 		// 1: network key
-		keyType = extendedFrameControl >> 5;
+		securityKeyFlag = (d[0] & 0x20) != 0;
+		
+		++d;
 	}
 
 	uint32_t deviceId = d[0] | (d[1] << 8) | (d[2] << 16) | (d[3] << 24);
@@ -749,8 +727,17 @@ void dissectIeee(uint8_t *d, uint8_t const *end) {
 	uint8_t const *frame = d;
 
 	// frame control
-	uint16_t frameControl = d[0] | (d[1] << 8);
-	d += 2;
+	radio::FrameType frameType = radio::FrameType(d[0] & 7);
+	bool securityFlag = (d[0] & 0x08) != 0;
+	bool framePendingFlag = (d[0] & 0x10) != 0;
+	bool acknowledgeRequestFlag = (d[0] & 0x20) != 0;
+	bool panIdCompressionFlag = (d[0] & 0x40) != 0;
+	bool sequenceNumberSuppressionFlag = (d[1] & 0x01) != 0;
+	bool informationElementsPresentFlag = (d[1] & 0x02) != 0;
+	radio::AddressingMode destinationAddressingMode = radio::AddressingMode((d[1] >> 2) & 3);
+	int frameVersion = (d[1] >> 4) & 3;
+	radio::AddressingMode sourceAddressingMode = radio::AddressingMode(d[1] >> 6);
+/*	uint16_t frameControl = d[0] | (d[1] << 8);
 	IeeeFrameType frameType = IeeeFrameType(frameControl & 7);
 	bool securityFlag = (frameControl >> 3) & 1;
 	bool framePendingFlag = (frameControl >> 4) & 1;
@@ -758,10 +745,11 @@ void dissectIeee(uint8_t *d, uint8_t const *end) {
 	bool panIdCompressionFlag = (frameControl >> 6) & 1;
 	bool sequenceNumberSuppressionFlag = (frameControl >> 8) & 1;
 	bool informationElementsPresentFlag = (frameControl >> 9) & 1;
-	IeeeAddressingMode destinationAddressingMode = IeeeAddressingMode((frameControl >> 10) & 3);
+	radio::AddressingMode destinationAddressingMode = radio::AddressingMode((frameControl >> 10) & 3);
 	int frameVersion = (frameControl >> 12) & 2;
-	IeeeAddressingMode sourceAddressingMode = IeeeAddressingMode((frameControl >> 14) & 3);
-	
+	radio::AddressingMode sourceAddressingMode = radio::AddressingMode((frameControl >> 14) & 3);
+*/	d += 2;
+
 	uint8_t sequenceNumber = 0;
 	if (!sequenceNumberSuppressionFlag) {
 		sequenceNumber = d[0];
@@ -770,19 +758,19 @@ void dissectIeee(uint8_t *d, uint8_t const *end) {
 	}
 
 	uint16_t destinationPan = 0;
-	if (destinationAddressingMode != IeeeAddressingMode::NONE) {
+	if (destinationAddressingMode != radio::AddressingMode::NONE) {
 		destinationPan = d[0] | (d[1] << 8);
 		d += 2;
 
 		printf("%04X:", destinationPan);
 	}
 
-	if (destinationAddressingMode == IeeeAddressingMode::SHORT) {
+	if (destinationAddressingMode == radio::AddressingMode::SHORT) {
 		uint16_t destination = d[0] | (d[1] << 8);
 		d += 2;
 		
 		printf("%04X <- ", destination);
-	} else if (destinationAddressingMode == IeeeAddressingMode::LONG) {
+	} else if (destinationAddressingMode == radio::AddressingMode::LONG) {
 		uint32_t destinationL = d[0] | (d[1] << 8) | (d[2] << 16) | (d[3] << 24);
 		uint32_t destinationH = d[4] | (d[5] << 8) | (d[6] << 16) | (d[7] << 24);
 		d += 8;
@@ -791,8 +779,8 @@ void dissectIeee(uint8_t *d, uint8_t const *end) {
 	}
 	
 	uint16_t sourcePan = destinationPan;
-	if (sourceAddressingMode != IeeeAddressingMode::NONE) {
-		if (!panIdCompressionFlag || destinationAddressingMode == IeeeAddressingMode::NONE) {
+	if (sourceAddressingMode != radio::AddressingMode::NONE) {
+		if (!panIdCompressionFlag || destinationAddressingMode == radio::AddressingMode::NONE) {
 			sourcePan = d[0] | (d[1] << 8);
 			d += 2;
 		}
@@ -800,12 +788,12 @@ void dissectIeee(uint8_t *d, uint8_t const *end) {
 		printf("%04X:", sourcePan);
 	}
 
-	if (sourceAddressingMode == IeeeAddressingMode::SHORT) {
+	if (sourceAddressingMode == radio::AddressingMode::SHORT) {
 		uint16_t source = d[0] | (d[1] << 8);
 		d += 2;
 		
 		printf("%04X; ", source);
-	} else if (sourceAddressingMode == IeeeAddressingMode::LONG) {
+	} else if (sourceAddressingMode == radio::AddressingMode::LONG) {
 	   uint32_t sourceL = d[0] | (d[1] << 8) | (d[2] << 16) | (d[3] << 24);
 	   uint32_t sourceH = d[4] | (d[5] << 8) | (d[6] << 16) | (d[7] << 24);
 	   d += 8;
@@ -815,7 +803,7 @@ void dissectIeee(uint8_t *d, uint8_t const *end) {
 	
 
 	switch (frameType) {
-	case IeeeFrameType::BEACON:
+	case radio::FrameType::BEACON:
 		{
 			uint16_t superframeSpecification = d[0] | (d[1] << 8);
 			d += 2;
@@ -841,22 +829,22 @@ void dissectIeee(uint8_t *d, uint8_t const *end) {
 			printf("\n");
 		}
 		break;
-	case IeeeFrameType::COMMAND:
+	case radio::FrameType::COMMAND:
 		{
-			IeeeCommand command = IeeeCommand(d[0]);
+			radio::Command command = radio::Command(d[0]);
 			++d;
 			
 			switch (command) {
-			case IeeeCommand::ASSOCIATION_REQUEST:
+			case radio::Command::ASSOCIATION_REQUEST:
 				printf("Association Request\n");
 				break;
-			case IeeeCommand::ASSOCIATION_RESPONSE:
+			case radio::Command::ASSOCIATION_RESPONSE:
 				printf("Association Response\n");
 				break;
-			case IeeeCommand::DATA_REQUEST:
+			case radio::Command::DATA_REQUEST:
 				printf("Data Request\n");
 				break;
-			case IeeeCommand::BEACON_REQUEST:
+			case radio::Command::BEACON_REQUEST:
 				printf("Beacon Request\n");
 				break;
 			default:
@@ -864,10 +852,10 @@ void dissectIeee(uint8_t *d, uint8_t const *end) {
 			}
 		}
 		break;
-	case IeeeFrameType::ACK:
+	case radio::FrameType::ACK:
 		printf("Ack\n");
 		break;
-	case IeeeFrameType::DATA:
+	case radio::FrameType::DATA:
 		{
 			ZigbeeVersion version = ZigbeeVersion((d[0] >> 2) & 15);
 			switch (version) {
@@ -896,6 +884,7 @@ int main(int argc, char const *argv[]) {
 	keyHash(hashedKey, zigbeeAlliance09Key, 0);
 	setKey(trustCenterLinkKey0, hashedKey);
 	
+	int radioFlags = radio::ALL;
 	for (int i = 1; i < argc; ++i) {
 		std::string arg = argv[i];
 		
@@ -913,9 +902,12 @@ int main(int argc, char const *argv[]) {
 			
 			setKey(networkKey, key);
 		} else if (arg == "-i" || arg == "--input") {
-			// input file
+			// input pcap file
 			++i;
 			inputFile = argv[i];
+		} else if (arg == "-a" || arg == "--ack") {
+			// ack all received packets
+			radioFlags |= radio::HANDLE_ACK;
 		} else {
 			// output pcap file
 			outputFile = argv[i];
@@ -929,6 +921,7 @@ int main(int argc, char const *argv[]) {
 		if (r < 0)
 			return r;
 
+		// get device list
 		libusb_device **devs;
 		ssize_t cnt = libusb_get_device_list(NULL, &devs);
 		if (cnt < 0) {
@@ -936,73 +929,100 @@ int main(int argc, char const *argv[]) {
 			return (int)cnt;
 		}
 
+		// iterate over devices
 		for (int i = 0; devs[i]; ++i) {
 			libusb_device *dev = devs[i];
 
 			// get device descriptor
 			libusb_device_descriptor desc;
 			int ret = libusb_get_device_descriptor(dev, &desc);
-			if (ret < 0)
+			if (ret != LIBUSB_SUCCESS) {
+				fprintf(stderr, "get device descriptor error: %d\n", ret);
 				continue;
-			
-			if (desc.idVendor == 0x1915 && desc.idProduct == 0x1337) {
-				// open device
-				libusb_device_handle *handle;
-				ret = libusb_open(dev, &handle);
-				if (ret != LIBUSB_SUCCESS)
-					continue;
-
-				// set configuration (reset alt_setting, reset toggles)
-				libusb_set_configuration(handle, 1);
-
-				// claim interface with bInterfaceNumber = 0
-				ret = libusb_claim_interface(handle, 0);
-				//ret = libusb_set_interface_alt_setting(handle, 0, 0);
-
-				// open output pcap file
-				FILE *pcap = fopen(outputFile.string().c_str(), "wb");
-				
-				// write pcap header
-				PcapHeader header;
-				header.magic_number = 0xa1b2c3d4;
-				header.version_major = 2;
-				header.version_minor = 4;
-				header.thiszone = 0;
-				header.sigfigs = 0;
-				header.snaplen = 128;
-				header.network = 0xC3;
-				fwrite(&header, sizeof(header), 1, pcap);
-
-				// loop
-				printf("waiting for ieee802.15.4 packet from device ...\n");
-				PcapPacket packet;
-				int length;
-				auto startTime = std::chrono::steady_clock::now();
-				while (true) {
-					std::fill(std::begin(packet.data), std::end(packet.data), 0xAA);
-					
-					// receive from radio
-					ret = libusb_bulk_transfer(handle, USB_IN | 1, packet.data, 256, &length, 0);
-					if (ret < 0)
-						break;
-					--length;
-					printf("length: %d, LQI: %d\n", length, packet.data[length]);
-					
-					auto time = std::chrono::steady_clock::now();
-					auto duration = std::chrono::duration_cast<std::chrono::microseconds>(time - startTime).count();
-					packet.ts_sec = duration / 1000000;
-					packet.ts_usec = duration % 1000000;
-					packet.incl_len = length;
-					packet.orig_len = length + 2; // 2 byte crc not transferred
-					fwrite(&packet, offsetof(PcapPacket, data) + packet.incl_len, 1, pcap);
-					
-					// flush file so that we can interrupt
-					fflush(pcap);
-					
-					dissectIeee(packet.data, packet.data + packet.incl_len);
-				}
-				printf("libusb error: %d\n", ret);
 			}
+			
+			// check vendor/product
+			if (desc.idVendor != 0x1915 && desc.idProduct != 0x1337)
+				continue;
+
+			// protocol: 0: binary, 1: text
+			bool text = desc.bDeviceProtocol == 1;
+
+			// open device
+			libusb_device_handle *handle;
+			ret = libusb_open(dev, &handle);
+			if (ret != LIBUSB_SUCCESS) {
+				fprintf(stderr, "open error: %d\n", ret);
+				continue;
+			}
+				
+			// set configuration (reset alt_setting, reset toggles)
+			ret = libusb_set_configuration(handle, 1);
+			if (ret != LIBUSB_SUCCESS) {
+				fprintf(stderr, "set configuration error: %d\n", ret);
+				continue;
+			}
+
+			// claim interface with bInterfaceNumber = 0
+			ret = libusb_claim_interface(handle, 0);
+			if (ret != LIBUSB_SUCCESS) {
+				fprintf(stderr, "claim interface error: %d\n", ret);
+				continue;
+			}
+
+			//ret = libusb_set_interface_alt_setting(handle, 0, 0);
+
+			// configure the radio
+			ret = libusb_control_transfer(handle,
+				usb::OUT | usb::REQUEST_TYPE_VENDOR | usb::RECIPIENT_INTERFACE,
+				uint8_t(radio::Request::SET_FLAGS), radioFlags, 0,
+				nullptr, 0, 1000);
+
+			// open output pcap file
+			FILE *pcap = fopen(outputFile.string().c_str(), "wb");
+			
+			// write pcap header
+			PcapHeader header;
+			header.magic_number = 0xa1b2c3d4;
+			header.version_major = 2;
+			header.version_minor = 4;
+			header.thiszone = 0;
+			header.sigfigs = 0;
+			header.snaplen = 128;
+			header.network = 0xC3;
+			fwrite(&header, sizeof(header), 1, pcap);
+
+			// loop
+			printf("waiting for ieee802.15.4 packet from device ...\n");
+			PcapPacket packet;
+			int length;
+			auto startTime = std::chrono::steady_clock::now();
+			while (true) {
+				std::fill(std::begin(packet.data), std::end(packet.data), 0xAA);
+				
+				// receive from radio
+				ret = libusb_bulk_transfer(handle, 1 | usb::IN, packet.data, 256, &length, 0);
+				if (ret != LIBUSB_SUCCESS) {
+					fprintf(stderr, "transfer error: %d\n", ret);
+					break;
+				}
+				--length;
+				printf("length: %d, LQI: %d\n", length, packet.data[length]);
+				
+				auto time = std::chrono::steady_clock::now();
+				auto duration = std::chrono::duration_cast<std::chrono::microseconds>(time - startTime).count();
+				packet.ts_sec = duration / 1000000;
+				packet.ts_usec = duration % 1000000;
+				packet.incl_len = length;
+				packet.orig_len = length + 2; // 2 byte crc not transferred
+				fwrite(&packet, offsetof(PcapPacket, data) + packet.incl_len, 1, pcap);
+				
+				// flush file so that we can interrupt
+				fflush(pcap);
+				
+				dissectIeee(packet.data, packet.data + packet.incl_len);
+			}
+			break;
 		}
 		libusb_free_device_list(devs, 1);
 		libusb_exit(NULL);

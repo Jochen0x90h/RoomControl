@@ -2,7 +2,7 @@
 
 #include "../spi.hpp"
 #include <Queue.hpp>
-#include <config.hpp>
+#include <sysConfig.hpp>
 
 
 // internal interface if spi

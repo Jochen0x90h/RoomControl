@@ -32,6 +32,10 @@
 		CC[3]: backoff timeout
 	NRF_PPI
 		CH[27]: RADIO->EVENTS_END -> TIMER0->TASKS_CAPTURE[2]
+	EGU0
+		TRIGGER[0]: energy detection
+		TRIGGER[1]: receive queue
+		TRIGGER[2]: send queue
 */
 
 /*
@@ -56,18 +60,8 @@ constexpr int ackTurnaroundDuration = 12 * symbolDuration;
 constexpr int ackWaitDuration = 54 * symbolDuration;
 
 
-// ieee 802.15.4 frame type
-enum class FrameType {
-	BEACON = 0,
-	DATA = 1,
-	ACK = 2,
-	COMMAND = 3
-};
-
-
 // radio state
 // -----------
-int channel;
 
 // radio is active (start() was called)
 bool active;
@@ -100,7 +94,6 @@ EndAction endAction;
 // energy detection
 // ----------------
 
-constexpr int ED_RSSISCALE = 4;
 std::function<void (uint8_t)> onEdReady;
 
 
@@ -113,8 +106,8 @@ uint32_t longAddressHi;
 struct Context {
 	// flags and pan used for filtering by pan
 	uint16_t volatile flags = 0;
-	uint16_t volatile pan;
-	uint16_t volatile shortAddress;
+	uint16_t volatile pan = 0xffff;
+	uint16_t volatile shortAddress = 0xffff;
 	
 	// receive handler
 	std::function<void (uint8_t *)> onReceived;
@@ -220,7 +213,7 @@ int backoffCount;
 struct Send {
 	enum State : uint8_t {
 		// send and don't wait for ack
-		NO_ACK,
+		AWAIT_SENT,
 		
 		// wait for an ack from the destination
 		AWAIT_ACK,
@@ -301,50 +294,54 @@ setSendSignal(true);
 // event loop handler chain
 loop::Handler nextHandler;
 void handle() {
-	// check energy detection
-	if (NRF_RADIO->EVENTS_EDEND) {
-		NRF_RADIO->EVENTS_EDEND = 0;
-		int ed = NRF_RADIO->EDSAMPLE;
-		radio::onEdReady(min(ed * ED_RSSISCALE, 255));
-	}
-	
-	// check receive queue
-	while (!radio::receiveQueue.empty()) {
-		Receive &receive = receiveQueue.get();
+	if (isInterruptPending(SWI0_EGU0_IRQn)) {
+		// check energy detection
+		if (NRF_EGU0->EVENTS_TRIGGERED[0]) {
+			NRF_EGU0->EVENTS_TRIGGERED[0] = 0;
+			radio::onEdReady(NRF_RADIO->EDSAMPLE);
+		}
+		
+		// check receive queue
+		if (NRF_EGU0->EVENTS_TRIGGERED[1]) {
+			NRF_EGU0->EVENTS_TRIGGERED[1] = 0;
+			do {
+				Receive &receive = receiveQueue.get();
+		
+				// call receive handlers
+				for (auto const &c : radio::contexts) {
+					if (c.onReceived && c.filter(receive.data))
+						c.onReceived(receive.data);
+				}
+				
+				// remove element from queue and start receive if the buffer was full
+				disableInterrupt(RADIO_IRQn);
+				{
+					bool full = radio::receiveQueue.full();
+					
+					// remove entry from receive queue unless queue was emptied in onReceived() by calling stop()
+					if (!receiveQueue.empty())
+						receiveQueue.remove();
+					
+					// continue receiving if the queue has now space again
+					if (full) {
+						startReceive(); // -> END
+					}
+				}
+				enableInterrupt(RADIO_IRQn);
+			} while (!radio::receiveQueue.empty());
+		}
+				
+		// check send queue
+		if (NRF_EGU0->EVENTS_TRIGGERED[2]) {
+			NRF_EGU0->EVENTS_TRIGGERED[2] = 0;
 
-		// call receive handlers
-		for (auto const &c : radio::contexts) {
-			if (c.onReceived && c.filter(receive.data))
-				c.onReceived(receive.data);
-		}
-		
-		// remove element from queue and start receive if the buffer was full
-		disableInterrupt(RADIO_IRQn);
-		{
-			bool full = radio::receiveQueue.full();
-			
-			// remove entry from receive queue unless queue was emptied in onReceived() by calling stop()
-			if (!receiveQueue.empty())
-				receiveQueue.remove();
-			
-			// continue receiving if the queue has now space again
-			if (full) {
-				startReceive(); // -> END
-			}
-		}
-		enableInterrupt(RADIO_IRQn);
-	}
-	
-	// check send queue
-	if (!radio::sendQueue.empty()) {
-		Send &send = sendQueue.get();
-		
-		if (send.state >= Send::SUCCESS) {
+			Send &send = sendQueue.get();
 			bool success = send.state == Send::SUCCESS;
 			
 			// set to call state so that stop() doesn't remove the queue entry
 			send.state = Send::CALL;
-			send.onSent(success);
+			if (send.onSent)
+				send.onSent(success);
 			
 			sendQueue.remove();
 			
@@ -352,6 +349,9 @@ void handle() {
 			if (!sendQueue.empty())
 				startBackoff();
 		}
+
+		// clear pending interrupt flag at NVIC
+		clearInterrupt(SWI0_EGU0_IRQn);
 	}
 
 	// call next handler in chain
@@ -396,6 +396,7 @@ void init() {
 	// set interrupt flags and enable interrupts
 	NRF_RADIO->INTENSET =
 		N(RADIO_INTENSET_RXREADY, Set)
+		| N(RADIO_INTENSET_EDEND, Set)
 		| N(RADIO_INTENSET_CRCOK, Set)
 		| N(RADIO_INTENSET_CRCERROR, Set)
 		| N(RADIO_INTENSET_CCABUSY, Set)
@@ -405,9 +406,13 @@ void init() {
 	enableInterrupt(RADIO_IRQn);
 
 	// capture time when packet was received or sent
-	//NRF_PPI->CH[0].EEP = intptr_t(&NRF_RADIO->EVENTS_END);
-	//NRF_PPI->CH[0].TEP = intptr_t(&NRF_TIMER0->TASKS_CAPTURE[0]);
 	NRF_PPI->CHENSET = 1 << 27;
+
+	// init event generator
+	NRF_EGU0->INTENSET =
+		N(EGU_INTENSET_TRIGGERED0, Set)
+		| N(EGU_INTENSET_TRIGGERED1, Set)
+		| N(EGU_INTENSET_TRIGGERED2, Set);
 
 	// add to event loop handler chain
 	radio::nextHandler = loop::addHandler(handle);
@@ -434,8 +439,10 @@ void RADIO_IRQHandler(void) {
 
 	// check if end of energy detection
 	if (NRF_RADIO->EVENTS_EDEND) {
-		// disable interrupt, but leave EDEND event set to be processed in handle()
-		NRF_RADIO->INTENCLR = N(RADIO_INTENCLR_EDEND, Clear);
+		NRF_RADIO->EVENTS_EDEND = 0;
+
+		// signal end of energy detection to handle()
+		NRF_EGU0->TASKS_TRIGGER[0] = Trigger;
 	}
 
 	// check if clear channel assessment failed
@@ -479,8 +486,9 @@ void RADIO_IRQHandler(void) {
 					// disable ack wait interrupt
 					NRF_TIMER0->INTENCLR = N(TIMER_INTENCLR_COMPARE1, Clear);
 
-					// set state of sent packet to success
+					// set state of sent packet to success and signal it to handle()
 					send.state = Send::SUCCESS;
+					NRF_EGU0->TASKS_TRIGGER[2] = Trigger;
 				}
 			}
 		}
@@ -501,6 +509,9 @@ void RADIO_IRQHandler(void) {
 		if (pass) {
 			// increment head of queue because received element is ready now
 			radio::receiveQueue.increment();
+
+			// signal to handle() that a received packet is ready
+			NRF_EGU0->TASKS_TRIGGER[1] = Trigger;
 			
 			// check if we need to send ack
 			if (ack) {
@@ -548,7 +559,6 @@ setSendSignal(false);
 				NRF_TIMER0->CC[0] = NRF_TIMER0->CC[2] + ackTurnaroundDuration;
 				NRF_TIMER0->EVENTS_COMPARE[0] = 0;
 				NRF_TIMER0->INTENSET = N(TIMER_INTENSET_COMPARE0, Set); // -> COMPARE[0]
-
 				// now wait for timeout
 			}
 			break;
@@ -572,8 +582,9 @@ setSendSignal(false);
 				
 					// now we either receive an ack packet or timeout 
 				} else {
-					// set state of sent packet to success
+					// set state of sent packet to success and signal it to handle()
 					send.state = Send::SUCCESS;
+					NRF_EGU0->TASKS_TRIGGER[2] = Trigger;
 				}
 			}
 			break;
@@ -614,8 +625,9 @@ void TIMER0_IRQHandler(void) {
 		// disable interrupt
 		NRF_TIMER0->INTENCLR = N(TIMER_INTENCLR_COMPARE1, Clear);
 
-		// packet was not acknowledged
+		// sent packet was not acknowledged and signal it to handle()
 		radio::sendQueue.get().state = Send::FAILED;
+		NRF_EGU0->TASKS_TRIGGER[2] = Trigger;
 	}
 
 	// check if backoff period elapsed
@@ -644,7 +656,6 @@ void TIMER0_IRQHandler(void) {
 }
 
 void start(int channel) {
-radio::channel = channel;
 	assert(channel >= 10 && channel <= 26);
 	
 	// set channel
@@ -681,8 +692,8 @@ void stop() {
 	// disable radio
 	NRF_RADIO->SHORTS = 0;
 	NRF_RADIO->TASKS_STOP = Trigger;	
-	//NRF_RADIO->TASKS_EDSTOP = Trigger;
-	//NRF_RADIO->TASKS_CCASTOP = Trigger;
+	NRF_RADIO->TASKS_EDSTOP = Trigger;
+	NRF_RADIO->TASKS_CCASTOP = Trigger;
 	NRF_RADIO->TASKS_DISABLE = Trigger; // -> DISABLED
 
 	// clear queues
@@ -702,10 +713,6 @@ void stop() {
 void detectEnergy(std::function<void (uint8_t)> const &onReady) {
 	radio::onEdReady = onReady;
 	
-	// enable interrupt
-	NRF_RADIO->EVENTS_EDEND = 0;
-	NRF_RADIO->INTENSET = N(RADIO_INTENSET_EDEND, Set);
-
 	// shortcut: start energy detection on READY event
 	NRF_RADIO->SHORTS = N(RADIO_SHORTS_READY_EDSTART, Enabled);
 
@@ -733,61 +740,41 @@ void setLongAddress(uint64_t longAddress) {
 	radio::longAddressHi = uint32_t(longAddress >> 32);
 }
 
-uint8_t allocate() {
-	for (uint8_t index = 0; index < RADIO_CONTEXT_COUNT; ++index) {
-		Context &c = radio::contexts[index];
-		if (c.flags == 0) {
-			c.flags = 0x8000; // msb indicates that the context is allocated
-			c.pan = 0xffff;
-			c.shortAddress = 0xffff;
-			return index + 1;
-		}
-	}
-	
-	// error: radio context array is full
-	assert(false);
-	return 0;
-}
-
-void setFlags(uint8_t id, uint16_t flags) {
-	uint8_t index = id - 1;
-	assert(index < RADIO_CONTEXT_COUNT);
+void setFlags(int index, uint16_t flags) {
+	assert(uint(index) < RADIO_CONTEXT_COUNT);
 	Context &c = radio::contexts[index];
 
-	c.flags = 0x8000 | flags;
+	c.flags = flags;
 }
 
-void setPan(uint8_t id, uint16_t pan) {
-	uint8_t index = id - 1;
-	assert(index < RADIO_CONTEXT_COUNT);
+void setPan(int index, uint16_t pan) {
+	assert(uint(index) < RADIO_CONTEXT_COUNT);
 	Context &c = radio::contexts[index];
 
 	c.pan = pan;
 }
 
-void setShortAddress(uint8_t id, uint16_t shortAddress) {
-	uint8_t index = id - 1;
-	assert(index < RADIO_CONTEXT_COUNT);
+void setShortAddress(int index, uint16_t shortAddress) {
+	assert(uint(index) < RADIO_CONTEXT_COUNT);
 	Context &c = radio::contexts[index];
 
 	c.shortAddress = shortAddress;
 }
 
-void setReceiveHandler(uint8_t id, std::function<void (uint8_t *)> const &onReceived) {
-	uint8_t index = id - 1;
-	assert(index < RADIO_CONTEXT_COUNT);
+void setReceiveHandler(int index, std::function<void (uint8_t *)> const &onReceived) {
+	assert(uint(index) < RADIO_CONTEXT_COUNT);
 	Context &c = radio::contexts[index];
 	
 	c.onReceived = onReceived;
 }
 
-bool send(uint8_t id, uint8_t const* data, std::function<void (bool)> const &onSent) {
+bool send(int index, uint8_t const* data, std::function<void (bool)> const &onSent) {
+	assert(uint(index) < RADIO_CONTEXT_COUNT);
+	
 	// check if send queue is full
 	if (radio::sendQueue.full())
 		return false;
 
-	uint8_t index = id - 1;
-	assert(index < RADIO_CONTEXT_COUNT);
 	Context &c = radio::contexts[index];
 
 	disableInterrupt(RADIO_IRQn);
@@ -795,10 +782,10 @@ bool send(uint8_t id, uint8_t const* data, std::function<void (bool)> const &onS
 		bool empty = radio::sendQueue.empty();
 		Send &send = radio::sendQueue.add();
 		
-		// set data and callback
+		// set data, callback and state
 		send.data = data;
 		send.onSent = onSent;
-		send.state = c.flags & HANDLE_ACK ? Send::AWAIT_ACK : Send::NO_ACK;
+		send.state = c.flags & HANDLE_ACK ? Send::AWAIT_ACK : Send::AWAIT_SENT;
 		
 		// try to send packet if queue was empty by starting backoff sequence
 		if (empty) {

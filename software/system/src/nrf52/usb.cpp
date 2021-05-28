@@ -9,6 +9,7 @@ namespace usb {
 
 std::function<Data (DescriptorType)> getDescriptor;
 std::function<void (uint8_t)> onSetConfiguration;
+std::function<bool (uint8_t, uint16_t, uint16_t)> onRequest;
 
 // endpoint 0
 uint8_t ep0Buffer[64] __attribute__((aligned(4)));
@@ -85,9 +86,8 @@ void handle() {
 			case IN | REQUEST_TYPE_STANDARD | RECIPIENT_DEVICE:
 				// read request to standard device
 				if (bRequest == 0x06) {
-					// get descriptor
+					// get descriptor from user code by using the callback
 					auto descriptorType = DescriptorType(NRF_USBD->WVALUEH);
-					
 					Data descriptor = usb::getDescriptor(descriptorType);
 					if (descriptor.size > 0) {
 						// send descriptor
@@ -115,6 +115,22 @@ void handle() {
 				} else {
 					// unsupported request: stall
 					NRF_USBD->TASKS_EP0STALL = Trigger;
+				}
+				break;
+			case OUT | REQUEST_TYPE_VENDOR | RECIPIENT_INTERFACE:
+				{
+					int wValue = (NRF_USBD->WVALUEH << 8) | NRF_USBD->WVALUEL;
+					int wIndex = (NRF_USBD->WINDEXH << 8) | NRF_USBD->WINDEXL;
+					
+					// let user code handle the request
+					bool result = usb::onRequest(bRequest, wValue, wIndex);
+					if (result) {
+						// enter status stage
+						NRF_USBD->TASKS_EP0STATUS = Trigger;
+					} else {
+						// unsupported request: stall
+						NRF_USBD->TASKS_EP0STALL = Trigger;
+					}
 				}
 				break;
 			default:
@@ -225,11 +241,14 @@ void handle() {
 	usb::nextHandler();
 }
 
-void init(std::function<Data (DescriptorType)> const &getDescriptor,
-	std::function<void (uint8_t)> const &onSetConfiguration)
+void init(
+	std::function<Data (DescriptorType)> const &getDescriptor,
+	std::function<void (uint8_t)> const &onSetConfiguration,
+	std::function<bool (uint8_t, uint16_t, uint16_t)> const &onRequest)
 {
 	usb::getDescriptor = getDescriptor;
 	usb::onSetConfiguration = onSetConfiguration;
+	usb::onRequest = onRequest;
 	
 	NRF_USBD->INTENSET = N(USBD_INTENSET_USBEVENT, Set)
 		| N(USBD_INTENSET_EP0SETUP, Set)

@@ -12,7 +12,7 @@ struct Data {
 	constexpr Data() : data(nullptr), size(0) {}
 
 	template <typename T>
-	constexpr Data(T const &data) : data(&data), size(sizeof(T)) {}
+	constexpr Data(T const *data) : data(data), size(sizeof(T)) {}
 
 	Data(void const *data, int size) : data(data), size(size) {}
 

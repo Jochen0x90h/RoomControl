@@ -4,6 +4,8 @@
 
 #define getOffset(Type, member) intptr_t(&((Type*)nullptr)->member)
 
+using uint = unsigned int;
+
 constexpr int min(int x, int y) {return x < y ? x : y;}
 constexpr int max(int x, int y) {return x > y ? x : y;}
 

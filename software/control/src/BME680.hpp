@@ -1,8 +1,9 @@
 #pragma once
 
-#include <config.hpp>
+#include <appConfig.hpp>
 #include <cstdint>
 #include <functional>
+
 
 /**
  * Controller for BME680 air sensor
@@ -123,6 +124,9 @@ protected:
 
 	void onMeasurementsReady();
 	
+	// spi index
+	static int const spiIndex = SPI_AIR_SENSOR;
+
 	std::function<void ()> onReady;
 	bool busy;
 	

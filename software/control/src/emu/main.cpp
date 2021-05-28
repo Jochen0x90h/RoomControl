@@ -13,8 +13,9 @@
 
 
 
-// emulator drivers
+// extension to emulated spi driver
 namespace spi {
+	// set temperature of emulated air sensor
 	void setTemperature(float celsius);
 	
 	void doGui(Gui &gui, int &id) {
@@ -25,14 +26,166 @@ namespace spi {
 		gui.newLine();
 	}
 }
+
+// extension to emulated display driver
 namespace display {
+	// get dipslay contents into an 8 bit grayscale image
 	void getDisplay(uint8_t *buffer);
 }
+
+// extension to emulated bus driver
 namespace bus {
-  void doGui(Gui &gui, int &id);
+	void doGui(Gui &gui, int &id);
 }
+
+// extension to emulated radio driver
 namespace radio {
-  void doGui(Gui &gui, int &id);
+	// poll usb device
+	//void poll();
+
+	// let the emulated radio receive some data
+	void receiveData(int channel, uint8_t *data);
+
+	// little endian 32 bit integer
+	#define LE_INT32(value) uint8_t(value), uint8_t(value >> 8), uint8_t(value >> 16), uint8_t(value >> 24)
+
+	static AesKey const defaultAesKey = {{0x5a696742, 0x6565416c, 0x6c69616e, 0x63653039, 0x166d75b9, 0x730834d5, 0x1f6155bb, 0x7c046582, 0xe62066a9, 0x9528527c, 0x8a4907c7, 0xf64d6245, 0x018a08eb, 0x94a25a97, 0x1eeb5d50, 0xe8a63f15, 0x2dff5170, 0xb95d0be7, 0xa7b656b7, 0x4f1069a2, 0xf7066bf4, 0x4e5b6013, 0xe9ed36a4, 0xa6fd5f06, 0x83c904d0, 0xcd9264c3, 0x247f5267, 0x82820d61, 0xd01eebc3, 0x1d8c8f00, 0x39f3dd67, 0xbb71d006, 0xf36e8429, 0xeee20b29, 0xd711d64e, 0x6c600648, 0x3801d679, 0xd6e3dd50, 0x01f20b1e, 0x6d920d56, 0x41d66745, 0x9735ba15, 0x96c7b10b, 0xfb55bc5d}};
+
+	struct GreenPowerDevice {
+		// the emulated radio channel the device sends on
+		int channel;
+		
+		// device id
+		uint32_t deviceId;
+
+		// device security counter
+		uint32_t counter;
+
+		// device key
+		AesKey key;
+		
+		// time for long button press
+		std::chrono::steady_clock::time_point time;
+		
+		// last rocker state
+		int lastRocker = 0;
+	};
+
+	GreenPowerDevice devices[1];
+
+	// data used to initialize the green power devices
+	struct GreenPowerDeviceData {
+		uint32_t deviceId;
+		uint32_t counter;
+		uint8_t key[16];
+	};
+
+	GreenPowerDeviceData const deviceData[1] = {{
+		0x12345678,
+		0xfffffff0,
+		{0xa0, 0xa1, 0xa2, 0xa3, 0xa4, 0xa5, 0xa6, 0xa7, 0xa8, 0xa9, 0xaa, 0xab, 0xac, 0xad, 0xae, 0xaf}}};
+
+	void doGui(Gui &gui, int &id) {
+		static bool inited = false;
+		if (!inited) {
+			inited = true;
+			// init emulated green power devices (on user interface)
+			for (int i = 0; i < array::size(devices); ++i) {
+				GreenPowerDeviceData const &d = deviceData[i];
+				GreenPowerDevice &device = devices[i];
+				device.channel = 11; // default channel
+				device.deviceId = d.deviceId;
+				device.counter = d.counter;
+				setKey(device.key, d.key);
+			}
+		}
+		
+		// emulated devices on user interface
+		for (GreenPowerDevice &device : devices) {
+			int rocker = gui.doubleRocker(id++);
+			if (rocker != -1) {
+
+				// time difference
+				auto now = std::chrono::steady_clock::now();
+				int ms = std::chrono::duration_cast<std::chrono::milliseconds>(now - device.time).count();
+				device.time = now;
+
+				if (ms > 3000 && rocker == 0) {
+					// released after some time: commission
+					if (device.lastRocker & 1)
+						device.channel = 15;
+					else if (device.lastRocker & 2)
+						device.channel = 20;
+					else if (device.lastRocker & 4)
+						device.channel = 11;
+					else if (device.lastRocker & 8)
+						device.channel = 25;
+
+					uint8_t data[] = {0,
+						0x01, 0x08, uint8_t(device.counter), 0xff, 0xff, 0xff, 0xff, // mac header
+						0x0c, // network header
+						LE_INT32(device.deviceId), // deviceId
+						0xe0, 0x02, 0xc5, 0xf2, // command and flags
+						0xa0, 0xa1, 0xa2, 0xa3, 0xa4, 0xa5, 0xa6, 0xa7, 0xa8, 0xa9, 0xaa, 0xab, 0xac, 0xad, 0xae, 0xaf, // key
+						LE_INT32(0), // mic
+						LE_INT32(device.counter)}; // counter
+					data[0] = array::size(data) - 1 + 2;
+
+					// nonce
+					Nonce nonce(device.deviceId, device.deviceId);
+
+					// header is deviceId
+					uint8_t const *header = data + 9;
+					int headerLength = 4;
+					
+					// payload is key
+					uint8_t *message = data + 17;
+					
+					encrypt(message, nonce, header, headerLength, message, 16, 4, defaultAesKey);
+
+					radio::receiveData(device.channel, data);
+				} else {
+					uint8_t command = rocker != 0 ? 0 : 0x04;
+					int r = rocker | device.lastRocker;
+					if (r == 1)
+						command |= 0x10;
+					else if (r == 2)
+						command |= 0x11;
+					else if (r == 4)
+						command |= 0x13;
+					else if (r == 8)
+						command |= 0x12;
+
+					uint8_t data[] = {0,
+						0x01, 0x08, uint8_t(device.counter), 0xff, 0xff, 0xff, 0xff, // mac header
+						0x8c, 0x30, // network header
+						LE_INT32(device.deviceId), // deviceId
+						LE_INT32(device.counter), // counter
+						command,
+						0x00, 0x00, 0x00, 0x00}; // mic
+					data[0] = array::size(data) - 1 + 2;
+					
+					// nonce
+					Nonce nonce(device.deviceId, device.counter);
+
+					// header is network header, deviceId, counter and command
+					uint8_t const *header = data + 8;
+					int headerLength = 11;
+
+					// message: empty payload and mic
+					uint8_t *message = data + 19;
+
+					encrypt(message, nonce, header, headerLength, message, 0, 4, device.key);
+
+					radio::receiveData(device.channel, data);
+				}
+				++device.counter;
+				device.lastRocker = rocker;
+			}
+		}
+		
+		gui.newLine();
+	}
 }
 
 

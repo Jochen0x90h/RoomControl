@@ -1,6 +1,7 @@
 #pragma once
 
-// pins for nRF52840 MDK USB Dongle, https://wiki.makerdiary.com/nrf52840-mdk-usb-dongle/
+// note: pins defined in this file are for nRF52840 MDK USB Dongle, https://wiki.makerdiary.com/nrf52840-mdk-usb-dongle/
+
 constexpr int PORT0 = 0;
 constexpr int PORT1 = 32;
 
@@ -21,13 +22,11 @@ constexpr int BUTTON_PIN = PORT0 | 6;
 // spi
 // ---
 
-constexpr int SPI_TASK_COUNT = 4;
+constexpr int SPI_TRANSFER_QUEUE_LENGTH = 4;
 constexpr int SPI_SCK_PIN = PORT0 | 19;
 constexpr int SPI_MOSI_PIN = PORT0 | 20;
 constexpr int SPI_MISO_PIN = PORT0 | 21; // also connected to display D/C#
-constexpr int AIR_SENSOR_CS_PIN = PORT0 | 2;
-constexpr int FERAM_CS_PIN = PORT0 | 3;
-constexpr int SPI_CS_PINS[2] = {AIR_SENSOR_CS_PIN, FERAM_CS_PIN};
+constexpr int SPI_CS_PINS[2] = {PORT0 | 2, PORT0 | 3};
 
 
 // display

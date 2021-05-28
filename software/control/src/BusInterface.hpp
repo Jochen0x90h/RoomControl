@@ -2,7 +2,7 @@
 
 #include <Interface.hpp>
 #include <DataQueue.hpp>
-#include <config.hpp>
+#include <appConfig.hpp>
 
 
 /**

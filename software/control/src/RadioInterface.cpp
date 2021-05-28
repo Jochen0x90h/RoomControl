@@ -10,9 +10,6 @@ static AesKey const defaultAesKey = {{0x5a696742, 0x6565416c, 0x6c69616e, 0x6365
 RadioInterface::RadioInterface(std::function<void (uint8_t, uint8_t const *, int)> const &onReceived)
 	: onReceived(onReceived)
 {
-	// allocate a radio context
-	this->radioId = radio::allocate();
-	
 	// check if there is a coordinator
 	if (this->coordinator.empty()) {
 		Coordinator coordinator;
@@ -27,21 +24,24 @@ RadioInterface::RadioInterface(std::function<void (uint8_t, uint8_t const *, int
 		this->coordinator.write(0, &coordinator);
 	}
 	Coordinator const &coordinator = *this->coordinator[0].flash;
+	this->panId = coordinator.pan;
 
 	// set long address of coordinator
 	radio::setLongAddress(coordinator.longAddress);
 
+	
+	
 	// set pan of coordinator
-	radio::setPan(this->radioId, coordinator.pan);
+	radio::setPan(this->radioIndex, this->panId);
 
 	// set short address of coordinator
-	radio::setShortAddress(this->radioId, 0x0000);
+	radio::setShortAddress(this->radioIndex, 0x0000);
 
 	// filter packets with the coordinator as destination (and broadcast pan/address)
-	radio::setFlags(this->radioId, radio::TYPE_BEACON | radio::DEST_SHORT | radio::HANDLE_ACK);
+	radio::setFlags(this->radioIndex, radio::DEST_SHORT | radio::HANDLE_ACK);
 	
 	// set receive handler
-	radio::setReceiveHandler(this->radioId, [this](uint8_t *data) {
+	radio::setReceiveHandler(this->radioIndex, [this](uint8_t *data) {
 		int length = data[0] - 2; // cut off crc
 		onRx(data + 1, length);
 	});
@@ -128,31 +128,168 @@ void RadioInterface::onRx(uint8_t *data, int length) {
 	uint8_t *d = data;
 	uint8_t const *end = data + length;
 
-	// ieee 802.15.4 frame
+	// ieee 802.15.4 frame control
 	uint8_t const *mac = d;
-	uint16_t macFrameControl = d[0] | (d[1] << 8);
+	radio::FrameType frameType = radio::FrameType(d[0] & 7);
+	bool panIdCompression = (mac[0] & 0x40) != 0;
+	radio::AddressingMode destinationAddressingMode = radio::AddressingMode((d[1] >> 2) & 3);
+	radio::AddressingMode sourceAddressingMode = radio::AddressingMode(mac[1] >> 6);
 	d += 2;
-	
-	// check if data frame and no source address
-	if (macFrameControl != 0x0801)
-		return;
-	
-	// mac frame counter
-	uint8_t macCounter = d[0];
+
+	// the radio filter flags ensure that a sequence number is present
+	uint8_t sequenceNumber = d[0];
 	++d;
 	
-	// destination pan id (0xffff is broadcast)
+	// the radio filter flags ensure that a destination pan id is present that is either broadcast or this->panId
 	uint16_t destinationPanId = d[0] | (d[1] << 8);
 	d += 2;
+	bool destinationBroadcast = destinationPanId == 0xffff;
 	
-	// destination address (0xffff is broadcast)
-	uint16_t destinationAddress = d[0] | (d[1] << 8);
+	// the radio filter flags ensure that a destination address is present hat is either boradcast or our address
+	if (destinationAddressingMode == radio::AddressingMode::SHORT) {
+		uint16_t destAddress = d[0] | (d[1] << 8);
+		d += 2;
+		destinationBroadcast |= destAddress == 0xffff;
+	} else {
+		// long address is always our long address
+		d += 8;
+	}
+
+	if (sourceAddressingMode == radio::AddressingMode::NONE) {
+		// no source address
+		if (frameType == radio::FrameType::COMMAND) {
+			radio::Command command = radio::Command(d[0]);
+			if (command == radio::Command::BEACON_REQUEST) {
+				// handle beacon request by sending a beacon
+				onBeaconRequest();
+			}
+		} else if (frameType == radio::FrameType::DATA) {
+			// zigbee network layer
+			int protocolVersion = (d[0] >> 2) & 0xf;
+
+			// check for green power frame
+			if (protocolVersion == 3)
+				onGreenPower(mac, d, end);
+		}
+	} else if (sourceAddressingMode >= radio::AddressingMode::SHORT) {
+		// short or long source address
+
+		// get source pan id
+		uint16_t sourcePanId = destinationPanId;
+		if (!panIdCompression) {
+			sourcePanId = d[0] | (d[1] << 8);
+			d += 2;
+		}
+
+		if (sourceAddressingMode == radio::AddressingMode::SHORT) {
+			// short source address
+			uint16_t sourceAddress = d[0] | (d[1] << 8);
+			d += 2;
+
+			if (frameType == radio::FrameType::DATA) {
+				// zigbee network layer
+				int protocolVersion = (d[0] >> 2) & 0xf;
+				if (protocolVersion == 2) {
+					// lookup device by short address
+				
+				}
+			}
+		} else {
+			// long source address
+			uint32_t sourceL = d[0] | (d[1] << 8) | (d[2] << 16) | (d[3] << 24);
+			uint32_t sourceH = d[4] | (d[5] << 8) | (d[6] << 16) | (d[7] << 24);
+			uint64_t sourceAddress = (uint64_t(sourceH) << 32) | sourceL;
+			d += 8;
+
+			if (frameType == radio::FrameType::COMMAND) {
+				radio::Command command = radio::Command(d[0]);
+
+				// association request must be directed to us, no broadcast
+				if (command == radio::Command::ASSOCIATION_REQUEST && !destinationBroadcast)
+					onAssociationRequest();
+			} else if (frameType == radio::FrameType::DATA) {
+				// zigbee network layer
+				int protocolVersion = (d[0] >> 2) & 0xf;
+				if (protocolVersion == 2) {
+					// lookup device by long address
+					
+				}
+			}
+		}
+	}
+}
+
+void RadioInterface::onBeaconRequest() {
+	this->buffer[0] = 26 + 2; // for crc
+	uint8_t *d = this->buffer + 1;
+	
+	// ieee 802.15.4 frame control
+	d[0] = 0;
+	d[1] = uint8_t(radio::AddressingMode::SHORT) << 6;
 	d += 2;
 	
-	// check if broadcast destination address
-	if (d >= end || destinationPanId != 0xffff || destinationAddress != 0xffff)
-		return;
+	// sequence number
+	d[0] = this->macSequenceNumber++;
+	++d;
+	
+	// source pan
+	d[0] = this->panId;
+	d[1] = this->panId >> 8;
+	d += 2;
+	
+	// source address
+	d[0] = 0;
+	d[1] = 0;
+	d += 2;
+	
+	// superframe specification
+	// beacon interval, superframe interval
+	d[0] = 0x0f | 0xf0;
+	// final cap slot, battery extension, pan coordinator, association permit
+	d[1] = 0x0f | 0 | 0x40 | (this->commissioning ? 0x80 : 0);
+	d += 2;
+	
+	// gts
+	d[0] = 0;
+	++d;
+	
+	// pending addresses, short and long
+	d[0] = 0x00;
+	++d;
+	
+	// zigbee beacon
+	
+	// protocol id
+	d[0] = 0;
+	++d;
+	
+	// stack profile
+	// zigbee pro, protocol version
+	d[0] = 0x02 | (2 << 4);
+	// router capacity, device depth, end device capacity
+	d[1] = 0 | (0 << 3) | 0x80;
+	d += 2;
+	
+	// extended pan id
+	array::fill(d, d + 8, 0xdd);
+	d += 8;
+	
+	// tx offset
+	array::fill(d, d + 3, 0xff);
+	d += 3;
+	
+	// update id
+	d[0] = 0;
+	++d;
+	
+	radio::send(this->radioIndex, this->buffer, [](bool success) {});
+}
 
+void RadioInterface::onAssociationRequest() {
+
+}
+
+void RadioInterface::onGreenPower(uint8_t const *mac, uint8_t *d, uint8_t const *end) {
 	// green power frame
 	// -----------------
 	// NWK header (frame control)
@@ -161,35 +298,31 @@ void RadioInterface::onRx(uint8_t *data, int length) {
 	// MIC (0, 2 or 4 byte message integrity code)
 	uint8_t *frame = d;
 
-	uint8_t frameControl = d[0];
+	// frame control
+	bool extendedFlag = (d[0] & 0x80) != 0;
 	++d;
-	int protocolVersion = (frameControl >> 2) & 7;
-	bool extendedFlag = frameControl & 0x80;
 
-	if (protocolVersion != 3)
-		return;
-
+	// extended frame conrol
 	int applicationId = 0;
 	int securityLevel = 0;
-	int keyType = 0;
+	int securityKeyFlag = false;
 	if (extendedFlag) {
-		uint8_t extendedFrameControl = d[0];
-		++d;
-		
 		// application id
-		applicationId = extendedFrameControl & 3;
+		applicationId = d[0] & 3;
 		
 		// security level
 		// 0: none
 		// 1: 1 byte counter and 2 byte MIC
 		// 2: 4 byte counter + 4 byte MIC
 		// 3: encryption + 4 byte counter + 4 byte MIC
-		securityLevel = (extendedFrameControl >> 3) & 3;
+		securityLevel = (d[0] >> 3) & 3;
 		
-		// security key type
+		// security key
 		// 0: none
 		// 1: network key
-		keyType = extendedFrameControl >> 5;
+		securityKeyFlag = (d[0] & 0x20) != 0;
+		
+		++d;
 	}
 	
 	uint32_t deviceId = d[0] | (d[1] << 8) | (d[2] << 16) | (d[3] << 24);

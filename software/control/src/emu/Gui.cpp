@@ -2,7 +2,7 @@
 #include "StringBuffer.hpp"
 #include "tahoma_8pt.hpp"
 #include <Bitmap.hpp>
-#include <config.hpp>
+#include <appConfig.hpp>
 #include <vector>
 #include <stdexcept>
 #include <cmath>

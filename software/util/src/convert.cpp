@@ -106,7 +106,7 @@ int toString(uint32_t value, char *str, int length, int digitCount) {
 
 static char const *hexTable = "0123456789abcdef";
 
-int hexToString(uint32_t value, char *str, int length, int digitCount) {
+int hexToString(uint64_t value, char *str, int length, int digitCount) {
 	int l = min(length, digitCount);
 	for (int i = 0; i < l; ++i) {
 		str[i] = hexTable[(value >> (digitCount - 1 - i) * 4) & 0xf];

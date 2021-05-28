@@ -8,7 +8,7 @@ int main(void) {
 	calendar::init();
 	debug::init();
 	
-	calendar::addSecondHandler([]() {debug::toggleBlueLed();});
+	calendar::setSecondHandler(0, []() {debug::toggleBlueLed();});
 
 	loop::run();	
 }

@@ -1,31 +1,10 @@
 #pragma once
 
-#include <cstdint>
+#include "radioDefs.hpp"
 #include <functional>
 
 
 namespace radio {
-
-// filter flags (filtered packets must have a sequence number)
-
-// all packets pass
-constexpr int ALL = 1;
-
-// beacon packets pass
-constexpr int TYPE_BEACON = 2;
-
-// packets pass when destination pan and short address match or are broadcast
-constexpr int DEST_SHORT = 4;
-
-// data packets pass when destination pan and short address match or are broadcast (green power)
-constexpr int TYPE_DATA_DEST_SHORT = 8;
-
-// packets pass where destination pan and long address match or are broadcast
-constexpr int DEST_LONG = 16;
-
-// handle ack for own packets in radio driver to meet turnaround time. Make sure the destination address filter is set
-constexpr int HANDLE_ACK = 32;
-
 
 /**
  * Initialize the radio
@@ -45,7 +24,9 @@ void stop();
 
 /**
  * Receiver energy detection (ED) for channel selection. Radio must be started using start(), but
- * enableReceive() is not necessary.
+ * enableReceive() is not necessary. The detected energy is in the range [0, 127]. To convert to
+ * IEEE 802.15.4 energy detect level, multiply by four and clamp to 255.
+ * @param onReady called when operation finished with detected energy
  */
 void detectEnergy(std::function<void (uint8_t)> const &onReady);
 
@@ -69,49 +50,42 @@ void enableReceiver(bool enable);
 void setLongAddress(uint64_t address);
 
 /**
- * Allocate a radio context. Call the following methods to configure it
- * @return id of radio context (not zero)
- */
-uint8_t allocate();
-
-/**
  * Set filter and configuration flags
- * @param id context id
+ * @param index context index (number of contexts defined by RADIO_CONTEXT_COUNT in sysConfig.hpp)
  * @param flags flags
  */
-void setFlags(uint8_t id, uint16_t flags);
+void setFlags(int index, uint16_t flags);
 
 /**
  * Set pan, default is 0xffff (broadcast)
- * @param id context id
+ * @param index context index (number of contexts defined by RADIO_CONTEXT_COUNT in sysConfig.hpp)
  * @param pan pan
  */
-void setPan(uint8_t id, uint16_t pan);
+void setPan(int index, uint16_t pan);
 
 /**
  * Set short address, default is 0xffff (broadcast)
- * @param id context id
+ * @param index context index (number of contexts defined by RADIO_CONTEXT_COUNT in sysConfig.hpp)
  * @param shortAddress short address
  */
-void setShortAddress(uint8_t id, uint16_t shortAddress); 
+void setShortAddress(int index, uint16_t shortAddress); 
 
 /**
  * Set handler that gets called when a packet was received and it passes the filters for the context.
  * The payload data starts at data[1] and the length of the payload is in first byte and gets calculated as
  * length = data[0] - 2 (crc is not included). After the last payload byte, a link quality indicator is transferred.
- * @param id context id
+ * @param index context index (number of contexts defined by RADIO_CONTEXT_COUNT in sysConfig.hpp)
  * @param onReceived called when data was received, must not be null
  */
-void setReceiveHandler(uint8_t id, std::function<void (uint8_t *)> const &onReceived);
+void setReceiveHandler(int index, std::function<void (uint8_t *)> const &onReceived);
 
 /**
  * Send data over radio when no other carrier was detected
- * @param id context id
+ * @param index context index (number of contexts defined by RADIO_CONTEXT_COUNT in sysConfig.hpp)
  * @param data data to send, first byte is length of the following payload + 2 for CRC (not included in data)
  * @param onSent called when finished sending with parameter true on success and false on failure
  * @return true on success, false if busy with previous send
  */
-bool send(uint8_t id, uint8_t const *data, std::function<void (bool)> const &onSent);
-
+bool send(int index, uint8_t const *data, std::function<void (bool)> const &onSent);
 
 } // namespace radio

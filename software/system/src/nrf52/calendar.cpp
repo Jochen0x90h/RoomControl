@@ -36,9 +36,9 @@ void handle() {
 		}
 	
 		// call second handlers
-		for (auto const &h : calendar::onSecond) {
-			if (h)
-				h();
+		for (auto const &handler : calendar::onSecond) {
+			if (handler)
+				handler();
 		}
 	}
 	
@@ -57,22 +57,14 @@ void init() {
 	calendar::nextHandler = loop::addHandler(handle);
 }
 
-ClockTime getTime() {
+ClockTime now() {
 	return ClockTime(calendar::weekday, calendar::hours, calendar::minutes, calendar::seconds);
 }
 
-uint8_t addSecondHandler(std::function<void ()> const &onSecond) {
-	assert(onSecond);
-	for (int i = 0; i < CALENDAR_SECOND_HANDLER_COUNT; ++i) {
-		if (!calendar::onSecond[i]) {
-			calendar::onSecond[i] = onSecond;
-			return i + 1;
-		}
-	}
-	
-	// error: handler array is full
-	assert(false);
-	return 0;
+void setSecondHandler(int index, std::function<void ()> const &onSecond) {
+	assert(uint(index) < CALENDAR_SECOND_HANDLER_COUNT);
+
+	calendar::onSecond[index] = onSecond;
 }
 
 } // namespace calendar

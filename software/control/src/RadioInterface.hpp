@@ -3,7 +3,7 @@
 #include <Interface.hpp>
 #include <Storage.hpp>
 #include <crypt.hpp>
-#include <config.hpp>
+#include <appConfig.hpp>
 
 
 /**
@@ -66,7 +66,7 @@ public:
 			GREEN_POWER
 		};
 		
-		// device id, either ieee 802.15.4 long device address or 32 bit green power id
+		// device id, either 64 bit ieee 802.15.4 long device address or 32 bit green power id
 		DeviceId deviceId;
 
 		// radio device type
@@ -127,12 +127,20 @@ private:
 
 	void onRx(uint8_t *data, int length);
 
+	void onBeaconRequest();
+	void onAssociationRequest();
+
+	void onGreenPower(uint8_t const *mac, uint8_t *d, uint8_t const *end);
 	void commission(uint32_t deviceId, uint8_t *d, uint8_t const *end);
 
 
-	// radio context id
-	uint8_t radioId;
+	// radio context index
+	static int const radioIndex = RADIO_ZIGBEE;
 
+	// id of "our" pan
+	uint16_t panId;
+
+	// callback
 	std::function<void (uint8_t, uint8_t const *, int)> onReceived;
 
 	// true for commissioning mode, joining of new devices is allowed
@@ -140,4 +148,8 @@ private:
 
 	// endpoint reference counters
 	uint8_t nextEndpointId = 1;
+
+
+	uint8_t buffer[128];
+	uint8_t macSequenceNumber;
 };

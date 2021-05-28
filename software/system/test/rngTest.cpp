@@ -9,7 +9,7 @@
 // device descriptor
 static const usb::DeviceDescriptor deviceDescriptor = {
 	.bLength = sizeof(usb::DeviceDescriptor),
-	.bDescriptorType = usb::DESCRIPTOR_DEVICE,
+	.bDescriptorType = usb::DescriptorType::DEVICE,
 	.bcdUSB = 0x0200, // USB 2.0
 	.bDeviceClass = 0xff, // no class
 	.bDeviceSubClass = 0xff,
@@ -34,7 +34,7 @@ struct UsbConfiguration {
 static const UsbConfiguration configurationDescriptor = {
 	.config = {
 		.bLength = sizeof(usb::ConfigDescriptor),
-		.bDescriptorType = usb::DESCRIPTOR_CONFIGURATION,
+		.bDescriptorType = usb::DescriptorType::CONFIGURATION,
 		.wTotalLength = sizeof(UsbConfiguration),
 		.bNumInterfaces = 1,
 		.bConfigurationValue = 1,
@@ -44,7 +44,7 @@ static const UsbConfiguration configurationDescriptor = {
 	},
 	.interface = {
 		.bLength = sizeof(usb::InterfaceDescriptor),
-		.bDescriptorType = usb::DESCRIPTOR_INTERFACE,
+		.bDescriptorType = usb::DescriptorType::INTERFACE,
 		.bInterfaceNumber = 0,
 		.bAlternateSetting = 0,
 		.bNumEndpoints = array::size(configurationDescriptor.endpoints),
@@ -55,9 +55,9 @@ static const UsbConfiguration configurationDescriptor = {
 	},
 	.endpoints = {{
 		.bLength = sizeof(usb::EndpointDescriptor),
-		.bDescriptorType = usb::DESCRIPTOR_ENDPOINT,
-		.bEndpointAddress = usb::IN | 1, // in 1 (tx)
-		.bmAttributes = usb::ENDPOINT_BULK,
+		.bDescriptorType = usb::DescriptorType::ENDPOINT,
+		.bEndpointAddress = 1 | usb::IN, // 1 in (device to host)
+		.bmAttributes = usb::EndpointType::BULK,
 		.wMaxPacketSize = 64,
 		.bInterval = 1 // polling interval
 	}}
@@ -65,15 +65,15 @@ static const UsbConfiguration configurationDescriptor = {
 
 
 
-uint8_t timer1;
 uint8_t sendData[16] __attribute__((aligned(4)));
 
-void setTimer1() {
+// send random numbers to host
+void send() {
 	for (int i = 0; i < array::size(sendData); ++i)
 		sendData[i] = rng::get8();
 		
 	usb::send(1, sendData, array::size(sendData), []() {debug::toggleBlueLed();});
-	timer::start(timer1, timer::getTime() + 1s, []() {setTimer1();});
+	timer::start(0, timer::now() + 1s, []() {send();});
 }
 
 int main(void) {
@@ -83,10 +83,10 @@ int main(void) {
 	usb::init(
 		[](usb::DescriptorType descriptorType) {
 			switch (descriptorType) {
-			case usb::DESCRIPTOR_DEVICE:
-				return Data(deviceDescriptor);
-			case usb::DESCRIPTOR_CONFIGURATION:
-				return Data(configurationDescriptor);
+			case usb::DescriptorType::DEVICE:
+				return Data(&deviceDescriptor);
+			case usb::DescriptorType::CONFIGURATION:
+				return Data(&configurationDescriptor);
 			default:
 				return Data();
 			}
@@ -95,11 +95,13 @@ int main(void) {
 			// enable bulk endpoints in 1 (keep control endpoint 0 enabled)
 			usb::enableEndpoints(1 | (1 << 1), 1); 			
 
-			setTimer1();
+			// start to send random numbers to host
+			send();
+		},
+		[](uint8_t bRequest, uint16_t wValue, uint16_t wIndex) {
+			return false;
 		});
 	debug::init();
-
-	timer1 = timer::allocate();
 		
 	loop::run();
 }

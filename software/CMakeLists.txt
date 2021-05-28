@@ -116,7 +116,9 @@ set(SYSTEM
 	system/src/loop.hpp
 	system/src/emu/poti.cpp
 	system/src/poti.hpp
+	system/src/emu/radio.cpp
 	system/src/radio.hpp
+	system/src/radioDefs.hpp
 	system/src/emu/rng.cpp
 	system/src/rng.hpp
 	system/src/spi.hpp
@@ -125,6 +127,7 @@ set(SYSTEM
 	system/src/timer.hpp
 	system/src/emu/usb.cpp
 	system/src/usb.hpp
+	system/src/usbDefs.hpp
 )
 source_group(system FILES ${SYSTEM})
 
@@ -139,12 +142,12 @@ source_group(node FILES ${NODE})
 
 # room control software running on the nRF52840
 set(CONTROL
+	control/src/appConfig.hpp
 	control/src/BME680.cpp
 	control/src/BME680.hpp
 	control/src/BusInterface.cpp
 	control/src/BusInterface.hpp
 	control/src/emu/bus.cpp
-	control/src/emu/config.hpp
 	control/src/Device.hpp
 	control/src/emu/display.cpp
 	control/src/emu/Gui.cpp
@@ -155,7 +158,6 @@ set(CONTROL
 	control/src/LocalInterface.hpp
 	control/src/emu/Network.cpp
 	control/src/emu/Network.hpp
-	control/src/emu/radio.cpp
 	control/src/RadioInterface.cpp
 	control/src/RadioInterface.hpp
 	control/src/RoomControl.cpp
@@ -165,6 +167,7 @@ set(CONTROL
 	control/src/SSD1309.hpp
 	control/src/Storage.cpp
 	control/src/Storage.hpp
+	control/src/emu/sysConfig.hpp
 	control/src/tahoma_8pt.cpp
 	control/src/tahoma_8pt.hpp
 )
@@ -228,15 +231,63 @@ install(TARGETS emulator
 
 
 
+# terminal for tests that output text or binary data via usb
+add_executable(terminal
+	tools/src/terminal.cpp
+)
+target_include_directories(terminal
+	PRIVATE
+	util/src
+	system/src
+)
+conan_target_link_libraries(terminal)
+
+
+
+# radio packet sniffer that can write .pcap files and analyze packets (needs radioTest on device)
+add_executable(sniffer
+	tools/src/sniffer.cpp
+	${CRYPT}
+)
+target_include_directories(sniffer
+	PRIVATE
+	util/src
+	crypt/src
+	system/src
+)
+conan_target_link_libraries(sniffer)
+
+
+
 # host for usbTest on device (command line tool)
 add_executable(usbTestHost
 	system/test/usbTestHost.cpp
+)
+target_include_directories(usbTestHost
+	PRIVATE
+	system/src
 )
 conan_target_link_libraries(usbTestHost)
 
 
 
-# test for BME680
+# test that sends packets using the radio
+add_executable(radioSendTest
+	system/test/radioSendTest.cpp
+	${UTIL}
+	${SYSTEM}
+)
+target_include_directories(radioSendTest
+	PRIVATE
+	system/test/emu
+	system/src
+	util/src
+)
+conan_target_link_libraries(radioSendTest)
+
+
+
+# test for BME680 air sensor
 add_executable(bme680Test
 	control/test/bme680Test.cpp
 	${UTIL}
@@ -254,31 +305,6 @@ target_include_directories(bme680Test
 )
 conan_target_link_libraries(bme680Test)
 
-
-
-# terminal for tests that output text or binary data via usb
-add_executable(terminal
-	tools/src/terminal.cpp
-)
-target_include_directories(terminal
-	PRIVATE
-	util/src
-)
-conan_target_link_libraries(terminal)
-
-
-
-# radio packet sniffer that can write .pcap files and analyze packets (needs radioTest on device)
-add_executable(sniffer
-	tools/src/sniffer.cpp
-	${CRYPT}
-)
-target_include_directories(sniffer
-	PRIVATE
-	util/src
-	crypt/src
-)
-conan_target_link_libraries(sniffer)
 
 
 

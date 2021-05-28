@@ -4,10 +4,18 @@
 #include <util.hpp>
 
 
+enum class Request : uint8_t {
+	RED = 0,
+	GREEN = 1,
+	BLUE = 2
+};
+
+
+
 // device descriptor
 static const usb::DeviceDescriptor deviceDescriptor = {
 	.bLength = sizeof(usb::DeviceDescriptor),
-	.bDescriptorType = usb::DESCRIPTOR_DEVICE,
+	.bDescriptorType = usb::DescriptorType::DEVICE,
 	.bcdUSB = 0x0200, // USB 2.0
 	.bDeviceClass = 0xff, // no class
 	.bDeviceSubClass = 0xff,
@@ -32,7 +40,7 @@ struct UsbConfiguration {
 static const UsbConfiguration configurationDescriptor = {
 	.config = {
 		.bLength = sizeof(usb::ConfigDescriptor),
-		.bDescriptorType = usb::DESCRIPTOR_CONFIGURATION,
+		.bDescriptorType = usb::DescriptorType::CONFIGURATION,
 		.wTotalLength = sizeof(UsbConfiguration),
 		.bNumInterfaces = 1,
 		.bConfigurationValue = 1,
@@ -42,7 +50,7 @@ static const UsbConfiguration configurationDescriptor = {
 	},
 	.interface = {
 		.bLength = sizeof(usb::InterfaceDescriptor),
-		.bDescriptorType = usb::DESCRIPTOR_INTERFACE,
+		.bDescriptorType = usb::DescriptorType::INTERFACE,
 		.bInterfaceNumber = 0,
 		.bAlternateSetting = 0,
 		.bNumEndpoints = array::size(configurationDescriptor.endpoints),
@@ -53,22 +61,21 @@ static const UsbConfiguration configurationDescriptor = {
 	},
 	.endpoints = {{
 		.bLength = sizeof(usb::EndpointDescriptor),
-		.bDescriptorType = usb::DESCRIPTOR_ENDPOINT,
-		.bEndpointAddress = usb::IN | 1, // in 1 (tx)
-		.bmAttributes = usb::ENDPOINT_BULK,
+		.bDescriptorType = usb::DescriptorType::ENDPOINT,
+		.bEndpointAddress = 1 | usb::IN, // 1 in (device to host)
+		.bmAttributes = usb::EndpointType::BULK,
 		.wMaxPacketSize = 64,
 		.bInterval = 1 // polling interval
 	},
 	{
 		.bLength = sizeof(usb::EndpointDescriptor),
-		.bDescriptorType = usb::DESCRIPTOR_ENDPOINT,
-		.bEndpointAddress = usb::OUT | 2, // out 2 (rx)
-		.bmAttributes = usb::ENDPOINT_BULK,
+		.bDescriptorType = usb::DescriptorType::ENDPOINT,
+		.bEndpointAddress = 1 | usb::OUT, // 1 out (host to device)
+		.bmAttributes = usb::EndpointType::BULK,
 		.wMaxPacketSize = 64,
 		.bInterval = 1 // polling interval
 	}}
 };
-
 
 
 uint8_t sendData[128] __attribute__((aligned(4)));
@@ -77,7 +84,7 @@ uint8_t receiveData[128] __attribute__((aligned(4)));
 
 void receive() {
 	// wait until the host sends data
-	usb::receive(2, receiveData, array::size(receiveData), [](int length) {
+	usb::receive(1, receiveData, array::size(receiveData), [](int length) {
 		//debug::toggleGreenLed();
 
 		// check received data
@@ -107,20 +114,36 @@ int main(void) {
 	usb::init(
 		[](usb::DescriptorType descriptorType) {
 			switch (descriptorType) {
-			case usb::DESCRIPTOR_DEVICE:
-				return Data(deviceDescriptor);
-			case usb::DESCRIPTOR_CONFIGURATION:
-				return Data(configurationDescriptor);
+			case usb::DescriptorType::DEVICE:
+				return Data(&deviceDescriptor);
+			case usb::DescriptorType::CONFIGURATION:
+				return Data(&configurationDescriptor);
 			default:
 				return Data();
 			}
 		},
 		[](uint8_t bConfigurationValue) {
-			// enable bulk endpoints in 1 and out 2 (keep control endpoint 0 enabled)
-			usb::enableEndpoints(1 | (1 << 1), 1 | (1 << 2)); 			
+			// enable bulk endpoints 1 in and 1 out (keep control endpoint 0 enabled)
+			usb::enableEndpoints(1 | (1 << 1), 1 | (1 << 1)); 			
 		
 			// start to receive from usb host
 			receive();
+		},
+		[](uint8_t bRequest, uint16_t wValue, uint16_t wIndex) {
+			switch (Request(bRequest)) {
+			case Request::RED:
+				debug::setRedLed(wValue != 0);
+				break;
+			case Request::GREEN:
+				debug::setGreenLed(wIndex != 0);
+				break;
+			case Request::BLUE:
+				debug::setBlueLed(wValue == wIndex);
+				break;
+			default:
+				return false;
+			}
+			return true;
 		});
 	debug::init();
 		

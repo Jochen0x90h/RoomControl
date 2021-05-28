@@ -3,23 +3,19 @@
 #include <loop.hpp>
 
 
-uint8_t timer1;
-uint8_t timer2;
-uint8_t timer3;
+void setTimer0() {
+	debug::toggleRedLed();
+	timer::start(0, timer::now() + 1s, []() {setTimer0();});
+}
 
 void setTimer1() {
-	debug::toggleRedLed();
-	timer::start(timer1, timer::getTime() + 1s, []() {setTimer1();});
+	debug::toggleGreenLed();
+	timer::start(1, timer::now() + 5s + 500ms, []() {setTimer1();});
 }
 
 void setTimer2() {
-	debug::toggleGreenLed();
-	timer::start(timer2, timer::getTime() + 5s + 500ms, []() {setTimer2();});
-}
-
-void setTimer3() {
 	debug::toggleBlueLed();
-	timer::start(timer3, timer::getTime() + 3s + 333ms, []() {setTimer3();});
+	timer::start(2, timer::now() + 3s + 333ms, []() {setTimer2();});
 }
 
 int main(void) {
@@ -27,13 +23,9 @@ int main(void) {
 	timer::init();
 	debug::init();
 
-	timer1 = timer::allocate();
-	timer2 = timer::allocate();
-	timer3 = timer::allocate();
-
+	setTimer0();
 	setTimer1();
 	setTimer2();
-	setTimer3();
 
 	loop::run();
 }

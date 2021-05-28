@@ -1,6 +1,5 @@
 #pragma once
 
-
 // flash
 // -----
 
@@ -22,22 +21,9 @@ constexpr int TIMER_COUNT = 4;
 constexpr int CALENDAR_SECOND_HANDLER_COUNT = 1;
 
 
-// spi
-// ---
-
-constexpr int AIR_SENSOR_CS_PIN = 0;
-constexpr int FERAM_CS_PIN = 1;
-
-
-// display
-// -------
-
-constexpr int DISPLAY_WIDTH = 128;
-constexpr int DISPLAY_HEIGHT = 64;
-
-
 // radio
 // -----
 
 constexpr int RADIO_CONTEXT_COUNT = 2;
+constexpr int RADIO_SEND_QUEUE_LENGTH = 2;
 constexpr int RADIO_MAX_PAYLOAD_LENGTH = 125; // payload length without leading length byte and trailing crc

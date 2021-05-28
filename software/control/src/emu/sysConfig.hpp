@@ -1,5 +1,6 @@
 #pragma once
 
+
 // flash
 // -----
 
@@ -24,5 +25,12 @@ constexpr int CALENDAR_SECOND_HANDLER_COUNT = 1;
 // spi
 // ---
 
-constexpr int AIR_SENSOR_CS_PIN = 0;
-constexpr int FERAM_CS_PIN = 1;
+constexpr int SPI_CS_PINS[2] = {0, 1};
+
+
+// radio
+// -----
+
+constexpr int RADIO_CONTEXT_COUNT = 2;
+constexpr int RADIO_SEND_QUEUE_LENGTH = 2;
+constexpr int RADIO_MAX_PAYLOAD_LENGTH = 125; // payload length without leading length byte and trailing crc

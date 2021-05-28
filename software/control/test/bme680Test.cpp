@@ -12,7 +12,7 @@
 // device descriptor
 static const usb::DeviceDescriptor deviceDescriptor = {
 	.bLength = sizeof(usb::DeviceDescriptor),
-	.bDescriptorType = usb::DESCRIPTOR_DEVICE,
+	.bDescriptorType = usb::DescriptorType::DEVICE,
 	.bcdUSB = 0x0200, // USB 2.0
 	.bDeviceClass = 0xff, // no class
 	.bDeviceSubClass = 0xff,
@@ -37,7 +37,7 @@ struct UsbConfiguration {
 static const UsbConfiguration configurationDescriptor = {
 	.config = {
 		.bLength = sizeof(usb::ConfigDescriptor),
-		.bDescriptorType = usb::DESCRIPTOR_CONFIGURATION,
+		.bDescriptorType = usb::DescriptorType::CONFIGURATION,
 		.wTotalLength = sizeof(UsbConfiguration),
 		.bNumInterfaces = 1,
 		.bConfigurationValue = 1,
@@ -47,7 +47,7 @@ static const UsbConfiguration configurationDescriptor = {
 	},
 	.interface = {
 		.bLength = sizeof(usb::InterfaceDescriptor),
-		.bDescriptorType = usb::DESCRIPTOR_INTERFACE,
+		.bDescriptorType = usb::DescriptorType::INTERFACE,
 		.bInterfaceNumber = 0,
 		.bAlternateSetting = 0,
 		.bNumEndpoints = array::size(configurationDescriptor.endpoints),
@@ -58,9 +58,9 @@ static const UsbConfiguration configurationDescriptor = {
 	},
 	.endpoints = {{
 		.bLength = sizeof(usb::EndpointDescriptor),
-		.bDescriptorType = usb::DESCRIPTOR_ENDPOINT,
+		.bDescriptorType = usb::DescriptorType::ENDPOINT,
 		.bEndpointAddress = usb::IN | 1, // in 1 (tx)
-		.bmAttributes = usb::ENDPOINT_BULK,
+		.bmAttributes = usb::EndpointType::BULK,
 		.wMaxPacketSize = 64,
 		.bInterval = 1 // polling interval
 	}}
@@ -81,12 +81,12 @@ uint8_t buffer[129] __attribute__((aligned(4)));
 void getId() {
 	// read chip id
 	buffer[0] = READ(0xD0);
-	spi::transfer(AIR_SENSOR_CS_PIN, buffer, 1, buffer, 2, []() {
+	spi::transfer(SPI_AIR_SENSOR, buffer, 1, buffer, 2, []() {
 		if (buffer[1] == CHIP_ID)
 			debug::toggleGreenLed();
 	});
 
-	timer::start(timerId, timer::getTime() + 1s, []() {getId();});
+	timer::start(0, timer::now() + 1s, []() {getId();});
 }
 */
 /*
@@ -94,7 +94,7 @@ void getRegisters() {
 	debug::toggleRedLed();
 	buffer[0] = READ(0);
 
-	spi::transfer(AIR_SENSOR_CS_PIN, buffer, 1, buffer, 129, []() {
+	spi::transfer(SPI_AIR_SENSOR, buffer, 1, buffer, 129, []() {
 		usb::send(1, buffer + 1, 128, []() {
 			debug::toggleGreenLed();
 		});			
@@ -119,7 +119,7 @@ void onInitialized(BME680 &sensor) {
 
 void measure(BME680 &sensor) {
 	sensor.startMeasurement();
-	timer::start(timerId, timer::getTime() + 1s, [&sensor]() {read(sensor);});
+	timer::start(0, timer::now() + 1s, [&sensor]() {read(sensor);});
 	//debug::toggleGreenLed();
 }
 
@@ -127,7 +127,7 @@ void read(BME680 &sensor) {
 	//getRegisters();
 	sensor.readMeasurements([&sensor]() {getValues(sensor);});
 	
-	timer::start(timerId, timer::getTime() + 59s, [&sensor]() {measure(sensor);});
+	timer::start(0, timer::now() + 59s, [&sensor]() {measure(sensor);});
 }
 
 void getValues(BME680 &sensor) {
@@ -152,10 +152,10 @@ int main(void) {
 	usb::init(
 		[](usb::DescriptorType descriptorType) {
 			switch (descriptorType) {
-			case usb::DESCRIPTOR_DEVICE:
-				return Data(deviceDescriptor);
-			case usb::DESCRIPTOR_CONFIGURATION:
-				return Data(configurationDescriptor);
+			case usb::DescriptorType::DEVICE:
+				return Data(&deviceDescriptor);
+			case usb::DescriptorType::CONFIGURATION:
+				return Data(&configurationDescriptor);
 			default:
 				return Data();
 			}
@@ -165,11 +165,12 @@ int main(void) {
 			usb::enableEndpoints(1 | (1 << 1), 1); 			
 		
 			//getRegisters();
+		},
+		[](uint8_t bRequest, uint16_t wValue, uint16_t wIndex) {
+			return false;
 		});
 	debug::init();	
 	
-	timerId = timer::allocate();
-
 	// test raw values
 	//getId();
 	

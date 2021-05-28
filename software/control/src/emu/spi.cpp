@@ -1,5 +1,8 @@
 #include <spi.hpp>
 #include <emu/loop.hpp>
+#include <util.hpp>
+#include <appConfig.hpp>
+#include <sysConfig.hpp>
 #include <iostream>
 
 
@@ -55,10 +58,12 @@ void init() {
 	setTemperature(20.0f);
 }
 
-bool transfer(int csPin, uint8_t const *writeData, int writeLength, uint8_t *readData, int readLength,
+bool transfer(int index, uint8_t const *writeData, int writeLength, uint8_t *readData, int readLength,
 	std::function<void ()> const &onTransferred)
 {
-	if (csPin == AIR_SENSOR_CS_PIN) {
+	assert(uint(index) < array::size(SPI_CS_PINS));
+
+	if (index == SPI_AIR_SENSOR) {
 		if (writeData[0] & 0x80) {
 			// read
 			int addr = writeData[0] & 0x7f;

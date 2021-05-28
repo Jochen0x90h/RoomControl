@@ -29,14 +29,14 @@ optional<float> parseFloat(String str);
 int toString(uint32_t value, char *str, int length, int digitCount = 1);
 
 /**
- * Convert a 32 bit unsigned integer to hex string
+ * Convert a 64 bit unsigned integer to hex string
  * @param value value to convert
  * @param str string buffer to convert into
  * @param length length of string buffer
  * @param digitCount number of hex digits to convert
  * @return actual length of string
 */
-int hexToString(uint32_t value, char *str, int length, int digitCount);
+int hexToString(uint64_t value, char *str, int length, int digitCount);
 
 /**
  * Convert a float to string

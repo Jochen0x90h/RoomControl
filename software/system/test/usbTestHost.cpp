@@ -1,3 +1,4 @@
+#include <usbDefs.hpp>
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
@@ -8,16 +9,8 @@
 // flash usbTest onto the device, then run usbTestHost
 
 
-// transfer direction
-enum UsbDirection {
-	USB_OUT = 0, // to device
-	USB_IN = 0x80 // to host
-};
-
-
 // https://github.com/libusb/libusb/blob/master/examples/listdevs.c
-static void printDevices(libusb_device **devs)
-{
+static void printDevices(libusb_device **devs) {
 	libusb_device *dev;
 	int i = 0, j = 0;
 	uint8_t path[8]; 
@@ -46,8 +39,7 @@ static void printDevices(libusb_device **devs)
 }
 
 // https://github.com/libusb/libusb/blob/master/examples/testlibusb.c
-static int printDevice(libusb_device *dev, int level)
-{
+static int printDevice(libusb_device *dev) {
 	libusb_device_descriptor desc;
 	libusb_device_handle *handle = NULL;
 	unsigned char string[256];
@@ -141,107 +133,153 @@ static int printDevice(libusb_device *dev, int level)
 	return 0;
 }
 
+// vendor specific control request
+enum class Request : uint8_t {
+	RED = 0,
+	GREEN = 1,
+	BLUE = 2
+};
+
+// sent vendor specific control request to usb device
+int controlOut(libusb_device_handle *handle, Request request, uint16_t wValue, uint16_t wIndex) {
+	return libusb_control_transfer(handle,
+		usb::OUT | usb::REQUEST_TYPE_VENDOR | usb::RECIPIENT_INTERFACE,
+		uint8_t(request),
+		wValue,
+		wIndex,
+		nullptr,
+		0,
+		1000);
+}
+
+// print test status
 void printStatus(char const* message, bool status) {
 	printf("%s: %s\n", message, status ? "ok" : "error");
 }
 
 int main(void) {
-	libusb_device **devs;
-	int r;
-	ssize_t cnt;
-
-	r = libusb_init(NULL);
+	int r = libusb_init(NULL);
 	if (r < 0)
 		return r;
 
-	cnt = libusb_get_device_list(NULL, &devs);
-	if (cnt < 0){
+	// get device list
+	libusb_device **devs;
+	ssize_t cnt = libusb_get_device_list(NULL, &devs);
+	if (cnt < 0) {
 		libusb_exit(NULL);
 		return (int) cnt;
 	}
-
+/*
 	// print list of devices
 	printDevices(devs);
-
 	for (int i = 0; devs[i]; ++i) {
-		printDevice(devs[i], 0);
+		printDevice(devs[i]);
 	}
-
-
+*/
+	// iterate over devices
 	for (int i = 0; devs[i]; ++i) {
 		libusb_device *dev = devs[i];
+
+		// get device descriptor
 		libusb_device_descriptor desc;
-
 		int ret = libusb_get_device_descriptor(dev, &desc);
-		if (ret < 0) {
-			fprintf(stderr, "failed to get device descriptor");
-			return -1;
+		if (ret != LIBUSB_SUCCESS) {
+			fprintf(stderr, "get device descriptor error: %d\n", ret);
+			continue;
 		}
-		if (desc.idVendor == 0x1915 && desc.idProduct == 0x1337) {
-			libusb_device_handle *handle;
-			ret = libusb_open(dev, &handle);
-			if (ret == LIBUSB_SUCCESS) {
+		
+		// check vendor/product
+		if (desc.idVendor != 0x1915 && desc.idProduct != 0x1337)
+			continue;
 
-				// set configuration (reset alt_setting, reset toggles)
-				libusb_set_configuration(handle, 1);
+		// print device
+		//printDevice(devs[i]);
 
-				// claim interface with bInterfaceNumber = 0
-				ret = libusb_claim_interface(handle, 0);
-				printf("claim interface %d\n", ret);
+		// protocol: 0: binary, 1: text
+		bool text = desc.bDeviceProtocol == 1;
 
-				//ret = libusb_set_interface_alt_setting(handle, 0, 0);
-				//printf("set alternate setting %d\n", ret);
+		// open device
+		libusb_device_handle *handle;
+		ret = libusb_open(dev, &handle);
+		if (ret != LIBUSB_SUCCESS) {
+			fprintf(stderr, "open error: %d\n", ret);
+			continue;
+		}
+			
+		// set configuration (reset alt_setting, reset toggles)
+		ret = libusb_set_configuration(handle, 1);
+		if (ret != LIBUSB_SUCCESS) {
+			fprintf(stderr, "set configuration error: %d\n", ret);
+			continue;
+		}
 
-				// loop
-				uint8_t data[128] = {};
-				int sendLength = 0;
-				int transferred;
-				bool allOk = true;
-				while (true) {
-					printf("length: %d\n", sendLength);
+		// claim interface with bInterfaceNumber = 0
+		ret = libusb_claim_interface(handle, 0);
+		if (ret != LIBUSB_SUCCESS) {
+			fprintf(stderr, "claim interface error: %d\n", ret);
+			continue;
+		}
 
-					// send to device
-					for (int i = 0; i < sendLength; ++i) {
-						data[i] = sendLength + i;
-					}
-					ret = libusb_bulk_transfer(handle, USB_OUT | 2, data, sendLength, &transferred, 10000);
-					if (ret == LIBUSB_ERROR_TIMEOUT)
-						printf("send timeout!\n");
-					printStatus("sent", ret == 0 && transferred == sendLength);
-					allOk &= ret == 0 && transferred == sendLength;
-					
-					// send zero length packet to indicate that transfer is complete
-					if (sendLength > 0 && (sendLength & 63) == 0)
-						libusb_bulk_transfer(handle, USB_OUT | 2, data, 0, &transferred, 1000);
+		//ret = libusb_set_interface_alt_setting(handle, 0, 0);
+		//printf("set alternate setting %d\n", ret);
 
-					// receive from device (we get back the same data that we sent)
-					ret = libusb_bulk_transfer(handle, USB_IN | 1, data, 128, &transferred, 10000);
-					if (ret == LIBUSB_ERROR_TIMEOUT)
-						printf("receive timeout!\n");
-					printStatus("received", ret == 0 && transferred == sendLength);
-					allOk &= ret == 0 && transferred == sendLength;
 
-					// check received data
-					bool ok = true;
-					for (int i = 0; i < transferred; ++i) {
-						if (data[i] != transferred + i)
-							ok = false;
-					}
-					printStatus("data", ok);
-					allOk &= ok;
+		// test control request
+		ret = controlOut(handle, Request::RED, 1, 0);
+		ret = controlOut(handle, Request::GREEN, 0, 1);
+		ret = controlOut(handle, Request::RED, 0, 0);
+		ret = controlOut(handle, Request::GREEN, 0, 0);
+		ret = controlOut(handle, Request::BLUE, 5, 5);
+		ret = controlOut(handle, Request::BLUE, 0, 256);
 
-					printStatus("all", allOk);
+		
+		// loop
+		uint8_t data[128] = {};
+		int sendLength = 0;
+		int transferred;
+		bool allOk = true;
+		while (true) {
+			printf("length: %d\n", sendLength);
 
-					usleep(1000000);
-					sendLength = (sendLength + 5) % 129;
-				}
+			// send to device
+			for (int i = 0; i < sendLength; ++i) {
+				data[i] = sendLength + i;
 			}
+			ret = libusb_bulk_transfer(handle, 1 | usb::OUT, data, sendLength, &transferred, 10000);
+			if (ret == LIBUSB_ERROR_TIMEOUT)
+				printf("send timeout!\n");
+			printStatus("sent", ret == 0 && transferred == sendLength);
+			allOk &= ret == 0 && transferred == sendLength;
+			
+			// send zero length packet to indicate that transfer is complete if length is multiple of 64
+			if (sendLength > 0 && (sendLength & 63) == 0)
+				libusb_bulk_transfer(handle, 1 | usb::OUT, data, 0, &transferred, 1000);
+
+			// receive from device (we get back the same data that we sent)
+			ret = libusb_bulk_transfer(handle, 1 | usb::IN, data, 128, &transferred, 10000);
+			if (ret == LIBUSB_ERROR_TIMEOUT)
+				printf("receive timeout!\n");
+			printStatus("received", ret == 0 && transferred == sendLength);
+			allOk &= ret == 0 && transferred == sendLength;
+
+			// check received data
+			bool ok = true;
+			for (int i = 0; i < transferred; ++i) {
+				if (data[i] != transferred + i)
+					ok = false;
+			}
+			printStatus("data", ok);
+			allOk &= ok;
+
+			printStatus("all", allOk);
+
+			usleep(1000000);
+			sendLength = (sendLength + 5) % 129;
 		}
+		break;
 	}
 
-
 	libusb_free_device_list(devs, 1);
-
 	libusb_exit(NULL);
 	return 0;
 }

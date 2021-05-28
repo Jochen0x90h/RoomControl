@@ -3,6 +3,10 @@
 #include "global.hpp"
 
 
+/*
+	resources:
+	SPIM3
+*/
 namespace spi {
 
 // queue of pending transfers
@@ -99,15 +103,17 @@ void startTransfer() {
 	NRF_SPIM3->TASKS_START = Trigger;
 }
 
-bool transfer(int csPin, uint8_t const *writeData, int writeLength, uint8_t *readData, int readLength,
+bool transfer(int index, uint8_t const *writeData, int writeLength, uint8_t *readData, int readLength,
 	std::function<void ()> const &onTransferred)
 {
+	assert(uint(index) < array::size(SPI_CS_PINS));
+
 	// check if transfer queue is full
 	if (spi::transferQueue.full())
 		return false;
 
 	Transfer &transfer = spi::transferQueue.add();
-	transfer.csPin = csPin;
+	transfer.csPin = SPI_CS_PINS[index];
 	transfer.writeData = intptr_t(writeData);
 	transfer.writeLength = writeLength;
 	transfer.readData = intptr_t(readData);

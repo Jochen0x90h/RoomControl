@@ -3,7 +3,7 @@
 #include "Network.hpp"
 #include "timer.hpp"
 #include <String.hpp>
-#include <config.hpp>
+#include <appConfig.hpp>
 
 
 // MQTT-SN helper functions
@@ -408,7 +408,8 @@ private:
 	Message removeSentMessage(uint16_t msgId, mqttsn::MessageType type);
 	
 	
-	uint8_t timerId;
+	// timer index
+	static int const timerIndex = TIMER_MQTTSN_CLIENT;
 	
 	// state
 	State state = State::STOPPED;

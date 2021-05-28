@@ -301,8 +301,9 @@ private:
 	void sendDisconnect(uint16_t clientId);
 	
 
-	uint8_t timerId;
-	
+	// timer index
+	static int const timerIndex = TIMER_MQTTSN_BROKER;
+
 	// clients
 	ClientInfo clients[MAX_CLIENT_COUNT];
 	

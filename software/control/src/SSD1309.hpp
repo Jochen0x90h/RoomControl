@@ -1,7 +1,7 @@
 #pragma once
 
 #include <Bitmap.hpp>
-#include <config.hpp>
+#include <appConfig.hpp>
 #include <functional>
 
 
@@ -71,6 +71,7 @@ protected:
 	void init11();
 	void init12();
 	void init13();
+
 
 	uint8_t sendCount = 0;
 	bool enabled = false;

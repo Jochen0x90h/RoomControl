@@ -34,9 +34,7 @@ constexpr int SPI_TRANSFER_QUEUE_LENGTH = 4;
 constexpr int SPI_SCK_PIN = PORT0 | 19;
 constexpr int SPI_MOSI_PIN = PORT0 | 20;
 constexpr int SPI_MISO_PIN = PORT0 | 21; // also connected to display D/C#
-constexpr int SPI_CS1_PIN = PORT0 | 2;
-constexpr int SPI_CS2_PIN = PORT0 | 3;
-constexpr int SPI_CS_PINS[2] = {SPI_CS1_PIN, SPI_CS2_PIN};
+constexpr int SPI_CS_PINS[2] = {PORT0 | 2, PORT0 | 3};
 
 
 // bus

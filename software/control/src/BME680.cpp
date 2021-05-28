@@ -1,6 +1,6 @@
 #include "BME680.hpp"
 #include <spi.hpp>
-#include <config.hpp>
+#include <appConfig.hpp>
 #include <assert.hpp>
 
 
@@ -18,7 +18,7 @@ BME680::BME680(std::function<void ()> const &onInitialized)
 {
 	// read chip id
 	this->buffer[0] = READ(0xD0);
-	this->busy = spi::transfer(AIR_SENSOR_CS_PIN, this->buffer, 1, this->buffer, 2, [this]() {init1();});
+	this->busy = spi::transfer(this->spiIndex, this->buffer, 1, this->buffer, 2, [this]() {init1();});
 }
 
 BME680::~BME680() {
@@ -74,7 +74,7 @@ void BME680::setParameters(int temperatureOversampling, int pressureOversampling
 
 	// transfer
 	this->onReady = onReady;
-	this->busy = spi::transfer(AIR_SENSOR_CS_PIN, this->buffer, i, nullptr, 0, [this]() {
+	this->busy = spi::transfer(this->spiIndex, this->buffer, i, nullptr, 0, [this]() {
 		this->busy = false;
 		this->onReady();
 	});
@@ -86,7 +86,7 @@ void BME680::startMeasurement() {
 	this->buffer[1] = this->_74 | 1; // forced mode
 
 	// transfer
-	this->busy = spi::transfer(AIR_SENSOR_CS_PIN, this->buffer, 2, nullptr, 0, [this]() {
+	this->busy = spi::transfer(this->spiIndex, this->buffer, 2, nullptr, 0, [this]() {
 		this->busy = false;
 		//this->onReady();
 	});
@@ -97,7 +97,7 @@ void BME680::readMeasurements(std::function<void ()> const &onReady) {
 	this->buffer[0] = READ(0x1D);
 	
 	this->onReady = onReady;
-	this->busy = spi::transfer(AIR_SENSOR_CS_PIN, this->buffer, 1, this->buffer, 16, [this]() {
+	this->busy = spi::transfer(this->spiIndex, this->buffer, 1, this->buffer, 16, [this]() {
 		onMeasurementsReady();
 	});
 }
@@ -107,14 +107,14 @@ void BME680::init1() {
 	if (this->buffer[1] == CHIP_ID) {
 		// read calibration parameters 1
 		this->buffer[0] = READ(0x8A);
-		spi::transfer(AIR_SENSOR_CS_PIN, this->buffer, 1, &this->par.cmd1, 1 + 0xA1 - 0x8A, [this]() {init2();});
+		spi::transfer(this->spiIndex, this->buffer, 1, &this->par.cmd1, 1 + 0xA1 - 0x8A, [this]() {init2();});
 	}
 }
 
 void BME680::init2() {
 	// read calibration parameters 2
 	this->buffer[0] = READ(0xE1);
-	spi::transfer(AIR_SENSOR_CS_PIN, this->buffer, 1, &this->par.cmd2, 1 + 0xEF - 0xE1, [this]() {init3();});
+	spi::transfer(this->spiIndex, this->buffer, 1, &this->par.cmd2, 1 + 0xEF - 0xE1, [this]() {init3();});
 }
 
 void BME680::init3() {
@@ -126,13 +126,13 @@ void BME680::init3() {
 	// switch register bank
 	this->buffer[0] = WRITE(0x73);
 	this->buffer[1] = 1 << 4;
-	spi::transfer(AIR_SENSOR_CS_PIN, this->buffer, 2, nullptr, 0, [this]() {init4();});
+	spi::transfer(this->spiIndex, this->buffer, 2, nullptr, 0, [this]() {init4();});
 }
 
 void BME680::init4() {
 	// read res_heat_val, res_reat_range and range_switching_error
 	this->buffer[0] = READ(0x00);
-	spi::transfer(AIR_SENSOR_CS_PIN, this->buffer, 1, this->buffer, 6, [this]() {init5();});
+	spi::transfer(this->spiIndex, this->buffer, 1, this->buffer, 6, [this]() {init5();});
 }
 
 void BME680::init5() {
