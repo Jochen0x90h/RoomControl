@@ -4,22 +4,26 @@
 #include <loop.hpp>
 
 
-uint8_t displayCommand[] = {0x55, 0x55};
-uint8_t displayData[] = {0x33, 0x33};
+uint8_t displayData[] = {
+	0x00, 0xff,
+	0x0f, 0x33, 0x55};
 
-void writeDisplay() {
-
-	display::send(displayCommand, 1, 1, []() {});
-	display::send(displayData, 1, 1, []() {writeDisplay();});
+Coroutine writeDisplay() {
+	while (true) {
+		co_await display::send(2, 3, displayData);
+	}
 }
 
 uint8_t spiData[] = {0x0f, 0x7f, 0x00};
 
-void transferSpi() {
-	spi::transfer(0, spiData, 3, nullptr, 0, []() {transferSpi();});
+Coroutine transferSpi() {
+	while (true) {
+		co_await spi::transfer(0, 3, spiData, 0, nullptr);
+	}
 }
 
 int main(void) {
+	loop::init();
 	spi::init();
 	display::init();
 	debug::init();
@@ -27,5 +31,5 @@ int main(void) {
 	writeDisplay();
 	transferSpi();
 
-	loop::run();		
+	loop::run();
 }

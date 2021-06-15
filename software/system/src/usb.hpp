@@ -1,12 +1,27 @@
 #pragma once
 
 #include "usbDefs.hpp"
+#include <Coroutine.hpp>
 #include <Data.hpp>
 #include <cstdint>
 #include <functional>
 
 
 namespace usb {
+
+// Internal helper: Stores the parameters and a reference to the result value in the awaitable during co_await
+struct ReceiveParameters {
+	int length;
+	int &receivedLength;
+	void *data;
+};
+
+// Internal helper: Stores the parameters in the awaitable during co_await
+struct SendParameters {
+	int length;
+	void const *data;
+};
+
 
 /**
  * Initialize USB
@@ -21,26 +36,26 @@ void init(
 
 /**
  * Enable endpoints. Can be done in onSetConfiguration. Endpoint 0 should stay enabled
+ * @param inFlags, an enabled flag for each in endpoint
+ * @param outFlags, an enabled flag for each out endpoint
  */
 void enableEndpoints(uint8_t inFlags, uint8_t outFlags);
 
 /**
- * Send data over an endpoint (IN transfer)
- * @param endpont endpoint index (1-7)
- * @param data data to send, must be in ram and 32 bit aligned
- * @param length data length
- * @param onSent called when finished sending
- * @return true on success, false if busy with previous send
+ * Suspend execution using co_await until data is received from an endpoint (IN transfer)
+ * @param index endpoint index (1-7)
+ * @param length length of data buffer
+ * @param receivedLength number of bytes actually received
+ * @param data data to receive, must be in ram and 32 bit aligned
  */
-bool send(int endpoint, void const *data, int length, std::function<void ()> const &onSent);
+Awaitable<ReceiveParameters> receive(int index, int length, int &receivedLength, void *data);
 
 /**
- * Receive data over an endpoint (OUT transfer)
- * @param endpont endpoint index (1-7)
- * @param data data to receive, must be in ram and 32 bit aligned
- * @param maxLength maximum length of data to receive
- * @param onReceived called when data was received
+ * Suspend execution using co_await until data is sent over an endpoint (IN transfer)
+ * @param index endpoint index (1-7)
+ * @param length data length
+ * @param data data to send, must be in ram and 32 bit aligned
  */
-bool receive(int endpoint, void *data, int maxLength, std::function<void (int)> const &onReceived);
+Awaitable<SendParameters> send(int index, int length, void const *data);
 
 } // namespace usb

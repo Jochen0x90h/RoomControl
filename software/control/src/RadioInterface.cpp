@@ -1,60 +1,60 @@
 #include "RadioInterface.hpp"
-#include <util.hpp>
-#include <iostream>
 #include <radio.hpp>
 #include <rng.hpp>
+#include <timer.hpp>
+#include <crypt.hpp>
+#include <Nonce.hpp>
+#include <ieee.hpp>
+#include <zb.hpp>
+#include <gp.hpp>
+#include <util.hpp>
+#include <PacketReader.hpp>
+#include <PacketWriter.hpp>
+#include <iostream>
+
+
+using namespace zb;
+
+
+namespace SendFlags {
+	constexpr int BEACON = 1;
+	constexpr int LINK_STATUS = 2;
+}
 
 
 static AesKey const defaultAesKey = {{0x5a696742, 0x6565416c, 0x6c69616e, 0x63653039, 0x166d75b9, 0x730834d5, 0x1f6155bb, 0x7c046582, 0xe62066a9, 0x9528527c, 0x8a4907c7, 0xf64d6245, 0x018a08eb, 0x94a25a97, 0x1eeb5d50, 0xe8a63f15, 0x2dff5170, 0xb95d0be7, 0xa7b656b7, 0x4f1069a2, 0xf7066bf4, 0x4e5b6013, 0xe9ed36a4, 0xa6fd5f06, 0x83c904d0, 0xcd9264c3, 0x247f5267, 0x82820d61, 0xd01eebc3, 0x1d8c8f00, 0x39f3dd67, 0xbb71d006, 0xf36e8429, 0xeee20b29, 0xd711d64e, 0x6c600648, 0x3801d679, 0xd6e3dd50, 0x01f20b1e, 0x6d920d56, 0x41d66745, 0x9735ba15, 0x96c7b10b, 0xfb55bc5d}};
 
-RadioInterface::RadioInterface(std::function<void (uint8_t, uint8_t const *, int)> const &onReceived)
-	: onReceived(onReceived)
+RadioInterface::RadioInterface(AesKey const &networkKey, std::function<void (uint8_t, uint8_t const *, int)> const &onReceived)
+	: networkKey(networkKey), onReceived(onReceived), panId(0xffff)
 {
-	// check if there is a coordinator
-	if (this->coordinator.empty()) {
-		Coordinator coordinator;
-
-		// generate random long address
-		//coordinator.longAddress = rng::get64();
-		coordinator.longAddress = UINT64_C(0x00124b00214f3c55);
-
-		// todo: scan for free pan
-		coordinator.pan = 0x1a62;
-		
-		this->coordinator.write(0, &coordinator);
-	}
-	Coordinator const &coordinator = *this->coordinator[0].flash;
-	this->panId = coordinator.pan;
-
-	// set long address of coordinator
-	radio::setLongAddress(coordinator.longAddress);
-
-	
-	
-	// set pan of coordinator
-	radio::setPan(this->radioIndex, this->panId);
+	// note: longAddress, panId and networkKey are not valid in the constructor yet
 
 	// set short address of coordinator
 	radio::setShortAddress(this->radioIndex, 0x0000);
 
 	// filter packets with the coordinator as destination (and broadcast pan/address)
-	radio::setFlags(this->radioIndex, radio::DEST_SHORT | radio::HANDLE_ACK);
+	radio::setFlags(this->radioIndex, radio::ContextFlags::PASS_DEST_SHORT | radio::ContextFlags::HANDLE_ACK);
+
+	// start coroutines
+	receive();
+	sendBeacon();
+	sendLinkStatus();
 	
-	// set receive handler
-	radio::setReceiveHandler(this->radioIndex, [this](uint8_t *data) {
-		int length = data[0] - 2; // cut off crc
-		onRx(data + 1, length);
-	});
+this->commissioning = true;
 }
 
 RadioInterface::~RadioInterface() {
 }
 
+void RadioInterface::setPan(uint16_t panId) {
+	this->panId = panId;
+	
+	// set pan of coordinator
+	radio::setPan(this->radioIndex, panId);
+}
+
 void RadioInterface::setCommissioning(bool enabled) {
 	this->commissioning = enabled && this->devices.size() < MAX_DEVICE_COUNT;
-	if (this->commissioning) {
-		
-	}
 }
 
 int RadioInterface::getDeviceCount() {
@@ -124,214 +124,136 @@ void RadioInterface::unsubscribe(uint8_t &endpointId, DeviceId deviceId, uint8_t
 void RadioInterface::send(uint8_t endpointId, uint8_t const *data, int length) {
 }
 
-void RadioInterface::onRx(uint8_t *data, int length) {
-	uint8_t *d = data;
-	uint8_t const *end = data + length;
 
-	// ieee 802.15.4 frame control
-	uint8_t const *mac = d;
-	radio::FrameType frameType = radio::FrameType(d[0] & 7);
-	bool panIdCompression = (mac[0] & 0x40) != 0;
-	radio::AddressingMode destinationAddressingMode = radio::AddressingMode((d[1] >> 2) & 3);
-	radio::AddressingMode sourceAddressingMode = radio::AddressingMode(mac[1] >> 6);
-	d += 2;
+Coroutine RadioInterface::receive() {
+	while (true) {
+		radio::Packet packet;
+		co_await radio::receive(this->radioIndex, packet);
+		PacketReader d(packet);
+		
+		// ieee 802.15.4 mac
+		uint8_t const *mac = d.current;
 
-	// the radio filter flags ensure that a sequence number is present
-	uint8_t sequenceNumber = d[0];
-	++d;
-	
-	// the radio filter flags ensure that a destination pan id is present that is either broadcast or this->panId
-	uint16_t destinationPanId = d[0] | (d[1] << 8);
-	d += 2;
-	bool destinationBroadcast = destinationPanId == 0xffff;
-	
-	// the radio filter flags ensure that a destination address is present hat is either boradcast or our address
-	if (destinationAddressingMode == radio::AddressingMode::SHORT) {
-		uint16_t destAddress = d[0] | (d[1] << 8);
-		d += 2;
-		destinationBroadcast |= destAddress == 0xffff;
-	} else {
-		// long address is always our long address
-		d += 8;
-	}
+		// frame control
+		auto frameControl = d.enum16<ieee::FrameControl>();
 
-	if (sourceAddressingMode == radio::AddressingMode::NONE) {
-		// no source address
-		if (frameType == radio::FrameType::COMMAND) {
-			radio::Command command = radio::Command(d[0]);
-			if (command == radio::Command::BEACON_REQUEST) {
-				// handle beacon request by sending a beacon
-				onBeaconRequest();
-			}
-		} else if (frameType == radio::FrameType::DATA) {
-			// zigbee network layer
-			int protocolVersion = (d[0] >> 2) & 0xf;
-
-			// check for green power frame
-			if (protocolVersion == 3)
-				onGreenPower(mac, d, end);
-		}
-	} else if (sourceAddressingMode >= radio::AddressingMode::SHORT) {
-		// short or long source address
-
-		// get source pan id
-		uint16_t sourcePanId = destinationPanId;
-		if (!panIdCompression) {
-			sourcePanId = d[0] | (d[1] << 8);
-			d += 2;
+		// the radio filter flags ensure that a sequence number is present
+		uint8_t sequenceNumber = d.int8();
+		
+		// the radio filter flags ensure that a destination pan id is present that is either broadcast or this->panId
+		uint16_t destinationPanId = d.int16();
+		bool destinationBroadcast = destinationPanId == 0xffff;
+		
+		// the radio filter flags ensure that a destination address is present hat is either boradcast or our address
+		if ((frameControl & ieee::FrameControl::DESTINATION_ADDRESSING_LONG_FLAG) == 0) {
+			// short destination address
+			uint16_t destAddress = d.int16();
+			destinationBroadcast |= destAddress == 0xffff;
+		} else {
+			// long destination address is always our address
+			d.skip(8);
 		}
 
-		if (sourceAddressingMode == radio::AddressingMode::SHORT) {
-			// short source address
-			uint16_t sourceAddress = d[0] | (d[1] << 8);
-			d += 2;
-
-			if (frameType == radio::FrameType::DATA) {
-				// zigbee network layer
-				int protocolVersion = (d[0] >> 2) & 0xf;
-				if (protocolVersion == 2) {
-					// lookup device by short address
-				
+		auto frameType = frameControl & ieee::FrameControl::TYPE_MASK;
+		if ((frameControl & ieee::FrameControl::SOURCE_ADDRESSING_FLAG) == 0) {
+			// no source address
+			if (frameType == ieee::FrameControl::TYPE_COMMAND) {
+				auto command = d.enum8<ieee::Command>();
+				if (command == ieee::Command::BEACON_REQUEST) {
+					// handle beacon request by sending a beacon
+					this->beaconWait.resumeAll();
 				}
+			} else if (frameType == ieee::FrameControl::TYPE_DATA) {
+				// network layer: handle dependent on protocol version
+				auto version = d.peekEnum8<gp::NwkFrameControl>() & gp::NwkFrameControl::VERSION_MASK;
+				if (version == gp::NwkFrameControl::VERSION_3_GP)
+					handleGp(mac, d);
 			}
 		} else {
-			// long source address
-			uint32_t sourceL = d[0] | (d[1] << 8) | (d[2] << 16) | (d[3] << 24);
-			uint32_t sourceH = d[4] | (d[5] << 8) | (d[6] << 16) | (d[7] << 24);
-			uint64_t sourceAddress = (uint64_t(sourceH) << 32) | sourceL;
-			d += 8;
+			// short or long source address
 
-			if (frameType == radio::FrameType::COMMAND) {
-				radio::Command command = radio::Command(d[0]);
+			// get source pan id
+			uint16_t sourcePanId = destinationPanId;
+			if ((frameControl & ieee::FrameControl::PAN_ID_COMPRESSION) == 0) {
+				sourcePanId = d.int16();
+			}
 
-				// association request must be directed to us, no broadcast
-				if (command == radio::Command::ASSOCIATION_REQUEST && !destinationBroadcast)
-					onAssociationRequest();
-			} else if (frameType == radio::FrameType::DATA) {
-				// zigbee network layer
-				int protocolVersion = (d[0] >> 2) & 0xf;
-				if (protocolVersion == 2) {
-					// lookup device by long address
-					
+			void* device = nullptr;
+			if ((frameControl & ieee::FrameControl::SOURCE_ADDRESSING_LONG_FLAG) == 0) {
+				// short source address
+				uint16_t sourceAddress = d.int16();
+
+				// try to lookup device by short address
+
+			} else {
+				// long source address
+				uint64_t sourceAddress = d.int64();
+
+				// try to lookup device by long address
+
+				// check for association request if the device was not found
+				if (!device && this->commissioning && frameType == ieee::FrameControl::TYPE_COMMAND) {
+					auto command = d.enum8<ieee::Command>();
+
+					// check for association request with no broadcast
+					if (!destinationBroadcast && command == ieee::Command::ASSOCIATION_REQUEST)
+						handleAssociationRequest(sourceAddress, d);
+				}
+			}
+
+			// check if the device was found
+			if (device) {
+				if (frameType == ieee::FrameControl::TYPE_COMMAND) {
+					auto command = d.enum8<ieee::Command>();
+
+					// check for data request with no broadcast
+					if (!destinationBroadcast) {
+						if (command == ieee::Command::DATA_REQUEST)
+							;//device->onDataRequest();
+					}
+				} else if (frameType == ieee::FrameControl::TYPE_DATA) {
+					// network layer: handle dependent on protocol version
+					auto version = d.peekEnum8<gp::NwkFrameControl>() & gp::NwkFrameControl::VERSION_MASK;
+					if (version == gp::NwkFrameControl::VERSION_2) {
+
+					}
 				}
 			}
 		}
 	}
 }
 
-void RadioInterface::onBeaconRequest() {
-	this->buffer[0] = 26 + 2; // for crc
-	uint8_t *d = this->buffer + 1;
+void RadioInterface::handleAssociationRequest(uint64_t sourceAddress, PacketReader &d) {
+	auto associationRequest = d.enum8<ieee::AssociationRequest>();
 	
-	// ieee 802.15.4 frame control
-	d[0] = 0;
-	d[1] = uint8_t(radio::AddressingMode::SHORT) << 6;
-	d += 2;
-	
-	// sequence number
-	d[0] = this->macSequenceNumber++;
-	++d;
-	
-	// source pan
-	d[0] = this->panId;
-	d[1] = this->panId >> 8;
-	d += 2;
-	
-	// source address
-	d[0] = 0;
-	d[1] = 0;
-	d += 2;
-	
-	// superframe specification
-	// beacon interval, superframe interval
-	d[0] = 0x0f | 0xf0;
-	// final cap slot, battery extension, pan coordinator, association permit
-	d[1] = 0x0f | 0 | 0x40 | (this->commissioning ? 0x80 : 0);
-	d += 2;
-	
-	// gts
-	d[0] = 0;
-	++d;
-	
-	// pending addresses, short and long
-	d[0] = 0x00;
-	++d;
-	
-	// zigbee beacon
-	
-	// protocol id
-	d[0] = 0;
-	++d;
-	
-	// stack profile
-	// zigbee pro, protocol version
-	d[0] = 0x02 | (2 << 4);
-	// router capacity, device depth, end device capacity
-	d[1] = 0 | (0 << 3) | 0x80;
-	d += 2;
-	
-	// extended pan id
-	array::fill(d, d + 8, 0xdd);
-	d += 8;
-	
-	// tx offset
-	array::fill(d, d + 3, 0xff);
-	d += 3;
-	
-	// update id
-	d[0] = 0;
-	++d;
-	
-	radio::send(this->radioIndex, this->buffer, [](bool success) {});
 }
 
-void RadioInterface::onAssociationRequest() {
-
-}
-
-void RadioInterface::onGreenPower(uint8_t const *mac, uint8_t *d, uint8_t const *end) {
+void RadioInterface::handleGp(uint8_t const *mac, PacketReader &d) {
 	// green power frame
 	// -----------------
 	// NWK header (frame control)
 	// Security header (0, 1 or 4 byte counter)
 	// NWK payload (optionally encrypted)
 	// MIC (0, 2 or 4 byte message integrity code)
-	uint8_t *frame = d;
+	uint8_t *frame = d.current;
 
 	// frame control
-	bool extendedFlag = (d[0] & 0x80) != 0;
-	++d;
+	auto frameControl = d.enum8<gp::NwkFrameControl>();
 
 	// extended frame conrol
-	int applicationId = 0;
-	int securityLevel = 0;
-	int securityKeyFlag = false;
-	if (extendedFlag) {
-		// application id
-		applicationId = d[0] & 3;
-		
-		// security level
-		// 0: none
-		// 1: 1 byte counter and 2 byte MIC
-		// 2: 4 byte counter + 4 byte MIC
-		// 3: encryption + 4 byte counter + 4 byte MIC
-		securityLevel = (d[0] >> 3) & 3;
-		
-		// security key
-		// 0: none
-		// 1: network key
-		securityKeyFlag = (d[0] & 0x20) != 0;
-		
-		++d;
-	}
+	gp::NwkExtendedFrameControl extendedFrameControl = gp::NwkExtendedFrameControl::NONE;
+	if ((frameControl & gp::NwkFrameControl::EXTENDED) != 0)
+		extendedFrameControl = d.enum8<gp::NwkExtendedFrameControl>();
+	auto securityLevel = extendedFrameControl & gp::NwkExtendedFrameControl::SECURITY_LEVEL_MASK;
 	
-	uint32_t deviceId = d[0] | (d[1] << 8) | (d[2] << 16) | (d[3] << 24);
-	//printf("deviceId: %08x\n", deviceId);
-	d += 4;
+	// device id
+	uint32_t deviceId = d.int32();
 
-	if (this->commissioning && securityLevel == 0 && d[0] == 0xe0) {
+	if (this->commissioning && securityLevel == gp::NwkExtendedFrameControl::SECURITY_LEVEL_NONE
+		&& d.peekEnum8<gp::Command>() == gp::Command::COMMISSIONING)
+	{
 		// commissioning
-		commission(deviceId, d + 1, end);
+		handleCommission(deviceId, d);
 		return;
 	}
 
@@ -341,7 +263,7 @@ void RadioInterface::onGreenPower(uint8_t const *mac, uint8_t *d, uint8_t const 
 			Device const &device = *e.flash;
 			DeviceState &state = *e.ram;
 						
-			if (securityLevel == 1) {
+			if (securityLevel == gp::NwkExtendedFrameControl::SECURITY_LEVEL_CNT8_MIC16) {
 				// security level 1: 1 byte counter, 2 byte mic
 
 				// security counter (use mac sequence number)
@@ -353,7 +275,7 @@ void RadioInterface::onGreenPower(uint8_t const *mac, uint8_t *d, uint8_t const 
 				// header starts at mac sequence number and includes also payload
 				uint8_t const *header = mac + 2;
 				int micLength = 2;
-				int headerLength = end - micLength - header;
+				int headerLength = d.end - micLength - header;
 				if (headerLength < 1)
 					return;
 					
@@ -364,13 +286,12 @@ void RadioInterface::onGreenPower(uint8_t const *mac, uint8_t *d, uint8_t const 
 				}
 				
 				// remove mic from end
-				end -= 2;
-			} else if (securityLevel >= 2) {
+				d.end -= micLength;
+			} else if (securityLevel >= gp::NwkExtendedFrameControl::SECURITY_LEVEL_CNT32_MIC32) {
 				// security levels 2 and 3: 4 byte counter, 4 byte mic
 				
 				// security counter
-				uint32_t counter = d[0] | (d[1] << 8) | (d[2] << 16) | (d[3] << 24);
-				d += 4;
+				uint32_t counter = d.int32();
 
 				// nonce
 				Nonce nonce(deviceId, counter);
@@ -378,8 +299,9 @@ void RadioInterface::onGreenPower(uint8_t const *mac, uint8_t *d, uint8_t const 
 				// header starts at frame (frameControl) and either includes payload (level 2) or not (level 3)
 				uint8_t *header = frame;
 				int micLength = 4;
-				int headerAndPayloadLength = end - micLength - header;
-				int headerLength = securityLevel == 2 ? headerAndPayloadLength : d - header;
+				int headerAndPayloadLength = d.end - micLength - header;
+				int headerLength = securityLevel == gp::NwkExtendedFrameControl::SECURITY_LEVEL_CNT32_MIC32
+					? headerAndPayloadLength : d.current - header;
 				if (headerLength < 1)
 					return;
 
@@ -393,15 +315,15 @@ void RadioInterface::onGreenPower(uint8_t const *mac, uint8_t *d, uint8_t const 
 				}
 
 				// remove mic from end
-				end -= 4;
+				d.end -= micLength;
 			}
 
 			switch (device.deviceType) {
 			case 0x02:
-				if (d < end) {
+				if (d.getRemaining() >= 1) {
 					int endpointIndex = -1;
 					uint8_t data = 0;
-					uint8_t command = d[0];
+					uint8_t command = d.int8();
 					switch (command) {
 					// A
 					case 0x14:
@@ -451,8 +373,8 @@ void RadioInterface::onGreenPower(uint8_t const *mac, uint8_t *d, uint8_t const 
 				}
 				break;
 			case 0x07:
-				if (d + 2 <= end) {
-					uint8_t buttons = d[1];
+				if (d.getRemaining() >= 2) {
+					uint8_t buttons = d.int8();
 					
 					uint8_t change = (buttons ^ state.state) & 0x0f;
 					
@@ -486,18 +408,20 @@ void RadioInterface::onGreenPower(uint8_t const *mac, uint8_t *d, uint8_t const 
 	}
 }
 
-void RadioInterface::commission(uint32_t deviceId, uint8_t *d, uint8_t const *end) {
+void RadioInterface::handleCommission(uint32_t deviceId, PacketReader& d) {
+	// remove commissioning command (0xe0)
+	d.int8();
+	
 	Device device;
 	device.deviceId = deviceId;
-	device.type = Device::GREEN_POWER;
+	device.type = Device::GP;
 	DeviceState deviceState = {};
 	
 	// A.4.2.1.1 Commissioning
 		
 	// device type
 	// 0x02: on/off switch
-	device.deviceType = d[0];
-	++d;
+	device.deviceType = d.int8();
 
 	device.endpointTypes[0] = EndpointType(0);
 	switch (device.deviceType) {
@@ -521,14 +445,12 @@ void RadioInterface::commission(uint32_t deviceId, uint8_t *d, uint8_t const *en
 	}
 	
 	// options
-	uint8_t options = d[0];
-	++d;
+	uint8_t options = d.int8();
 	bool incrementalCounterFlag = options & 1;
 	bool extendedFlag = options & 0x80;
 	
 	if (extendedFlag) {
-		uint8_t extendedOptions = d[0];
-		++d;
+		uint8_t extendedOptions = d.int8();
 
 		// security level for messages
 		// 0: none
@@ -550,7 +472,7 @@ void RadioInterface::commission(uint32_t deviceId, uint8_t *d, uint8_t const *en
 		bool counterFlag = extendedOptions & 0x80;
 	
 		if (keyFlag) {
-			uint8_t *key = d;
+			uint8_t *key = d.current;
 			if (keyEncryptedFlag) {
 				// decrypt key, Green Power A.1.5.3.3.3
 				
@@ -561,29 +483,29 @@ void RadioInterface::commission(uint32_t deviceId, uint8_t *d, uint8_t const *en
 				DataBuffer<4> header;
 				header.setLittleEndianInt32(0, deviceId);
 
-				if (!decrypt(key, nonce, header.data, 4, d, 16, 4, defaultAesKey)) {
+				if (!decrypt(key, nonce, header.data, 4, key, 16, 4, defaultAesKey)) {
 					//printf("error while decrypting key!\n");
 					return;
-				}				
+				}
 
 				// skip key and MIC
-				d += 16 + 4;
+				d.skip(16 + 4);
 			} else {
 				// skip key
-				d += 16;
+				d.skip(16);
 			}
 			
 			// set key for device
 			setKey(device.u.key, key);
 		}
 		if (counterFlag) {
-			deviceState.counter = d[0] | (d[1] << 8) | (d[2] << 16) | (d[3] << 24);
-			d += 4;
+			deviceState.counter = d.int32();
 			//printf("counter: %08x\n", counter);
 		}
 	}
 
-	if (d > end)
+	// check if we exceeded the end
+	if (d.getRemaining() < 0)
 		return;
 
 	// check if device already exists
@@ -599,16 +521,176 @@ void RadioInterface::commission(uint32_t deviceId, uint8_t *d, uint8_t const *en
 	this->devices.write(this->devices.size(), &device, &deviceState);
 }
 
+Coroutine RadioInterface::sendBeacon() {
+	uint8_t packet[32];
+	while (true) {
+		// wait until a beacon request was received
+		co_await this->beaconWait.wait();
+		
+		PacketWriter d(packet);
 
-// RadioInterface::Coordinator
+		// ieee 802.15.4 frame control
+		d.enum16(ieee::FrameControl::TYPE_BEACON
+			| ieee::FrameControl::SOURCE_ADDRESSING_SHORT);
 
-int RadioInterface::Coordinator::getFlashSize() const {
-	return sizeof(Coordinator);
+		// sequence number
+		d.int8(this->macSequenceNumber++);
+
+		// source pan
+		d.int16(this->panId);
+
+		// source address
+		d.int16(0x0000);
+
+		// superframe specification
+		d.int16(15 // beacon interval
+			| (15 << 4) // superframe interval
+			| (15 << 8) // final cap slot
+			| (0 << 12) // battery extension
+			| 0x4000 // pan coordinator
+			| (this->commissioning ? 0x8000 : 0)); // association permit
+
+		// gts
+		d.int8(0);
+
+		// pending addresses, short and long
+		d.int8(0x00);
+
+		// beacon
+
+		// protocol id
+		d.int8(0);
+
+		// stack profile
+		d.int16(2 // zb pro
+			| (2 << 4) // protocol version
+			| (0 << 10) // router capacity
+			| (0 << 11) // device depth (4 bit)
+			| 0x8000); // end device capacity
+
+		// extended pan id
+		d.int64(UINT64_C(0xdddddddddddddddd));
+
+		// tx offset
+		d.int16(0xffff);
+		d.int8(0xff);
+
+		// update id
+		d.int8(0);
+	
+		// send beacon
+		uint8_t result;
+		co_await radio::send(this->radioIndex, d.finish(), result);
+		
+		// "cool down" before a new beacon can be sent
+		co_await timer::delay(100ms);
+	}
 }
 
-int RadioInterface::Coordinator::getRamSize() const {
-	return sizeof(CoordinatorState);
-};
+Coroutine RadioInterface::sendLinkStatus() {
+	uint8_t packet[48];
+	while (true) {
+		// send link status every 15 seconds
+		co_await timer::delay(15s);
+
+		PacketWriter d(packet);
+
+		// ieee 802.15.4 frame control
+		d.enum16(ieee::FrameControl::TYPE_DATA
+			| ieee::FrameControl::PAN_ID_COMPRESSION
+			| ieee::FrameControl::DESTINATION_ADDRESSING_SHORT
+			| ieee::FrameControl::SOURCE_ADDRESSING_SHORT);
+		
+		// sequence number
+		d.int8(this->macSequenceNumber++);
+		
+		// destination pan
+		d.int16(this->panId);
+
+		// destination address (broadcast)
+		d.int16(0xffff);
+
+		// source address
+		d.int16(0x0000);
+
+
+		// header ("string a" for encryption)
+		uint8_t const *header = d.current;
+
+		// network layer frame control field
+		d.enum16(NwkFrameControl::TYPE_COMMAND
+			| NwkFrameControl::VERSION_2
+			| NwkFrameControl::DISCOVER_ROUTE_SUPPRESS
+			| NwkFrameControl::SECURITY
+			| NwkFrameControl::EXTENDED_SOURCE);
+
+		// destination
+		d.int16(0xfffc);
+		
+		// source
+		d.int16(0x0000);
+		
+		// radius
+		d.int8(1);
+		
+		// sequence number
+		d.int8(this->nwkSequenceNumber++);
+		
+		// extended source
+		d.int64(this->longAddress);
+
+		
+		// security control field
+		auto securityControl = SecurityControl::LEVEL_ENC_MIC32
+			| SecurityControl::KEY_NETWORK
+			| SecurityControl::EXTENDED_NONCE;
+		uint8_t *securityControlPtr = d.current;
+		d.enum8(securityControl);
+
+		// security counter
+		uint32_t securityCounter = this->securityCounter++;
+		d.int32(securityCounter);
+
+		// extended source
+		uint8_t const *extendedSource = d.current;
+		d.int64(this->longAddress);
+
+		// key sequence number
+		d.int8(0);
+
+		int headerLength = d.current - header;
+
+		
+		// message to encrypt
+		uint8_t *message = d.current;
+
+		// command frame
+		d.enum8(NwkCommand::LINK_STATUS);
+		d.int8(0x40 // last frame
+			| 0x20 // first frame
+			| 0); // link status count
+
+		// encrypt
+		int payloadLength = d.current - message;
+		int micLength = 4;
+		d.skip(micLength);
+
+		// nonce (4.5.2.2)
+		Nonce nonce(extendedSource, securityCounter, securityControl);
+
+		// encrypt in-place
+		encrypt(message, nonce, header, headerLength, message, payloadLength, micLength, this->networkKey);
+
+		//bool ok = decrypt(message, nonce, header, headerLength, message, payloadLength, micLength, this->networkKey);
+
+		// clear security level according to 4.3.1.1 step 8.
+		*securityControlPtr &= ~SecurityControl::LEVEL_MASK;
+
+		// send link status
+		uint8_t result;
+		co_await radio::send(this->radioIndex, d.finish(), result);
+	}
+}
 
 
 // RadioInterface::Device
@@ -616,9 +698,9 @@ int RadioInterface::Coordinator::getRamSize() const {
 int RadioInterface::Device::getFlashSize() const {
 	int o = offsetof(Device, u);
 	switch (this->type) {
-	case ZIGBEE:
+	case ZB:
 		return o + sizeof(u.shortAddress);
-	case GREEN_POWER:
+	case GP:
 		return o + sizeof(u.key);
 	}
 	return o;

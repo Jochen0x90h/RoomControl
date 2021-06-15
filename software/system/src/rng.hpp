@@ -18,11 +18,11 @@ void init();
 /**
  * Get an 8 bit random number
  */
-uint8_t get8();
+uint8_t int8();
 
 /**
  * Get a 64 bit random number
  */
-uint64_t get64();
+uint64_t int64();
 
 } // namespace rng

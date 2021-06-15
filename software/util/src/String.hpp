@@ -57,7 +57,7 @@ struct String {
 		: data(reinterpret_cast<char const*>(data)), length(length)
 	{}
 
-	bool empty() {return this->length <= 0;}
+	bool isEmpty() {return this->length <= 0;}
 	
 	String substring(int startIndex) {
 		return String(this->data + startIndex, max(this->length - startIndex, 0));

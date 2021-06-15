@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ClockTime.hpp"
+#include <Coroutine.hpp>
 #include <functional>
 
 
@@ -18,10 +19,8 @@ void init();
 ClockTime now();
 
 /**
- * Set callback that gets called once per second
- * @param index handler index (number of handlers defined by CALENDAR_SECOND_HANDLER_COUNT in sysConfig.hpp)
- * @param onSecond called when a second has elapsed, must not be null
+ * Suspend execution using co_await until next second tick
  */
-void setSecondHandler(int index, std::function<void ()> const &onSecond);
+Awaitable<> secondTick();
 
 } // namespace calendar

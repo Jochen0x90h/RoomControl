@@ -24,7 +24,7 @@ public:
 	 * Check if the queue is empty
 	 * @return true if queue is empty
 	 */
-	bool empty() const {return this->entryCount == 0;}
+	bool isEmpty() const {return this->entryCount == 0;}
 
 	/**
 	 * Check if the queue has space for a new element with given data length

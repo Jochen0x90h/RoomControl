@@ -94,7 +94,7 @@ public:
 		#endif
 	}
 
-	bool empty() {return this->index == 0;}
+	bool isEmpty() {return this->index == 0;}
 
 	/**
 	 * Remove last topic element (e.g. "foo/bar" -> "foo")

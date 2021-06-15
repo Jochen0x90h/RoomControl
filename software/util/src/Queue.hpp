@@ -21,22 +21,22 @@ public:
 	 * Check if the queue is empty
 	 * @return true if queue is empty
 	 */
-	bool empty() const {return this->c == 0;}
-	bool empty() const volatile {return this->c == 0;}
+	bool isEmpty() const {return this->c == 0;}
+	bool isEmpty() const volatile {return this->c == 0;}
 
 	/**
 	 * Check if the queue is full
 	 * @return true if queue is full
 	 */
-	bool full() const {return this->c >= N;}
-	bool full() const volatile {return this->c >= N;}
+	bool isFull() const {return this->c >= N;}
+	bool isFull() const volatile {return this->c >= N;}
 
 	/**
 	 * Get number of elements in queue
 	 * @return number of elements
 	 */
-	int count() const {return this->c;}
-	int count() const volatile {return this->c;}
+	int size() const {return this->c;}
+	int size() const volatile {return this->c;}
 
 	/**
 	 * Get the element at the tail of the queue
@@ -65,10 +65,23 @@ public:
 		int head = this->tail + this->c;
 		return const_cast<Element &>(this->elements[head >= N ? head - N : head]);
    }
+   
+	/**
+	 * Increment the head of the queue (use after head was written using getHead())
+	*/
+	void increment() {
+	   assert(this->c < N);
+	   ++this->c;
+	}
+	void increment() volatile {
+	   assert(this->c < N);
+	   ++this->c;
+	}
 
 	/**
-	* Add a new element to the head of the queue and return previous head
-	* @return previous head element of the queue
+	 * Add a new element to the head of the queue and return previous head.
+	 * Equivalent to head = queue.getHead(); queue.increment();
+	 * @return previous head element of the queue
 	*/
 	Element &add() {
 		assert(this->c < N);
@@ -80,21 +93,10 @@ public:
 		int head = this->tail + this->c++;
 		return const_cast<Element &>(this->elements[head >= N ? head - N : head]);
 	}
-	
-	/**
-	 * Increment the head of the queue (after the head was written using getHead())
-	 */
-	void increment() {
-		assert(this->c < N);
-		++this->c;
-	}
-	void increment() volatile {
-		assert(this->c < N);
-		++this->c;
-	}
 
 	/**
 	 * Remove the element at tail and make the next element the current element
+	 * A pointer to the tail element stays valid until the head is obtained and written to using getHead() or add()
 	 */
 	void remove() {
 		assert(this->c > 0);

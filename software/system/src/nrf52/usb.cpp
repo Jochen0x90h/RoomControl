@@ -22,27 +22,31 @@ void ep0Send(void const *data, int length) {
 	array::copy(ep0Buffer, ep0Buffer + l, d);
 	NRF_USBD->EPIN[0].PTR = intptr_t(ep0Buffer);
 	NRF_USBD->EPIN[0].MAXCNT = l;
-	NRF_USBD->TASKS_STARTEPIN[0] = Trigger;
-
 	ep0Data = d;
 	ep0SendLength = length;
+
+	NRF_USBD->TASKS_STARTEPIN[0] = Trigger;
 }
 
 // endpoints 1 - 7
 struct Endpoint {
-	int sendLength = 0;
-	std::function<void ()> onSent;
-
+	// receive
+	bool receiveBusy;
 	int maxReceiveLength;
 	int receiveLength = 0;
-	std::function<void (int)> onReceived;
+	CoList<ReceiveParameters> receiveWaitingList;
+
+	// send
+	bool sendBusy;
+	int sendLength = 0;
+	CoList<SendParameters> sendWaitingList;
 };
 
 Endpoint endpoints[USB_ENDPOINT_COUNT - 1];
 
 
 // event loop handler chain
-loop::Handler nextHandler;
+loop::Handler nextHandler = nullptr;
 void handle() {
 	if (isInterruptPending(USBD_IRQn)) {
 		if (NRF_USBD->EVENTS_USBEVENT) {
@@ -164,23 +168,41 @@ void handle() {
 		uint32_t EPDATASTATUS = NRF_USBD->EPDATASTATUS;
 		
 		// handle end of receive (OUT) DMA transfer
-		for (int endpoint = 1; endpoint < USB_ENDPOINT_COUNT; ++endpoint) {
-			if (NRF_USBD->EVENTS_ENDEPOUT[endpoint]) {
+		for (int index = 1; index < USB_ENDPOINT_COUNT; ++index) {
+			if (NRF_USBD->EVENTS_ENDEPOUT[index]) {
 				// clear pending interrupt flag at peripheral
-				NRF_USBD->EVENTS_ENDEPOUT[endpoint] = 0;
+				NRF_USBD->EVENTS_ENDEPOUT[index] = 0;
 	
-				Endpoint& ep = usb::endpoints[endpoint - 1];
+				auto& ep = usb::endpoints[index - 1];
 				
-				int receivedCount = NRF_USBD->EPOUT[endpoint].AMOUNT;
+				int receivedCount = NRF_USBD->EPOUT[index].AMOUNT;
 				ep.receiveLength -= receivedCount;
 				if (receivedCount == 64) {
 					// more to receive
-					NRF_USBD->EPOUT[endpoint].PTR += 64;
+					NRF_USBD->EPOUT[index].PTR += 64;
 				} else {
-					// finished
+					// finished: calculate length of received data
 					int length = ep.maxReceiveLength - ep.receiveLength;
-					ep.receiveLength = 0;
-					ep.onReceived(length);
+					
+					// resume first waiting coroutine
+					ep.receiveWaitingList.resumeFirst([length](ReceiveParameters p){
+						p.receivedLength = length;
+						return true;
+					});
+					
+					// check if there are more queued coroutines waiting for receive
+					ep.receiveBusy = ep.receiveWaitingList.resumeFirst([&ep, index](ReceiveParameters p) {
+						// set receive data
+						ep.maxReceiveLength = p.length;
+						ep.receiveLength = p.length;
+						NRF_USBD->EPOUT[index].PTR = intptr_t(p.data);
+					
+						// write to start receiving into intermediate buffer
+						NRF_USBD->SIZE.EPOUT[index] = 0;						
+
+						// don't resume yet
+						return false;						
+					});
 				}
 			}
 		}
@@ -191,39 +213,55 @@ void handle() {
 			NRF_USBD->EVENTS_EPDATA = 0;
 			NRF_USBD->EPDATASTATUS = EPDATASTATUS;
 			
-			for (int endpoint = 1; endpoint < USB_ENDPOINT_COUNT; ++endpoint) {
-				int inFlag = 1 << endpoint;
+			for (int index = 1; index < USB_ENDPOINT_COUNT; ++index) {
+				int inFlag = 1 << index;
 				int outFlag = inFlag << 16;
 				
 				if (EPDATASTATUS & inFlag) {
 					// finished send to host (IN)
-					Endpoint& ep = usb::endpoints[endpoint - 1];
+					auto& ep = usb::endpoints[index - 1];
 	
 					// check if more to send
-					int sentCount = NRF_USBD->EPIN[endpoint].AMOUNT;
+					int sentCount = NRF_USBD->EPIN[index].AMOUNT;
 					int length = ep.sendLength - sentCount;
 					ep.sendLength = length;
 					if (sentCount == 64) {
 						// more to send: Start DMA transfer from memory to internal buffer
-						NRF_USBD->EPIN[endpoint].PTR += 64;
-						NRF_USBD->EPIN[endpoint].MAXCNT = min(length, 64);
-						NRF_USBD->TASKS_STARTEPIN[endpoint] = Trigger;
+						NRF_USBD->EPIN[index].PTR += 64;
+						NRF_USBD->EPIN[index].MAXCNT = min(length, 64);
+						NRF_USBD->TASKS_STARTEPIN[index] = Trigger;
 					} else {
-						// finished
-						ep.onSent();
+						// finished: resume waiting coroutine
+						ep.sendWaitingList.resumeFirst([](SendParameters p) {
+							return true;
+						});
+						
+						// check if there are more queued coroutines waiting for send
+						ep.sendBusy = ep.sendWaitingList.resumeFirst([index, &ep](SendParameters p) {
+							// set send data
+							ep.sendLength = p.length;
+							NRF_USBD->EPIN[index].PTR = intptr_t(p.data);
+							NRF_USBD->EPIN[index].MAXCNT = min(p.length, 64);
+						
+							// start send
+							NRF_USBD->TASKS_STARTEPIN[index] = Trigger;
+							
+							// don't resume yet
+							return false;
+						});
 					}
 				}
 	
 				if (EPDATASTATUS & outFlag) {
 					// finished receive from host (OUT)
-					Endpoint& ep = usb::endpoints[endpoint - 1];
+					auto& ep = usb::endpoints[index - 1];
 	
 					// get length of data in internal buffer
-					int length = NRF_USBD->SIZE.EPOUT[endpoint];
+					int length = NRF_USBD->SIZE.EPOUT[index];
 	
 					// start DMA transfer of received data from internal buffer to memory
-					NRF_USBD->EPOUT[endpoint].MAXCNT = min(ep.receiveLength, length);
-					NRF_USBD->TASKS_STARTEPOUT[endpoint] = Trigger;
+					NRF_USBD->EPOUT[index].MAXCNT = min(ep.receiveLength, length);
+					NRF_USBD->TASKS_STARTEPOUT[index] = Trigger;
 				}
 			}		
 		}
@@ -274,36 +312,42 @@ void enableEndpoints(uint8_t inFlags, uint8_t outFlags) {
 	NRF_USBD->EPOUTEN = outFlags;
 }
 
-bool send(int endpoint, void const *data, int length, std::function<void ()> const &onSent) {
-	assert(endpoint >= 1 && endpoint < USB_ENDPOINT_COUNT);
-	Endpoint& ep = usb::endpoints[endpoint - 1];
-	if (ep.sendLength != 0)
-		return false;
-	ep.onSent = onSent;
+Awaitable<ReceiveParameters> receive(int index, int length, int &receivedLength, void *data) {
+	assert(index >= 1 && endpoint < USB_ENDPOINT_COUNT);
+	auto& ep = usb::endpoints[index - 1];
 	
-	NRF_USBD->EPIN[endpoint].PTR = intptr_t(data);
-	NRF_USBD->EPIN[endpoint].MAXCNT = min(length, 64);
-	NRF_USBD->TASKS_STARTEPIN[endpoint] = Trigger;
+	// check if usb receiver is idle
+	if (!ep.receiveBusy) {
+		// set receive data
+		ep.receiveBusy = true;
+		ep.maxReceiveLength = length;
+		ep.receiveLength = length;
+		NRF_USBD->EPOUT[index].PTR = intptr_t(data);
 	
-	ep.sendLength = length;
-	return true;
+		// write to start receiving into intermediate buffer
+		NRF_USBD->SIZE.EPOUT[index] = 0;
+	}
+
+	return {ep.receiveWaitingList, {length, receivedLength, data}};
 }
 
-bool receive(int endpoint, void *data, int maxLength, std::function<void (int)> const &onReceived) {
-	assert(endpoint >= 1 && endpoint < USB_ENDPOINT_COUNT);
-	Endpoint& ep = usb::endpoints[endpoint - 1];
-	if (ep.receiveLength != 0)
-		return false;
-	ep.onReceived = onReceived;
+Awaitable<SendParameters> send(int index, int length, void const *data) {
+	assert(index >= 1 && index < USB_ENDPOINT_COUNT);
+	auto& ep = usb::endpoints[index - 1];
+	
+	// check if usb sender is idle
+	if (!ep.sendBusy) {
+		// set send data
+		ep.sendBusy = true;
+		ep.sendLength = length;
+		NRF_USBD->EPIN[index].PTR = intptr_t(data);
+		NRF_USBD->EPIN[index].MAXCNT = min(length, 64);
+	
+		// start send
+		NRF_USBD->TASKS_STARTEPIN[index] = Trigger;
+	}
 
-	NRF_USBD->EPOUT[endpoint].PTR = intptr_t(data);
-
-	// write to start receiving into intermediate buffer
-	NRF_USBD->SIZE.EPOUT[endpoint] = 0;
-
-	ep.maxReceiveLength = maxLength;
-	ep.receiveLength = maxLength;
-	return true;
+	return {ep.sendWaitingList, {length, data}};
 }
 
 } // namespace usb

@@ -1,6 +1,7 @@
 #include <usb.hpp>
 #include <debug.hpp>
 #include <loop.hpp>
+#include <Coroutine.hpp>
 #include <util.hpp>
 
 
@@ -78,35 +79,29 @@ static const UsbConfiguration configurationDescriptor = {
 };
 
 
-uint8_t sendData[128] __attribute__((aligned(4)));
-uint8_t receiveData[128] __attribute__((aligned(4)));
 
+uint8_t buffer[128] __attribute__((aligned(4)));
 
-void receive() {
-	// wait until the host sends data
-	usb::receive(1, receiveData, array::size(receiveData), [](int length) {
-		//debug::toggleGreenLed();
+Coroutine echo() {
+	while (true) {
+		// receive data from host
+		int length;
+		co_await usb::receive(1, array::size(buffer), length, buffer);
 
 		// check received data
 		bool error = false;
 		for (int i = 0; i < length; ++i) {
-			if (receiveData[i] != length + i)
+			if (buffer[i] != length + i)
 				error = true;
 		}
 		if (error)
 			debug::setRedLed(true);
-
-		// send received data back to host
-		for (int i = 0; i < length; ++i) {
-			sendData[i] = receiveData[i];
-		}
-		usb::send(1, sendData, length, []() {
-			debug::toggleBlueLed();
-		});
 		
-		// receive from usb host again
-		receive();
-	});
+		// send data back to host
+		co_await usb::send(1, length, buffer);
+
+		debug::toggleBlueLed();
+	}
 }
 
 int main(void) {
@@ -127,7 +122,7 @@ int main(void) {
 			usb::enableEndpoints(1 | (1 << 1), 1 | (1 << 1)); 			
 		
 			// start to receive from usb host
-			receive();
+			echo();
 		},
 		[](uint8_t bRequest, uint16_t wValue, uint16_t wIndex) {
 			switch (Request(bRequest)) {

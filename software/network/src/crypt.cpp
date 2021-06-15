@@ -69,14 +69,27 @@ void encrypt(uint8_t *result, DataBuffer<13> const &nonce, uint8_t const *header
 	Xi.setBigEndianInt16(14, payloadLength);
 
 	// X1 = E(key, X0 ^ B0)
-	tc_aes_encrypt(Xi.data, Xi.data, &aesKey);
+	encrypt(Xi, Xi, aesKey);
 	
 	// X1 ^ B1
 	Xi.xorBigEndianInt16(0, headerLength);
 	Xi.xorData(2, header, headerLength);
+	header += 14;
+	headerLength -= 14;
 
 	// X2 = E(key, X1 ^ B1)
-	tc_aes_encrypt(Xi.data, Xi.data, &aesKey);
+	encrypt(Xi, Xi, aesKey);
+
+	// repeat for remainder of header
+	while (headerLength > 0) {
+		// Xi ^ Bi
+		Xi.xorData(0, header, headerLength);
+		header += 16;
+		headerLength -= 16;
+
+		// Xi+1 = E(key, Xi ^ Bi)
+		encrypt(Xi, Xi, aesKey);
+	}
 
 	uint8_t const *b = message;
 	int length = payloadLength;
@@ -119,7 +132,7 @@ bool decrypt(uint8_t *result, DataBuffer<13> const &nonce, uint8_t const *header
 		Xi.setBigEndianInt16(14, payloadLength);
 
 		// X1 = E(key, X0 ^ B0)
-		tc_aes_encrypt(Xi.data, Xi.data, &aesKey);
+		encrypt(Xi, Xi, aesKey);
 		
 		// X1 ^ B1
 		Xi.xorBigEndianInt16(0, headerLength);

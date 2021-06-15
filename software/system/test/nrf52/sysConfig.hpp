@@ -18,23 +18,14 @@ constexpr int FLASH_WRITE_ALIGN = 4;
 // timer
 // -----
 
-constexpr int TIMER_COUNT = 4;
+constexpr int TIMER_WAITING_COUNT = 4;
 
 
 // calendar
 // --------
 
+constexpr int CALENDAR_SECOND_WAITING_COUNT = 1;
 constexpr int CALENDAR_SECOND_HANDLER_COUNT = 1;
-
-
-// spi
-// ---
-
-constexpr int SPI_TRANSFER_QUEUE_LENGTH = 4;
-constexpr int SPI_SCK_PIN = PORT0 | 19;
-constexpr int SPI_MOSI_PIN = PORT0 | 20;
-constexpr int SPI_MISO_PIN = PORT0 | 21; // also connected to display D/C#
-constexpr int SPI_CS_PINS[2] = {PORT0 | 2, PORT0 | 3};
 
 
 // bus
@@ -48,27 +39,33 @@ constexpr int BUS_RX_PIN = PORT0 | 2;
 // -----
 
 constexpr int RADIO_CONTEXT_COUNT = 2;
+constexpr int RADIO_RECEIVE_QUEUE_LENGTH = 4;
 constexpr int RADIO_MAX_PAYLOAD_LENGTH = 125; // payload length without leading length byte and trailing crc
-constexpr int RADIO_RECEIVE_QUEUE_LENGTH = 2;
-constexpr int RADIO_SEND_QUEUE_LENGTH = 2;
-
-
-// usb
-// ---
-
-constexpr int USB_ENDPOINT_COUNT = 3;
 
 
 // poti
 // ----
+
 constexpr int POTI_A_PIN = PORT0 | 4;
 constexpr int POTI_B_PIN = PORT0 | 5;
 constexpr int BUTTON_PIN = PORT0 | 6;
 
 
+// spi
+// ---
+
+//constexpr int SPI_QUEUE_LENGTH = 2;
+//constexpr int SPI_CONTEXT_COUNT = 3;
+constexpr int SPI_CS_PINS[2] = {PORT0 | 2, PORT0 | 3};
+constexpr int SPI_SCK_PIN = PORT0 | 19;
+constexpr int SPI_MOSI_PIN = PORT0 | 20;
+constexpr int SPI_MISO_PIN = PORT0 | 21; // also connected to display D/C#
+
+
 // display
 // -------
 
+//constexpr int DISPLAY_QUEUE_LENGTH = 1;
 constexpr int DISPLAY_CS_PIN = PORT0 | 3;
 
 
@@ -83,6 +80,12 @@ constexpr int MOTION_DETECTOR_PIR_PIN = PORT0 | 2;
 constexpr int MOTION_DETECTOR_PIR_INPUT = 0;
 constexpr int MOTION_DETECTOR_TRACKER_PIN = PORT0 | 3;
 constexpr int MOTION_DETECTOR_TRACKER_INPUT = 1;
+
+
+// usb
+// ---
+
+constexpr int USB_ENDPOINT_COUNT = 3;
 
 
 // debug

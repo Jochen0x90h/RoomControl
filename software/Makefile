@@ -16,17 +16,17 @@ VERSION := $(subst /,-,$(subst $(left),_,$(subst $(right),_,$(BRANCH))))
 all: release debug
 
 # build release and run unit tests
-release: export CONAN_RUN_TESTS = 1
+release: export CONAN_RUN_TESTS=1
 release:
 	conan create . $(VERSION)@
 
 # build debug and run unit tests
-debug: export CONAN_RUN_TESTS = 1
+debug: export CONAN_RUN_TESTS=1
 debug:
 	conan create --profile Debug . $(VERSION)@
 
 # install to ~/.local
-install: export CONAN_INSTALL_PREFIX = ${HOME}/.local
+install: export CONAN_INSTALL_PREFIX=${HOME}/.local
 install:
 	conan install $(NAME)/$(VERSION)@
 

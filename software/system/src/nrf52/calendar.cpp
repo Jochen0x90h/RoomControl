@@ -6,14 +6,17 @@
 
 namespace calendar {
 
-std::function<void ()> onSecond[CALENDAR_SECOND_HANDLER_COUNT];
+// waiting coroutines
+CoList<> waitingList;
+
+
 uint8_t seconds = 0;
 uint8_t minutes = 0;
 uint8_t hours = 0;
 uint8_t weekday = 0;
 
 // event loop handler chain
-loop::Handler nextHandler;
+loop::Handler nextHandler = nullptr;
 void handle() {
 	if (NRF_RTC0->EVENTS_COMPARE[1]) {
 		// clear pending interrupt flags at peripheral and NVIC
@@ -34,12 +37,9 @@ void handle() {
 				}
 			}
 		}
-	
-		// call second handlers
-		for (auto const &handler : calendar::onSecond) {
-			if (handler)
-				handler();
-		}
+
+		// resume all waiting coroutines
+		calendar::waitingList.resumeAll();
 	}
 	
 	// call next handler in chain
@@ -47,6 +47,9 @@ void handle() {
 }
 
 void init() {
+	if (calendar::nextHandler != nullptr)
+		return;
+
 	// use channel 1 of RTC0
 	NRF_RTC0->CC[1] = (NRF_RTC0->COUNTER + 16384 + 256) & ~16383;
 	NRF_RTC0->INTENSET = N(RTC_INTENSET_COMPARE1, Set);
@@ -61,10 +64,8 @@ ClockTime now() {
 	return ClockTime(calendar::weekday, calendar::hours, calendar::minutes, calendar::seconds);
 }
 
-void setSecondHandler(int index, std::function<void ()> const &onSecond) {
-	assert(uint(index) < CALENDAR_SECOND_HANDLER_COUNT);
-
-	calendar::onSecond[index] = onSecond;
+Awaitable<> secondTick() {
+	return calendar::waitingList;
 }
 
 } // namespace calendar

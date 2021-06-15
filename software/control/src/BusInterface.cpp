@@ -218,7 +218,7 @@ void BusInterface::onTransferred(int rxLength) {
 	this->txQueue.remove();
 
 	// check if more to transfer
-	if (!this->txQueue.empty()) {
+	if (!this->txQueue.isEmpty()) {
 		auto tx = this->txQueue.get();
 		bus::transfer(tx.data, tx.length, this->rxData, 10, [this](int rxLength) {onTransferred(rxLength);});
 	} else {

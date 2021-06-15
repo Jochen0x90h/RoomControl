@@ -1,8 +1,7 @@
 #include "Gui.hpp"
 #include "StringBuffer.hpp"
-#include "tahoma_8pt.hpp"
+#include <tahoma_8pt.hpp>
 #include <Bitmap.hpp>
-#include <appConfig.hpp>
 #include <vector>
 #include <stdexcept>
 #include <cmath>
@@ -12,7 +11,7 @@ float const MARGIN = 0.02f;
 
 int const TEMPERATURE_BITMAP_WIDTH = 40;
 
-GLuint createTexture(int width, int height) {
+GLuint createTexture() {//int width, int height) {
 	GLuint texture;
 	glGenTextures(1, &texture);
 	glBindTexture(GL_TEXTURE_2D, texture);
@@ -20,7 +19,7 @@ GLuint createTexture(int width, int height) {
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, width, height, 0, GL_RED, GL_UNSIGNED_BYTE, nullptr);
+	//glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, width, height, 0, GL_RED, GL_UNSIGNED_BYTE, nullptr);
 	glBindTexture(GL_TEXTURE_2D, 0);
 	return texture;
 }
@@ -246,7 +245,7 @@ Gui::Gui() {
 		"void main() {\n"
 			"pixel = texture(tex, xy).xxxw;\n"
 		"}\n");
-	this->displayTexture = createTexture(DISPLAY_WIDTH, DISPLAY_HEIGHT);
+	this->displayTexture = createTexture();//DISPLAY_WIDTH, DISPLAY_HEIGHT);
 	
 	// poti
 	this->potiRender = new Render("#version 330\n"
@@ -295,27 +294,25 @@ Gui::Gui() {
 	this->doubleRockerB1 = this->doubleRockerRender->getUniformLocation("b1");
 
 	// temperature sensor
-	this->temperatureTexture = createTexture(TEMPERATURE_BITMAP_WIDTH, tahoma_8pt.height);
+	this->temperatureTexture = createTexture();//TEMPERATURE_BITMAP_WIDTH, tahoma_8pt.height);
 
 	// light
 	this->lightRender = new Render("#version 330\n"
-		"uniform float value;\n"
-		"uniform float innerValue;\n"
+		"uniform vec4 color;\n"
+		"uniform vec4 innerColor;\n"
 		"in vec2 xy;\n"
 		"out vec4 pixel;\n"
 		"void main() {\n"
 			"vec2 a = xy - vec2(0.5, 0.5f);\n"
-			"float angle = atan(a.y, a.x) + value;\n"
+			"float angle = atan(a.y, a.x);\n"
 			"float length = sqrt(a.x * a.x + a.y * a.y);\n"
 			"float limit = cos(angle * 50) * 0.1 + 0.4;\n"
 			"float innerLimit = 0.1;\n"
 			"vec4 background = vec4(0, 0, 0, 1);\n"
-			"vec4 color = vec4(value, value, 0, 1);\n"
-			"vec4 innerColor = vec4(innerValue, innerValue, 0, 1);\n"
 			"pixel = length < limit ? (length < innerLimit ? innerColor : color) : background;\n"
 		"}\n");
-	this->lightValue = this->lightRender->getUniformLocation("value");
-	this->lightInnerValue = this->lightRender->getUniformLocation("innerValue");
+	this->lightColor = this->lightRender->getUniformLocation("color");
+	this->lightInnerColor = this->lightRender->getUniformLocation("innerColor");
 
 	// blind
 	this->blindRender = new Render("#version 330\n"
@@ -408,18 +405,16 @@ void Gui::newLine() {
 	this->maxHeight = 0;
 }
 
-void Gui::display(uint8_t const *displayBuffer) {
+void Gui::display(int width, int height, uint8_t const *displayBuffer) {
 	float const w = 0.4f;
 	float const h = 0.2f;
-
-	// convert bitmap to 8 bit display buffer
-	//convert(this->displayBuffer, bitmap);
 
 	// set state
 	this->displayRender->setState(this->x, this->y, w, h);
 	glBindTexture(GL_TEXTURE_2D, this->displayTexture);
-	glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT, GL_RED, GL_UNSIGNED_BYTE,
-		displayBuffer);
+	//glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT, GL_RED, GL_UNSIGNED_BYTE,
+	//	displayBuffer);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, width, height, 0, GL_RED, GL_UNSIGNED_BYTE, displayBuffer);
 
 	// draw and reset state
 	this->displayRender->drawAndResetState();
@@ -428,7 +423,7 @@ void Gui::display(uint8_t const *displayBuffer) {
 	next(w, h);
 }
 
-std::pair<int, bool> Gui::poti(int id) {
+std::optional<Gui::Poti> Gui::poti(int id) {
 	float const w = 0.2f;
 	float const h = 0.2f;
 
@@ -454,7 +449,9 @@ std::pair<int, bool> Gui::poti(int id) {
 	bool activated = !widget->state && widget->lastState;
 	widget->lastState = widget->state;
 	
-	return {delta, activated};
+	if (delta != 0 || activated)
+		return {{delta, activated}};
+	return {};
 }
 
 int Gui::button(int id) {
@@ -551,7 +548,7 @@ int Gui::doubleRocker(int id) {
 	return activated ? state : -1;
 }
 
-int Gui::temperatureSensor(int id) {
+std::optional<float> Gui::temperatureSensor(int id) {
 	float const w = 0.1f;
 	float const h = 0.1f;
 
@@ -586,7 +583,9 @@ int Gui::temperatureSensor(int id) {
 	// set state
 	this->displayRender->setState(this->x + w*0.15f, this->y + h*0.35f, w*0.7f, h*0.3f);
 	glBindTexture(GL_TEXTURE_2D, this->temperatureTexture);
-	glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, TEMPERATURE_BITMAP_WIDTH, tahoma_8pt.height, GL_RED, GL_UNSIGNED_BYTE,
+	//glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, TEMPERATURE_BITMAP_WIDTH, tahoma_8pt.height, GL_RED, GL_UNSIGNED_BYTE,
+	//	displayBuffer);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, TEMPERATURE_BITMAP_WIDTH, tahoma_8pt.height, 0, GL_RED, GL_UNSIGNED_BYTE,
 		displayBuffer);
 
 	// draw and reset state
@@ -596,7 +595,10 @@ int Gui::temperatureSensor(int id) {
 	next(w, h);
 
 	// return temperature in 1/20 Kelvin when changed, else -1
-	return changed ? temperature * 2 + 27315 * 20 / 100 : -1;
+	//return changed ? temperature * 2 + 27315 * 20 / 100 : -1;
+	if (changed)
+		return float(temperature * 0.1f);
+	return {};
 }
 
 void Gui::light(bool power, int percentage) {
@@ -606,8 +608,8 @@ void Gui::light(bool power, int percentage) {
 	// set state
 	this->lightRender->setState(this->x, this->y, w, h);
 	float value = ((power ? percentage : 0) + 30.0f) / 130.0f;
-	glUniform1f(this->lightValue, value);
-	glUniform1f(this->lightInnerValue, value);
+	glUniform4f(this->lightColor, value, value, 0, 1.0f);
+	glUniform4f(this->lightInnerColor, value, value, 0, 1.0f);
 
 	// draw and reset state
 	this->lightRender->drawAndResetState();
@@ -629,5 +631,24 @@ void Gui::blind(int percentage) {
 	this->blindRender->drawAndResetState();
 	
 	this->x += w + MARGIN;
+	this->maxHeight = std::max(this->maxHeight, h);
+}
+
+void Gui::led(int color) {
+	float const w = 0.025f;
+	float const h = 0.025f;
+
+	// set state
+	this->lightRender->setState(this->x, this->y, w, h);
+	float r = float(color & 0xff) / 255.0f;
+	float g = float((color >> 8) & 0xff) / 255.0f;
+	float b = float((color >> 16) & 0xff) / 255.0f;
+	glUniform4f(this->lightColor, r, g, b, 1.0f);
+	glUniform4f(this->lightInnerColor, r, g, b, 1.0);
+
+	// draw and reset state
+	this->lightRender->drawAndResetState();
+
+	this->x += w + 0.01;
 	this->maxHeight = std::max(this->maxHeight, h);
 }

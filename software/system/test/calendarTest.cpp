@@ -3,12 +3,19 @@
 #include <loop.hpp>
 
 
+Coroutine handleSecondTick() {
+	while (true) {
+		co_await calendar::secondTick();
+		debug::toggleBlueLed();
+	}
+}
+
 int main(void) {
 	loop::init();
 	calendar::init();
 	debug::init();
 	
-	calendar::setSecondHandler(0, []() {debug::toggleBlueLed();});
+	handleSecondTick();
 
 	loop::run();	
 }

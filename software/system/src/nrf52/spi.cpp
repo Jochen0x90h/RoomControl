@@ -1,44 +1,139 @@
-#include "spi.hpp"
+#include "../spi.hpp"
+#include "../display.hpp"
 #include "loop.hpp"
 #include "global.hpp"
+#include "util.hpp"
 
 
 /*
-	resources:
+	Also implements display.hpp
+	
+	Resources:
 	SPIM3
+	GPIO
+		SPI_CS_PINS
+		DISPLAY_CS_PIN
 */
 namespace spi {
 
-// queue of pending transfers
-Queue<Transfer, SPI_TRANSFER_QUEUE_LENGTH> transferQueue;
+constexpr int CONTEXT_COUNT = array::size(SPI_CS_PINS);
+
+struct Context {
+	CoList<Parameters> waitingList;
+};
+
+Context contexts[CONTEXT_COUNT];
+
+int transferContext;
+
+void startTransfer(int index, Parameters const &p) {
+	// set CS pin
+	NRF_SPIM3->PSEL.CSN = SPI_CS_PINS[index];
+
+	// configure MISO pin
+	NRF_SPIM3->PSELDCX = Disconnected;
+	NRF_SPIM3->PSEL.MISO = SPI_MISO_PIN;
+
+	// set write data
+	NRF_SPIM3->TXD.MAXCNT = p.writeLength;
+	NRF_SPIM3->TXD.PTR = intptr_t(p.writeData);
+
+	// set read data
+	NRF_SPIM3->RXD.MAXCNT = p.readLength;
+	NRF_SPIM3->RXD.PTR = intptr_t(p.readData);
+
+	// enable and start
+	NRF_SPIM3->ENABLE = N(SPIM_ENABLE_ENABLE, Enabled);
+	NRF_SPIM3->TASKS_START = Trigger;
+	spi::transferContext = index;
+}
+
+} // namespace spi
+
+namespace display {
+
+CoList<Parameters> waitingList;
+
+void startTransfer(int index, Parameters const &p) {
+	// set CS pin
+	NRF_SPIM3->PSEL.CSN = DISPLAY_CS_PIN;
+
+	// configure MISO pin as D/C# pin and set D/C# count
+	NRF_SPIM3->PSEL.MISO = Disconnected;
+	NRF_SPIM3->PSELDCX = SPI_MISO_PIN;
+	//configureOutput(SPI_MISO_PIN); // done automatically by hardware
+	NRF_SPIM3->DCXCNT = p.commandLength;
+	
+	// set write data
+	NRF_SPIM3->TXD.MAXCNT = p.commandLength + p.dataLength;
+	NRF_SPIM3->TXD.PTR = intptr_t(p.data);
+
+	// no read data
+	NRF_SPIM3->RXD.MAXCNT = 0;
+
+	// enable and start
+	NRF_SPIM3->ENABLE = N(SPIM_ENABLE_ENABLE, Enabled);
+	NRF_SPIM3->TASKS_START = Trigger;
+	
+	spi::transferContext = index;
+}
+
+} // namespace display
+
+namespace spi {
 
 // event loop handler chain
-loop::Handler nextHandler;
+loop::Handler nextHandler = nullptr;
 void handle() {
 	if (NRF_SPIM3->EVENTS_END) {
 		// clear pending interrupt flags at peripheral and NVIC
 		NRF_SPIM3->EVENTS_END = 0;
 		clearInterrupt(SPIM3_IRQn);			
+		int index = spi::transferContext;
 
-		// disable SPI
+		// resume first waiting coroutine
+		if (index < spi::CONTEXT_COUNT) {
+			auto &context = spi::contexts[index];
+			context.waitingList.resumeFirst([](Parameters p) {
+				return true;
+			});
+		} else {
+			display::waitingList.resumeFirst([](display::Parameters p) {
+				return true;
+			});
+		}
+
+		// disable SPI (after resume to prevent queue-jumping of new transfers)
 		NRF_SPIM3->ENABLE = 0;
 
-		// get current transfer
-		Transfer const &transfer = spi::transferQueue.get();
-		if (transfer.readData == 1) {
-			// restore MISO pin
-			NRF_SPIM3->PSELDCX = Disconnected;
-			NRF_SPIM3->PSEL.MISO = SPI_MISO_PIN;
-			//configureInputWithPullUp(SPI_MISO_PIN); // done automatically by hardware
-		}
-		spi::transferQueue.remove();
-		
-		// handle pending transfers
-		if (!spi::transferQueue.empty())
-			startTransfer();
+		// check all contexts for more transfers
+		do {
+			index = index < spi::CONTEXT_COUNT ? index + 1 : 0;
+			
+			if (index < spi::CONTEXT_COUNT) {
+				auto &context = spi::contexts[index];
+				
+				// check if a coroutine is waiting on this context
+				if (context.waitingList.resumeFirst([index](Parameters p) {
+					startTransfer(index, p);
 
-		// callback to user code
-		transfer.onTransferred();			
+					// don't resume yet
+					return false;
+				})) {
+					break;
+				}
+			} else {
+				// display: check if a coroutine is waiting on this context
+				if (display::waitingList.resumeFirst([index](display::Parameters p) {
+					display::startTransfer(index, p);
+					
+					// don't resume yet
+					return false;
+				})) {
+					break;
+				}
+			}
+		} while (index != spi::transferContext);
 	}
 	
 	// call next handler in chain
@@ -46,6 +141,9 @@ void handle() {
 }
 
 void init() {
+	if (spi::nextHandler != nullptr)
+		return;
+
 	configureOutput(SPI_SCK_PIN);
 	setOutput(SPI_MOSI_PIN, true);
 	configureOutput(SPI_MOSI_PIN);
@@ -61,7 +159,7 @@ void init() {
 	NRF_SPIM3->INTENSET = N(SPIM_INTENSET_END, Set);
 	NRF_SPIM3->PSEL.SCK = SPI_SCK_PIN;
 	NRF_SPIM3->PSEL.MOSI = SPI_MOSI_PIN;
-	NRF_SPIM3->PSEL.MISO = SPI_MISO_PIN;
+	//NRF_SPIM3->PSEL.MISO = SPI_MISO_PIN; // gets configured in startTransfer()
 	NRF_SPIM3->FREQUENCY = N(SPIM_FREQUENCY_FREQUENCY, M1);
 	NRF_SPIM3->CONFIG = N(SPIM_CONFIG_CPOL, ActiveHigh)
 		| N(SPIM_CONFIG_CPHA, Leading)
@@ -71,60 +169,34 @@ void init() {
 	spi::nextHandler = loop::addHandler(handle);
 }
 
-void startTransfer() {
-	Transfer const &transfer = spi::transferQueue.get();
-	
-	// set CS pin
-	NRF_SPIM3->PSEL.CSN = transfer.csPin;
+Awaitable<Parameters> transfer(int index, int writeLength, uint8_t const *writeData, int readLength, uint8_t *readData) {
+	assert(uint(index) < spi::CONTEXT_COUNT);
+	auto &context = spi::contexts[index];
 
-	// set write data
-	NRF_SPIM3->TXD.PTR = transfer.writeData;
-	NRF_SPIM3->TXD.MAXCNT = transfer.writeLength;
-	
-	// check if this is a write-only transfer for display
-	if (transfer.readData == 1) {
-		// configure MISO pin as D/C# pin and set D/C# count
-		NRF_SPIM3->PSEL.MISO = Disconnected;
-		NRF_SPIM3->PSELDCX = SPI_MISO_PIN;
-		//configureOutput(SPI_MISO_PIN); // done automatically by hardware
-		NRF_SPIM3->DCXCNT = transfer.readLength;
-	
-		// no read data
-		NRF_SPIM3->RXD.PTR = 0;
-		NRF_SPIM3->RXD.MAXCNT = 0;
-	} else {
-		// set read data
-		NRF_SPIM3->RXD.PTR = transfer.readData;
-		NRF_SPIM3->RXD.MAXCNT = transfer.readLength;
-	}
-		
-	// enable and start
-	NRF_SPIM3->ENABLE = N(SPIM_ENABLE_ENABLE, Enabled);
-	NRF_SPIM3->TASKS_START = Trigger;
-}
-
-bool transfer(int index, uint8_t const *writeData, int writeLength, uint8_t *readData, int readLength,
-	std::function<void ()> const &onTransferred)
-{
-	assert(uint(index) < array::size(SPI_CS_PINS));
-
-	// check if transfer queue is full
-	if (spi::transferQueue.full())
-		return false;
-
-	Transfer &transfer = spi::transferQueue.add();
-	transfer.csPin = SPI_CS_PINS[index];
-	transfer.writeData = intptr_t(writeData);
-	transfer.writeLength = writeLength;
-	transfer.readData = intptr_t(readData);
-	transfer.readLength = readLength;
-	transfer.onTransferred = onTransferred;
-
-	// transfer immediately if SPI is idle
+	// start transfer immediately if SPI is idle
 	if (!NRF_SPIM3->ENABLE)
-		startTransfer();
+		startTransfer(index, {writeLength, writeData, readLength, readData});
 
-	return true;
+	return {context.waitingList, {writeLength, writeData, readLength, readData}};
 }
 
 } // namespace spi
+
+// display is connected via spi
+namespace display {
+
+void init() {
+	spi::init();
+	setOutput(DISPLAY_CS_PIN, true);
+	configureOutput(DISPLAY_CS_PIN);
+}
+
+Awaitable<Parameters> send(int commandLength, int dataLength, uint8_t const *data) {
+	// start transfer immediately if SPI is idle
+	if (!NRF_SPIM3->ENABLE)
+		startTransfer(spi::CONTEXT_COUNT, {commandLength, dataLength, data});
+
+	return {display::waitingList, {commandLength, dataLength, data}};
+}
+
+} // namespace display

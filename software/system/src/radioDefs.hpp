@@ -1,53 +1,34 @@
 #pragma once
 
+#include "enum.hpp"
 #include <cstdint>
 
 
 namespace radio {
 
-// filter flags (filtered packets except for ALL must have a sequence number)
-
-// all packets pass
-constexpr int ALL = 1;
-
-// beacon packets pass
-constexpr int TYPE_BEACON = 2;
-
-// packets pass when destination pan and short address match or are broadcast
-constexpr int DEST_SHORT = 4;
-
-// data packets pass when destination pan and short address match or are broadcast (green power)
-constexpr int TYPE_DATA_DEST_SHORT = 8;
-
-// packets pass where destination pan and long address match or are broadcast
-constexpr int DEST_LONG = 16;
-
-// handle ack for own packets in radio driver to meet turnaround time. Make sure the destination address filter is set
-constexpr int HANDLE_ACK = 32;
-
-
-// ieee 802.15.4 frame type
-enum class FrameType {
-	BEACON = 0,
-	DATA = 1,
-	ACK = 2,
-	COMMAND = 3
-};
-
-// ieee 802.15.4 addressing mode
-enum class AddressingMode {
+// radio context flags (packets except for PASS_ALL must have a sequence number)
+enum class ContextFlags : uint16_t {
 	NONE = 0,
-	SHORT = 2,
-	LONG = 3
-};
+	
+	// pass all packets to receive handler of the context (even when SEQUENCE_NUMBER_SUPPRESSION is on)
+	PASS_ALL = 1,
 
-// ieee 802.15.4 command
-enum class Command {
-	ASSOCIATION_REQUEST = 1,
-	ASSOCIATION_RESPONSE = 2,
-	DATA_REQUEST = 4,
-	BEACON_REQUEST = 7,
+	// pass beacon packets
+	PASS_TYPE_BEACON = 2,
+
+	// pass packets when destination pan and short address match or are broadcast
+	PASS_DEST_SHORT = 4,
+
+	// pass data packets when destination pan and short address match or are broadcast (green power)
+	PASS_TYPE_DATA_DEST_SHORT = 8,
+
+	// packets pass where destination pan and long address match or are broadcast
+	PASS_DEST_LONG = 16,
+
+	// handle ack for own packets in radio driver to meet turnaround time. Make sure the destination address filter is set
+	HANDLE_ACK = 32,
 };
+FLAGS_ENUM(ContextFlags)
 
 
 // enum for remote controlling the radio, e.g. via usb
@@ -70,11 +51,8 @@ namespace Result {
 	// maximum value of energy detection, range is [0, 127]
 	constexpr uint8_t MAX_ED_VALUE = 127;
 	
-	// send was successful
-	constexpr uint8_t SUCCESS = 128;
-	
-	// send failed
-	constexpr uint8_t FAILURE = 255;
+	// start of result values (0: failure, 1: success with one backoff, 2: success with two backoffs...)
+	constexpr uint8_t MIN_RESULT_VALUE = 128;
 }
 
 } // namespace radio

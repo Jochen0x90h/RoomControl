@@ -43,7 +43,7 @@ MqttSnClient::Result MqttSnClient::connect(/*Udp6Endpoint const &gateway, uint8_
 {
 	//if (gatewayId == 0)
 	//	return Result::INVALID_PARAMETER;
-    if (clientName.empty() || clientName.length > MAX_MESSAGE_LENGTH - 5)
+    if (clientName.isEmpty() || clientName.length > MAX_MESSAGE_LENGTH - 5)
 		return Result::INVALID_PARAMETER;
 	if (!canConnect())
 		return Result::INVALID_STATE;

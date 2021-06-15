@@ -13,7 +13,7 @@ struct StringSet {
 		
 	StringSet() : length(0), dataLength(0) {}
 
-	bool empty() {return this->length <= 0;}
+	bool isEmpty() {return this->length <= 0;}
 	int size() {return this->length;}
 
 	void clear() {

@@ -5,8 +5,8 @@
 
 namespace display {
 
-// display layout: rows of 8 pixels where each byte describes a column in each row
-// this would be the layout of a 16x16 display where each '|' is one byte
+// display layout: rows of 8 pixels where each byte describes a column in each row.
+// this would be the layout of a 16x16 display where each '|' is one byte:
 // ||||||||||||||||
 // ||||||||||||||||
 int column; // column 0 to 127
@@ -29,69 +29,83 @@ void getDisplay(uint8_t *buffer) {
 	for (int j = 0; j < height; ++j) {
 		uint8_t *b = &buffer[width * j];
 		for (int i = 0; i < width; ++i) {
-			// data layout: rows of 8 pixels where each byte describes a column in each row
-			// this would be the layout of a 16x16 display where each '|' is one byte
-			// ||||||||||||||||
-			// ||||||||||||||||
 			bool bit = (display[i + width * (j >> 3)] & (1 << (j & 7))) != 0;
 			b[i] = bit ? foreground : background;
 		}
 	}
 }
 
+CoList<Parameters> waitingList;
 
-void init() {
+
+// event loop handler chain
+loop::Handler nextHandler;
+void handle(Gui &gui) {
+	display::waitingList.resumeAll([](Parameters p) {
+		// execute commands
+		for (int i = 0; i < p.commandLength; ++i) {
+			switch (p.data[i]) {
+			// set contrast control
+			case 0x81:
+				display::displayContrast = p.data[++i];
+				break;
+			
+			// entire display on
+			case 0xA4:
+				display::displayOn = false;
+				break;
+			case 0xA5:
+				display::displayOn = true;
+				break;
+			
+			// set normal/inverse display
+			case 0xA6:
+				display::displayInverse = false;
+				break;
+			case 0xA7:
+				display::displayInverse = true;
+				break;
+
+			// set display on/off
+			case 0xAE:
+				display::displayEnabled = false;
+				break;
+			case 0xAF:
+				display::displayEnabled = true;
+				break;
+			}
+		}
+
+		// set data
+		for (int i = 0; i < p.dataLength; ++i) {
+			// copy byte (8 pixels in a column)
+			display::display[page * DISPLAY_WIDTH + display::column] = p.data[p.commandLength + i];
+
+			// increment column index
+			display::column = (display::column == DISPLAY_WIDTH - 1) ? 0 : display::column + 1;
+			if (display::column == 0)
+				display::page = display::page == (DISPLAY_HEIGHT / 8 - 1) ? 0 : display::page + 1;
+		}
+		
+		return true;
+	});
+
+	// call next handler in chain
+	display::nextHandler(gui);
+
+	// draw display on gui
+	uint8_t displayBuffer[DISPLAY_WIDTH * DISPLAY_HEIGHT];
+	getDisplay(displayBuffer);
+	gui.display(DISPLAY_WIDTH, DISPLAY_HEIGHT, displayBuffer);
 }
 
-bool send(uint8_t const* data, int commandLength, int dataLength, std::function<void ()> const &onSent) {
+void init() {
+	// add to event loop handler chain
+	display::nextHandler = loop::addHandler(handle);
+}
 
-	// execute commands	
-	for (int i = 0; i < commandLength; ++i) {
-		switch (data[i]) {
-		// set contrast control
-		case 0x81:			
-			displayContrast = data[++i];
-			break;
-		
-		// entire display on
-		case 0xA4:
-			displayOn = false;
-			break;
-		case 0xA5:
-			displayOn = true;
-			break;
-		
-		// set normal/inverse display
-		case 0xA6:
-			displayInverse = false;
-			break;
-		case 0xA7:
-			displayInverse = true;
-			break;
-
-		// set display on/off
-		case 0xAE:
-			displayEnabled = false;
-			break;
-		case 0xAF:
-			displayEnabled = true;
-			break;
-		}		
-	}
-
-	// set data
-	for (int i = 0; i < dataLength; ++i) {
-		display[page * DISPLAY_WIDTH + column] = data[commandLength + i];
-
-		column = (column == DISPLAY_WIDTH - 1) ? 0 : column + 1;
-		if (column == 0)
-			page = page == (DISPLAY_HEIGHT / 8 - 1) ? 0 : page + 1;
-	}
-	
-	// notify that we are ready
-	asio::post(loop::context, onSent);
-	
-	return true;
+Awaitable<Parameters> send(int commandLength, int dataLength, uint8_t const *data) {
+	return {display::waitingList, {commandLength, dataLength, data}};
 }
 
 } // namespace spi

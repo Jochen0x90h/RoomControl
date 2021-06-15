@@ -5,7 +5,6 @@
 #include <debug.hpp>
 #include <loop.hpp>
 #include <StringBuffer.hpp>
-#include <Data.hpp>
 
 
 
@@ -77,71 +76,64 @@ StringBuffer<128> string __attribute__((aligned(4)));
 constexpr int CHIP_ID = 0x61;
 uint8_t buffer[129] __attribute__((aligned(4)));
 
-/*
-void getId() {
-	// read chip id
-	buffer[0] = READ(0xD0);
-	spi::transfer(SPI_AIR_SENSOR, buffer, 1, buffer, 2, []() {
+// get chip id and output result on debug led's
+Coroutine getId() {
+	while (true) {
+		// read chip id
+		buffer[0] = READ(0xD0);
+		co_await spi::transfer(SPI_AIR_SENSOR, 1, buffer, 2, buffer);
+		
+		// check chip id
 		if (buffer[1] == CHIP_ID)
 			debug::toggleGreenLed();
-	});
+		else
+			debug::toggleRedLed();
 
-	timer::start(0, timer::now() + 1s, []() {getId();});
+		// wait for 1s
+		co_await timer::delay(1s);
+	}
 }
-*/
-/*
-void getRegisters() {
-	debug::toggleRedLed();
-	buffer[0] = READ(0);
 
-	spi::transfer(SPI_AIR_SENSOR, buffer, 1, buffer, 129, []() {
-		usb::send(1, buffer + 1, 128, []() {
-			debug::toggleGreenLed();
-		});			
-	});	
+// read all registers and send to usb host
+Coroutine getRegisters() {
+	while (true) {
+		// read upper page
+		buffer[0] = READ(0);
+		co_await spi::transfer(SPI_AIR_SENSOR, 1, buffer, 129, buffer);
+		
+		// send to usb host
+		co_await usb::send(1, 128, buffer + 1);
+		debug::toggleBlueLed();
+
+		// wait for 5s
+		co_await timer::delay(5s);
+	}
 }
-*/
 
+// measure and send values to usb host
+Coroutine measure() {
+	BME680 sensor;
 
-void measure(BME680 &sensor);
-void read(BME680 &sensor);
-void getValues(BME680 &sensor);
-
-
-void onInitialized(BME680 &sensor) {
-	sensor.setParameters(
+	co_await sensor.init();
+	co_await sensor.setParameters(
 		2, 5, 2, // temperature and pressure oversampling and filter
 		1, // humidity oversampling
-		300, 100, // heater temperature and duration
-		[&sensor]() {measure(sensor);});
+		300, 100); // heater temperature and duration
 	debug::setBlueLed(true);
-}
 
-void measure(BME680 &sensor) {
-	sensor.startMeasurement();
-	timer::start(0, timer::now() + 1s, [&sensor]() {read(sensor);});
-	//debug::toggleGreenLed();
-}
+	while (true) {
+		co_await sensor.measure();
 
-void read(BME680 &sensor) {
-	//getRegisters();
-	sensor.readMeasurements([&sensor]() {getValues(sensor);});
-	
-	timer::start(0, timer::now() + 59s, [&sensor]() {measure(sensor);});
-}
+		string = "Temperature: " + flt(sensor.getTemperature(), 1, 1) + "°C\n"
+			+ "Pressure: " + flt(sensor.getPressure() / 100.0f, 1, 1) + "hPa\n"
+			+ "Humidity: " + flt(sensor.getHumidity(), 1, 1) + "%\n"
+			+ "Gas: " + flt(sensor.getGasResistance(), 1, 1) + "Ω\n";
 
-void getValues(BME680 &sensor) {
-	//debug::toggleRedLed();
-
-	string = "Temperature: " + flt(sensor.getTemperature(), 1, 1) + "°C\n"
-		+ "Pressure: " + flt(sensor.getPressure() / 100.0f, 1, 1) + "hPa\n"
-		+ "Humidity: " + flt(sensor.getHumidity(), 1, 1) + "%\n"
-		+ "Gas: " + flt(sensor.getGasResistance(), 1, 1) + "Ω\n";
-	
-	usb::send(1, string.data(), string.length(), []() {
-		//debug::toggleBlueLed();
+		co_await usb::send(1, string.length(), string.data());
 		debug::toggleRedLed();
-	});	
+
+		co_await timer::delay(10s);
+	}
 }
 
 
@@ -174,8 +166,7 @@ int main(void) {
 	// test raw values
 	//getId();
 	
-	// test sensor class
-	BME680 sensor([&sensor]() {onInitialized(sensor);});
-
+	measure();
+	
 	loop::run();
 }

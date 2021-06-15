@@ -1,4 +1,6 @@
 #include "ArrayList.hpp"
+#include "Coroutine.hpp"
+#include "enum.hpp"
 #include "DataQueue.hpp"
 #include "Queue.hpp"
 #include "StringBuffer.hpp"
@@ -97,7 +99,23 @@ TEST(utilTest, DataQueue) {
 	}
 	
 	// now queue must be empty again
-	EXPECT_TRUE(queue.empty());
+	EXPECT_TRUE(queue.isEmpty());
+}
+
+enum class Foo : uint8_t {
+	FOO = 1,
+	BAR = 2
+};
+FLAGS_ENUM(Foo);
+
+TEST(utilTest, flagsEnum) {
+	Foo a = Foo::FOO;
+	a |= Foo::BAR;
+	EXPECT_EQ(a, Foo::FOO | Foo::BAR);
+
+	uint8_t b = 0;
+	b |= Foo::FOO;
+	EXPECT_EQ(Foo::FOO, b);
 }
 
 TEST(utilTest, Queue) {
@@ -105,36 +123,36 @@ TEST(utilTest, Queue) {
 	Q queue;
 	
 	// check if initially empty
-	EXPECT_TRUE(queue.empty());
+	EXPECT_TRUE(queue.isEmpty());
 	
 	// add and remove one element
 	queue.add() = 5;
 	EXPECT_EQ(queue.get(), 5);
 	queue.remove();
-	EXPECT_TRUE(queue.empty());
+	EXPECT_TRUE(queue.isEmpty());
 
 	// add elements until queue is full
 	int i = 0;
 	int &head = queue.getHead();
-	while (!queue.full()) {
+	while (!queue.isFull()) {
 		queue.add() = 1000 + i;
 		++i;
 	}
 	EXPECT_EQ(i, 4);
-	EXPECT_EQ(queue.count(), 4);
+	EXPECT_EQ(queue.size(), 4);
 	EXPECT_EQ(head, 1000);
 
 	// remove one element
 	queue.remove();
-	EXPECT_FALSE(queue.empty());
-	EXPECT_FALSE(queue.full());
-	EXPECT_EQ(queue.count(), 3);
+	EXPECT_FALSE(queue.isEmpty());
+	EXPECT_FALSE(queue.isFull());
+	EXPECT_EQ(queue.size(), 3);
 	EXPECT_EQ(queue.get(), 1000 + 1);
 	
 	// clear and "resurrect" first element (is used in radio driver)
 	queue.clear();
 	queue.increment();
-	EXPECT_EQ(queue.count(), 1);
+	EXPECT_EQ(queue.size(), 1);
 	EXPECT_EQ(queue.get(), 1000 + 1);
 }
 
@@ -247,6 +265,135 @@ TEST(utilTest, UInt) {
 	static_assert(sizeof(UInt<65536>::Type) == 2);
 	static_assert(sizeof(UInt<65537>::Type) == 4);
 }
+
+// test coroutine
+// --------------
+
+CoList<void> coList;
+
+Awaitable<void> wait() {
+	return coList;
+}
+
+CoList<void> coList2;
+
+Awaitable<void> wait2() {
+	return coList2;
+}
+
+Awaitable<void> inner() {
+	std::cout << "inner wait 1" << std::endl;
+	co_await wait();
+	std::cout << "inner wait 2" << std::endl;
+	co_await wait();
+}
+
+Coroutine outer() {
+	co_await inner();
+
+	std::cout << "outer select" << std::endl;
+	switch (co_await select(wait(), wait2())) {
+	case 1:
+		std::cout << "selected 1" << std::endl;
+		break;
+	case 2:
+		std::cout << "selected 2" << std::endl;
+		break;
+	}
+}
+
+TEST(utilTest, Coroutine) {
+	outer();
+	
+	std::cout << "inner resume 1" << std::endl;
+	coList.resumeAll();
+	std::cout << "inner resume 2" << std::endl;
+	coList.resumeAll();
+	
+	std::cout << "outer resume 2" << std::endl;
+	coList2.resumeAll();
+}
+
+
+// test coroutine with extra value
+// -------------------------------
+
+CoList<int> coListValue;
+
+Awaitable<int> delay(int value) {
+	return {coListValue, value};
+}
+
+Coroutine waitForDelay1() {
+	co_await delay(5);
+	std::cout << "resumed delay(5)" << std::endl;
+}
+
+Coroutine waitForDelay2() {
+	switch (co_await select(wait(), delay(10))) {
+	case 1:
+		std::cout << "resumed wait" << std::endl;
+		break;
+	case 2:
+		std::cout << "resumed delay(10)" << std::endl;
+		break;
+	}
+}
+
+TEST(utilTest, CoroutineValue) {
+	waitForDelay1();
+	waitForDelay2();
+	
+	coListValue.resumeAll([] (int value) {return value == 5;});
+	coListValue.resumeAll([] (int value) {return value == 10;});
+}
+
+
+// test wait on CoList<>
+// ---------------------
+
+CoList<> waitList;
+
+Coroutine waitForList() {
+	std::cout << "wait for list" << std::endl;
+	co_await waitList.wait();
+	std::cout << "list resumed" << std::endl;
+}
+
+TEST(utilTest, CoListWait) {
+	waitForList();
+	std::cout << "resume list" << std::endl;
+	waitList.resumeAll();
+}
+
+
+// test Semaphore
+// --------------
+
+Semaphore semaphore(0);
+
+Coroutine worker1() {
+	while (true) {
+		co_await semaphore.wait();
+		std::cout << "worker 1" << std::endl;
+	}
+}
+
+Coroutine worker2() {
+	while (true) {
+		co_await semaphore.wait();
+		std::cout << "worker 2" << std::endl;
+	}
+}
+
+TEST(utilTest, Semaphore) {
+	worker1();
+	worker2();
+	for (int i = 0; i < 10; ++i) {
+		semaphore.post();
+	}
+}
+
 
 
 int main(int argc, char **argv) {

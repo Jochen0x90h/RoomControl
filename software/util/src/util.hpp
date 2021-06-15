@@ -65,6 +65,29 @@ void copy(OutputIt begin, OutputIt end, InputIt src) {
 	}
 }
 
+
+template <typename T, int N, typename V>
+void fill(T (&array)[N], V const &value) {
+	for (T &element : array)
+		element = value;
+}
+
+template <typename OutputIt, typename V>
+void fill(int length, OutputIt dst, V const &value) {
+	auto end = dst + length;
+	for (; dst < end; ++dst) {
+		*dst = value;
+	}
+}
+
+template <typename OutputIt, typename InputIt>
+void copy(int length, OutputIt dst, InputIt src) {
+	auto end = dst + length;
+	for (; dst < end; ++dst, ++src) {
+		*dst = *src;
+	}
+}
+
 } // namespace array
 
 

@@ -1,7 +1,7 @@
 #include <bus.hpp>
 #include <BusInterface.hpp>
-#include <Gui.hpp>
 #include <util.hpp>
+#include <emu/Gui.hpp>
 #include <emu/loop.hpp>
 #include <iostream>
 
@@ -16,6 +16,7 @@ constexpr uint32_t deviceIds[] = {
 	0x00000003
 };
 
+// endpoints of emulated devices
 constexpr EndpointType endpointTypes[] = {
 	EndpointType::ROCKER, EndpointType::ROCKER, EndpointType::LIGHT, EndpointType::LIGHT, EndpointType::LIGHT,
 	EndpointType::ROCKER, EndpointType::BUTTON, EndpointType::BLIND, EndpointType::ROCKER, EndpointType::BUTTON, EndpointType::BLIND, EndpointType::LIGHT, EndpointType::LIGHT,
@@ -38,14 +39,22 @@ inline void request(uint8_t endpointId) {
 	}
 }
 
-void doGui(Gui &gui, int &id) {
+// event loop handler chain
+loop::Handler nextHandler;
+void handle(Gui &gui) {
+	// call next handler in chain
+	bus::nextHandler(gui);
 
+	int id = 0x81729aec;
+	
 	// time difference
 	auto now = std::chrono::steady_clock::now();
 	int us = std::chrono::duration_cast<std::chrono::microseconds>(now - bus::time).count();
 	bus::time = now;
 	
 	for (int deviceIndex = 0; deviceIndex < array::size(bus::deviceIds); ++deviceIndex) {
+		gui.newLine();
+
 		for (int i = bus::endpointStarts[deviceIndex]; i < bus::endpointStarts[deviceIndex + 1]; ++i) {
 			uint8_t endpointId = bus::endpointIds[i];
 			
@@ -108,21 +117,21 @@ void doGui(Gui &gui, int &id) {
 				case EndpointType::TEMPERATURE_SENSOR:
 					// temperature sensor
 					{
-						int temperature = gui.temperatureSensor(id++);
-						if (temperature != -1) {
-							state = temperature;
+						auto temperature = gui.temperatureSensor(id++);
+						if (temperature) {
+							state = int((*temperature + 273.15f) * 20.0f);
 							request(endpointId);
 						}
 					}
 				}
 			}
 		}
-		gui.newLine();
 	}
 }
 
-
 void init() {
+	// add to event loop handler chain
+	bus::nextHandler = loop::addHandler(handle);
 }
 
 void handle() {

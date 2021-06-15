@@ -3,6 +3,8 @@
 #include <Interface.hpp>
 #include <Storage.hpp>
 #include <crypt.hpp>
+#include <PacketReader.hpp>
+#include <Coroutine.hpp>
 #include <appConfig.hpp>
 
 
@@ -18,10 +20,25 @@ public:
 	 * @param onSent gets called when send queue is empty, also initialy when all devices on the bus are enumerated
 	 * @param onReceived gets called when data was reveived from an endpoint (endpointId, data, length)
 	 */
-	RadioInterface(std::function<void (uint8_t, uint8_t const *, int)> const &onReceived);
+	RadioInterface(AesKey const &networkKey, std::function<void (uint8_t, uint8_t const *, int)> const &onReceived);
 
 	~RadioInterface() override;
 
+	/**
+	 * Set long address
+	 */
+	void setLongAddress(uint64_t longAddress) {this->longAddress = longAddress;}
+
+	/**
+	 * Set pan is where the radio interface should operate. Must be called
+	 * @param panId pan id
+	 */
+	void setPan(uint16_t panId);
+
+	/**
+	 * Set commissioning mode
+	 * @param enabled true to enable commissioning
+	 */
 	void setCommissioning(bool enabled) override;
 
 	int getDeviceCount() override;
@@ -34,36 +51,11 @@ public:
 
 	void send(uint8_t endpointId, uint8_t const *data, int length) override;
 
-	//bool isBusy() {return this->busy;}
-
-
-	struct Coordinator {
-		// long coordinator address (short address is always 0x0000)
-		uint64_t longAddress;
-		
-		// pan
-		uint16_t pan;
 	
-		/**
-		 * Returns the size in bytes needed to store the device configuration in flash
-		 * @return size in bytes
-		 */
-		int getFlashSize() const;
-
-		/**
-		 * Returns the size in bytes needed to store the device state in ram
-		 * @return size in bytes
-		 */
-		int getRamSize() const;
-	};
-	
-	struct CoordinatorState {
-	};
-
 	struct Device {
 		enum Type : uint8_t {
-			ZIGBEE,
-			GREEN_POWER
+			ZB,
+			GP
 		};
 		
 		// device id, either 64 bit ieee 802.15.4 long device address or 32 bit green power id
@@ -117,28 +109,40 @@ public:
 	};
 
 
-	// coordinator (array of length 1)
-	Storage::Array<Coordinator, CoordinatorState> coordinator;
-
 	// list of commissioned devices
 	Storage::Array<Device, DeviceState> devices;
 
 private:
 
-	void onRx(uint8_t *data, int length);
+	Coroutine receive();
 
-	void onBeaconRequest();
-	void onAssociationRequest();
+	void handleAssociationRequest(uint64_t sourceAddress, PacketReader &d);
 
-	void onGreenPower(uint8_t const *mac, uint8_t *d, uint8_t const *end);
-	void commission(uint32_t deviceId, uint8_t *d, uint8_t const *end);
+	void handleGp(uint8_t const *mac, PacketReader &d);
+	void handleCommission(uint32_t deviceId, PacketReader& d);
 
-
+	
+	// ieee beacon
+	Coroutine sendBeacon();
+	
+	// send beacon coroutine waits on this object until a beacon request arrives
+	CoList<> beaconWait;
+	
+	// zb link status
+	Coroutine sendLinkStatus();
+	
+	
 	// radio context index
-	static int const radioIndex = RADIO_ZIGBEE;
+	static int const radioIndex = RADIO_ZB;
 
-	// id of "our" pan
+	// our ieee long address
+	uint64_t longAddress;
+	
+	// id of our pan
 	uint16_t panId;
+
+	// network key
+	AesKey const &networkKey;
 
 	// callback
 	std::function<void (uint8_t, uint8_t const *, int)> onReceived;
@@ -150,6 +154,8 @@ private:
 	uint8_t nextEndpointId = 1;
 
 
-	uint8_t buffer[128];
-	uint8_t macSequenceNumber;
+	// counters
+	uint8_t macSequenceNumber = 0;
+	uint8_t nwkSequenceNumber = 0;
+	uint32_t securityCounter = 0;
 };

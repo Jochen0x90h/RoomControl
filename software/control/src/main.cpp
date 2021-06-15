@@ -1,9 +1,13 @@
 #include "RoomControl.hpp"
-#include "Gui.hpp"
-#include <flash.hpp>
-#include <emu/spi.hpp>
+#include <calendar.hpp>
 #include <display.hpp>
+#include <flash.hpp>
+#include <bus.hpp>
 #include <radio.hpp>
+#include <poti.hpp>
+#include <debug.hpp>
+#include <emu/spi.hpp>
+#include <emu/Gui.hpp>
 #include <emu/loop.hpp>
 #include <iostream>
 #include <fstream>
@@ -11,33 +15,7 @@
 #include <thread>
 #include <iterator>
 
-
-
-// extension to emulated spi driver
-namespace spi {
-	// set temperature of emulated air sensor
-	void setTemperature(float celsius);
-	
-	void doGui(Gui &gui, int &id) {
-		// air sensor
-		int temperature = gui.temperatureSensor(id++);
-		if (temperature != -1)
-			setTemperature(temperature / 20.0f - 273.15f);
-		gui.newLine();
-	}
-}
-
-// extension to emulated display driver
-namespace display {
-	// get dipslay contents into an 8 bit grayscale image
-	void getDisplay(uint8_t *buffer);
-}
-
-// extension to emulated bus driver
-namespace bus {
-	void doGui(Gui &gui, int &id);
-}
-
+/*
 // extension to emulated radio driver
 namespace radio {
 	// poll usb device
@@ -187,31 +165,7 @@ namespace radio {
 		gui.newLine();
 	}
 }
-
-
-static void errorCallback(int error, const char* description)
-{
-    fprintf(stderr, "Error: %s\n", description);
-}
-
-static void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods)
-{
-    if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
-        glfwSetWindowShouldClose(window, GLFW_TRUE);
-}
-
-static void mouseCallback(GLFWwindow* window, int button, int action, int mods) {
- /*   if (button == GLFW_MOUSE_BUTTON_LEFT) {
-        if(GLFW_PRESS == action)
-            lbutton_down = true;
-        else if(GLFW_RELEASE == action)
-            lbutton_down = false;
-    }
-
-    if(lbutton_down) {
-         // do your drag here
-    }*/
-}
+*/
 
 struct DeviceData {
 	uint32_t deviceId;
@@ -236,7 +190,7 @@ constexpr DeviceData localDeviceData[] = {
 };
 
 
-// configuration for emulated devices in Bus.cpp
+// configuration for emulated devices in bus.cpp
 constexpr DeviceData busDeviceData[] = {
 	{0x00000001, "switch1", 7, {
 		{RoomControl::Device::Component::ROCKER, 0, 0},
@@ -320,80 +274,37 @@ constexpr TimerData timerData[] = {
  * Emulator main, start without parameters
  */
 int main(int argc, const char **argv) {
-
-	// erase emulated flash
-	memset(const_cast<uint8_t*>(flash::getAddress(0)), 0xff, FLASH_PAGE_COUNT * FLASH_PAGE_SIZE);
-
-	// read flash contents from file
-	std::ifstream is("flash.bin", std::ios::binary);
-	//is.read(reinterpret_cast<char*>(const_cast<uint8_t*>(Flash::getAddress(0))), Flash::PAGE_COUNT * Flash::PAGE_SIZE);
-	is.close();
-
-	// get device from command line
-	//std::string device = argv[1];
-	
-	// init GLFW
-	glfwSetErrorCallback(errorCallback);
-	if (!glfwInit())
-		exit(EXIT_FAILURE);
-
-	// window size
-	int width = 800;
-	int height = 800;
-
-	// scale window size on linux, is done automatically on mac
-#ifdef __linux__
-	GLFWmonitor* monitor = glfwGetPrimaryMonitor();
-	float xScale, yScale;
-	glfwGetMonitorContentScale(monitor, &xScale, &yScale);
-
-	width = int(width * xScale);
-	height = int(height * yScale);
-#endif
-
-	// create GLFW window and OpenGL 3.3 Core context
-	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
-	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-	glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
-	//glfwWindowHint(GLFW_COCOA_RETINA_FRAMEBUFFER, GL_TRUE);
-	GLFWwindow *window = glfwCreateWindow(width, height, "RoomControl", NULL, NULL);
-	if (!window) {
-		glfwTerminate();
-		exit(EXIT_FAILURE);
-	}
-	glfwSetKeyCallback(window, keyCallback);
-	glfwSetMouseButtonCallback(window, mouseCallback);
-	
-	// make OpenGL context current
-	glfwMakeContextCurrent(window);
-	
-	// load OpenGL functions
-	gladLoadGLLoader((GLADloadproc)glfwGetProcAddress);
-	
-	// v-sync
-	glfwSwapInterval(1);
-
-	// emulator user interface
-	Gui gui;
-
 	// set global variables
 	boost::system::error_code ec;
 	asio::ip::address localhost = asio::ip::address::from_string("::1", ec);
 	global::local = asio::ip::udp::endpoint(asio::ip::udp::v6(), 1337);
 	global::upLink = asio::ip::udp::endpoint(localhost, 47193);
 
-	// init emulated drivers
+	// init drivers
+	loop::init();
+	flash::init();
 	timer::init();
 	calendar::init();
-	spi::init();
 	display::init();
+	poti::init();
+	spi::init();
+	bus::init();
 	radio::init();
+	debug::init();
+	
 	radio::start(15); // start on channel 15
 	radio::enableReceiver(true); // enable baseband decoder
 
 	// the room control application
 	RoomControl roomControl;
+
+	// configure
+	RoomControl::Configuration config = *roomControl.configuration[0].flash;
+	config.address = UINT64_C(0x00124b00214f3c55);
+	static uint8_t const networkKey[] = {0xe6, 0x63, 0x2b, 0xa3, 0x55, 0xd4, 0x76, 0x82, 0x63, 0xe8, 0xb5, 0x9a, 0x2a, 0x6b, 0x41, 0x44};
+	memcpy(config.networkKey, networkKey, 16);
+	roomControl.configuration.write(0, &config);
+	roomControl.applyConfiguration();
 
 	// add test data
 	setDevices(localDeviceData, roomControl.localDevices);
@@ -463,82 +374,7 @@ int main(int argc, const char **argv) {
 	roomControl.subscribeInterface(roomControl.localInterface, roomControl.localDevices);
 	roomControl.subscribeAll();
 
-	// main loop
-	int frameCount = 0;
-	auto start = std::chrono::steady_clock::now();
-	while (!glfwWindowShouldClose(window)) {
-		auto frameStart = std::chrono::steady_clock::now();
+	loop::run();
 
-		// process events
-		glfwPollEvents();
-
-		// process emulated system events
-		loop::context.poll();
-		if (loop::context.stopped())
-			loop::context.reset();
-
-		// mouse
-		gui.doMouse(window);
-
-		// set viewport
-		int width, height;
-		glfwGetFramebufferSize(window, &width, &height);
-		glViewport(0, 0, width, height);
-		
-		// clear screen
-		glClear(GL_COLOR_BUFFER_BIT);
-
-		// gui
-		{
-			int id = 0;
-		
-			// user interface
-			{
-				// display
-				uint8_t displayBuffer[DISPLAY_WIDTH * DISPLAY_HEIGHT];
-				display::getDisplay(displayBuffer);
-				gui.display(displayBuffer);
-
-				// poti
-				auto poti = gui.poti(id++);
-				roomControl.onPotiChanged(poti.first, poti.second);
-
-				gui.newLine();
-			}
-						
-			// local devices
-			spi::doGui(gui, id);
-			
-			// bus devices
-			bus::doGui(gui, id);
-
-			// radio devices
-			radio::doGui(gui, id);
-		}
-		
-		// swap render buffer to screen
-		glfwSwapBuffers(window);
-		
-		
-		// show frames per second
-		auto now = std::chrono::steady_clock::now();
-		++frameCount;
-		auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(now - start);
-		if (duration.count() > 1000) {
-			//std::cout << frameCount * 1000 / duration.count() << "fps" << std::endl;
-			frameCount = 0;
-			start = std::chrono::steady_clock::now();
-		}
-
-	}
-
-	// write flash
-	std::ofstream os("flash.bin", std::ios::binary);
-	os.write(reinterpret_cast<const char*>(flash::getAddress(0)), FLASH_PAGE_COUNT * FLASH_PAGE_SIZE);
-	os.close();
-
-	// cleanup
-	glfwDestroyWindow(window);
-	glfwTerminate();
 	return 0;
 }

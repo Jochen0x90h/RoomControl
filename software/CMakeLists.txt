@@ -5,8 +5,13 @@ project(Emulator)
 
 #set(CMAKE_VERBOSE_MAKEFILE ON)
 
-# use C++17 standard by default
-set(CMAKE_CXX_STANDARD 17)
+# use C++20 standard with coroutines
+set(CMAKE_CXX_STANDARD 20)
+if (APPLE)
+	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fcoroutines-ts")
+else()
+	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fcoroutines")
+endif()
 
 # suppress warning for own s and ms literal operators that are used instad of those in std::chrono
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
@@ -49,7 +54,7 @@ conan_basic_setup(TARGETS KEEP_RPATHS)
 # set debug define
 add_definitions(-DDEBUG)
 
-# strip unised dylibs
+# strip unused dylibs
 #add_link_options(-dead_strip_dylibs)
 
 
@@ -62,9 +67,11 @@ set(UTIL
 	util/src/Bitmap.hpp
 	util/src/convert.cpp
 	util/src/convert.hpp
+	util/src/Coroutine.hpp
 	util/src/Data.hpp
 	util/src/DataQueue.hpp
 	util/src/defines.hpp
+	util/src/enum.hpp
 	util/src/Font.cpp
 	util/src/Font.hpp
 	util/src/optional.hpp
@@ -79,24 +86,29 @@ set(UTIL
 )
 source_group(util FILES ${UTIL})
 
-# encrypt/decrypt functions
-set(CRYPT
-	crypt/src/crypt.cpp
-	crypt/src/crypt.hpp
-	crypt/src/DataBuffer.hpp
-	crypt/src/hash.cpp
-	crypt/src/hash.hpp
+# network utilities
+set(NETWORK
+	network/src/crypt.cpp
+	network/src/crypt.hpp
+	network/src/DataBuffer.hpp
+	network/src/hash.cpp
+	network/src/hash.hpp
+	network/src/PacketReader.hpp
+	network/src/PacketWriter.hpp
+	network/src/ieee.hpp
+	network/src/zb.hpp
+	network/src/gp.hpp
 )
 set(TINYCRYPT
-	crypt/src/tinycrypt/aes.h
-	crypt/src/tinycrypt/aes_encrypt.c
-	crypt/src/tinycrypt/constants.h
-	crypt/src/tinycrypt/utils.c
-	crypt/src/tinycrypt/utils.h
+	network/src/tinycrypt/aes.h
+	network/src/tinycrypt/aes_encrypt.c
+	network/src/tinycrypt/constants.h
+	network/src/tinycrypt/utils.c
+	network/src/tinycrypt/utils.h
 )
-source_group(crypt FILES ${CRYPT})
-source_group(crypt/tinycrypt FILES ${TINYCRYPT})
-list(APPEND CRYPT ${TINYCRYPT})
+source_group(network FILES ${NETWORK})
+source_group(network/tinycrypt FILES ${TINYCRYPT})
+list(APPEND NETWORK ${TINYCRYPT})
 
 # system
 set(SYSTEM
@@ -111,6 +123,8 @@ set(SYSTEM
 	system/src/flash.hpp
 	system/src/emu/global.cpp
 	system/src/emu/global.hpp
+	system/src/emu/Gui.cpp
+	system/src/emu/Gui.hpp
 	system/src/emu/loop.cpp
 	system/src/emu/loop.hpp
 	system/src/loop.hpp
@@ -128,8 +142,20 @@ set(SYSTEM
 	system/src/emu/usb.cpp
 	system/src/usb.hpp
 	system/src/usbDefs.hpp
+	control/src/tahoma_8pt.cpp # used by Gui
+	control/src/tahoma_8pt.hpp
 )
 source_group(system FILES ${SYSTEM})
+
+# OpenGL support
+set(GLAD
+	glad/glad.c
+	glad/glad.h
+	glad/khrplatform.h
+)
+source_group(glad FILES ${GLAD})
+list(APPEND SYSTEM ${GLAD})
+
 
 # base code for nodes (control and gateway)
 set(NODE
@@ -150,8 +176,6 @@ set(CONTROL
 	control/src/emu/bus.cpp
 	control/src/Device.hpp
 	control/src/emu/display.cpp
-	control/src/emu/Gui.cpp
-	control/src/emu/Gui.hpp
 	control/src/Interface.cpp
 	control/src/Interface.hpp
 	control/src/LocalInterface.cpp
@@ -168,28 +192,19 @@ set(CONTROL
 	control/src/Storage.cpp
 	control/src/Storage.hpp
 	control/src/emu/sysConfig.hpp
-	control/src/tahoma_8pt.cpp
-	control/src/tahoma_8pt.hpp
+	#control/src/tahoma_8pt.cpp
+	#control/src/tahoma_8pt.hpp
 )
 source_group(control FILES ${CONTROL})
 
-# OpenGL support
-set(GLAD
-	glad/glad.c
-	glad/glad.h
-	glad/khrplatform.h
-)
-source_group(glad FILES ${GLAD})
-
 # emulator executable
 add_executable(emulator
-	control/src/emu/main.cpp
+	control/src/main.cpp
 	${UTIL}
-	${CRYPT}
+	${NETWORK}
 	${SYSTEM}
 	${NODE}
 	${CONTROL}
-	${GLAD}
 )
 target_include_directories(emulator
 	PRIVATE
@@ -197,7 +212,7 @@ target_include_directories(emulator
 	control/src
 	node/src
 	system/src
-	crypt/src
+	network/src
 	util/src
 	glad
 )
@@ -247,12 +262,12 @@ conan_target_link_libraries(terminal)
 # radio packet sniffer that can write .pcap files and analyze packets (needs radioTest on device)
 add_executable(sniffer
 	tools/src/sniffer.cpp
-	${CRYPT}
+	${NETWORK}
 )
 target_include_directories(sniffer
 	PRIVATE
 	util/src
-	crypt/src
+	network/src
 	system/src
 )
 conan_target_link_libraries(sniffer)
@@ -266,6 +281,7 @@ add_executable(usbTestHost
 target_include_directories(usbTestHost
 	PRIVATE
 	system/src
+	util/src
 )
 conan_target_link_libraries(usbTestHost)
 
@@ -275,22 +291,46 @@ conan_target_link_libraries(usbTestHost)
 add_executable(radioSendTest
 	system/test/radioSendTest.cpp
 	${UTIL}
+	${NETWORK}
 	${SYSTEM}
 )
 target_include_directories(radioSendTest
 	PRIVATE
+	control/src
 	system/test/emu
 	system/src
+	network/src
 	util/src
+	glad
+
 )
 conan_target_link_libraries(radioSendTest)
 
+
+# timer test
+add_executable(timerTest
+	system/test/timerTest.cpp
+	${UTIL}
+	${NETWORK}
+	${SYSTEM}
+)
+target_include_directories(timerTest
+	PRIVATE
+	control/src
+	system/test/emu
+	system/src
+	network/src
+	util/src
+	glad
+)
+conan_target_link_libraries(timerTest)
 
 
 # test for BME680 air sensor
 add_executable(bme680Test
 	control/test/bme680Test.cpp
 	${UTIL}
+	${NETWORK}
 	${SYSTEM}
 	control/src/BME680.cpp
 	control/src/BME680.hpp
@@ -301,10 +341,34 @@ target_include_directories(bme680Test
 	control/test/emu
 	control/src
 	system/src
+	network/src
 	util/src
+	glad
 )
 conan_target_link_libraries(bme680Test)
 
+
+# test for SSD1309 display
+add_executable(ssd1309Test
+	control/test/ssd1309Test.cpp
+	${UTIL}
+	${NETWORK}
+	${SYSTEM}
+	control/src/SSD1309.cpp
+	control/src/SSD1309.hpp
+	control/src/emu/spi.cpp
+	control/src/emu/display.cpp
+)
+target_include_directories(ssd1309Test
+	PRIVATE
+	control/test/emu
+	control/src
+	system/src
+	network/src
+	util/src
+	glad
+)
+conan_target_link_libraries(ssd1309Test)
 
 
 
@@ -330,13 +394,13 @@ add_test(NAME utilTest
 
 # crypt test
 add_executable(cryptTest
-	crypt/test/cryptTest.cpp
+	network/test/cryptTest.cpp
 	#${UTIL}
-	${CRYPT}
+	${NETWORK}
 )
 target_include_directories(cryptTest
 	PRIVATE
-	crypt/src
+	network/src
 	util/src
 )
 conan_target_link_libraries(cryptTest)
@@ -349,11 +413,9 @@ add_test(NAME cryptTest
 add_executable(systemTest
 	system/test/systemTest.cpp
 	${UTIL}
-	${SYSTEM}
 )
 target_include_directories(systemTest
 	PRIVATE
-	system/test/emu
 	system/src
 	util/src
 )

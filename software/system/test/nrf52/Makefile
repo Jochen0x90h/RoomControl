@@ -8,7 +8,7 @@ TEMPLATE_PATH    := $(SYSTEM_PATH)/nrf52/system
 
 
 # Include folders
-INC_FOLDERS += . $(SYSTEM_PATH) $(UTIL_PATH)
+INC_FOLDERS += . $(SYSTEM_PATH) ../../../network/src $(UTIL_PATH)
 
 # Source files common to all targets
 SRC_FILES += $(TEMPLATE_PATH)/gcc_startup_nrf52840.S
@@ -25,7 +25,6 @@ SRC_FILES_spiTest += ../spiTest.cpp
 SRC_FILES_spiTest += ../../src/nrf52/spi.cpp
 SRC_FILES_displayTest += ../displayTest.cpp
 SRC_FILES_displayTest += $(SYSTEM_PATH)/nrf52/spi.cpp
-SRC_FILES_displayTest += $(SYSTEM_PATH)/nrf52/display.cpp
 SRC_FILES_busTest += ../busTest.cpp
 SRC_FILES_busTest += $(SYSTEM_PATH)/nrf52/timer.cpp
 SRC_FILES_busTest += $(SYSTEM_PATH)/nrf52/bus.cpp
@@ -66,7 +65,7 @@ CFLAGS += -D__STACK_SIZE=8192
 CFLAGS += -Wall
 
 # C++ flags (C++ also uses CFLAGS)
-CXXFLAGS += -Wno-literal-suffix
+CXXFLAGS += -Wno-literal-suffix -fcoroutines
 
 # Assembler flags
 ASMFLAGS += -g3

@@ -3,15 +3,15 @@
 #include "LocalInterface.hpp"
 #include "BusInterface.hpp"
 #include "RadioInterface.hpp"
-#include <Bitmap.hpp>
-#include <StringBuffer.hpp>
-#include <StringSet.hpp>
-#include <TopicBuffer.hpp>
 #include <MqttSnBroker.hpp>
 #include <SSD1309.hpp>
 #include <Storage.hpp>
-#include <calendar.hpp>
-#include <poti.hpp>
+#include <ClockTime.hpp>
+#include <Bitmap.hpp>
+#include <Coroutine.hpp>
+#include <StringBuffer.hpp>
+#include <StringSet.hpp>
+#include <TopicBuffer.hpp>
 
 
 /**
@@ -30,6 +30,8 @@ public:
 
 	~RoomControl() override;
 
+	void applyConfiguration();
+	
 
 // UpLink
 // ------
@@ -69,19 +71,19 @@ public:
 // Display
 // -------
 
-	void onDisplayReady();
+	//void onDisplayReady();
 
 	// display bitmap
-	Bitmap<DISPLAY_WIDTH, DISPLAY_HEIGHT> bitmap;
+	//Bitmap<DISPLAY_WIDTH, DISPLAY_HEIGHT> bitmap;
 	
 	// display controller
-	SSD1309 display;
+	//SSD1309 display;
 	
 
 // Poti
 // ----
 
-	void onPotiChanged(int delta, bool activated);
+	//void onPotiChanged(int delta, bool activated);
 
 
 // Menu
@@ -130,11 +132,15 @@ public:
 		SELECT_TOPIC,
 	};
 	
-	
-	void updateMenu(int delta, bool activated);
+	Coroutine doMenu();
+
+	bool updateMenu(int delta, bool activated);
 
 	// menu state
 	MenuState menuState = IDLE;
+
+	// menu bitmap
+	Bitmap<DISPLAY_WIDTH, DISPLAY_HEIGHT> bitmap;
 
 
 // Menu System
@@ -216,12 +222,22 @@ public:
 	Storage storage;
 
 
-// Room
-// ----
+// Configuration
+// -------------
 
-	struct Room {
-		// name of this room
+	// global configuration for this room control
+	struct Configuration {
+		// name of this room control
 		char name[16];
+
+		// ieee 802.15.4 long address
+		long address;
+		
+		// pan id for radio devices
+		uint16_t zbPanId;
+
+		// network key
+		uint8_t networkKey[16];
 
 		/**
 		 * Returns the size in bytes needed to store the control configuration in flash
@@ -235,25 +251,31 @@ public:
 		 */
 		int getRamSize() const;
 	};
-
-	struct RoomState {
+/*
+	struct ConfigurationState {
 		// topic id for list of rooms in house (topic: enum)
 		uint16_t houseTopicId;
 
 		// topic id for list of devices in room (topic: enum/<room>)
 		uint16_t roomTopicId;
 	};
-
-	String getRoomName() {return this->room[0].flash->name;}
+*/
+	String getRoomName() {return this->configuration[0].flash->name;}
 
 	// subscribe everything to mqtt topics
 	void subscribeAll();
 
 
-	Storage::Array<Room, RoomState> room;
-	using RoomElement = Storage::Element<Room, RoomState>;
+	Storage::Array<Configuration, void> configuration;
 
+	// network key
+	AesKey networkKey;
 
+	// topic id for list of rooms in house (topic: enum)
+	uint16_t houseTopicId;
+
+	// topic id for list of devices in room (topic: enum/<room>)
+	uint16_t roomTopicId;
 
 
 // Devices
@@ -869,6 +891,9 @@ public:
 		CommandState commands[Timer::MAX_COMMAND_COUNT];
 	};
 	
+	// checks every second if a timer has elapsed
+	Coroutine doTimers();
+	
 	// register timer mqtt topics
 	void subscribeTimer(int index);
 
@@ -969,7 +994,7 @@ public:
 // Clock
 // -----
 
-	void onSecondElapsed();
+	//void onSecondElapsed();
 
 
 // Temporary variables for editing via menu
@@ -977,7 +1002,7 @@ public:
 
 	// first level
 	union {
-		Room room;
+		Configuration configuration;
 		Device device;
 		Route route;
 		Timer timer;

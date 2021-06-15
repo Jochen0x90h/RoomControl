@@ -8,7 +8,7 @@ TEMPLATE_PATH    := $(SYSTEM_PATH)/nrf52/system
 
 
 # Include folders
-INC_FOLDERS += . $(SYSTEM_PATH) $(UTIL_PATH)
+INC_FOLDERS += . $(SYSTEM_PATH) ../../../network/src $(UTIL_PATH)
 
 # Source files common to all targets
 SRC_FILES += $(TEMPLATE_PATH)/gcc_startup_nrf52840.S
@@ -43,7 +43,7 @@ CFLAGS += -D__STACK_SIZE=8192
 CFLAGS += -Wall
 
 # C++ flags (C++ also uses CFLAGS)
-CXXFLAGS += -Wno-literal-suffix
+CXXFLAGS += -Wno-literal-suffix -fcoroutines
 
 # Assembler flags
 ASMFLAGS += -g3

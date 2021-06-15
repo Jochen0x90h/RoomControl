@@ -32,4 +32,4 @@ constexpr int DISPLAY_HEIGHT = 64;
 // radio
 // -----
 
-constexpr int RADIO_ZIGBEE = 0;
+constexpr int RADIO_ZB = 0;

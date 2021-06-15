@@ -1,8 +1,8 @@
 #pragma once
 
+#include <Coroutine.hpp>
 #include <appConfig.hpp>
 #include <cstdint>
-#include <functional>
 
 
 /**
@@ -11,21 +11,29 @@
 class BME680 {
 public:
 	
+	enum State {
+		CREATED,
+		INITIALIZED,
+		PARAMETERIZED
+	};
+	
+	BME680() {}
+
+	~BME680() {}
+
 	/**
-	 * Constructor. Initializes the sensor and leaves it in disabled state.
-	 * @param onInitialized called when the sensor is initialized and setParameters() needs to be called
+	 * Suspend execution using co_await until initialization is done
 	 */
-	BME680(std::function<void ()> const &onInitialized);
-
-	~BME680();
+	Awaitable<> init();
 
 	/**
-	 * Returns true if a transfer is in progress
+	 * Returns the current state of the sensor
+	 * @return current state
 	 */
-	bool isBusy() {return this->busy;}
+	State getState() {return this->state;}
 
 	/**
-	 * Set parameters. Sets initialized state and calls onReady when finished
+	 * Suspend execution using co_await until parameters are set
 	 * @param temperatureOversampling temperature oversampling, 1-5 (0 disabled)
 	 * @param pressureOversampling pressure oversampling, 1-5 (0 disabled)
 	 * @param filter iir filter for temperature and pressure, 0-7
@@ -33,22 +41,14 @@ public:
 	 * @param heaterTemperature heater temperature for gas sensor, 200 to 400 degrees
 	 * @param heaterDuration time between the beginning of the heat phase and the start of gas sensor resistance
 	 * 	conversion in milliseconds
-	 * @param onReady gets called when the parameterization is finished
 	 */
-	void setParameters(int temperatureOversampling, int pressureOversampling, int filter,
-		int humidityOversampling, int heaterTemperature, int heaterDuration,
-		std::function<void ()> const &onReady);
+	Awaitable<> setParameters(int temperatureOversampling, int pressureOversampling, int filter,
+		int humidityOversampling, int heaterTemperature, int heaterDuration);
 
 	/**
-	 * Start a measurement. Call readMeasurements() a second later
+	 * Suspend execution using co_await until measurement is done. Then use get-methods to obtain the measured values
 	 */
-	void startMeasurement();
-
-	/**
-	 * Read measurements from the sensor registers. Calls onReady when finished
-	 * @param onReady called when measurements are read
-	 */
-	void readMeasurements(std::function<void ()> const &onReady);
+	Awaitable<> measure();
 
 	/**
 	 * Get current temperature
@@ -115,7 +115,7 @@ protected:
 		
 		uint16_t h1; // 0xE2<3:0> / 0xE3
 	};
-
+/*
 	void init1();
 	void init2();
 	void init3();
@@ -123,12 +123,11 @@ protected:
 	void init5();
 
 	void onMeasurementsReady();
-	
+*/
 	// spi index
 	static int const spiIndex = SPI_AIR_SENSOR;
 
-	std::function<void ()> onReady;
-	bool busy;
+	State state = CREATED;
 	
 	// read/write buffer
 	uint8_t buffer[16];
@@ -138,12 +137,17 @@ protected:
 	int8_t res_heat_val;
 	uint8_t res_heat_range;
 	int8_t range_switching_error;
-	
+		
+	// contents of register 74
 	uint8_t _74;
 
-	// measurements
+	// measurement values
 	float temperature;
 	float pressure;
 	float humidity;
 	float gasResistance;
+	
+	
+	//std::function<void ()> onReady;
+	//bool busy;
 };

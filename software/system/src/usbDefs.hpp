@@ -1,5 +1,6 @@
 #pragma once
 
+#include <enum.hpp>
 #include <cstdint>
 
 
@@ -14,12 +15,12 @@ enum class DescriptorType : uint8_t {
 };
 
 // endpoint type
-namespace EndpointType {
-	constexpr uint8_t CONTROL = 0;
-	constexpr uint8_t ISOCHRONOUS = 1;
-	constexpr uint8_t BULK = 2;
-	constexpr uint8_t INTERRUPT = 3;
-}
+enum class EndpointType : uint8_t {
+	CONTROL = 0,
+	ISOCHRONOUS = 1,
+	BULK = 2,
+	INTERRUPT = 3
+};
 
 // transfer direction
 enum Direction {
@@ -93,7 +94,7 @@ struct EndpointDescriptor {
 	uint8_t bLength;
 	DescriptorType bDescriptorType;
 	uint8_t bEndpointAddress;
-	uint8_t bmAttributes;
+	EndpointType bmAttributes;
 	uint16_t wMaxPacketSize;
 	uint8_t bInterval;
 } __attribute__((packed));

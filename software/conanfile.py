@@ -35,7 +35,7 @@ class Project(ConanFile):
     exports_sources =\
         "CMakeLists.txt",\
         "util/*",\
-        "crypt/*",\
+        "network/*",\
         "system/*",\
         "node/*",\
         "control/*",\

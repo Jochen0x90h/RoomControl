@@ -2,8 +2,8 @@
 
 #include <glad.h>
 #include <GLFW/glfw3.h> // http://www.glfw.org/docs/latest/quick_guide.html
+//#include <appConfig.hpp>
 #include "assert.hpp"
-//#include "Display.hpp"
 #include <map>
 
 
@@ -17,22 +17,32 @@ public:
 	
 	~Gui();
 	
+	/**
+	 * Handle mouse input and prepare for rendering
+	 */
 	void doMouse(GLFWwindow *window);
 	
 	void next(float w, float h);
 	void newLine();
 
 	/**
-	 * Add a display
+	 * Add an 8 bit grayscale display
+	 * @param width width of display
+	 * @param height height of display
 	 * @param bitmap content of display
 	 */
-	void display(uint8_t const *displayBuffer);
+	void display(int width, int height, uint8_t const *displayBuffer);
+
+	struct Poti {
+		int delta;
+		bool activated;
+	};
 
 	/**
 	 * Add a digital potentiometer with button
 	 * @param id id of poti, must stay the same during its lifetime
 	 */
-	std::pair<int, bool> poti(int id);
+	std::optional<Poti> poti(int id);
 
 	/**
 	 * Add a button with pressed/release states
@@ -60,9 +70,9 @@ public:
 
 	/**
 	 * Add a virtual temperature sensor
-	 * @return temperature in 1/20 Kelvin or -1 when no change
+	 * @return temperature in celsius
 	 */
-	int temperatureSensor(int id);
+	std::optional<float> temperatureSensor(int id);
 
 	/**
 	 * Add a light
@@ -77,6 +87,11 @@ public:
 	void blind(int percentage);
 	
 	//bool button(int id);
+
+	/**
+	 * Add an indicator led
+	 */
+	void led(int color);
 
 protected:
 
@@ -279,8 +294,8 @@ protected:
 	Render *lightRender;
 	
 	// uniform locations
-	GLint lightValue;
-	GLint lightInnerValue;
+	GLint lightColor;
+	GLint lightInnerColor;
 
 
 	// blind

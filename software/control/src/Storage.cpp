@@ -192,14 +192,14 @@ bool Storage::ArrayData::write(int index, void const *flashElement, void const* 
 	if (storage->it + alignedFlashHeaderSize + alignedFlashElementSize <= storage->end) {
 		// write header to flash
 		FlashHeader flashHeader = {this->index, uint8_t(index), uint8_t(1), Op::OVERWRITE};
-		flash::write(storage->it, &flashHeader, sizeof(FlashHeader));
+		flash::write(storage->it, sizeof(FlashHeader), &flashHeader);
 		storage->it += alignedFlashHeaderSize;
 		
 		// set element in flash
 		this->flashElements[index] = storage->it;
 
 		// write element to flash
-		flash::write(storage->it, flashElement, flashElementSize);
+		flash::write(storage->it, flashElementSize, flashElement);
 		storage->it += alignedFlashElementSize;
 	} else {
 		// set element, gets copied to flash in switchFlashRegions()
@@ -244,7 +244,7 @@ void Storage::ArrayData::erase(int index) {
 	if (storage->it + alignedFlashHeaderSize <= storage->end) {
 		// write header to flash
 		FlashHeader header = {this->index, uint8_t(index), uint8_t(1), Op::ERASE};
-		flash::write(storage->it, &header, sizeof(FlashHeader));
+		flash::write(storage->it, sizeof(FlashHeader), &header);
 		storage->it += alignedFlashHeaderSize;
 	} else {
 		// defragment flash
@@ -313,7 +313,7 @@ void Storage::ArrayData::move(int index, int newIndex) {
 	if (storage->it + alignedFlashHeaderSize <= storage->end) {
 		// write header to flash
 		FlashHeader header = {this->index, uint8_t(index), uint8_t(newIndex), Op::MOVE};
-		flash::write(storage->it, &header, sizeof(FlashHeader));
+		flash::write(storage->it, sizeof(FlashHeader), &header);
 		storage->it += alignedFlashHeaderSize;
 	} else {
 		// defragment flash
@@ -473,7 +473,7 @@ void Storage::switchFlashRegions() {
 		// write header for whole array (except first header)
 		if (arrayData != this->first) {
 			FlashHeader header = {arrayData->index, 0, arrayData->count, Op::OVERWRITE};
-			flash::write(it, &header, sizeof(FlashHeader));
+			flash::write(it, sizeof(FlashHeader), &header);
 		}
 		it += flashAlign(sizeof(FlashHeader));
 
@@ -481,7 +481,7 @@ void Storage::switchFlashRegions() {
 		for (int i = 0; i < arrayData->count; ++i) {
 			int elementSize = arrayData->flashSize(arrayData->flashElements[i]);
 			arrayData->flashElements[i] = it;
-			flash::write(it, arrayData->flashElements[i], elementSize);
+			flash::write(it, elementSize, arrayData->flashElements[i]);
 			it += flashAlign(elementSize);
 			
 			// update element count and accumulated size
@@ -495,7 +495,7 @@ void Storage::switchFlashRegions() {
 	
 	// write first header last to make new flash region valid
 	FlashHeader header = {this->first->index, 0, this->first->count, Op::OVERWRITE};
-	flash::write(this->it, &header, sizeof(FlashHeader));
+	flash::write(this->it, sizeof(FlashHeader), &header);
 	
 	// erase old flash region
 	if (this->it != p) {

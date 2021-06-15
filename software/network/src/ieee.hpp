@@ -1,0 +1,63 @@
+#pragma once
+
+#include <enum.hpp>
+
+
+namespace ieee {
+
+// ieee 802.15.4 frame control field
+enum class FrameControl : uint16_t {
+	// frame type
+	TYPE_MASK = 7,
+	TYPE_BEACON = 0,
+	TYPE_DATA = 1,
+	TYPE_ACK = 2,
+	TYPE_COMMAND = 3,
+
+	PAN_ID_COMPRESSION = 1 << 6,
+
+	SEQUENCE_NUMBER_SUPPRESSION = 1 << 8,
+
+	DESTINATION_ADDRESSING_MASK = 3 << 10,
+	DESTINATION_ADDRESSING_FLAG = 2 << 10,
+	DESTINATION_ADDRESSING_LONG_FLAG = 1 << 10,
+	DESTINATION_ADDRESSING_NONE = 0,
+	DESTINATION_ADDRESSING_SHORT = 2 << 10,
+	DESTINATION_ADDRESSING_LONG = 3 << 10,
+
+	SOURCE_ADDRESSING_MASK = 3 << 14,
+	SOURCE_ADDRESSING_FLAG = 2 << 14,
+	SOURCE_ADDRESSING_LONG_FLAG = 1 << 14,
+	SOURCE_ADDRESSING_NONE = 0,
+	SOURCE_ADDRESSING_SHORT = 2 << 14,
+	SOURCE_ADDRESSING_LONG = 3 << 14,
+};
+FLAGS_ENUM(FrameControl)
+
+// ieee 802.15.4 command
+enum class Command : uint8_t {
+	ASSOCIATION_REQUEST = 1,
+	ASSOCIATION_RESPONSE = 2,
+	DATA_REQUEST = 4,
+	BEACON_REQUEST = 7,
+};
+
+// ieee 802.15.4 association request
+enum class AssociationRequest : uint8_t {
+	ALTERNATE_PAN_COORDINATOR = 1,
+
+	DEVICE_TYPE_MASK = 1 << 1,
+	DEVICE_TYPE_RFD = 0,
+
+	POWER_SOURCE_MASK = 1 << 2,
+	POWER_SOURCE_BATTERY = 0,
+
+	RECEIVE_ON_WHEN_IDLE = 1 << 3,
+
+	SECURITY_CAPABILITY = 1 << 6,
+
+	ALLOCATE_ADDRESS = 1 << 7
+};
+FLAGS_ENUM(AssociationRequest)
+
+} // namespace ieee

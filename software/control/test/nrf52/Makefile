@@ -45,7 +45,7 @@ CFLAGS += -D__STACK_SIZE=8192
 CFLAGS += -Wall
 
 # C++ flags (C++ also uses CFLAGS)
-CXXFLAGS += -Wno-literal-suffix
+CXXFLAGS += -Wno-literal-suffix -fcoroutines
 
 # Assembler flags
 ASMFLAGS += -g3

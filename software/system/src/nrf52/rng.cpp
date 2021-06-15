@@ -46,7 +46,7 @@ void RNG_IRQHandler(void) {
 	}	
 }
 
-uint8_t get8() {	
+uint8_t int8() {	
 	// assert that random number generator was initialized
 	assert(NRF_RNG->INTENSET == N(RNG_INTENSET_VALRDY, Enabled));
 
@@ -56,7 +56,7 @@ uint8_t get8() {
 	return queue[index & (array::size(queue) - 1)];
 }
 
-uint64_t get64() {
+uint64_t int64() {
 	// assert that random number generator was initialized
 	assert(NRF_RNG->INTENSET == N(RNG_INTENSET_VALRDY, Enabled));
 

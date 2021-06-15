@@ -1,4 +1,5 @@
 #include "crypt.hpp"
+#include "Nonce.hpp"
 #include "hash.hpp"
 #include "util.hpp"
 #include <gtest/gtest.h>
@@ -54,7 +55,7 @@ TEST(cryptTest, security11) {
 	// header = a (is not encrypted)
 	static uint8_t const header[] = {0x8C, 0x38, 0x21, 0x43, 0x65, 0x87, 0x02, 0x00, 0x00, 0x00};
 	
-	// message (payload and MIC)
+	// message (1 byte payload and 4 byte MIC)
 	static uint8_t const message[] = {0x83, 0x5F, 0x1A, 0x30, 0x34};
 
 	AesKey aesKey;

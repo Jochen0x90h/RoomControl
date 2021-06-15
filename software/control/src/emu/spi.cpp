@@ -1,5 +1,6 @@
 #include <spi.hpp>
 #include <emu/loop.hpp>
+#include <Queue.hpp>
 #include <util.hpp>
 #include <appConfig.hpp>
 #include <sysConfig.hpp>
@@ -44,6 +45,56 @@ void setTemperature(float celsius) {
 	spi::airSensorRegisters[0x22] = value >> 12;
 }
 
+struct Context {
+	CoList<Parameters> waitingList;
+};
+Context contexts[SPI_CONTEXT_COUNT];
+
+
+// event loop handler chain
+loop::Handler nextHandler;
+void handle(Gui &gui) {
+	for (int index = 0; index < SPI_CONTEXT_COUNT; ++index) {
+		auto &context = spi::contexts[index];
+		context.waitingList.resumeFirst([index](Parameters p) {
+
+			if (index == SPI_AIR_SENSOR) {
+				if (p.writeData[0] & 0x80) {
+					// read
+					int addr = p.writeData[0] & 0x7f;
+					p.readData[0] = 0xff;
+					memcpy(p.readData + 1, &spi::airSensor[addr], p.readLength - 1);
+				} else {
+					// write
+					for (int i = 0; i < p.writeLength - 1; i += 2) {
+						int addr = p.writeData[i] & 0x7f;
+						uint8_t data = p.writeData[i + 1];
+						
+						if (addr == 0x73) {
+							// switch page
+							airSensorRegisters[0x73] = data;
+							airSensorRegisters[0xF3] = data;
+							airSensor = &airSensorRegisters[(data & (1 << 4)) ? 0 : 128];
+						}
+						airSensor[addr] = data;
+					}
+				}
+			}
+			return true;
+		});
+	}
+	
+	// call next handler in chain
+	spi::nextHandler(gui);
+	
+	gui.newLine();
+
+	// draw temperature sensor on gui using random id
+	auto temperature = gui.temperatureSensor(0xbc5032ad);
+	if (temperature)
+		setTemperature(*temperature);
+}
+
 void init() {
 	spi::airSensor = &spi::airSensorRegisters[128];
 
@@ -56,39 +107,16 @@ void init() {
 
 	// set temperature
 	setTemperature(20.0f);
+
+	// add to event loop handler chain
+	spi::nextHandler = loop::addHandler(handle);
 }
 
-bool transfer(int index, uint8_t const *writeData, int writeLength, uint8_t *readData, int readLength,
-	std::function<void ()> const &onTransferred)
-{
-	assert(uint(index) < array::size(SPI_CS_PINS));
+Awaitable<Parameters> transfer(int index, int writeLength, uint8_t const *writeData, int readLength, uint8_t *readData) {
+	assert(uint(index) < SPI_CONTEXT_COUNT);
+	auto &context = spi::contexts[index];
 
-	if (index == SPI_AIR_SENSOR) {
-		if (writeData[0] & 0x80) {
-			// read
-			int addr = writeData[0] & 0x7f;
-			readData[0] = 0xff;
-			memcpy(readData + 1, &spi::airSensor[addr], readLength - 1);
-		} else {
-			// write
-			for (int i = 0; i < writeLength - 1; i += 2) {
-				int addr = writeData[i] & 0x7f;
-				uint8_t data = writeData[i + 1];
-				
-				if (addr == 0x73) {
-					// switch page
-					airSensorRegisters[0x73] = data;
-					airSensorRegisters[0xF3] = data;
-					airSensor = &airSensorRegisters[(data & (1 << 4)) ? 0 : 128];
-				}
-				airSensor[addr] = data;
-			}
-		}
-
-		// notify that we are ready
-		asio::post(loop::context, onTransferred);
-	}
-	return true;
+	return {context.waitingList, {writeLength, writeData, readLength, readData}};
 }
 
 } // namespace spi

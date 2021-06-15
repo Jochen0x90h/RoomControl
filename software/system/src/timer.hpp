@@ -1,6 +1,7 @@
 #pragma once
 
 #include "SystemTime.hpp"
+#include <Coroutine.hpp>
 #include <functional>
 
 
@@ -16,6 +17,19 @@ void init();
  * @return current time
  */
 SystemTime now();
+
+/**
+ * Suspend execution using co_await until a given time. Only up to TIMER_COUNT coroutines can wait simultaneously.
+ * @param time time point
+ */
+Awaitable<SystemTime> time(SystemTime time);
+
+/**
+ * Suspend execution using co_await for a given duration. Only up to TIMER_COUNT coroutines can wait simultaneously.
+ * @param duration duration
+ */
+inline Awaitable<SystemTime> delay(SystemDuration duration) {return time(now() + duration);}
+
 
 /**
  * Set timeout handler

@@ -8,14 +8,16 @@ namespace debug {
 bool red = false;
 bool green = false;
 bool blue = false;
-
+/*
 bool changed = false;
 
 void print() {
-	printf(debug::red ? "📕" : " ");
-	printf(debug::green ? "📗" : " ");
+	printf("\r");
+	printf(debug::red ? "📕\t" : " \t");
+	printf(debug::green ? "📗\t" : " \t");
 	printf(debug::blue ? "📘" : " ");
-	printf("\n");
+	//printf("\n");
+	fflush(stdout);
 	debug::changed = false;
 }
 
@@ -26,8 +28,28 @@ void set(bool &value, bool newValue) {
 	}
 	value = newValue;
 }
+*/
 
-void init() {}
+inline void set(bool &value, bool newValue) {value = newValue;}
+
+
+// event loop handler chain
+loop::Handler nextHandler;
+void handle(Gui &gui) {
+	// call next handler in chain
+	debug::nextHandler(gui);
+
+	// draw debug led's on gui
+	gui.newLine();
+	gui.led(debug::red ? 0x0000ff : 0);
+	gui.led(debug::green ? 0x00ff00 : 0);
+	gui.led(debug::blue ? 0xff0000 : 0);
+}
+
+void init() {
+	// add to event loop handler chain
+	debug::nextHandler = loop::addHandler(handle);
+}
 
 void setRedLed(bool value) {
 	set(debug::red, value);

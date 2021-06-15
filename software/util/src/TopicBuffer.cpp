@@ -2,7 +2,7 @@
 
 
 TopicBuffer &TopicBuffer::operator /=(String str) {
-	if (!str.empty()) {
+	if (!str.isEmpty()) {
 		char *data = this->data + MAX_PREFIX_LENGTH;
 		if (this->index < MAX_TOPIC_LENGTH)
 			data[this->index++] = '/';

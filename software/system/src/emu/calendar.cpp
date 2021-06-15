@@ -5,19 +5,17 @@
 
 namespace calendar {
 
+// waiting coroutines
+CoList<> waitingList;
+
 asio::deadline_timer *timer;
-std::function<void ()> onSecond[CALENDAR_SECOND_HANDLER_COUNT];
 
 void setTimeout(boost::posix_time::ptime utc) {
 	calendar::timer->expires_at(utc);
 	calendar::timer->async_wait([] (boost::system::error_code error) {
 		if (!error) {
-			//calendar::onSecondElapsed();
-			// call second handlers
-			for (auto const &handler : calendar::onSecond) {
-				if (handler)
-					handler();
-			}
+			// resume all waiting coroutines
+			calendar::waitingList.resumeAll();
 
 			// set next timeout in one second
 			auto utc = boost::date_time::second_clock<boost::posix_time::ptime>::universal_time();
@@ -47,10 +45,8 @@ ClockTime now() {
 	return ClockTime(weekDay, hours, minutes, seconds);
 }
 
-void setSecondHandler(int index, std::function<void ()> const &onSecond) {
-	assert(uint(index) < CALENDAR_SECOND_HANDLER_COUNT);
-
-	calendar::onSecond[index] = onSecond;
+Awaitable<> secondTick() {
+	return calendar::waitingList;
 }
 
 } // namespace system

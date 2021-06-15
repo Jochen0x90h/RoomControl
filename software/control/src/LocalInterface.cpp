@@ -42,8 +42,11 @@ constexpr EndpointType motionDetectorEndpoints[] = {
 
 LocalInterface::LocalInterface(std::function<void (uint8_t, uint8_t const *, int)> const &onReceived)
 	: onReceived(onReceived)
-	, airSensor([this]() {onAirSensorInitialized();}), subscriptions{}
+	//, airSensor([this]() {onAirSensorInitialized();})
+	, subscriptions{}
 {
+	// start coroutine
+	measure();
 }
 
 LocalInterface::~LocalInterface() {
@@ -60,12 +63,6 @@ DeviceId LocalInterface::getDeviceId(int index) {
 	assert(index >= 0 && index < array::size(deviceIds));
 	return deviceIds[index];
 }
-
-/*
-Array<DeviceId> LocalInterface::getDevices() {
-	return deviceIds;
-}
- */
 
 Array<EndpointType> LocalInterface::getEndpoints(DeviceId deviceId) {
 	switch (deviceId) {
@@ -110,6 +107,46 @@ void LocalInterface::unsubscribe(uint8_t &endpointId, DeviceId deviceId, uint8_t
 void LocalInterface::send(uint8_t endpointId, uint8_t const *data, int length) {
 }
 
+Coroutine LocalInterface::measure() {
+	BME680 sensor;
+
+	co_await sensor.init();
+	co_await sensor.setParameters(
+		2, 5, 2, // temperature and pressure oversampling and filter
+		1, // humidity oversampling
+		300, 100); // heater temperature and duration
+
+	while (true) {
+		co_await sensor.measure();
+
+		if (this->subscriptions[TEMPERATURE_SENSOR_ENDPOINT - 1] > 0) {
+			float temperature = this->airSensor.getTemperature();
+			
+			// convert to 1/20 Kelvin
+			int k = int((temperature + 273.15f) * 20.0f + 0.5f);
+			
+			uint8_t t[2];
+			t[0] = k;
+			t[1] = k >> 8;
+			this->onReceived(TEMPERATURE_SENSOR_ENDPOINT, t, 2);
+		}
+		if (this->subscriptions[AIR_PRESSURE_SENSOR_ENDPOINT - 1] > 0) {
+			this->airSensor.getPressure();
+
+		}
+		if (this->subscriptions[AIR_HUMIDITY_SENSOR_ENDPOINT - 1] > 0) {
+			this->airSensor.getHumidity();
+
+		}
+		if (this->subscriptions[AIR_VOC_SENSOR_ENDPOINT - 1] > 0) {
+			this->airSensor.getGasResistance();
+
+		}
+		
+		co_await timer::delay(60s);
+	}
+}
+/*
 void LocalInterface::onAirSensorInitialized() {
 	this->airSensor.setParameters(
 		2, 5, 2, // temperature and pressure oversampling and filter
@@ -153,3 +190,4 @@ void LocalInterface::airSensorGetValues() {
 
 	}
 }
+*/

@@ -11,11 +11,11 @@ std::uniform_int_distribution<uint64_t> dist;
 void init() {
 }
 
-uint8_t get8() {
+uint8_t int8() {
 	return rng::dist(rng::mt);
 }
 
-uint64_t get64() {
+uint64_t int64() {
 	return rng::dist(rng::mt);
 }
 

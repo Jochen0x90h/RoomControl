@@ -1,10 +1,13 @@
 //#include <iostream>
 #include "RoomControl.hpp"
 #include <calendar.hpp>
+#include <poti.hpp>
 #include <spi.hpp>
+#include <rng.hpp>
+#include <radio.hpp>
+#include <crypt.hpp>
+#include "tahoma_8pt.hpp" // font
 
-// font
-#include "tahoma_8pt.hpp"
 
 constexpr String weekdays[7] = {"Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"};
 constexpr String weekdaysShort[7] = {"M", "T", "W", "T", "F", "S", "S"};
@@ -189,21 +192,33 @@ ValueInfo valueInfos[] = {
 // -----------
 
 RoomControl::RoomControl()
-	: storage(0, FLASH_PAGE_COUNT, room, localDevices, busDevices, radioDevices, routes, timers, radioInterface.coordinator, radioInterface.devices)
-	//, room(storage), localDevices(storage), busDevices(storage), radioDevices(storage), routes(storage), timers(storage)
-	, display([this]() {onDisplayReady();})
+	: storage(0, FLASH_PAGE_COUNT, configuration, localDevices, busDevices, radioDevices, routes, timers, radioInterface.devices)
+	, houseTopicId(), roomTopicId()
 	, localInterface([this](uint8_t endpointId, uint8_t const *data, int length) {onLocalReceived(endpointId, data, length);})
 	, busInterface([this]() {onBusSent();}, [this](uint8_t endpointId, uint8_t const *data, int length) {onBusReceived(endpointId, data, length);})
-	, radioInterface(/*storage,*/ [this](uint8_t endpointId, uint8_t const *data, int length) {onRadioReceived(endpointId, data, length);})
+	, radioInterface(networkKey, [this](uint8_t endpointId, uint8_t const *data, int length) {onRadioReceived(endpointId, data, length);})
 {
 	timer::setHandler(this->timerIndex, [this]() {onTimeout();});
-	calendar::setSecondHandler(CALENDAR_ROOM_CONTROL, [this]() {onSecondElapsed();});
-	poti::setHandler([this](int delta, bool activated) {onPotiChanged(delta, activated);});
 
-	if (this->room.size() == 0) {
-		assign(this->temp.room.name, "room");
-		this->room.write(0, &this->temp.room);
+	// set default configuration for this device if necessary
+	if (this->configuration.size() == 0) {
+		assign(this->temp.configuration.name, "room");
+		
+		// generate a random 64 bit address
+		this->temp.configuration.address = rng::int64();
+		
+		// set default pan
+		this->temp.configuration.zbPanId = 0x1a62;
+		
+		// generate network key
+		for (int i = 0; i < array::size(this->temp.configuration.networkKey); ++i) {
+			this->temp.configuration.networkKey[i] = rng::int8();
+		}
+		
+		// write to flash
+		this->configuration.write(0, &this->temp.configuration);
 	}
+	applyConfiguration();
 	
 	// subscribe to local devices
 	subscribeInterface(this->localInterface, this->localDevices);
@@ -217,10 +232,22 @@ RoomControl::RoomControl()
 	this->lastUpdateTime = now;
 	this->nextReportTime = now;
 	onTimeout();
+	
+	// start coroutines
+	doMenu();
+	doTimers();
 }
 
 RoomControl::~RoomControl() {
 	// unregister second handler not needed because RoomControl lives forever
+}
+
+void RoomControl::applyConfiguration() {
+	Configuration const &configuration = *this->configuration[0].flash;
+	radio::setLongAddress(configuration.address);
+	this->radioInterface.setLongAddress(configuration.address);
+	this->radioInterface.setPan(configuration.zbPanId);
+	setKey(this->networkKey, configuration.networkKey);
 }
 
 // UpLink
@@ -272,7 +299,7 @@ void RoomControl::onPublished(uint16_t topicId, uint8_t const *data, int length,
 */
 
 	// topic list of house, room or device (depending on topicDepth)
-	if (topicId == this->selectedTopicId && !message.empty()) {
+	if (topicId == this->selectedTopicId && !message.isEmpty()) {
 		int space = message.indexOf(' ', 0, message.length);
 		if (this->topicDepth < 2 || !this->onlyCommands || message.substring(space + 1) == "c")
 			this->topicSet.add(message.substring(0, space));
@@ -280,30 +307,30 @@ void RoomControl::onPublished(uint16_t topicId, uint8_t const *data, int length,
 	}
 
 	// global commands
-	RoomState const &roomState = *this->room[0].ram;
+	//ConfigurationState const &configurationState = *this->room[0].ram;
 
 	// check for request to list rooms in the house
-	if (topicId == roomState.houseTopicId && message.empty()) {
+	if (topicId == this->houseTopicId && message.isEmpty()) {
 		// publish room name
-		publish(roomState.houseTopicId, getRoomName(), QOS);
+		publish(this->houseTopicId, getRoomName(), QOS);
 		return;
 	}
 
 	// check for request to list devices in this room
-	if (topicId == roomState.roomTopicId && message.empty()) {
+	if (topicId == this->roomTopicId && message.isEmpty()) {
 		// publish device names
 		// todo: do async
 		for (int i = 0; i < this->localDevices.size(); ++i) {
 			auto e = this->localDevices[i];
-			publish(roomState.roomTopicId, e.flash->getName(), QOS);
+			publish(this->roomTopicId, e.flash->getName(), QOS);
 		}
 		for (int i = 0; i < this->busDevices.size(); ++i) {
 			auto e = this->busDevices[i];
-			publish(roomState.roomTopicId, e.flash->getName(), QOS);
+			publish(this->roomTopicId, e.flash->getName(), QOS);
 		}
 		for (int i = 0; i < this->radioDevices.size(); ++i) {
 			auto e = this->radioDevices[i];
-			publish(roomState.roomTopicId, e.flash->getName(), QOS);
+			publish(this->roomTopicId, e.flash->getName(), QOS);
 		}
 		return;
 	}
@@ -388,30 +415,34 @@ void RoomControl::onTimeout() {
 }
 
 
-// Display
-// -------
-
-void RoomControl::onDisplayReady() {
-	if (!this->display.isEnabled())
-		this->display.enable();
-}
-
-
-// Poti
-// ----
-
-void RoomControl::onPotiChanged(int delta, bool activated) {
-	updateMenu(delta, activated);
-	if (this->display.getSendCount() == 0) {
-		display.set(this->bitmap);
-	}
-}
-
 
 // Menu
 // ----
 
-void RoomControl::updateMenu(int delta, bool activated) {
+Coroutine RoomControl::doMenu() {
+	SSD1309 display;
+	co_await display.init();
+	co_await display.enable();
+
+	updateMenu(0, false);
+	while (true) {
+		co_await display.set(this->bitmap);
+
+		int delta;
+		bool activated;
+		switch (co_await select(poti::change(delta, activated), calendar::secondTick())) {
+		case 1:
+			if (updateMenu(delta, activated))
+				updateMenu(0, false);
+			break;
+		case 2:
+			updateMenu(0, false);
+			break;
+		}
+	}
+}
+
+bool RoomControl::updateMenu(int delta, bool activated) {
 	// if menu entry was activated, read menu state from stack
 	if (this->stackHasChanged) {
 		this->stackHasChanged = false;
@@ -428,12 +459,12 @@ void RoomControl::updateMenu(int delta, bool activated) {
 	this->bitmap.clear();
 
 	// toast
-	if (!this->buffer.empty() && timer::now() - this->toastTime < 3s) {
+	if (!this->buffer.isEmpty() && timer::now() - this->toastTime < 3s) {
 		String text = this->buffer;
 		int y = 10;
 		int len = tahoma_8pt.calcWidth(text, 1);
 		this->bitmap.drawText((bitmap.WIDTH - len) >> 1, y, tahoma_8pt, text, 1);
-		return;
+		return false;
 	}
 
 	// draw menu
@@ -487,7 +518,8 @@ void RoomControl::updateMenu(int delta, bool activated) {
 		if (entry("Timers"))
 			push(TIMERS);
 		if (entry("Exit")) {
-			this->menuState = IDLE;
+			this->stack[0] = {IDLE, 0, 0, 0};
+			this->stackHasChanged = true;
 		}
 		break;
 	
@@ -752,7 +784,7 @@ void RoomControl::updateMenu(int delta, bool activated) {
 					// menu entry for topic
 					{
 						String topic = editor.getTopic();
-						if (entry(!topic.empty() ? topic : "Select Topic")) {
+						if (entry(!topic.isEmpty() ? topic : "Select Topic")) {
 							enterTopicSelector(topic, true, commandIndex);
 						}
 					}
@@ -931,8 +963,7 @@ void RoomControl::updateMenu(int delta, bool activated) {
 		
 		// cancel menu entry
 		if (entry("Cancel")) {
-			// unsubscribe from selected topic if it is not one of the own global topics
-			RoomState *roomState = this->room[0].ram;
+			// unsubscribe from selected topic
 			unsubscribeTopic(this->selectedTopicId, this->selectedTopic.enumeration());
 			
 			// clear
@@ -944,9 +975,8 @@ void RoomControl::updateMenu(int delta, bool activated) {
 			pop();
 		}
 		
-		if (!selected.empty()) {
-			// unsubscribe from selected topic if it is not one of the own global topics
-			RoomState *roomState = this->room[0].ram;
+		if (!selected.isEmpty()) {
+			// unsubscribe from selected topic
 			unsubscribeTopic(this->selectedTopicId, this->selectedTopic.enumeration());
 			
 			// append new element (room, device or attribute) to selected topic
@@ -981,7 +1011,7 @@ void RoomControl::updateMenu(int delta, bool activated) {
 						if (this->tempIndex == 0) {
 							// unsubscribe from old source topic
 							TopicBuffer oldTopic = route.getSrcTopic();
-							if (!oldTopic.empty())
+							if (!oldTopic.isEmpty())
 								unsubscribeTopic(state.srcTopicId, oldTopic.state());
 
 							// set new source topic
@@ -991,7 +1021,7 @@ void RoomControl::updateMenu(int delta, bool activated) {
 							subscribeTopic(state.srcTopicId, this->selectedTopic.state(), QOS);
 						} else {
 							// unregsiter old destination topic
-							if (!route.getDstTopic().empty())
+							if (!route.getDstTopic().isEmpty())
 								unregisterTopic(state.dstTopicId);
 							
 							// set new destination topic
@@ -1036,8 +1066,26 @@ void RoomControl::updateMenu(int delta, bool activated) {
 		break;
 	}
 	this->buffer.clear();
-}
+	
+	
+	// determine if an immediate redraw is needed
+	bool redraw = this->stackHasChanged;
+	
+	const int lineHeight = tahoma_8pt.height + 4;
 
+	// adjust yOffset so that selected entry is visible
+	int upper = this->selectedY;
+	int lower = upper + lineHeight;
+	if (upper < this->yOffset) {
+		this->yOffset = upper;
+		redraw = true;
+	}
+	if (lower > this->yOffset + bitmap.HEIGHT) {
+		this->yOffset = lower - bitmap.HEIGHT;
+		redraw = true;
+	}
+	return redraw;
+}
 
 
 
@@ -1061,7 +1109,7 @@ void RoomControl::menu(int delta, bool activated) {
 	// set activated state for selecting the current menu entry
 	this->activated = activated;
 
-
+/*
 	const int lineHeight = tahoma_8pt.height + 4;
 
 	// adjust yOffset so that selected entry is visible
@@ -1071,7 +1119,7 @@ void RoomControl::menu(int delta, bool activated) {
 		this->yOffset = upper;
 	if (lower > this->yOffset + bitmap.HEIGHT)
 		this->yOffset = lower - bitmap.HEIGHT;
-
+*/
 	this->entryIndex = 0;
 	this->entryY = 0;
 }
@@ -1181,39 +1229,30 @@ void RoomControl::pop() {
 }
 
 
-// Room
-// ----
+// Configuration
+// -------------
 
-int RoomControl::Room::getFlashSize() const {
-	int length = array::size(this->name);
-	for (int i = 0; i < array::size(this->name); ++i) {
-		if (this->name[i] == 0) {
-			length = i + 1;
-			break;
-		}
-	}
-	return getOffset(Room, name[length]);
+int RoomControl::Configuration::getFlashSize() const {
+	return sizeof(Configuration);
 }
 
-int RoomControl::Room::getRamSize() const {
-	return sizeof(RoomState);
+int RoomControl::Configuration::getRamSize() const {
+	return 0;
 }
 
 // todo don't register all topics in one go, message buffer may overflow
 void RoomControl::subscribeAll() {
 	
 	// register/subscribe room topics
-	RoomElement e = this->room[0];
-	Room const &room = *e.flash;
-	RoomState &roomState = *e.ram;
+	Configuration const &configuration = *this->configuration[0].flash;
 	
 	// house topic (room name is published when empty message is received on this topic)
 	TopicBuffer topic;
-	subscribeTopic(roomState.houseTopicId, topic.enumeration(), QOS);
+	subscribeTopic(this->houseTopicId, topic.enumeration(), QOS);
 
 	// toom topic (device names are published when empty message is received on this topic)
-	topic /= room.name;
-	subscribeTopic(roomState.roomTopicId, topic.enumeration(), QOS);
+	topic /= configuration.name;
+	subscribeTopic(this->roomTopicId, topic.enumeration(), QOS);
 
 
 	// register/subscribe device topics
@@ -1426,7 +1465,7 @@ SystemTime RoomControl::updateDevices(SystemTime time, SystemDuration duration, 
 		DeviceState &deviceState = *e.ram;
 
 		// check for request to list attributes in this device
-		if (topicId == deviceState.deviceTopicId && message.empty()) {
+		if (topicId == deviceState.deviceTopicId && message.isEmpty()) {
 			for (ComponentIterator it(device, deviceState); !it.atEnd(); it.next()) {
 				auto &component = it.getComponent();
 				StringBuffer<8> b = component.getName();
@@ -1575,7 +1614,7 @@ std::cout << "delay button " << int(data[0]) << " " << int(d[0]) << std::endl;
 					
 					// handle mqtt message
 					if (topicId == relayState.commandTopicId) {
-						if (message.empty()) {
+						if (message.isEmpty()) {
 							// indicate that we want to publish the current state
 							report = true;
 						} else {
@@ -1664,7 +1703,7 @@ std::cout << "delay button " << int(data[0]) << " " << int(d[0]) << std::endl;
 					
 					// handle topic
 					if (topicId == blindState.commandTopicId) {
-						if (message.empty()) {
+						if (message.isEmpty()) {
 							// indicate that we want to publish the current state
 							report = true;
 						} else {
@@ -2572,6 +2611,35 @@ int RoomControl::Timer::getRamSize() const {
 	return getOffset(TimerState, commands[this->commandCount]);
 }
 
+Coroutine RoomControl::doTimers() {
+	while (true) {
+		co_await calendar::secondTick();
+		
+		// check for timer event
+		auto now = calendar::now();
+		if (now.getSeconds() == 0) {
+			int minutes = now.getMinutes();
+			int hours = now.getHours();
+			int weekday = now.getWeekday();
+			for (auto e : this->timers) {
+				Timer const &timer = *e.flash;
+				TimerState &timerState = *e.ram;
+				
+				ClockTime t = timer.time;
+				if (t.getMinutes() == minutes && t.getHours() == hours && (t.getWeekdays() & (1 << weekday)) != 0) {
+					// timer event: publish commands
+					for (CommandIterator it(timer, timerState); !it.atEnd(); it.next()) {
+						auto &command = it.getCommand();
+						auto &state = it.getState();
+
+						publishCommand(state.topicId, command.valueType, it.getValue());
+					}
+				}
+			}
+		}
+	}
+}
+
 void RoomControl::subscribeTimer(int index) {
 	auto e = this->timers[index];
 	
@@ -2696,7 +2764,7 @@ void RoomControl::CommandEditor::next() {
 
 // Clock
 // -----
-
+/*
 void RoomControl::onSecondElapsed() {
 	updateMenu(0, false);
 	if (this->display.getSendCount() == 0) {
@@ -2726,7 +2794,7 @@ void RoomControl::onSecondElapsed() {
 		}
 	}
 }
-
+*/
 
 // Topic Selector
 // --------------

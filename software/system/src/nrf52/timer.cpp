@@ -8,37 +8,54 @@ namespace timer {
 
 SystemTime systemTime;
 
+// next timeout of a timer in the list
+SystemTime next;
+
+// waiting coroutines
+CoList<SystemTime> waitingList;
+
+
 enum State : uint8_t {
 	STOPPED = 0,
 	RUNNING = 1
 };
 
-struct Timer {
+struct TimerOld {
 	// state
 	State state = STOPPED;
 	
 	// timeout time
 	SystemTime time;
-	
+		
 	// timeout callback
 	std::function<void ()> onTimeout;
 };
 
 // list of timers
-Timer timers[TIMER_COUNT];
+TimerOld timersOld[4];
 
-// next timeout of a timer in the list
-SystemTime next;
 
 
 // event loop handler chain
-loop::Handler nextHandler;
+loop::Handler nextHandler = nullptr;
 void handle() {
 	if (NRF_RTC0->EVENTS_COMPARE[0]) {
 		do {
 			auto timeout = timer::next;
 			next.value += 0x80000;
-			for (Timer &t : timers) {
+			
+			// resume all coroutines that where timeout occurred
+			timer::waitingList.resumeAll([timeout](SystemTime time) {
+				if (time == timeout)
+					return true;
+				
+				// check if this time is the next to elapse
+				if (time < timer::next)
+					timer::next = time;
+				return false;
+			});
+
+			for (TimerOld &t : timersOld) {
 				// check if timer is running
 				if (t.state == RUNNING) {
 					// check if timeout time reached
@@ -57,6 +74,8 @@ void handle() {
 				}
 			}
 			NRF_RTC0->CC[0] = timer::next.value << 4;
+		
+			// repeat until next timeout is in the future
 		} while (now() >= timer::next);
 
 		// clear pending interrupt flags at peripheral and NVIC
@@ -69,6 +88,9 @@ void handle() {
 }
 
 void init() {
+	if (timer::nextHandler != nullptr)
+		return;
+
 	// use channel 0 of RTC0
 	next.value = 0x80000;
 	NRF_RTC0->CC[0] = next.value << 4;
@@ -82,21 +104,36 @@ void init() {
 
 SystemTime now() {
 	uint32_t counter = ((NRF_RTC0->COUNTER + 8) >> 4) & 0xfffff;
-	bool overflow = counter < (systemTime.value & 0xfffff);
-	systemTime.value = ((systemTime.value & 0xfff00000) | counter) + (overflow ? 0x0100000 : 0);
-	return systemTime;
+	bool overflow = counter < (timer::systemTime.value & 0xfffff);
+	timer::systemTime.value = ((systemTime.value & 0xfff00000) | counter) + (overflow ? 0x0100000 : 0);
+	return timer::systemTime;
+}
+
+Awaitable<SystemTime> time(SystemTime time) {
+	// check if this time is the next to elapse
+	if (time < timer::next) {
+		timer::next = time;
+		NRF_RTC0->CC[0] = timer::next.value << 4;
+	}
+
+	// check if timeout already elapsed
+	if (time > now()) {
+		NRF_RTC0->EVENTS_COMPARE[0] = Generated;
+	}
+	
+	return {timer::waitingList, time};
 }
 
 void setHandler(int index, std::function<void ()> const &onTimeout) {
-	assert(uint(index) < TIMER_COUNT);
-	Timer &t = timer::timers[index];
+	assert(uint(index) < TIMER_WAITING_COUNT);
+	TimerOld &t = timer::timersOld[index];
 
 	t.onTimeout = onTimeout;
 }
 
 void start(int index, SystemTime time) {
-	assert(uint(index) < TIMER_COUNT);
-	Timer &t = timer::timers[index];
+	assert(uint(index) < TIMER_WAITING_COUNT);
+	TimerOld &t = timer::timersOld[index];
 
 	// set state to running
 	t.state = RUNNING;
@@ -117,11 +154,11 @@ void start(int index, SystemTime time) {
 }
 
 void stop(int index) {
-	assert(uint(index) < TIMER_COUNT);
-	Timer &t = timer::timers[index];
+	assert(uint(index) < TIMER_WAITING_COUNT);
+	TimerOld &t = timer::timersOld[index];
 
 	// set state to stopped
-	t.state = STOPPED;
+	t.state = STOPPED;	
 }
 
 } // namespace timer

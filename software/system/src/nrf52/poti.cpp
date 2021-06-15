@@ -2,17 +2,28 @@
 #include "loop.hpp"
 #include "timer.hpp"
 #include "global.hpp"
+#include <assert.hpp>
 
-
+/*
+	Dependencies:
+	timer
+	
+	Resources:
+		NRF_QDEC
+		NRF_GPIOTE
+			IN[0]	
+*/
 namespace poti {
 
-std::function<void (int, bool)> onChanged;
+// waiting coroutines
+CoList<Parameters> waitingList;
+
 int acc = 0;
 bool buttonState = false;
 uint32_t counter;
 
 // event loop handler chain
-loop::Handler nextHandler;
+loop::Handler nextHandler = nullptr;
 void handle() {
 	if (NRF_QDEC->EVENTS_REPORTRDY) {
 		// clear pending interrupt flags at peripheral and NVIC
@@ -23,8 +34,14 @@ void handle() {
 		int poti = poti::acc & ~3;
 		if (poti != 0) {
 			poti::acc -= poti;
-			if (poti::onChanged)
-				poti::onChanged(poti >> 2, false);
+			int delta = poti >> 2;
+
+			// resume all waiting coroutines
+			poti::waitingList.resumeAll([delta](Parameters parameters) {
+				parameters.delta = delta;
+				parameters.activated = false;
+				return true;
+			});
 		}
 	}
 	if (NRF_GPIOTE->EVENTS_IN[0]) {
@@ -37,8 +54,14 @@ void handle() {
 		uint32_t c = timer::now().value;		
 		bool activated = !poti::buttonState;
 		if (activated) {
-			if (c - poti::counter > 100 && poti::onChanged)
-				poti::onChanged(0, true);		
+			if (c - poti::counter > 100) {				
+				// resume all waiting coroutines
+				poti::waitingList.resumeAll([](Parameters parameters) {
+					parameters.delta = 0;
+					parameters.activated = true;
+					return true;
+				});
+			}
 		}
 		poti::buttonState = b;
 		poti::counter = c;
@@ -49,6 +72,9 @@ void handle() {
 }
 
 void init() {
+	if (poti::nextHandler != nullptr)
+		return;
+	
 	configureInputWithPullUp(POTI_A_PIN);
 	configureInputWithPullUp(POTI_B_PIN);
 	configureInputWithPullUp(BUTTON_PIN);
@@ -65,7 +91,7 @@ void init() {
 	NRF_QDEC->TASKS_START = Trigger;
 
 	// gpio event for button
-	NRF_GPIOTE->INTENSET = N(GPIOTE_INTENSET_IN0, Enabled) | N(GPIOTE_INTENSET_IN1, Enabled);
+	NRF_GPIOTE->INTENSET = N(GPIOTE_INTENSET_IN0, Enabled);// | N(GPIOTE_INTENSET_IN1, Enabled);
 	NRF_GPIOTE->CONFIG[0] = N(GPIOTE_CONFIG_MODE, Event) | N(GPIOTE_CONFIG_POLARITY, Toggle)
 		| (BUTTON_PIN << GPIOTE_CONFIG_PSEL_Pos);
 
@@ -73,8 +99,8 @@ void init() {
 	poti::nextHandler = loop::addHandler(handle);
 }
 
-void setHandler(std::function<void (int, bool)> const &onChanged) {
-	poti::onChanged = onChanged;
+Awaitable<Parameters> change(int& delta, bool& activated) {
+	return {poti::waitingList, {delta, activated}};
 }
 
 } // namespace poti

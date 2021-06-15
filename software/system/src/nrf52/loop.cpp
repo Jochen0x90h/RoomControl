@@ -6,6 +6,11 @@
 namespace loop {
 
 Handler nextHandler = waitForEvent;
+Handler addHandler(Handler handler) {
+	Handler h = nextHandler;
+	loop::nextHandler = handler;
+	return h;
+}
 
 void init() {
 	// configure system clock
@@ -26,23 +31,10 @@ void init() {
 	SCB->SCR |= SCB_SCR_SEVONPEND_Msk;
 }
 
-Handler addHandler(Handler handler) {
-	Handler h = nextHandler;
-	loop::nextHandler = handler;
-	return h;
-}
-
 void run() {
 	while (true) {
+		// call handler chain of drivers
 		loop::nextHandler();
-		/*
-		// wait for next event
-		waitForEvent();
-	
-		// call handlers
-		for (int i = 0; i < handlerCount; ++i) {
-			loop::handlers[i]();
-		}*/
 	}
 }
 

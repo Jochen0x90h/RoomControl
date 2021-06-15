@@ -1,19 +1,26 @@
 #pragma once
 
-#include <functional>
+#include <Coroutine.hpp>
 
 
 namespace poti {
 
+// Internal helper: Stores references to the result values in the awaitable during co_await
+struct Parameters {
+	int &delta;
+	bool &activated;
+};
+
 /**
- * Initialize the digital potentiometer with button
+ * Initialize the digital potentiometer with button. Depends on timer, also call timer::init()
  */
 void init();
 
 /**
- * Set callback for digital potentiometer that notifies differential change or button press
- * @param onChanged called when the quadrature decoder detected a change or button was activated
+ * Suspend execution using co_await until the digital potentiometer or button changed. Only one coroutine can wait.
+ * @param delta delta motion of digital potentiometer
+ * @param activated true when the button was pressed
  */
-void setHandler(std::function<void (int, bool)> const &onChanged);
+Awaitable<Parameters> change(int& delta, bool& activated);
 
 } // namespace poti

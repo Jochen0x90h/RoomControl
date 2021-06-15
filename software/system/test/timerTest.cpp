@@ -1,21 +1,31 @@
 #include <timer.hpp>
 #include <debug.hpp>
 #include <loop.hpp>
+#include <Coroutine.hpp>
 
 
-void setTimer0() {
-	debug::toggleRedLed();
-	timer::start(0, timer::now() + 1s, []() {setTimer0();});
+Coroutine timer1() {
+	while (true) {
+		debug::setRedLed(true);
+		co_await timer::delay(100ms);
+		
+		debug::setRedLed(false);
+		co_await timer::delay(1900ms);
+	}
 }
 
-void setTimer1() {
-	debug::toggleGreenLed();
-	timer::start(1, timer::now() + 5s + 500ms, []() {setTimer1();});
+Coroutine timer2() {
+	while (true) {
+		debug::toggleGreenLed();
+		co_await timer::delay(3s);	
+	}
 }
 
-void setTimer2() {
-	debug::toggleBlueLed();
-	timer::start(2, timer::now() + 3s + 333ms, []() {setTimer2();});
+Coroutine timer3() {
+	while (true) {
+		debug::toggleBlueLed();
+		co_await timer::delay(5s);	
+	}
 }
 
 int main(void) {
@@ -23,9 +33,9 @@ int main(void) {
 	timer::init();
 	debug::init();
 
-	setTimer0();
-	setTimer1();
-	setTimer2();
+	timer1();
+	timer2();
+	timer3();
 
 	loop::run();
 }

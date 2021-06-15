@@ -3,8 +3,9 @@
 #include <radio.hpp>
 #include <debug.hpp>
 #include <loop.hpp>
-#include <util.hpp>
+#include <Coroutine.hpp>
 #include <Queue.hpp>
+#include <util.hpp>
 
 /*
 	This test sends a packet every second and sets the green led on success (ack received) and red led on error
@@ -16,27 +17,31 @@ uint8_t packet[] = {0, 0x61, 0x88, 0, 0x62, 0x1a, 0x00, 0x00, 0x36, 0xcb, 0x48, 
 
 int channel = 15;
 
-void send() {
+Coroutine send() {
 	packet[0] = array::size(packet) - 1 + 2;
-	packet[3]++;
+	while (true) {
+		packet[3]++;
 
-	debug::setRedLed(false);
-	debug::setGreenLed(false);
-	debug::setBlueLed(false);
+		//debug::setRedLed(false);
+		//debug::setGreenLed(false);
+		//debug::setBlueLed(false);
 
-	// send over the air
-	radio::send(0, packet, [](bool success) {
+		// send over the air
+		uint8_t result;
+		co_await radio::send(0, packet, result);
+		
+		bool success = result != 0;
 		debug::setRedLed(!success);
 		debug::setGreenLed(success);
-		
+			
 		// change channel
 		/*radio::stop();
 		channel ^= 1;
 		radio::start(channel);
 		radio::enableReceiver(true);*/
-	});
 
-	timer::start(0, timer::now() + 1s, []() {send();});
+		co_await timer::delay(1s);
+	}
 }
 
 
@@ -48,13 +53,12 @@ int main(void) {
 	debug::init();
 	
 	// send is reported as successful only when ack was received
-	radio::setFlags(0, radio::HANDLE_ACK);
+	radio::setFlags(0, radio::ContextFlags::HANDLE_ACK);
 
 	// start radio
 	radio::start(15);
 	radio::enableReceiver(true);
 
-	//timer::start(timerId, timer::now() + 1s, []() {send();});
 	send();
 	
 	loop::run();

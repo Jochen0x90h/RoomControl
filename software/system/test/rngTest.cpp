@@ -68,12 +68,18 @@ static const UsbConfiguration configurationDescriptor = {
 uint8_t sendData[16] __attribute__((aligned(4)));
 
 // send random numbers to host
-void send() {
-	for (int i = 0; i < array::size(sendData); ++i)
-		sendData[i] = rng::get8();
+Coroutine send() {
+	while (true) {
+		// generate random numbers
+		for (int i = 0; i < array::size(sendData); ++i)
+			sendData[i] = rng::int8();
 		
-	usb::send(1, sendData, array::size(sendData), []() {debug::toggleBlueLed();});
-	timer::start(0, timer::now() + 1s, []() {send();});
+		// send to host	
+		co_await usb::send(1, array::size(sendData), sendData);
+		debug::toggleBlueLed();
+		
+		co_await timer::delay(1s);
+	}
 }
 
 int main(void) {

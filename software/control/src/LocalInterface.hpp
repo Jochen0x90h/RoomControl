@@ -2,6 +2,7 @@
 
 #include "Interface.hpp"
 #include "BME680.hpp"
+#include <Coroutine.hpp>
 
 
 /**
@@ -30,13 +31,15 @@ public:
 	
 protected:
 
+	Coroutine measure();
+/*
 	void onAirSensorInitialized();
 
 	void measure();
 
 	void readAirSensor();
 	void airSensorGetValues();
-
+*/
 	
 	// timer index
 	static int const timerIndex = TIMER_LOCAL_INTERFACE;
