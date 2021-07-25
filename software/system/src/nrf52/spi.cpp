@@ -19,7 +19,7 @@ namespace spi {
 constexpr int CONTEXT_COUNT = array::size(SPI_CS_PINS);
 
 struct Context {
-	CoList<Parameters> waitingList;
+	Waitlist<Parameters> waitlist;
 };
 
 Context contexts[CONTEXT_COUNT];
@@ -52,7 +52,7 @@ void startTransfer(int index, Parameters const &p) {
 
 namespace display {
 
-CoList<Parameters> waitingList;
+Waitlist<Parameters> waitlist;
 
 void startTransfer(int index, Parameters const &p) {
 	// set CS pin
@@ -94,11 +94,11 @@ void handle() {
 		// resume first waiting coroutine
 		if (index < spi::CONTEXT_COUNT) {
 			auto &context = spi::contexts[index];
-			context.waitingList.resumeFirst([](Parameters p) {
+			context.waitlist.resumeFirst([](Parameters p) {
 				return true;
 			});
 		} else {
-			display::waitingList.resumeFirst([](display::Parameters p) {
+			display::waitlist.resumeFirst([](display::Parameters p) {
 				return true;
 			});
 		}
@@ -114,7 +114,7 @@ void handle() {
 				auto &context = spi::contexts[index];
 				
 				// check if a coroutine is waiting on this context
-				if (context.waitingList.resumeFirst([index](Parameters p) {
+				if (context.waitlist.resumeFirst([index](Parameters p) {
 					startTransfer(index, p);
 
 					// don't resume yet
@@ -124,7 +124,7 @@ void handle() {
 				}
 			} else {
 				// display: check if a coroutine is waiting on this context
-				if (display::waitingList.resumeFirst([index](display::Parameters p) {
+				if (display::waitlist.resumeFirst([index](display::Parameters p) {
 					display::startTransfer(index, p);
 					
 					// don't resume yet
@@ -177,7 +177,7 @@ Awaitable<Parameters> transfer(int index, int writeLength, uint8_t const *writeD
 	if (!NRF_SPIM3->ENABLE)
 		startTransfer(index, {writeLength, writeData, readLength, readData});
 
-	return {context.waitingList, {writeLength, writeData, readLength, readData}};
+	return {context.waitlist, writeLength, writeData, readLength, readData};
 }
 
 } // namespace spi
@@ -196,7 +196,7 @@ Awaitable<Parameters> send(int commandLength, int dataLength, uint8_t const *dat
 	if (!NRF_SPIM3->ENABLE)
 		startTransfer(spi::CONTEXT_COUNT, {commandLength, dataLength, data});
 
-	return {display::waitingList, {commandLength, dataLength, data}};
+	return {display::waitlist, commandLength, dataLength, data};
 }
 
 } // namespace display

@@ -34,12 +34,12 @@ struct Endpoint {
 	bool receiveBusy;
 	int maxReceiveLength;
 	int receiveLength = 0;
-	CoList<ReceiveParameters> receiveWaitingList;
+	Waitlist<ReceiveParameters> receiveWaitlist;
 
 	// send
 	bool sendBusy;
 	int sendLength = 0;
-	CoList<SendParameters> sendWaitingList;
+	Waitlist<SendParameters> sendWaitlist;
 };
 
 Endpoint endpoints[USB_ENDPOINT_COUNT - 1];
@@ -185,13 +185,13 @@ void handle() {
 					int length = ep.maxReceiveLength - ep.receiveLength;
 					
 					// resume first waiting coroutine
-					ep.receiveWaitingList.resumeFirst([length](ReceiveParameters p){
+					ep.receiveWaitlist.resumeFirst([length](ReceiveParameters p){
 						p.receivedLength = length;
 						return true;
 					});
 					
 					// check if there are more queued coroutines waiting for receive
-					ep.receiveBusy = ep.receiveWaitingList.resumeFirst([&ep, index](ReceiveParameters p) {
+					ep.receiveBusy = ep.receiveWaitlist.resumeFirst([&ep, index](ReceiveParameters p) {
 						// set receive data
 						ep.maxReceiveLength = p.length;
 						ep.receiveLength = p.length;
@@ -232,12 +232,12 @@ void handle() {
 						NRF_USBD->TASKS_STARTEPIN[index] = Trigger;
 					} else {
 						// finished: resume waiting coroutine
-						ep.sendWaitingList.resumeFirst([](SendParameters p) {
+						ep.sendWaitlist.resumeFirst([](SendParameters p) {
 							return true;
 						});
 						
 						// check if there are more queued coroutines waiting for send
-						ep.sendBusy = ep.sendWaitingList.resumeFirst([index, &ep](SendParameters p) {
+						ep.sendBusy = ep.sendWaitlist.resumeFirst([index, &ep](SendParameters p) {
 							// set send data
 							ep.sendLength = p.length;
 							NRF_USBD->EPIN[index].PTR = intptr_t(p.data);
@@ -328,7 +328,7 @@ Awaitable<ReceiveParameters> receive(int index, int length, int &receivedLength,
 		NRF_USBD->SIZE.EPOUT[index] = 0;
 	}
 
-	return {ep.receiveWaitingList, {length, receivedLength, data}};
+	return {ep.receiveWaitlist, length, receivedLength, data};
 }
 
 Awaitable<SendParameters> send(int index, int length, void const *data) {
@@ -347,7 +347,7 @@ Awaitable<SendParameters> send(int index, int length, void const *data) {
 		NRF_USBD->TASKS_STARTEPIN[index] = Trigger;
 	}
 
-	return {ep.sendWaitingList, {length, data}};
+	return {ep.sendWaitlist, length, data};
 }
 
 } // namespace usb

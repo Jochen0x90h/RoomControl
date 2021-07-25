@@ -46,7 +46,7 @@ void setTemperature(float celsius) {
 }
 
 struct Context {
-	CoList<Parameters> waitingList;
+	Waitlist<Parameters> waitlist;
 };
 Context contexts[SPI_CONTEXT_COUNT];
 
@@ -56,7 +56,7 @@ loop::Handler nextHandler;
 void handle(Gui &gui) {
 	for (int index = 0; index < SPI_CONTEXT_COUNT; ++index) {
 		auto &context = spi::contexts[index];
-		context.waitingList.resumeFirst([index](Parameters p) {
+		context.waitlist.resumeFirst([index](Parameters p) {
 
 			if (index == SPI_AIR_SENSOR) {
 				if (p.writeData[0] & 0x80) {
@@ -116,7 +116,7 @@ Awaitable<Parameters> transfer(int index, int writeLength, uint8_t const *writeD
 	assert(uint(index) < SPI_CONTEXT_COUNT);
 	auto &context = spi::contexts[index];
 
-	return {context.waitingList, {writeLength, writeData, readLength, readData}};
+	return {context.waitlist, writeLength, writeData, readLength, readData};
 }
 
 } // namespace spi

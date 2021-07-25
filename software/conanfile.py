@@ -45,7 +45,7 @@ class Project(ConanFile):
         "boost/1.76.0", \
         "glfw/3.3.3", \
         "libusb/1.0.24", \
-        "gtest/1.8.1"
+        "gtest/1.11.0"
 
 
     keep_imports = True

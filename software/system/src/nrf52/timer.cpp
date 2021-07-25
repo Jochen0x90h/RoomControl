@@ -12,7 +12,7 @@ SystemTime systemTime;
 SystemTime next;
 
 // waiting coroutines
-CoList<SystemTime> waitingList;
+Waitlist<SystemTime> waitlist;
 
 
 enum State : uint8_t {
@@ -45,7 +45,7 @@ void handle() {
 			next.value += 0x80000;
 			
 			// resume all coroutines that where timeout occurred
-			timer::waitingList.resumeAll([timeout](SystemTime time) {
+			timer::waitlist.resumeAll([timeout](SystemTime time) {
 				if (time == timeout)
 					return true;
 				
@@ -121,7 +121,7 @@ Awaitable<SystemTime> time(SystemTime time) {
 		NRF_RTC0->EVENTS_COMPARE[0] = Generated;
 	}
 	
-	return {timer::waitingList, time};
+	return {timer::waitlist, time};
 }
 
 void setHandler(int index, std::function<void ()> const &onTimeout) {

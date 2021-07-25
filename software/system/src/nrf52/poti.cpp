@@ -16,7 +16,7 @@
 namespace poti {
 
 // waiting coroutines
-CoList<Parameters> waitingList;
+Waitlist<Parameters> waitlist;
 
 int acc = 0;
 bool buttonState = false;
@@ -37,7 +37,7 @@ void handle() {
 			int delta = poti >> 2;
 
 			// resume all waiting coroutines
-			poti::waitingList.resumeAll([delta](Parameters parameters) {
+			poti::waitlist.resumeAll([delta](Parameters parameters) {
 				parameters.delta = delta;
 				parameters.activated = false;
 				return true;
@@ -56,7 +56,7 @@ void handle() {
 		if (activated) {
 			if (c - poti::counter > 100) {				
 				// resume all waiting coroutines
-				poti::waitingList.resumeAll([](Parameters parameters) {
+				poti::waitlist.resumeAll([](Parameters parameters) {
 					parameters.delta = 0;
 					parameters.activated = true;
 					return true;
@@ -100,7 +100,7 @@ void init() {
 }
 
 Awaitable<Parameters> change(int& delta, bool& activated) {
-	return {poti::waitingList, {delta, activated}};
+	return {poti::waitlist, delta, activated};
 }
 
 } // namespace poti

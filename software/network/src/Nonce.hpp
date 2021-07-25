@@ -16,7 +16,16 @@ public:
 	}
 
 	/**
-	 * Constructor for Green Power nonce
+	 *	Constructor
+	 */
+	Nonce(uint64_t sourceAddress, uint32_t securityCounter, zb::SecurityControl securityControl) {
+		setLittleEndianInt64(0, sourceAddress);
+		setLittleEndianInt32(8, securityCounter);
+		setInt8(12, uint8_t(securityControl));
+	}
+
+	/**
+	 * Constructor for self powered devices
 	 */
 	Nonce(uint32_t deviceId, uint32_t securityCounter) {
 		setLittleEndianInt32(0, deviceId);

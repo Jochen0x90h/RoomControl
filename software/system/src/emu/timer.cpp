@@ -12,7 +12,7 @@ std::chrono::steady_clock::time_point startTime;
 SystemTime next;
 
 // waiting coroutines
-CoList<SystemTime> waitingList;
+Waitlist<SystemTime> waitlist;
 
 asio::steady_timer *timer = nullptr;
 
@@ -44,7 +44,7 @@ void handle() {
 	timer::next.value += 0x80000;
 
 	// resume all coroutines that where timeout occurred
-	timer::waitingList.resumeAll([timeout](SystemTime time) {
+	timer::waitlist.resumeAll([timeout](SystemTime time) {
 		if (time == timeout)
 			return true;
 		
@@ -94,7 +94,7 @@ Awaitable<SystemTime> time(SystemTime time) {
 		});
 	}
 
-	return {timer::waitingList, time};
+	return {timer::waitlist, time};
 }
 
 void setHandler(int index, std::function<void ()> const &onTimeout) {

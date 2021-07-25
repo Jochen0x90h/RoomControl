@@ -88,6 +88,16 @@ void copy(int length, OutputIt dst, InputIt src) {
 	}
 }
 
+template <typename InputIt1, typename InputIt2>
+bool compare(int length, InputIt1 a, InputIt2 b) {
+	auto end = a + length;
+	for (; a < end; ++a, ++b) {
+		if (*a != *b)
+			return false;
+	}
+	return true;
+}
+
 } // namespace array
 
 

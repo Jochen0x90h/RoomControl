@@ -196,27 +196,29 @@ RoomControl::RoomControl()
 	, houseTopicId(), roomTopicId()
 	, localInterface([this](uint8_t endpointId, uint8_t const *data, int length) {onLocalReceived(endpointId, data, length);})
 	, busInterface([this]() {onBusSent();}, [this](uint8_t endpointId, uint8_t const *data, int length) {onBusReceived(endpointId, data, length);})
-	, radioInterface(networkKey, [this](uint8_t endpointId, uint8_t const *data, int length) {onRadioReceived(endpointId, data, length);})
+	, radioInterface(configuration, [this](uint8_t endpointId, uint8_t const *data, int length) {onRadioReceived(endpointId, data, length);})
 {
 	timer::setHandler(this->timerIndex, [this]() {onTimeout();});
 
 	// set default configuration for this device if necessary
 	if (this->configuration.size() == 0) {
-		assign(this->temp.configuration.name, "room");
+		Configuration &configuration = this->temp.configuration;
+		assign(configuration.name, "room");
 		
 		// generate a random 64 bit address
-		this->temp.configuration.address = rng::int64();
+		configuration.longAddress = rng::int64();
 		
 		// set default pan
-		this->temp.configuration.zbPanId = 0x1a62;
+		configuration.zbPanId = 0x1a62;
 		
-		// generate network key
-		for (int i = 0; i < array::size(this->temp.configuration.networkKey); ++i) {
-			this->temp.configuration.networkKey[i] = rng::int8();
+		// generate random network key
+		for (uint8_t &b : configuration.networkKey) {
+			b = rng::int8();
 		}
+		setKey(configuration.networkAesKey, configuration.networkKey);
 		
 		// write to flash
-		this->configuration.write(0, &this->temp.configuration);
+		this->configuration.write(0, &configuration);
 	}
 	applyConfiguration();
 	
@@ -244,10 +246,11 @@ RoomControl::~RoomControl() {
 
 void RoomControl::applyConfiguration() {
 	Configuration const &configuration = *this->configuration[0].flash;
-	radio::setLongAddress(configuration.address);
-	this->radioInterface.setLongAddress(configuration.address);
-	this->radioInterface.setPan(configuration.zbPanId);
-	setKey(this->networkKey, configuration.networkKey);
+	radio::setLongAddress(configuration.longAddress);
+	radio::setPan(RADIO_ZB, configuration.zbPanId);
+	//this->radioInterface.setLongAddress(configuration.address);
+	//this->radioInterface.setPan(configuration.zbPanId);
+	//setKey(this->networkKey, configuration.networkKey);
 }
 
 // UpLink
@@ -1231,7 +1234,7 @@ void RoomControl::pop() {
 
 // Configuration
 // -------------
-
+/*
 int RoomControl::Configuration::getFlashSize() const {
 	return sizeof(Configuration);
 }
@@ -1239,6 +1242,7 @@ int RoomControl::Configuration::getFlashSize() const {
 int RoomControl::Configuration::getRamSize() const {
 	return 0;
 }
+*/
 
 // todo don't register all topics in one go, message buffer may overflow
 void RoomControl::subscribeAll() {

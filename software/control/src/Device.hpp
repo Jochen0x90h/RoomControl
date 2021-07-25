@@ -15,12 +15,13 @@ using DeviceId = uint64_t;
  enum class EndpointType : uint8_t {
 	// generic binary sensor with two states
 	BINARY_SENSOR = 1,
-	
+		
+	// switch with two stable states and optional toggle (0: off, 1: on, 2: toggle)
+	SWITCH = 2,
+
+
 	// button, returns to released state when not pressed
-	BUTTON = 2,
-	
-	// switch with two stable states
-	SWITCH = 3,
+	BUTTON = 3,
 
 	// rocker with two sides, returns to released state when not pressed
 	ROCKER = 4,
@@ -61,5 +62,7 @@ using DeviceId = uint64_t;
 	
 	// active power measured by an electricity meter
 	ACTIVE_POWER_SENSOR = 41,
+	
+	BATTERY_PERCENTAGE = 42,
  };
  

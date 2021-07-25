@@ -35,6 +35,11 @@ public:
 		this->data[index + 3] = value >> 24;
 	}
 
+	void setLittleEndianInt64(int index, uint64_t value) {
+		setLittleEndianInt32(index, uint32_t(value));
+		setLittleEndianInt32(index + 4, uint32_t(value >> 32));
+	}
+
 	void setData(int index, uint8_t const *data, int length) {
 		int l = min(N - index, length);
 		uint8_t *it = this->data + index;
@@ -104,6 +109,9 @@ public:
 		assert(index >= 0 && index + M <= N);
 		return {this->data + index};
 	}
+
+	uint8_t *begin() {return this->data;}
+	uint8_t *end() {return this->data + N;}
 
 	uint8_t data[N];
 };

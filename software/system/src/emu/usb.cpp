@@ -9,8 +9,8 @@ bool text;
 
 // endpoints 1 - 7
 struct Endpoint {
-	CoList<ReceiveParameters> receiveWaitingList;
-	CoList<SendParameters> sendWaitingList;
+	Waitlist<ReceiveParameters> receiveWaitlist;
+	Waitlist<SendParameters> sendWaitlist;
 };
 
 Endpoint endpoints[1];
@@ -20,7 +20,7 @@ loop::Handler nextHandler;
 void handle(Gui &gui) {
 	for (auto &endpoint : usb::endpoints) {
 
-		endpoint.sendWaitingList.resumeFirst([](SendParameters p) {
+		endpoint.sendWaitlist.resumeFirst([](SendParameters p) {
 			if (usb::text) {
 				printf("%.*s", p.length, reinterpret_cast<char const *>(p.data));
 			} else {
@@ -68,14 +68,14 @@ Awaitable<ReceiveParameters> receive(int index, int length, int& receivedLength,
 	assert(index == 1);
 	auto &endpoint = usb::endpoints[index - 1];
 
-	return {endpoint.receiveWaitingList, {length, receivedLength, data}};
+	return {endpoint.receiveWaitlist, length, receivedLength, data};
 }
 
 Awaitable<SendParameters> send(int index, int length, void const *data) {
 	assert(index == 1);
 	auto &endpoint = usb::endpoints[index - 1];
 
-	return {endpoint.sendWaitingList, {length, data}};
+	return {endpoint.sendWaitlist, length, data};
 }
 
 } // namespace usb

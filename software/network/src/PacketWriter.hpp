@@ -1,5 +1,6 @@
 #pragma once
 
+#include "DataBuffer.hpp"
 #include <enum.hpp>
 #include <cstdint>
 
@@ -46,14 +47,27 @@ public:
 		int32(value >> 32);
 	}
 
+	template <int N>
+	void data(DataBuffer<N> const &d) {
+		for (int i = 0; i < N; ++i)
+			this->current[i] = d.data[i];
+		this->current += N;
+	}
+
 	void skip(int n) {
 		this->current += n;
 	}
-
-	// write length to first byte of buffer (number of bytes written + 2 for crc)
-	uint8_t const *finish() {
+/*
+	void setLength() {
 		this->packet[0] = this->current - (this->packet + 1) + 2; // for crc
-		return this->packet;
+	}
+*/
+	/**
+	 * Set send flags and lenght of packet
+	 */
+	void finish(radio::SendFlags sendFlags) {
+		*this->current = uint8_t(sendFlags);
+		this->packet[0] = this->current - (this->packet + 1) + 2; // for crc
 	}
 
 	uint8_t *packet;

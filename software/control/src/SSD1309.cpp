@@ -2,7 +2,7 @@
 #include <display.hpp>
 
 
-Awaitable<> SSD1309::init() {
+AwaitableCoroutine SSD1309::init() {
 	// command unlock
 	this->command[0] = 0xFD;
 	this->command[1] = 0x12;
@@ -68,26 +68,26 @@ Awaitable<> SSD1309::init() {
 	co_await display::send(1, 0, this->command);
 }
 
-Awaitable<> SSD1309::enable() {
+AwaitableCoroutine SSD1309::enable() {
 	display::enableVcc(true);
 	this->command[0] = 0xAF;
 	co_await display::send(1, 0, this->command);
 	this->enabled = true;
 }
 
-Awaitable<> SSD1309::disable() {
+AwaitableCoroutine SSD1309::disable() {
 	this->command[0] = 0xAE;
 	co_await display::send(1, 0, this->command);
 	this->enabled = false;
 	display::enableVcc(false);
 }
 
-Awaitable<> SSD1309::setContrast(uint8_t contrast) {
+AwaitableCoroutine SSD1309::setContrast(uint8_t contrast) {
 	this->command[0] = 0x81;
 	this->command[1] = contrast;
 	co_await display::send(2, 0, this->command);
 }
 
-Awaitable<> SSD1309::set(Bitmap<DISPLAY_WIDTH, DISPLAY_HEIGHT> const &bitmap) {
+AwaitableCoroutine SSD1309::set(Bitmap<DISPLAY_WIDTH, DISPLAY_HEIGHT> const &bitmap) {
 	co_await display::send(0, array::size(bitmap.data), bitmap.data);
 }

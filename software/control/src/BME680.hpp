@@ -24,7 +24,7 @@ public:
 	/**
 	 * Suspend execution using co_await until initialization is done
 	 */
-	Awaitable<> init();
+	AwaitableCoroutine init();
 
 	/**
 	 * Returns the current state of the sensor
@@ -42,13 +42,13 @@ public:
 	 * @param heaterDuration time between the beginning of the heat phase and the start of gas sensor resistance
 	 * 	conversion in milliseconds
 	 */
-	Awaitable<> setParameters(int temperatureOversampling, int pressureOversampling, int filter,
+	AwaitableCoroutine setParameters(int temperatureOversampling, int pressureOversampling, int filter,
 		int humidityOversampling, int heaterTemperature, int heaterDuration);
 
 	/**
 	 * Suspend execution using co_await until measurement is done. Then use get-methods to obtain the measured values
 	 */
-	Awaitable<> measure();
+	AwaitableCoroutine measure();
 
 	/**
 	 * Get current temperature
