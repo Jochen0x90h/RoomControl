@@ -224,7 +224,7 @@ public:
 
 // Configuration
 // -------------
-
+/*
 	// global configuration for this room control
 	struct Configuration {
 		// name of this room control
@@ -239,25 +239,20 @@ public:
 		// network key
 		uint8_t networkKey[16];
 
-		/**
+		// network key prepared for aes encryption
+		AesKey networkAesKey;
+
+		/ **
 		 * Returns the size in bytes needed to store the control configuration in flash
 		 * @return size in bytes
-		 */
+		 * /
 		int getFlashSize() const;
 
-		/**
+		/ **
 		 * Returns the size in bytes needed to store the contol state in ram
 		 * @return size in bytes
-		 */
+		 * /
 		int getRamSize() const;
-	};
-/*
-	struct ConfigurationState {
-		// topic id for list of rooms in house (topic: enum)
-		uint16_t houseTopicId;
-
-		// topic id for list of devices in room (topic: enum/<room>)
-		uint16_t roomTopicId;
 	};
 */
 	String getRoomName() {return this->configuration[0].flash->name;}

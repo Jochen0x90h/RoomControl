@@ -14,7 +14,7 @@
 constexpr int CHIP_ID = 0x61;
 
 
-Awaitable<> BME680::init(){
+AwaitableCoroutine BME680::init(){
 	// read chip id and check if it is ok
 	this->buffer[0] = READ(0xD0);
 	co_await spi::transfer(this->spiIndex, 1, this->buffer, 2, this->buffer);
@@ -54,7 +54,7 @@ Awaitable<> BME680::init(){
 	this->state = INITIALIZED;
 }
 
-Awaitable<> BME680::setParameters(int temperatureOversampling, int pressureOversampling, int filter,
+AwaitableCoroutine BME680::setParameters(int temperatureOversampling, int pressureOversampling, int filter,
 	int humidityOversampling, int heaterTemperature, int heaterDuration)
 {
 	assert(this->state >= INITIALIZED);
@@ -109,7 +109,7 @@ Awaitable<> BME680::setParameters(int temperatureOversampling, int pressureOvers
 	this->state = PARAMETERIZED;
 }
 
-Awaitable<> BME680::measure() {
+AwaitableCoroutine BME680::measure() {
 	assert(this->state == PARAMETERIZED);
 
 	// start measurement

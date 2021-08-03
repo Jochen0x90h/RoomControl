@@ -102,21 +102,42 @@ TEST(utilTest, DataQueue) {
 	EXPECT_TRUE(queue.isEmpty());
 }
 
-enum class Foo : uint8_t {
+
+// flags enum
+// ----------
+
+enum class Flags : uint8_t {
 	FOO = 1,
 	BAR = 2
 };
-FLAGS_ENUM(Foo);
+FLAGS_ENUM(Flags);
+std::ostream &operator <<(std::ostream &s, Flags flags) {
+	switch (flags) {
+	case Flags::FOO:
+		s << "FOO";
+		break;
+	case Flags::BAR:
+		s << "BAR";
+		break;
+	default:
+		s << "<unknown>";
+	}
+	return s;
+}
 
 TEST(utilTest, flagsEnum) {
-	Foo a = Foo::FOO;
-	a |= Foo::BAR;
-	EXPECT_EQ(a, Foo::FOO | Foo::BAR);
+	Flags a = Flags::FOO;
+	a |= Flags::BAR;
+	EXPECT_EQ(a, Flags::FOO | Flags::BAR);
 
 	uint8_t b = 0;
-	b |= Foo::FOO;
-	EXPECT_EQ(Foo::FOO, b);
+	b |= Flags::FOO;
+	EXPECT_EQ(Flags::FOO, b);
 }
+
+
+// Queue
+// -----
 
 TEST(utilTest, Queue) {
 	using Q = Queue<int, 4>;
@@ -155,6 +176,10 @@ TEST(utilTest, Queue) {
 	EXPECT_EQ(queue.size(), 1);
 	EXPECT_EQ(queue.get(), 1000 + 1);
 }
+
+
+// String
+// ------
 
 TEST(utilTest, String) {
 	for (int j = 0; j < std::size(strings); ++j) {
@@ -203,32 +228,6 @@ TEST(utilTest, StringBuffer) {
 	EXPECT_EQ(d.string(), "x000000fffoo50-");
 }
 
-
-TEST(utilTest, TopicBuffer) {
-	TopicBuffer t = String();
-	EXPECT_EQ(t.string(), String());
-	
-	t = "bar";
-	EXPECT_EQ(t.string(), "bar");
-
-	t = String("foo") / "bar";
-	EXPECT_EQ(t.string(), "foo/bar");
-
-	t = String("foo") / "bar" / "baz";
-	EXPECT_EQ(t.string(), "foo/bar/baz");
-
-	EXPECT_EQ(t.command(), "cmnd/foo/bar/baz");
-	EXPECT_EQ(t.state(), "stat/foo/bar/baz");
-	EXPECT_EQ(t.enumeration(), "enum/foo/bar/baz");
-
-	t.removeLast();
-	EXPECT_EQ(t.string(), "foo/bar");
-
-	t.removeLast();
-	t.removeLast();
-	EXPECT_EQ(t.string(), String());
-}
-
 TEST(utilTest, StringSet) {
 	// test StringSet
 	std::mt19937 gen(1337); // standard mersenne_twister_engine seeded with 1337
@@ -259,6 +258,38 @@ TEST(utilTest, StringSet) {
 	}
 }
 
+
+// Topic
+// -----
+
+TEST(utilTest, TopicBuffer) {
+	TopicBuffer t = String();
+	EXPECT_EQ(t.string(), String());
+	
+	t = "bar";
+	EXPECT_EQ(t.string(), "bar");
+
+	t = String("foo") / "bar";
+	EXPECT_EQ(t.string(), "foo/bar");
+
+	t = String("foo") / "bar" / "baz";
+	EXPECT_EQ(t.string(), "foo/bar/baz");
+
+	EXPECT_EQ(t.command(), "cmnd/foo/bar/baz");
+	EXPECT_EQ(t.state(), "stat/foo/bar/baz");
+	EXPECT_EQ(t.enumeration(), "enum/foo/bar/baz");
+
+	t.removeLast();
+	EXPECT_EQ(t.string(), "foo/bar");
+
+	t.removeLast();
+	t.removeLast();
+	EXPECT_EQ(t.string(), String());
+}
+
+
+// UInt
+// ----
 TEST(utilTest, UInt) {
 	static_assert(sizeof(UInt<256>::Type) == 1);
 	static_assert(sizeof(UInt<257>::Type) == 2);
@@ -266,33 +297,114 @@ TEST(utilTest, UInt) {
 	static_assert(sizeof(UInt<65537>::Type) == 4);
 }
 
-// test coroutine
-// --------------
 
-CoList<void> coList;
+// return structures
+// -----------------
 
-Awaitable<void> wait() {
-	return coList;
+struct Foo {
+	int i;
+
+	Foo() {
+		std::cout << "Default" << std::endl;
+	}
+
+	Foo(int i) : i(i) {
+		std::cout << "Constructor" << std::endl;
+	}
+	
+	Foo(const Foo &) = delete;
+	
+	Foo(Foo &&foo) : i(foo.i) {
+		std::cout << "Move Constructor" << std::endl;
+	}
+	
+	Foo &operator =(Foo &&foo) {
+		std::cout << "Move Assignment" << std::endl;
+		this->i = foo.i;
+		return *this;
+	}
+};
+
+Foo getFoo1() {
+	return {50};
 }
 
-CoList<void> coList2;
+Foo getFoo2() {
+	return getFoo1();
+}
 
+Foo getFoo3() {
+	Foo foo = getFoo2();
+	return foo;
+}
+
+TEST(utilTest, Return) {
+	{
+		std::cout << "Variant 1" << std::endl;
+		Foo foo = getFoo2();
+	}
+	{
+		std::cout << "Variant 2" << std::endl;
+		Foo foo = getFoo3();
+	}
+	{
+		std::cout << "Variant 3" << std::endl;
+		Foo foos[2];
+		foos[0] = std::move(getFoo3());
+	}
+}
+
+
+// Coroutine
+// ---------
+
+Waitlist<void> waitlist1;
+Awaitable<void> wait1() {
+	return {waitlist1};
+}
+
+Waitlist<void> waitlist2;
 Awaitable<void> wait2() {
-	return coList2;
+	return {waitlist2};
 }
 
-Awaitable<void> inner() {
-	std::cout << "inner wait 1" << std::endl;
-	co_await wait();
-	std::cout << "inner wait 2" << std::endl;
-	co_await wait();
+
+struct Object {
+	~Object() {
+		std::cout << "~Object" << std::endl;
+	}
+};
+
+Coroutine coroutine() {
+	// an object whose destructor gets called when the coroutine ends or gets cancelled
+	Object o;
+	
+	std::cout << "!wait1" << std::endl;
+	co_await wait1();
+	std::cout << "!wait2" << std::endl;
+	co_await wait2();
 }
 
+
+AwaitableCoroutine inner() {
+	Object o;
+
+	std::cout << "!inner wait1" << std::endl;
+	co_await wait1();
+	std::cout << "!inner wait2" << std::endl;
+	co_await wait2();
+}
+
+CoroutineHandle outerHandle;
 Coroutine outer() {
+	// obtain handle of outer coroutine
+	co_await outerHandle;
+
 	co_await inner();
 
-	std::cout << "outer select" << std::endl;
-	switch (co_await select(wait(), wait2())) {
+	std::cout << "!outer select" << std::endl;
+	int result = co_await select(wait1(), wait2());
+	switch (result) {
 	case 1:
 		std::cout << "selected 1" << std::endl;
 		break;
@@ -303,36 +415,137 @@ Coroutine outer() {
 }
 
 TEST(utilTest, Coroutine) {
+	// start coroutine
+	coroutine();
+	
+	// resume coroutine
+	std::cout << "!resume wait1" << std::endl;
+	EXPECT_FALSE(waitlist1.isEmpty());
+	waitlist1.resumeAll();
+	EXPECT_TRUE(waitlist1.isEmpty());
+	std::cout << "!resume wait2" << std::endl;
+	EXPECT_FALSE(waitlist2.isEmpty());
+	waitlist2.resumeAll();
+	EXPECT_TRUE(waitlist2.isEmpty());
+}
+
+TEST(utilTest, DestroyCoroutine) {
+	// start coroutine
+	coroutine();
+	
+	// destroy coroutine
+	waitlist1.head.next->handle.destroy();
+}
+
+TEST(utilTest, NestedCoroutine) {
+	// start outer coroutine
 	outer();
+
+	// resume inner coroutine
+	std::cout << "!resume inner wait1" << std::endl;
+	waitlist1.resumeAll();
+	std::cout << "!resume inner wait2" << std::endl;
+	waitlist2.resumeAll();
+
+	std::cout << "!resume outer wait2" << std::endl;
+	EXPECT_FALSE(waitlist2.isEmpty());
+	waitlist2.resumeAll();
+	EXPECT_TRUE(waitlist2.isEmpty());
+}
+
+TEST(utilTest, DestroyNestedCoroutine) {
+	// start outer coroutine
+	outer();
+
+	//waitlist1.head.next->handle.destroy();
+
+	// destroy outer coroutine
+	std::cout << "!destroy outer" << std::endl;
+	outerHandle.handle.destroy();
+}
+
+TEST(utilTest, awaitAwaitableCoroutine) {
+	AwaitableCoroutine c = inner();
+
+	// check that the coroutine is running
+	EXPECT_FALSE(c.await_ready());
 	
-	std::cout << "inner resume 1" << std::endl;
-	coList.resumeAll();
-	std::cout << "inner resume 2" << std::endl;
-	coList.resumeAll();
-	
-	std::cout << "outer resume 2" << std::endl;
-	coList2.resumeAll();
+	waitlist1.resumeAll();
+
+	// move assign to c2
+	AwaitableCoroutine c2;
+	c2 = std::move(c);
+
+	// check that the c now reports ready
+	EXPECT_TRUE(c.await_ready());
+
+	// check that the coroutine is still running
+	EXPECT_FALSE(c2.await_ready());
+
+	waitlist2.resumeAll();
+
+	// check that the coroutine has stopped
+	EXPECT_TRUE(c2.await_ready());
 }
 
 
-// test coroutine with extra value
-// -------------------------------
+// Coroutine with extra value
+// --------------------------
 
-CoList<int> coListValue;
+void moveStart() {
+	std::cout << "Parameters::move start" << std::endl;
+}
 
-Awaitable<int> delay(int value) {
-	return {coListValue, value};
+struct Parameters1 {
+	int value;
+};
+
+struct Parameters2 : public WaitlistElement {
+	int value;
+
+	// default constructor
+	Parameters2(int value) : WaitlistElement(), value(value) {}
+
+	// move constructor
+	Parameters2(Parameters2 &&p) noexcept : WaitlistElement((moveStart(), std::move(p))), value(p.value) {
+		std::cout << "Parameters::move end" << std::endl;
+	}
+
+	// add to list
+	void add(WaitlistHead &head) noexcept {
+		std::cout << "Parameters::add" << std::endl;
+		WaitlistElement::add(head);
+	}
+
+	// remove from list
+	void remove() noexcept {
+		std::cout << "Parameters::remove" << std::endl;
+		WaitlistElement::remove();
+	}
+};
+
+Waitlist<Parameters1> waitListValue1;
+Waitlist<Parameters2> waitListValue2;
+
+Awaitable<Parameters1> delay1(int value) {
+	return {waitListValue1, value};
+}
+
+Awaitable<Parameters2> delay2(int value) {
+	return {waitListValue2, value};
 }
 
 Coroutine waitForDelay1() {
-	co_await delay(5);
+	auto a = delay2(5);
+	Awaitable<Parameters2> b(std::move(a));
+	co_await b;
 	std::cout << "resumed delay(5)" << std::endl;
 }
 
 Coroutine waitForDelay2() {
-	switch (co_await select(wait(), delay(10))) {
+	switch (co_await select(wait1(), delay2(10))) {
 	case 1:
-		std::cout << "resumed wait" << std::endl;
+		std::cout << "resumed wait1" << std::endl;
 		break;
 	case 2:
 		std::cout << "resumed delay(10)" << std::endl;
@@ -344,33 +557,78 @@ TEST(utilTest, CoroutineValue) {
 	waitForDelay1();
 	waitForDelay2();
 	
-	coListValue.resumeAll([] (int value) {return value == 5;});
-	coListValue.resumeAll([] (int value) {return value == 10;});
+	waitListValue2.resumeAll([] (Parameters2 const &p) {return p.value == 5;});
+	waitListValue2.resumeAll([] (Parameters2 const &p) {return p.value == 10;});
 }
 
 
-// test wait on CoList<>
-// ---------------------
+// Awaitable move constructor
+// --------------------------
 
-CoList<> waitList;
+Coroutine move() {
+	Awaitable<> a = wait1();
+	Awaitable<> b(std::move(a));
 
-Coroutine waitForList() {
-	std::cout << "wait for list" << std::endl;
-	co_await waitList.wait();
-	std::cout << "list resumed" << std::endl;
+	co_await a;
+	std::cout << "a is ready" << std::endl;
+
+	std::cout << "await b" << std::endl;
+	co_await b;
+	std::cout << "resumed from b" << std::endl;
+
+	co_await a;
+	std::cout << "a is ready" << std::endl;
+	co_await b;
+	std::cout << "b is ready" << std::endl;
 }
 
-TEST(utilTest, CoListWait) {
-	waitForList();
-	std::cout << "resume list" << std::endl;
-	waitList.resumeAll();
+TEST(utilTest, AwaitableMove) {
+	move();
+	
+	waitlist1.resumeAll();
+	EXPECT_TRUE(waitlist1.isEmpty());
+}
+
+
+// List of awaitables
+// ------------------
+
+Coroutine list() {
+	std::vector<Awaitable<>> list;
+	
+	list.push_back(wait1());
+	
+	co_await list[0];
+}
+
+TEST(utilTest, AwaitableList) {
+	list();
+	
+}
+
+
+// Barrier
+// -------
+
+Barrier<> barrier;
+
+Coroutine waitForBarrier() {
+	std::cout << "wait on barrier" << std::endl;
+	co_await barrier.wait();
+	std::cout << "passed barrier" << std::endl;
+}
+
+TEST(utilTest, Barrier) {
+	waitForBarrier();
+	std::cout << "resume barrier" << std::endl;
+	barrier.resumeAll();
 }
 
 
 // test Semaphore
 // --------------
 
-Semaphore semaphore(0);
+Semaphore semaphore(3);
 
 Coroutine worker1() {
 	while (true) {

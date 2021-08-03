@@ -27,8 +27,8 @@ struct Context {
 	uint16_t volatile pan;
 	uint16_t volatile shortAddress;
 
-	CoList<ReceiveParameters> receiveWaitingList;
-	CoList<SendParameters> sendWaitingList;
+	Waitlist<ReceiveParameters> receiveWaitlist;
+	Waitlist<SendParameters> sendWaitlist;
 
 	
 	bool filter(uint8_t const *data) const {
@@ -90,9 +90,9 @@ void receiveData(int channel, uint8_t *packet) {
 		for (auto &context : radio::contexts) {
 			if (context.filter(packet)) {
 				// resume first waiting coroutine
-				context.receiveWaitingList.resumeFirst([packet](ReceiveParameters p) {
-					// length without crc but with one byte for LQI
-					int length = packet[0] - 2 + 1;
+				context.receiveWaitlist.resumeFirst([packet](ReceiveParameters &p) {
+					// length without crc but with extra data
+					int length = packet[0] - 2 + radio::RECEIVE_EXTRA_LENGTH;
 					array::copy(1 + length, p.packet, packet);
 					return true;
 				});
@@ -152,6 +152,74 @@ GreenPowerDeviceData const deviceData[1] = {{
 }};
 
 
+// read from pcap file
+// -------------------
+
+// header of pcap file
+struct PcapHeader {
+	uint32_t magic_number;   // magic number
+	uint16_t version_major;  // major version number
+	uint16_t version_minor;  // minor version number
+	int32_t thiszone;       // GMT to local correction
+	uint32_t sigfigs;        // accuracy of timestamps
+	uint32_t snaplen;        // max length of captured packets, in octets
+	uint32_t network;        // data link type
+};
+
+// header of one packet in a pcap file
+struct PcapPacketHeader {
+	uint32_t ts_sec;         // timestamp seconds
+	uint32_t ts_usec;        // timestamp microseconds
+	uint32_t incl_len;       // number of octets of packet saved in file
+	uint32_t orig_len;       // actual length of packet
+};
+
+FILE *pcapIn = nullptr;
+FILE *pcapOut = nullptr;
+
+
+
+ReceiveParameters::ReceiveParameters(ReceiveParameters &&p) noexcept
+	: WaitlistElement(std::move(p)), packet(p.packet)
+{
+}
+	
+void ReceiveParameters::add(WaitlistHead &head) noexcept {
+	WaitlistElement::add(head);
+}
+
+void ReceiveParameters::remove() noexcept {
+	WaitlistElement::remove();
+}
+
+
+SendParameters::SendParameters(SendParameters &&p) noexcept
+	: WaitlistElement(std::move(p)), packet(p.packet), result(p.result)
+{
+}
+	
+void SendParameters::add(WaitlistHead &head) noexcept {
+	WaitlistElement::add(head);
+}
+
+void SendParameters::remove() noexcept {
+	WaitlistElement::remove();
+
+	// send mac counter to device to cancel the send operation
+	if (radio::device != nullptr) {
+		uint8_t macCounter = this->packet[3];
+		int length = packet[0] - 2;
+		int index = packet[1 + length]; // index is stored in send extra data
+		int transferred;
+
+		int ret = libusb_bulk_transfer(radio::device, 1 + index | usb::OUT, &macCounter, 1, &transferred, 10000);
+		if (ret == 0) {
+		}
+	}
+}
+	
+
+
 // event loop handler chain
 loop::Handler nextHandler;
 void handle(Gui &gui) {
@@ -159,11 +227,9 @@ void handle(Gui &gui) {
 		auto &context = radio::contexts[index];
 	
 		// resume all failed send operations (send operations fail e.g. when there is no usb radio device)
-		context.sendWaitingList.resumeAll([](SendParameters p) {
-			if (p.packet == nullptr) {
-				p.result = 0;
+		context.sendWaitlist.resumeAll([](SendParameters &p) {
+			if (p.result == 0)
 				return true;
-			}
 			return false;
 		});
 	
@@ -176,30 +242,35 @@ void handle(Gui &gui) {
 				int ret = libusb_bulk_transfer(radio::device, 1 + index | usb::IN, packet + 1, array::size(packet) - 1, &length, 1);
 				if (ret != LIBUSB_SUCCESS)
 					break;
-				if (length >= 2) {
+				if (length == 1) {
+					// got a result of an energy detection
+					uint8_t ed = packet[1];
+					
+				} else if (length == 2) {
+					// got a result of a send operation
+					uint8_t macCounter = packet[1];
+					uint8_t result = packet[2];
+
+					// resume coroutine that sent the packet with matching mac counter
+					context.sendWaitlist.resumeAll([macCounter, result](SendParameters &p) {
+						// check if mac counter matches
+						if (p.packet[3] == macCounter) {
+							p.result = result;
+							return true;
+						}
+						return false;
+					});
+				} else if (length >= 2 + radio::RECEIVE_EXTRA_LENGTH) {
+					// got a receive packet
+					
 					// resume first waiting coroutine
 					uint8_t *d = packet;
-					context.receiveWaitingList.resumeFirst([length, d](ReceiveParameters p) {
-						// convert to radio format where first byte is length of payload and crc, but no LQI
-						p.packet[0] = length - 1 + 2;
+					context.receiveWaitlist.resumeFirst([length, d](ReceiveParameters &p) {
+						// convert to radio format where first byte is length of payload and crc, but no extra data
+						p.packet[0] = length - radio::RECEIVE_EXTRA_LENGTH + 2;
 						array::copy(length, p.packet + 1, d + 1);
 						return true;
 					});
-				} else if (length == 1) {
-					// length of 1 indicates a result for detectEnergy() and send()
-					if (packet[1] <= Result::MAX_ED_VALUE) {
-						// got a result of an energy detection
-					
-					} else {
-						// got a result of a send operation
-						uint8_t result = packet[1] - Result::MIN_RESULT_VALUE;
-
-						// resume first waiting coroutine
-						context.sendWaitingList.resumeFirst([result](SendParameters p) {
-							p.result = result;
-							return true;
-						});
-					}
 				}
 			} else {
 				break;
@@ -233,7 +304,7 @@ void handle(Gui &gui) {
 				else if (device.lastRocker & 8)
 					device.channel = 25;
 
-				uint8_t data[] = {0,
+				uint8_t packet[] = {0, // length of packet
 					0x01, 0x08, uint8_t(device.counter), 0xff, 0xff, 0xff, 0xff, // mac header
 					0x0c, // network header
 					LE_INT32(device.deviceId), // deviceId
@@ -242,21 +313,21 @@ void handle(Gui &gui) {
 					LE_INT32(0), // mic
 					LE_INT32(device.counter), // counter
 					50}; // LQI
-				data[0] = array::size(data) - 2 + 2;
+				packet[0] = array::size(packet) - 1 - 1 + 2; // + 2 for crc which is not in the packet
 
 				// nonce
 				Nonce nonce(device.deviceId, device.deviceId);
 
 				// header is deviceId
-				uint8_t const *header = data + 9;
+				uint8_t const *header = packet + 9;
 				int headerLength = 4;
 				
 				// payload is key
-				uint8_t *message = data + 17;
+				uint8_t *message = packet + 17;
 				
 				encrypt(message, nonce, header, headerLength, message, 16, 4, defaultAesKey);
 
-				radio::receiveData(device.channel, data);
+				radio::receiveData(device.channel, packet);
 			} else {
 				uint8_t command = rocker != 0 ? 0 : 0x04;
 				int r = rocker | device.lastRocker;
@@ -269,7 +340,7 @@ void handle(Gui &gui) {
 				else if (r == 8)
 					command |= 0x12;
 
-				uint8_t data[] = {0,
+				uint8_t packet[] = {0, // length of packet
 					0x01, 0x08, uint8_t(device.counter), 0xff, 0xff, 0xff, 0xff, // mac header
 					0x8c, 0x30, // network header
 					LE_INT32(device.deviceId), // deviceId
@@ -277,24 +348,38 @@ void handle(Gui &gui) {
 					command,
 					0x00, 0x00, 0x00, 0x00, // mic
 					50}; // LQI
-				data[0] = array::size(data) - 2 + 2;
-				
+				packet[0] = array::size(packet) - 1 - 1 + 2; // + 2 for crc which is not in the packet
+
 				// nonce
 				Nonce nonce(device.deviceId, device.counter);
 
 				// header is network header, deviceId, counter and command
-				uint8_t const *header = data + 8;
+				uint8_t const *header = packet + 8;
 				int headerLength = 11;
 
 				// message: empty payload and mic
-				uint8_t *message = data + 19;
+				uint8_t *message = packet + 19;
 
 				encrypt(message, nonce, header, headerLength, message, 0, 4, device.key);
 
-				radio::receiveData(device.channel, data);
+				radio::receiveData(device.channel, packet);
 			}
 			++device.counter;
 			device.lastRocker = rocker;
+		}
+	}
+	
+	// inject packets from pcap file
+	if (radio::pcapIn != nullptr) {
+		PcapPacketHeader header;
+		if (fread(&header, sizeof(PcapPacketHeader), 1, radio::pcapIn) == 1) {
+			// read data
+			uint8_t packet[128];
+			packet[0] = header.orig_len;
+			fread(packet + 1, 1, header.incl_len, radio::pcapIn);
+			
+			// let the radio receive the packet
+			radio::receiveData(radio::channel, packet);
 		}
 	}
 }
@@ -349,6 +434,8 @@ void init() {
 			controlTransfer(device, Request::RESET, 0, 0);
 
 			radio::device = device;
+			
+			break;
 		}
 	}
 	
@@ -364,6 +451,49 @@ void init() {
 	}
 
 
+	// open input pcap file
+/*	radio::pcapIn = fopen("input.pcap", "rb");
+	if (radio::pcapIn != nullptr) {
+		// read pcap header
+		PcapHeader header;
+		fread(&header, sizeof(header), 1, radio::pcapIn);
+		if (header.network != 0xC3) {
+			// error: protocol not supported
+			radio::pcapIn = nullptr;
+		}
+		
+		// skip all packets up to a given time
+		while (true) {
+			PcapPacketHeader header;
+			if (fread(&header, sizeof(PcapPacketHeader), 1, radio::pcapIn) == 1) {
+				// read data
+				uint8_t packet[128];
+				packet[0] = header.orig_len;
+				fread(packet + 1, 1, header.incl_len, radio::pcapIn);
+				
+				if (header.ts_sec >= 25)
+					break;
+			} else {
+				break;
+			}
+		}
+	}
+
+	// open output pcap file
+	radio::pcapOut = fopen("output.pcap", "wb");
+	if (radio::pcapOut != nullptr) {
+		// write pcap header
+		PcapHeader header;
+		header.magic_number = 0xa1b2c3d4;
+		header.version_major = 2;
+		header.version_minor = 4;
+		header.thiszone = 0;
+		header.sigfigs = 0;
+		header.snaplen = 128;
+		header.network = 0xC3;
+		fwrite(&header, sizeof(header), 1, radio::pcapOut);
+	}
+*/
 	// add to event loop handler chain
 	radio::nextHandler = loop::addHandler(handle);
 }
@@ -389,7 +519,7 @@ void stop() {
 			p.data = nullptr;
 			return true;
 		});*/
-		context.sendWaitingList.resumeAll([](SendParameters p) {
+		context.sendWaitlist.resumeAll([](SendParameters &p) {
 			// coroutines waiting for send get a failure result
 			p.result = 0;
 			return true;
@@ -445,37 +575,60 @@ Awaitable<ReceiveParameters> receive(int index, Packet &packet) {
 	assert(uint(index) < RADIO_CONTEXT_COUNT);
 	auto &context = radio::contexts[index];
 
-	return {context.receiveWaitingList, {packet}};
+	return {context.receiveWaitlist, packet};
 }
 
-Awaitable<SendParameters> send(int index, uint8_t const *packet, uint8_t &result) {
+Awaitable<SendParameters> send(int index, uint8_t *packet, uint8_t &result) {
 	assert(uint(index) < RADIO_CONTEXT_COUNT);
 	auto &context = radio::contexts[index];
 
-	// get length without crc
+	// get length without crc but with extra data
 	int length = packet[0] - 2;
+
+	result = 1;
 
 	// send to usb device if available
 	if (radio::device != nullptr) {
-		int transferred;
+		int l = length + radio::SEND_EXTRA_LENGTH;
 		uint8_t *d = const_cast<uint8_t *>(packet + 1);
-		
-		int ret = libusb_bulk_transfer(radio::device, 1 + index | usb::OUT, d, length, &transferred, 10000);
+		int transferred;
+
+		int ret = libusb_bulk_transfer(radio::device, 1 + index | usb::OUT, d, l, &transferred, 10000);
 		if (ret == 0) {
 			// send zero length packet to indicate that transfer is complete if length is multiple of 64
-			if (length > 0 && (length & 63) == 0)
+			if (l > 0 && (l & 63) == 0)
 				libusb_bulk_transfer(radio::device, (1 + index) | usb::OUT, d, 0, &transferred, 1000);
 
 		} else {
 			// indicate failure
-			packet = nullptr;
+			result = 0;
 		}
 	} else {
 		// indicate failure
-		packet = nullptr;
+		result = 0;
+	}
+		
+	// store context index in extra data
+	packet[1 + length] = index;
+	
+	// write to pcap
+	if (radio::pcapOut != nullptr) {
+		// write header
+		PcapPacketHeader header;
+		header.ts_sec = 0;//duration / 1000000;
+		header.ts_usec = 0;//duration % 1000000;
+		header.incl_len = length;
+		header.orig_len = length + 2; // 2 byte crc not transferred
+		fwrite(&header, sizeof(header), 1, radio::pcapOut);
+
+		// write packet
+		fwrite(packet + 1, 1, length, radio::pcapOut);
+
+		// flush file so that we can interrupt any time
+		fflush(radio::pcapOut);
 	}
 	
-	return {context.sendWaitingList, {packet, result}};
+	return {context.sendWaitlist, packet, result};
 }
 
 } // namespace radio

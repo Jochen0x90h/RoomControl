@@ -11,7 +11,12 @@ public:
 	 * Construct from radio packet where the length (including 2 byte crc) is in the first byte
 	 */
 	PacketReader(uint8_t *packet) : current(packet + 1), end(packet + 1 + packet[0] - 2) {}
-	
+
+	/**
+	 * Construct from data buffer
+	 */
+	PacketReader(int length, uint8_t *data) : current(data), end(data + length) {}
+
 	/**
 	 * Construct from data buffer
 	 */

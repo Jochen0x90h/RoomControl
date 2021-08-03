@@ -10,22 +10,38 @@ namespace radio {
 enum class ContextFlags : uint16_t {
 	NONE = 0,
 	
-	// pass all packets to receive handler of the context (even when SEQUENCE_NUMBER_SUPPRESSION is on)
+	/**
+	 * Pass all packets to receive handler of the context (even when SEQUENCE_NUMBER_SUPPRESSION is on)
+	 */
 	PASS_ALL = 1,
 
-	// pass beacon packets
+	/**
+	 * Pass beacon packets
+	 */
 	PASS_TYPE_BEACON = 2,
 
-	// pass packets when destination pan and short address match or are broadcast
+	/**
+	 * Pass packets when destination pan and short address match or are broadcast
+	 */
 	PASS_DEST_SHORT = 4,
 
-	// pass data packets when destination pan and short address match or are broadcast (green power)
+	/**
+		Pass data packets when destination pan and short address match or are broadcast (self-powered devices such
+		as EnOcean switches)
+	*/
 	PASS_TYPE_DATA_DEST_SHORT = 8,
 
-	// packets pass where destination pan and long address match or are broadcast
+	/**
+		Pass packets where destination pan and long address match or are broadcast
+	*/
 	PASS_DEST_LONG = 16,
 
-	// handle ack for own packets in radio driver to meet turnaround time. Make sure the destination address filter is set
+	/**
+	 * Handle ack for own packets in radio driver to meet turnaround time.
+	 * For received packets, an ACK is sent automatically (Make sure the destination address filter is set).
+	 * For sent packets, success is reported after ACK was received. When ACK is not received, resend is attempted
+	 * 2 more times
+	 */
 	HANDLE_ACK = 32,
 };
 FLAGS_ENUM(ContextFlags)
@@ -42,7 +58,7 @@ enum class Request : uint8_t {
 	SET_PAN = 6,
 	SET_SHORT_ADDRESS = 7
 };
-
+/*
 // result of energy detection and send for remote controlling, e.g. via usb
 namespace Result {
 	// wait for result to be available, only internal use
@@ -54,5 +70,5 @@ namespace Result {
 	// start of result values (0: failure, 1: success with one backoff, 2: success with two backoffs...)
 	constexpr uint8_t MIN_RESULT_VALUE = 128;
 }
-
+*/
 } // namespace radio

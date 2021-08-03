@@ -35,18 +35,23 @@ public:
 	virtual DeviceId getDeviceId(int index) = 0;
 	
 	/**
-	 * Get list of devices connected to this interface
-	 * @return list of device ids
-	 */
-	//virtual Array<DeviceId> getDevices() = 0;
-	
-	/**
 	 * Get list of endpoints for a device
 	 * @param deviceId device id
 	 * @return list of endpoints
 	 */
 	virtual Array<EndpointType> getEndpoints(DeviceId deviceId) = 0;
 	//virtual Array<EndpointType> getEndpoints(int index) = 0;
+
+
+	struct Parameters {
+		uint8_t endpointIndex;
+		int &length;
+		uint8_t *data;
+	};
+
+	//virtual Awaitable<Parameters> subscribe(DeviceId deviceId, uint8_t endpointIndex) = 0;
+	//virtual void unsubscribe(DeviceId deviceId, uint8_t endpointIndex) = 0;
+
 
 	/**
 	 * Subscribe to an endpoint on the bus
@@ -61,12 +66,6 @@ public:
 	 * @param endpointId endpoint id, gets set to zero and the reference counter is decremented
 	 */
 	virtual void unsubscribe(uint8_t &endpointId, DeviceId deviceId, uint8_t endpointIndex) = 0;
-
-	/**
-	 * Get number of transfers in progress
-	 * @return number of transfers in progress
-	 */
-	//int getSendCount() {return this->transferCount;}
 
 	/**
 	 * Send a message to a device. Can be called multiple times in a row. When all messages are sent, onSent gets called

@@ -6,7 +6,7 @@
 namespace calendar {
 
 // waiting coroutines
-CoList<> waitingList;
+Waitlist<> waitlist;
 
 asio::deadline_timer *timer;
 
@@ -15,7 +15,7 @@ void setTimeout(boost::posix_time::ptime utc) {
 	calendar::timer->async_wait([] (boost::system::error_code error) {
 		if (!error) {
 			// resume all waiting coroutines
-			calendar::waitingList.resumeAll();
+			calendar::waitlist.resumeAll();
 
 			// set next timeout in one second
 			auto utc = boost::date_time::second_clock<boost::posix_time::ptime>::universal_time();
@@ -46,7 +46,7 @@ ClockTime now() {
 }
 
 Awaitable<> secondTick() {
-	return calendar::waitingList;
+	return {calendar::waitlist};
 }
 
 } // namespace system

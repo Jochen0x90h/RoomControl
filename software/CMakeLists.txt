@@ -5,19 +5,18 @@ project(Emulator)
 
 #set(CMAKE_VERBOSE_MAKEFILE ON)
 
-# use C++20 standard with coroutines
+# use C++20 standard
 set(CMAKE_CXX_STANDARD 20)
-if (APPLE)
-	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fcoroutines-ts")
-else()
-	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fcoroutines")
-endif()
 
+# enable coroutines
 # suppress warning for own s and ms literal operators that are used instad of those in std::chrono
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-user-defined-literals")
+	# clang
+	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fcoroutines-ts -Wno-user-defined-literals -ftemplate-backtrace-limit=0")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ")
 else()
-	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-literal-suffix")
+	# gcc
+	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fcoroutines -Wno-literal-suffix")
 endif()
 
 # enable address sanitizer
@@ -75,6 +74,7 @@ set(UTIL
 	util/src/Font.cpp
 	util/src/Font.hpp
 	util/src/optional.hpp
+	util/src/Pointer.hpp
 	util/src/Queue.hpp
 	util/src/String.hpp
 	util/src/StringBuffer.hpp
@@ -93,6 +93,7 @@ set(NETWORK
 	network/src/DataBuffer.hpp
 	network/src/hash.cpp
 	network/src/hash.hpp
+	network/src/Nonce.hpp
 	network/src/PacketReader.hpp
 	network/src/PacketWriter.hpp
 	network/src/ieee.hpp
@@ -173,6 +174,7 @@ set(CONTROL
 	control/src/BME680.hpp
 	control/src/BusInterface.cpp
 	control/src/BusInterface.hpp
+	control/src/Configuration.hpp
 	control/src/emu/bus.cpp
 	control/src/Device.hpp
 	control/src/emu/display.cpp

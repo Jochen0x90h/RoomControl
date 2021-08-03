@@ -6,6 +6,12 @@
 
 #include <experimental/coroutine>
 
+//#define DEBUG_PRINT
+#ifdef DEBUG_PRINT
+#include <iostream>
+#endif
+
+
 namespace std {
 	using namespace std::experimental::coroutines_v1;
 }
@@ -17,68 +23,156 @@ namespace std {
 #endif
 
 
-template <typename T = void>
-class CoList {
-	public:
+struct WaitlistElement;
 
-	struct Element;
-	
-	struct ElementBase {
-		Element *next;
-		Element *prev;
+// head of the linked list used by Waitlist
+struct WaitlistHead {
+	WaitlistElement *next;
+	WaitlistElement *prev;
+};
 
-		ElementBase() = default;
-		constexpr ElementBase(Element *head) : next(head), prev(head) {}
-	};
+// element of the linked list used by Waitlist
+struct WaitlistElement : public WaitlistHead {
+	std::coroutine_handle<> handle;
+
+
+	// default constructor
+	WaitlistElement() noexcept {
+		// set to "not in list"
+		this->next = nullptr;
+	}
 	
-	struct Element : public ElementBase {
-		std::coroutine_handle<> handle;
-		T value;
-	
-		explicit Element(T value) : value(value) {}
-	
-		/**
-		 * Remove this element from the list
-		 */
-		void remove() {
-			this->next->prev = this->prev;
-			this->prev->next = this->next;
-		}
-		
-		/**
-		 * Remove this element from the list and resume it
-		 */
-		void resume() {
-			remove();
+	// delete copy constructor
+	WaitlistElement(WaitlistElement const &) = delete;
+
+	// move constructor
+	WaitlistElement(WaitlistElement &&element) noexcept {
+		replace(element);
+/*
+		// replace other element by this element if it is "in list"
+		if (element.next != nullptr) {
+			this->prev = element.prev;
+			this->next = element.next;
+			this->prev->next = this;
+			this->next->prev = this;
+			
+			// set other element to "not in list"
+			//element.prev = element.next = &element;
+			element.next = nullptr;
+		} else {
+			// set to "not in list"
 			this->next = nullptr;
-			this->handle.resume();
 		}
-	};
 
-	constexpr CoList() : head((Element*)&this->head) {}
-	
-	CoList(CoList const &) = delete;
-	
-	CoList & operator=(CoList const &) = delete;
-	
-	bool isEmpty() {return this->head.next == &this->head;}
-	
-	void add(Element &element) {
-		Element *head = reinterpret_cast<Element*>(&this->head);
-
-		element.next = head;
-		element.prev = head->prev;
-		head->prev->next = &element;
-		head->prev = &element;
+		// handle does not need to be moved as it must be nullptr because the coroutine is not waiting
+*/
 	}
 
+	// add this element to a list
+	void add(WaitlistHead &head) {
+		this->next = static_cast<WaitlistElement*>(&head);
+		this->prev = head.prev;
+		head.prev->next = this;
+		head.prev = this;
+	}
+
+	// replace other element by this element
+	void replace(WaitlistElement &element) {
+		// replace other element by this element if it is "in list"
+		if (element.next != nullptr) {
+			this->prev = element.prev;
+			this->next = element.next;
+			this->prev->next = this;
+			this->next->prev = this;
+			
+			// set other element to "not in list"
+			//element.prev = element.next = &element;
+			element.next = nullptr;
+		} else {
+			// set to "not in list"
+			this->next = nullptr;
+		}
+		
+		// handle does not need to be moved as it must be nullptr because the coroutine is not waiting
+	}
+
+	// remove this element from the list and leave it in uninitialized state (use e.g. in destructor)
+	void remove() noexcept {
+		this->next->prev = this->prev;
+		this->prev->next = this->next;
+
+		// set to "not in list"
+		this->next = nullptr;
+	}
+};
+
+
+/**
+ * Check if a type is derived from a given class
+ * @tparam T type to check if it derives from base class B
+ * @tparam B base class
+ */
+template <typename T, class B>
+class IsDerivedFrom {
+	class No {};
+	class Yes {No no[3];};
+	
+	static Yes test(B *);
+	static No test(...);
+public:
+	enum {RESULT = sizeof(test(static_cast<T*>(0))) == sizeof(Yes)};
+};
+
+
+template <typename T, int>
+struct WaitlistElementSelector {
+	struct Element : public WaitlistElement, public T {
+		// default constructor
+		template <typename ...Args>
+		Element(Args &&...args) : T{std::forward<Args>(args)...} {}
+
+		// move constructor
+		Element(Element &&element) noexcept : WaitlistElement(std::move(element)), T(std::move(element)) {}
+	};
+};
+
+template <typename T>
+struct WaitlistElementSelector<T, 1> {
+	using Element = T;
+};
+
+
+
+/**
+ * List of coroutines that wait to be resumed
+ */
+template <typename T = void>
+class Waitlist {
+public:
+
+	// select element type
+	using Element = typename WaitlistElementSelector<T, IsDerivedFrom<T, WaitlistElement>::RESULT>::Element;
+
+
 	/**
-	 * Return the first value. List must not be empty
+	 * Default constructor
 	 */
-	/*const T &getFirstValue() {
-		assert(!isEmpty());
-		return this->head.next->value;
-	}*/
+	Waitlist() {
+		this->head.next = static_cast<Element *>(&this->head);
+		this->head.prev = static_cast<Element *>(&this->head);
+	}
+	
+	// delete copy constructor
+	Waitlist(Waitlist const &) = delete;
+	
+	// delete assignment operator
+	Waitlist & operator=(Waitlist const &) = delete;
+	
+	/**
+	 * Check if list is empty
+	 * @return true when empty
+	 */
+	bool isEmpty() {return this->head.next == &this->head;}
 
 	/**
 	 * Resume first waiting coroutine when the filter returns true
@@ -87,23 +181,25 @@ class CoList {
 	 */
 	template <typename V>
 	bool resumeFirst(V const &filter) {
-		Element *head = reinterpret_cast<Element*>(&this->head);
-		Element *current = head->next;
+		Element *head = static_cast<Element*>(&this->head);
+		Element *current = static_cast<Element*>(head->next);
 
 		// check if list is empty
 		if (current == head)
 			return false;
 
-		if (filter(current->value)) {
-			// remove element from list
-			head->next = current->next;
-			current->next->prev = head;
+		if (filter(*current)) {
+			// remove element from list (special implementation of remove() may lock interrupts to avoid race condition)
+			current->remove();
+			//head->next = current->next;
+			//current->next->prev = head;
 			
-			// mark element as handled
+			// indicate that element is ready (await_ready() returns true on subsequent co_await)
 			current->next = nullptr;
 			
-			// resume coroutine
-			current->handle.resume();
+			// resume coroutine if it is waiting
+			if (current->handle)
+				current->handle.resume();
 		}
 		
 		return true;
@@ -115,98 +211,99 @@ class CoList {
 	 */
 	template <typename V>
 	void resumeAll(V const &filter) {
-		Element *head = reinterpret_cast<Element*>(&this->head);
-		Element *current = head->next;
+		Element *head = static_cast<Element*>(&this->head);
+		Element *current = head;
+		Element *next = static_cast<Element*>(current->next);
+		Element *last = static_cast<Element*>(head->prev);
+
+		// iterate over all elements that were in the list at this point, omit any new elements added during resume()
+		while (current != last) {
+			current = next;
+			next = static_cast<Element*>(current->next);
+
+			if (filter(*current)) {
+				// remove element from list (special implementation of remove() may lock interrupts to avoid race condition)
+				current->remove();
+				//current->next->prev = current->prev;
+				//current->prev->next = current->next;
+
+				// indicate that element is ready (await_ready() returns true on subsequent co_await)
+				current->next = nullptr;
+
+				// resume coroutine if it is waiting
+				if (current->handle)
+					current->handle.resume();
+			}
+		}
+	}
+	
+	template <typename V>
+	bool find(V const &predicate) {
+		Element *head = static_cast<Element*>(&this->head);
+		Element *current = static_cast<Element*>(head->next);
 
 		while (current != head) {
-			Element *next = current->next;
-
-			if (filter(current->value)) {
-				// remove element from list
-				current->remove();
-
-				// mark element as handled
-				current->next = nullptr;
-				
-				// resume coroutine
-				current->handle.resume();
-			}
-
-			current = next;
+			if (predicate(*current))
+				return true;
+			current = static_cast<Element*>(current->next);
 		}
+		return false;
 	}
-	
-	//Element *begin() {return this->head.next;}
-	//Element *end() {return reinterpret_cast<Element*>(&this->head);}
 
-	ElementBase head;
+	WaitlistHead head;
 };
 
-
+// specialization for void
 template <>
-class CoList<void> {
+class Waitlist<void> {
 public:
 
-	struct Element;
-	
-	struct ElementBase {
-		ElementBase() = default;
-		constexpr ElementBase(Element *head) : next(head), prev(head) {}
-		
-		Element *next;
-		Element *prev;
-	};
-	
-	struct Element : public ElementBase {
-		std::coroutine_handle<> handle;
-	
-		/**
-		 * Remove this element from the list
-		 */
-		void remove() {
-			this->next->prev = this->prev;
-			this->prev->next = this->next;
-		}
-	};
+	using Element = WaitlistElement;
 
-	constexpr CoList() : head((Element*)&this->head) {}
 	
-	CoList(CoList const &) = delete;
-	
-	CoList & operator=(CoList const &) = delete;
-	
-	bool isEmpty() {return this->head.next == &this->head;}
-	
-	void add(Element &element) {
-		Element *head = reinterpret_cast<Element*>(&this->head);
-
-		element.next = head;
-		element.prev = head->prev;
-		head->prev->next = &element;
-		head->prev = &element;
+	/**
+	 * Default constructor
+	 */
+	Waitlist() {
+		this->head.next = static_cast<Element *>(&this->head);
+		this->head.prev = static_cast<Element *>(&this->head);
 	}
+	
+	// delete copy constructor
+	Waitlist(Waitlist const &) = delete;
+	
+	// delete assignment operator
+	Waitlist & operator=(Waitlist const &) = delete;
+	
+	/**
+	 * Check if list is empty
+	 * @return true when empty
+	 */
+	bool isEmpty() {return this->head.next == &this->head;}
 
 	/**
 	 * Resume first waiting coroutine
 	 * @return true when a coroutine was resumed, false when the list was empty
 	 */
 	bool resumeFirst() {
-		Element *head = reinterpret_cast<Element*>(&this->head);
+		Element *head = static_cast<Element*>(&this->head);
 		Element *current = head->next;
 
 		// check if list is empty
 		if (current == head)
 			return false;
-			
-		// remove element from list
-		head->next = current->next;
-		current->next->prev = head;
 		
-		// mark element as handled
+		// remove element from list (special implementation of remove() may lock interrupts to avoid race condition)
+		current->remove();
+		//head->next = current->next;
+		//current->next->prev = head;
+
+		// indicate that element is ready (await_ready() returns true on subsequent co_await)
 		current->next = nullptr;
-		
-		// resume coroutine
-		current->handle.resume();
+
+		// resume coroutine if it is waiting
+		if (current->handle)
+			current->handle.resume();
 
 		return true;
 	}
@@ -215,7 +312,30 @@ public:
 	 * Resume all waiting coroutines
 	 */
 	void resumeAll() {
-		Element *head = reinterpret_cast<Element*>(&this->head);
+		Element *head = static_cast<Element*>(&this->head);
+		Element *current = head;
+		Element *next = static_cast<Element*>(current->next);
+		Element *last = static_cast<Element*>(head->prev);
+
+		// iterate over all elements that were in the list at this point, omit any new elements added during resume()
+		while (current != last) {
+			current = next;
+			next = static_cast<Element*>(current->next);
+
+			// remove element from list (special implementation of remove() may lock interrupts to avoid race condition)
+			current->remove();
+			//current->next->prev = current->prev;
+			//current->prev->next = current->next;
+
+			// indicate that element is ready (await_ready() returns true on subsequent co_await)
+			current->next = nullptr;
+
+			// resume coroutine if it is waiting
+			if (current->handle)
+				current->handle.resume();
+		}
+/*
+		Element *head = static_cast<Element*>(&this->head);
 		Element *current = head->next;
 
 		// clear list
@@ -225,98 +345,272 @@ public:
 		while (current != head) {
 			Element *next = current->next;
 
-			// mark element as handled
+			// indicate that element is ready (await_ready() returns true on subsequent co_await)
 			current->next = nullptr;
 
-			// resume coroutine
-			current->handle.resume();
+			// resume coroutine if it is waiting
+			if (current->handle)
+				current->handle.resume();
 
 			current = next;
 		}
+*/
 	}
 
-	struct Awaitable {
-		Awaitable(CoList<void> &list) : list(list) {}
-
-		bool await_ready() {return false;}
-
-		void await_suspend(std::coroutine_handle<> handle) noexcept {
-			this->element.handle = handle;
-			this->list.add(this->element);
-		}
-
-		void await_resume() noexcept {}
-
-		CoList<void> &list;
-		Element element;
-	};
-
-	Awaitable wait() {
-		return *this;
-	}
-
-	ElementBase head;
+	WaitlistHead head;
 };
 
+
 /**
- * Simple awaitable function with no return value which can either be a normal function/method or a coroutine.
- * A normal function should return a pointer to a coroutine_handle that is initialized to nullptr and that gets set
- * when a coroutine awaits it. The function has to make sure that eventually resume() gets called on the handle.
+ * This type is returned from functions/methods that can be awaited on using co_await. It behaves like an unique_ptr
+ * to a resource and therefore can only be moved, but not copied.
  */
 template <typename T = void>
 struct Awaitable {
-	Awaitable(CoList<T> &list, T value) : list(list), element(value) {}
+	typename Waitlist<T>::Element element;
 
-	bool await_ready() {return false;}
 
-	void await_suspend(std::coroutine_handle<> handle) noexcept {
-		this->element.handle = handle;
-		this->list.add(this->element);
+	template <typename ...Args>
+	Awaitable(Waitlist<T> &list, Args &&...args) : element(std::forward<Args>(args)...) {
+		this->element.add(list.head);
+		#ifdef DEBUG_PRINT
+			std::cout << "Awaitable<T> add" << std::endl;
+		#endif
 	}
 
-	void await_resume() noexcept {}
+	Awaitable(Awaitable const &) = delete;
 
-	CoList<T> &list;
-	typename CoList<T>::Element element;
+	Awaitable(Awaitable &&a) noexcept : element(std::move(a.element)) {
+		#ifdef DEBUG_PRINT
+			std::cout << "Awaitable<T> move" << std::endl;
+		#endif
+	}
+
+	~Awaitable() {
+		//if (this->element.next != &this->element) {
+		if (this->element.next != nullptr) {
+			#ifdef DEBUG_PRINT
+				std::cout << "Awaitable<T> remove" << std::endl;
+			#endif
+			this->element.remove();
+		}
+	}
+
+	bool await_ready() const noexcept {
+		// is ready when the element is "not in list"
+		return this->element.next == nullptr;
+	}
+
+	void await_suspend(std::coroutine_handle<> handle) noexcept {
+		// set the coroutine handle
+		this->element.handle = handle;
+	}
+
+	bool await_resume() noexcept {
+		// clear the coroutine handle
+		this->element.handle = nullptr;
+
+		// return true when the element is "not in list", i.e. it is ready
+		return this->element.next == nullptr;
+	}
 };
 
-
-
+// specialization for void
 template <>
 struct Awaitable<void> {
-	Awaitable(CoList<void> &list) : list(list) {}
+	typename Waitlist<>::Element element;
 
-	bool await_ready() {return false;}
 
-	void await_suspend(std::coroutine_handle<> handle) noexcept {
-		this->element.handle = handle;
-		this->list.add(this->element);
+	Awaitable() = default;
+
+	Awaitable(Waitlist<> &list) {
+		this->element.add(list.head);
+		#ifdef DEBUG_PRINT
+			std::cout << "Awaitable add" << std::endl;
+		#endif
 	}
 
-	void await_resume() noexcept {}
+	Awaitable(Awaitable const &) = delete;
 
-	CoList<void> &list;
-	typename CoList<void>::Element element;
+	Awaitable(Awaitable &&a) noexcept : element(std::move(a.element)) {
+		#ifdef DEBUG_PRINT
+			std::cout << "Awaitable move" << std::endl;
+		#endif
+	}
 
-	// an awaitable function or method can also be a coroutine
-	struct promise_type {
-		Awaitable<void> get_return_object() {return this->list;}
-		std::suspend_never initial_suspend() {return {};}
-		std::suspend_never final_suspend() noexcept {return {};}
-		void unhandled_exception() {}
-		void return_void() {
-			this->list.resumeAll();
+	~Awaitable() {
+		//if (this->element.next != &this->element) {
+		if (this->element.next != nullptr) {
+			#ifdef DEBUG_PRINT
+				std::cout << "Awaitable remove" << std::endl;
+			#endif
+			this->element.remove();
 		}
+	}
 
-		CoList<void> list;
-	};
+	bool await_ready() const noexcept {
+		// is ready when the element is "not in list"
+		return this->element.next == nullptr;
+	}
+
+	void await_suspend(std::coroutine_handle<> handle) noexcept {
+		// set the coroutine handle
+		this->element.handle = handle;
+	}
+
+	bool await_resume() noexcept {
+		// clear the coroutine handle
+		this->element.handle = nullptr;
+
+		// return true when the element is "not in list", i.e. it is ready
+		return this->element.next == nullptr;
+	}
 };
- 
-
 
 
 /**
- * Return value for a simple coroutine for asynchronous processing with no return value.
+ * Return value for a sub-coroutine with no return value.
+ *
+ * Use like this:
+ * AwaitableCoroutine bar() {
+ * }
+ * Coroutine foo() {
+ *   co_await bar();
+ * }
+ */
+struct AwaitableCoroutine {
+	// an awaitable function or method can also be a coroutine
+	struct promise_type {
+		Waitlist<> list;
+
+		~promise_type() {
+			#ifdef DEBUG_PRINT
+				std::cout << "AwaitableCoroutine ~promise_type" << std::endl;
+			#endif
+
+			// the coroutine exits normally or gets destroyed
+			this->list.resumeAll();
+		}
+		
+		AwaitableCoroutine get_return_object() {
+			return *this;
+		}
+
+		std::suspend_never initial_suspend() noexcept {
+			return {};
+		}
+
+		std::suspend_never final_suspend() noexcept {
+			return {};
+		}
+		
+		void unhandled_exception() {
+		}
+		
+		void return_void() {
+			#ifdef DEBUG_PRINT
+				std::cout << "AwaitableCoroutine return_void" << std::endl;
+			#endif
+
+			// the coroutine exits normally
+			//this->list.resumeAll();
+		}
+	};
+
+
+	std::coroutine_handle<> handle;
+	typename Waitlist<>::Element element;
+
+
+	AwaitableCoroutine() = default;
+	
+	AwaitableCoroutine(promise_type &promise) : handle(std::coroutine_handle<promise_type>::from_promise(promise)) {
+		this->element.add(promise.list.head);
+		#ifdef DEBUG_PRINT
+			std::cout << "AwaitableCoroutine add" << std::endl;
+		#endif
+	}
+
+	AwaitableCoroutine(AwaitableCoroutine const &) = delete;
+
+	AwaitableCoroutine(AwaitableCoroutine &&a) noexcept : handle(a.handle), element(std::move(a.element)) {
+		#ifdef DEBUG_PRINT
+			std::cout << "AwaitableCoroutine move" << std::endl;
+		#endif
+	}
+
+	~AwaitableCoroutine() {
+		destroy();
+		/*if (this->element.next != nullptr) {
+			#ifdef DEBUG_PRINT
+				std::cout << "AwaitableCoroutine destroy" << std::endl;
+			#endif
+			this->element.remove();
+			this->handle.destroy();
+		}*/
+	}
+
+	AwaitableCoroutine &operator =(AwaitableCoroutine &&a) noexcept {
+		destroy();
+		/*if (this->element.next != nullptr) {
+			#ifdef DEBUG_PRINT
+				std::cout << "AwaitableCoroutine destroy" << std::endl;
+			#endif
+			this->element.remove();
+			this->handle.destroy();
+		}*/
+		this->handle = a.handle;
+		this->element.replace(a.element);
+		return *this;
+	}
+
+	/**
+	 * Destroy the coroutine if it is still running
+	 */
+	void destroy() {
+		if (this->element.next != nullptr) {
+			#ifdef DEBUG_PRINT
+				std::cout << "AwaitableCoroutine destroy" << std::endl;
+			#endif
+			this->element.remove();
+			this->handle.destroy();
+		}
+	}
+
+	/**
+	 * Determine if a coroutine is still running
+	 * @return true when running, false when finished
+	 */
+	bool isRunning() const noexcept {
+		//return this->element.next != &this->element;
+		return this->element.next != nullptr;
+	}
+
+
+	bool await_ready() const noexcept {
+		// is ready when the element is not part of a list
+		//return this->element.next == &this->element;
+		return this->element.next == nullptr;
+	}
+
+	void await_suspend(std::coroutine_handle<> handle) noexcept {
+		// set the coroutine handle
+		this->element.handle = handle;
+	}
+
+	bool await_resume() noexcept {
+		// clear the coroutine handle
+		this->element.handle = nullptr;
+
+		// return true when the element is not part of a list, i.e. it is ready
+		//return this->element.next == &this->element;
+		return this->element.next == nullptr;
+	}
+};
+
+
+/**
+ * Return value for a simple toplevel coroutine for asynchronous processing with no return value.
  *
  * Use like this:
  * Coroutine foo() {
@@ -325,8 +619,18 @@ struct Awaitable<void> {
  */
 struct Coroutine {
 	struct promise_type {
-		Coroutine get_return_object() {return {};}
-		std::suspend_never initial_suspend() {return {};}
+		Coroutine get_return_object() {
+			#ifdef DEBUG_PRINT
+				std::cout << "Coroutine get_return_object" << std::endl;
+			#endif
+			return {};
+		}
+		std::suspend_never initial_suspend() {
+			#ifdef DEBUG_PRINT
+				std::cout << "Coroutine initial_suspend" << std::endl;
+			#endif
+			return {};
+		}
 		std::suspend_never final_suspend() noexcept {return {};}
 		void unhandled_exception() {}
 		void return_void() {}
@@ -334,59 +638,60 @@ struct Coroutine {
 };
 
 
-// helper struct
-template <typename T1, typename T2>
-struct Selector2 {
-	bool await_ready() {return false;}
+/**
+ * Helper class to obtain the handle of a coroutine
+ */
+struct CoroutineHandle {
+	std::coroutine_handle<> handle;
 
-	//Selector2(CoList<T1> *list1, CoList<T2> *list2) : list1(list1), list2(list2) {}
+	bool await_ready() noexcept {
+		return false;
+	}
 
 	void await_suspend(std::coroutine_handle<> handle) noexcept {
-		/*this->element1.handle = handle;
-		this->list1->add(this->element1);
-		this->element2.handle = handle;
-		this->list2->add(this->element2);*/
-	/*
-		this->a1.element.handle = handle;
-		this->a1.list->add(this->a1.element);
-		this->a2.element.handle = handle;
-		this->a2.list->add(this->a2.element);
-	*/
-		const_cast<Awaitable<T1> &>(this->a1).await_suspend(handle);
-		const_cast<Awaitable<T2> &>(this->a2).await_suspend(handle);
+		this->handle = handle;
+		handle.resume();
+	}
+
+	void await_resume() noexcept {
+	}
+	
+	void destroy() {
+		if (this->handle) {
+			this->handle.destroy();
+			this->handle = nullptr;
+		}
+	}
+};
+
+
+
+
+
+// helper struct
+template <typename A1, typename A2>
+struct Awaitable2 {
+	A1 const &a1;
+	A2 const &a2;
+
+
+	bool await_ready() noexcept {
+		return this->a1.await_ready() || this->a2.await_ready();
+	}
+
+	void await_suspend(std::coroutine_handle<> handle) noexcept {
+		const_cast<A1 &>(this->a1).await_suspend(handle);
+		const_cast<A2 &>(this->a2).await_suspend(handle);
 	}
 
 	int await_resume() noexcept {
 		int result = 0;
-/*
-		if (this->element1.next == nullptr)
-			result = 1;
-		else
-			this->element1.remove();
-		if (this->element2.next == nullptr)
+		if (const_cast<A2 &>(this->a2).await_resume())
 			result = 2;
-		else
-			this->element2.remove();
-*/
-		if (this->a1.element.next == nullptr)
+		if (const_cast<A1 &>(this->a1).await_resume())
 			result = 1;
-		else
-			const_cast<Awaitable<T1> &>(this->a1).element.remove();
-		if (this->a2.element.next == nullptr)
-			result = 2;
-		else
-			const_cast<Awaitable<T2> &>(this->a2).element.remove();
-
 		return result;
 	}
-/*
-	CoList *list1;
-	CoList *list2;
-	CoList::Element element1;
-	CoList::Element element2;
-*/
-	Awaitable<T1> const& a1;
-	Awaitable<T2> const& a2;
 };
 
 /**
@@ -400,72 +705,82 @@ struct Selector2 {
  *   break;
  * }
  */
-template <typename T1, typename T2>
-inline Selector2<T1, T2> select(Awaitable<T1> const& a1, Awaitable<T2> const& a2) {
-	//return {a1.list, a2.list};
-	assert((void *)&a1.list != (void *)&a2.list);
+template <typename A1, typename A2>
+inline Awaitable2<A1, A2> select(A1 const& a1, A2 const& a2) {
+	//assert((void *)a1.list != (void *)a2.list);
 	return {a1, a2};
 }
 
-/*
+
 // helper struct
-struct Selector3 {
-	bool await_ready() {return false;}
+template <typename A1, typename A2, typename A3>
+struct Awaitable3 {
+	A1 const &a1;
+	A2 const &a2;
+	A2 const &a3;
+
+
+	bool await_ready() noexcept {
+		return this->a1.await_ready() || this->a2.await_ready() || this->a3.await_ready();
+	}
 
 	void await_suspend(std::coroutine_handle<> handle) noexcept {
-		*this->handle1 = handle;
-		*this->handle2 = handle;
+		const_cast<A1 &>(this->a1).await_suspend(handle);
+		const_cast<A2 &>(this->a2).await_suspend(handle);
+		const_cast<A3 &>(this->a3).await_suspend(handle);
 	}
 
 	int await_resume() noexcept {
 		int result = 0;
-		if (*this->handle1 == nullptr)
-			result = 1;
-		else
-			*this->handle1 = nullptr;
-		if (*this->handle2 == nullptr)
-			result = 2;
-		else
-			*this->handle2 = nullptr;
-		if (*this->handle3 == nullptr)
+		if (const_cast<A3 &>(this->a3).await_resume())
 			result = 3;
-		else
-			*this->handle3 = nullptr;
+		if (const_cast<A2 &>(this->a2).await_resume())
+			result = 2;
+		if (const_cast<A1 &>(this->a1).await_resume())
+			result = 1;
 		return result;
 	}
-
-	std::coroutine_handle<> *handle1;
-	std::coroutine_handle<> *handle2;
-	std::coroutine_handle<> *handle3;
 };
 
-/ **
- * Wait on three awaitables and return 1 if the first is ready, 2 if the second is ready and 3 if the third is ready
- * /
-constexpr Selector3 select(Awaitable a1, Awaitable a2, Awaitable a3) {
-	return {a1.handle, a2.handle, a3.handle};
+template <typename A1, typename A2, typename A3>
+inline Awaitable3<A1, A2, A3> select(A1 const& a1, A2 const& a2, A3 const &a3) {
+	return {a1, a2, a3};
 }
-*/
+
+
+/**
+ * Stateless barrier where coroutines wait until they get resumed. If resumeFirst() or resumeAll() get called when no
+ * Coroutine is waiting, nothing happens.
+ */
+template <typename T = void>
+class Barrier : public Waitlist<T> {
+public:
+
+	/**
+	 * Wait until resumeFirst() or resumeAll() get called
+	 */
+	Awaitable<T> wait(T &&value) {
+		return {*this, std::move(value)};
+	}
+};
+
+// specialization for void
+template <>
+class Barrier<void> : public Waitlist<> {
+public:
+
+	/**
+	 * Wait until resumeFirst() or resumeAll() get called
+	 */
+	Awaitable<> wait() {
+		return {*this};
+	}
+};
+
 
 
 class Semaphore {
 public:
-
-	struct Awaitable {
-	   Awaitable(CoList<void> *list) : list(list) {}
-
-	   bool await_ready() {return this->list == nullptr;}
-
-	   void await_suspend(std::coroutine_handle<> handle) noexcept {
-		   this->element.handle = handle;
-		   this->list->add(this->element);
-	   }
-
-	   void await_resume() noexcept {}
-
-	   CoList<void> *list;
-	   CoList<void>::Element element;
-	};
 
 	/**
 	 * Construct a semaphore with a given number of initial tokens that can be handed out
@@ -477,21 +792,21 @@ public:
 	 * Post a token and resume the next coroutine waiting for a token
 	 */
 	void post() {
-		this->n += 1 - int(this->waitingList.resumeFirst());
+		this->n += 1 - int(this->waitlist.resumeFirst());
 	}
 
 	/**
 	 * Wait for a token to become available
 	 */
-	Awaitable wait() {
+	Awaitable<> wait() {
 		// check if tokens are available
 		if (this->n > 0) {
 			--this->n;
-			return nullptr;
+			return {};
 		}
 
 		// wait until token is available
-		return &waitingList;
+		return {this->waitlist};
 	}
 
 
@@ -499,5 +814,5 @@ public:
 	int n;
 	
 	// list of waiting coroutines
-	CoList<void> waitingList;
+	Waitlist<void> waitlist;
 };

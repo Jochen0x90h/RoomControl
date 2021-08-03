@@ -8,22 +8,64 @@
 
 namespace radio {
 
+enum SendFlags {
+	NONE = 0,
+	AWAIT_DATA_REQUEST = 1,
+};
+FLAGS_ENUM(SendFlags);
+
+
 /**
- * Receive Packet containing one byte length, the payload and one byte link quality indicator (LQI).
+ * Receive: one byte link quality indicator (LQI) and 4 byte timestamp
+ */
+constexpr int RECEIVE_EXTRA_LENGTH = 1 + 4;
+
+/**
+ * Send: one byte send flags
+ */
+constexpr int SEND_EXTRA_LENGTH = 1;
+
+/**
+ * Radio packet containing one byte length, the payload, and extra data.
  * The length in the first byte is the length of the payload and crc (2 byte). The length of the
  * payload, which starts at packet[1], is therefore packet[0] - 2;
  */
-using Packet = uint8_t[1 + RADIO_MAX_PAYLOAD_LENGTH + 1];
+using Packet = uint8_t[1 + RADIO_MAX_PAYLOAD_LENGTH + RECEIVE_EXTRA_LENGTH];
 
-// Internal helper: Stores the parameters and a reference to the result value in the awaitable during co_await
-struct ReceiveParameters {
+
+// Internal helper: Stores the receive parameters and a reference to the result value in the awaitable during co_await
+struct ReceiveParameters : public WaitlistElement {
 	Packet &packet;
+
+	// default constructor
+	ReceiveParameters(Packet &packet) : packet(packet) {}
+
+	// move constructor
+	ReceiveParameters(ReceiveParameters &&p) noexcept;
+	
+	// add to list
+	void add(WaitlistHead &head) noexcept;
+
+	// remove from list
+	void remove() noexcept;
 };
 
-// Internal helper: Stores the parameters in the awaitable during co_await
-struct SendParameters {
-	uint8_t const *packet;
+// Internal helper: Stores the send parameters in the awaitable during co_await
+struct SendParameters : public WaitlistElement {
+	uint8_t *packet;
 	uint8_t &result;
+	
+	// default constructor
+	SendParameters(uint8_t *packet, uint8_t &result) : packet(packet), result(result) {}
+
+	// move constructor
+	SendParameters(SendParameters &&p) noexcept;
+	
+	// add to list
+	void add(WaitlistHead &head) noexcept;
+
+	// remove from list
+	void remove() noexcept;
 };
 
 
@@ -56,13 +98,6 @@ void detectEnergy(std::function<void (uint8_t)> const &onReady);
  * @param enable enable state
  */
 void enableReceiver(bool enable);
-
-/**
- * Wait for beacons (after a beacon request was sent) for baseSuperFrameDuration * 2^n + 1
- * @param n exponent n in wait time baseSuperFrameDuration * (2^n + 1) where in is 0 to 14
- * @param timeout called when wait time has elapsed
- */
-//void wait(int n, std::function<void ()> const &onTimeout);
 
 /**
  * Set long address which is global for all contexts
@@ -104,6 +139,6 @@ Awaitable<ReceiveParameters> receive(int index, Packet &packet);
  * @param data data to send, first byte is length of the following payload + 2 for CRC (not included in data)
  * @param result number of backoffs needed when successful, zero on failure
  */
-Awaitable<SendParameters> send(int index, uint8_t const *packet, uint8_t &result);
+Awaitable<SendParameters> send(int index, uint8_t *packet, uint8_t &result);
 
 } // namespace radio

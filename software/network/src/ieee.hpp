@@ -14,6 +14,12 @@ enum class FrameControl : uint16_t {
 	TYPE_ACK = 2,
 	TYPE_COMMAND = 3,
 
+	SECURITY = 1 << 3,
+
+	FRAME_PENDING = 1 << 4,
+
+	ACKNOWLEDGE_REQUEST = 1 << 5,
+	
 	PAN_ID_COMPRESSION = 1 << 6,
 
 	SEQUENCE_NUMBER_SUPPRESSION = 1 << 8,

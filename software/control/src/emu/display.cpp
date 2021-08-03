@@ -35,13 +35,13 @@ void getDisplay(uint8_t *buffer) {
 	}
 }
 
-CoList<Parameters> waitingList;
+Waitlist<Parameters> waitlist;
 
 
 // event loop handler chain
 loop::Handler nextHandler;
 void handle(Gui &gui) {
-	display::waitingList.resumeAll([](Parameters p) {
+	display::waitlist.resumeAll([](Parameters p) {
 		// execute commands
 		for (int i = 0; i < p.commandLength; ++i) {
 			switch (p.data[i]) {
@@ -105,7 +105,7 @@ void init() {
 }
 
 Awaitable<Parameters> send(int commandLength, int dataLength, uint8_t const *data) {
-	return {display::waitingList, {commandLength, dataLength, data}};
+	return {display::waitlist, commandLength, dataLength, data};
 }
 
 } // namespace spi

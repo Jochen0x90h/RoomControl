@@ -4,7 +4,7 @@
 namespace poti {
 
 // waiting coroutines
-CoList<Parameters> waitingList;
+Waitlist<Parameters> waitlist;
 
 
 // event loop handler chain
@@ -18,7 +18,7 @@ void handle(Gui &gui) {
 
 	if (poti) {
 		// resume all waiting coroutines
-		poti::waitingList.resumeAll([&poti](Parameters p) {
+		poti::waitlist.resumeAll([&poti](Parameters p) {
 			p.delta = poti->delta;
 			p.activated = poti->activated;
 			return true;
@@ -32,7 +32,7 @@ void init() {
 }
 
 Awaitable<Parameters> change(int& delta, bool& activated) {
-	return {poti::waitingList, {delta, activated}};
+	return {poti::waitlist, delta, activated};
 }
 
 } // namespace poti

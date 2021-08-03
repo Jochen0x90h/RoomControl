@@ -48,11 +48,15 @@ enum class NwkCommand : uint8_t {
 };
 
 
+// application support layer (aps)
+// -------------------------------
+
 // application support layer frame control field
-enum class AplFrameControl : uint8_t {
+enum class ApsFrameControl : uint8_t {
 	TYPE_MASK = 3,
 	TYPE_DATA = 0,
 	TYPE_COMMAND = 1,
+	TYPE_ACK = 2,
 	
 	DELIVERY_MASK = 3 << 2,
 	DELIVERY_UNICAST = 0 << 2,
@@ -63,10 +67,61 @@ enum class AplFrameControl : uint8_t {
 	
 	EXTENDED = 1 << 7
 };
-FLAGS_ENUM(AplFrameControl)
+FLAGS_ENUM(ApsFrameControl)
 
-enum class AplCommand : uint8_t  {
+enum class ApsCommand : uint8_t  {
 	TRANSPORT_KEY = 5,
+};
+
+
+// device profile (zdp)
+// --------------------
+
+enum class ZdpCommand : uint16_t {
+	NETWORK_ADDRESS_REQUEST = 0x0000,
+	
+	EXTENDED_ADDRESS_REQUEST = 0x0001,
+	EXTENDED_ADDRESS_RESPONSE = 0x8001,
+
+	NODE_DESCRIPTOR_REQUEST = 0x0002,
+	NODE_DESCRIPTOR_RESPONSE = 0x8002,
+
+	SIMPLE_DESCRIPTOR_REQUEST = 0x0004,
+	SIMPLE_DESCRIPTOR_RESPONSE = 0x8004,
+
+	ACTIVE_ENDPOINT_REQUEST = 0x0005,
+	ACTIVE_ENDPOINT_RESPONSE = 0x8005,
+
+	MATCH_DESCRIPTOR_REQUEST = 0x0006,
+	MATCH_DESCRIPTOR_RESPONSE = 0x8006,
+
+	DEVICE_ANNOUNCEMENT = 0x0013,
+
+	BIND_REQUEST = 0x0021,
+	BIND_RESPONSE = 0x8021,
+
+	PERMIT_JOIN_REQUEST = 0x0036,
+};
+
+
+// cluster library (zcl)
+// ---------------------
+
+enum class ZclProfile : uint16_t {
+	HOME_AUTOMATION = 0x104,
+	ZB_LIGHT_LINK = 0xc05e,
+};
+
+enum class ZclCluster : uint16_t {
+	BASIC = 0x0000,
+	POWER_CONFIGURATION = 0x0001,
+	IDENTIFY = 0x0003,
+	GROUPS = 0x0004,
+	SCENES = 0x0005,
+	ON_OFF = 0x0006,
+	LEVEL_CONTROL = 0x0008,
+	OTA_UPGRADE = 0x0019,
+	ZLL_COMMISSIONING = 0x1000,
 };
 
 enum class ZclFrameControl : uint8_t {
@@ -84,6 +139,7 @@ enum class ZclFrameControl : uint8_t {
 };
 FLAGS_ENUM(ZclFrameControl)
 
+// profile wide commands
 enum class ZclCommand : uint8_t {
 	READ_ATTRIBUTES = 0,
 	READ_ATTRIBUTES_RESPONSE = 1,
@@ -92,9 +148,9 @@ enum class ZclCommand : uint8_t {
 	DEFAULT_RESPONSE = 0x0b
 };
 
-enum class ZclAttribute : uint16_t {
-	MODEL_IDENTIFIER = 0x0005,
-	BATTERY_VOLTAGE = 0x0020,
+enum class ZclStatus : uint8_t {
+	SUCCESS = 0x00,
+	UNSUPPORTED_ATTRIBUTE = 0x86
 };
 
 enum class ZclDataType : uint8_t  {
@@ -102,6 +158,55 @@ enum class ZclDataType : uint8_t  {
 	STRING = 0x42
 };
 
+// basic cluster
+// -------------
+
+// attributes of basic cluster
+enum class ZclBasicAttribute : uint16_t {
+	ZCL_VERSION = 0x0000,
+	APPLICATION_VERSION = 0x0001,
+	STACK_VERSION = 0x0002,
+	HW_VERSION = 0x0003,
+	MANUFACTURER_NAME = 0x0004,
+	MODEL_IDENTIFIER = 0x0005,
+	DATE_CODE = 0x0006,
+	POWER_SOURCE = 0x0007,
+	SOFTWARE_BUILD_ID = 0x4000
+};
+
+// types of attribute POWER_SOURCE of basic cluster
+enum class ZclPowerSourceType : uint8_t {
+	// mains (single phase)
+	MAINS = 1,
+	
+	// battery
+	BATTERY = 3
+};
+
+// power configuration cluster
+// ---------------------------
+
+// attributes of power configuration cluster
+enum ZclPowerConfigurationAttribute : uint16_t {
+	BATTERY_VOLTAGE = 0x0020,
+	BATTERY_PERCENTAGE = 0x0021,
+};
+
+// on off cluster
+// --------------
+
+// attributes of on off cluster
+enum ZclOnOffAttribute : uint16_t {
+	ON_OFF = 0x0000,
+	GLOBAL_SCENE_CONTROL = 0x4000,
+	ON_TIME = 0x4001,
+	OFF_WAIT_TIME = 0x4002
+};
+
+
+
+// security
+// --------
 
 // key type (table 4.31)
 enum class KeyIdentifier : uint8_t  {

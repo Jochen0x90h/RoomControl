@@ -7,7 +7,7 @@
 namespace calendar {
 
 // waiting coroutines
-CoList<> waitingList;
+Waitlist<> waitlist;
 
 
 uint8_t seconds = 0;
@@ -39,7 +39,7 @@ void handle() {
 		}
 
 		// resume all waiting coroutines
-		calendar::waitingList.resumeAll();
+		calendar::waitlist.resumeAll();
 	}
 	
 	// call next handler in chain
@@ -65,7 +65,7 @@ ClockTime now() {
 }
 
 Awaitable<> secondTick() {
-	return calendar::waitingList;
+	return {calendar::waitlist};
 }
 
 } // namespace calendar

@@ -18,19 +18,19 @@ public:
 	/**
 	 * Suspend execution using co_await until initialization is done
 	 */
-	Awaitable<> init();
+	AwaitableCoroutine init();
 
 	/**
 	 * Suspend execution using co_await until display is enabled.
 	 * Powers down Vcc (if supported) and disables the display
 	 */
-	Awaitable<> enable();
+	AwaitableCoroutine enable();
 
 	/**
 	 * Suspend execution using co_await until display is disabled
 	 * Disable the display and power down Vcc (if supported). Calls onReady when finished
 	 */
-	Awaitable<> disable();
+	AwaitableCoroutine disable();
 
 	/**
 	 * Returns true if the display is enabled
@@ -41,13 +41,13 @@ public:
 	 * Suspend execution using co_await until contrast of display is set
 	 *
 	 */
-	Awaitable<> setContrast(uint8_t contrast);
+	AwaitableCoroutine setContrast(uint8_t contrast);
 
 	/**
 	 * Suspend execution using co_await until until whole display content is set
 	 * @param bitmap bitmap to display
 	 */
-	Awaitable<> set(Bitmap<DISPLAY_WIDTH, DISPLAY_HEIGHT> const &bitmap);
+	AwaitableCoroutine set(Bitmap<DISPLAY_WIDTH, DISPLAY_HEIGHT> const &bitmap);
 
 protected:
 

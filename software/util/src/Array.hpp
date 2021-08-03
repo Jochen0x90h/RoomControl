@@ -8,15 +8,15 @@
  */
 template <typename T>
 struct Array {
-	T const *const data;
 	int const length;
+	T const *const data;
 		
-	constexpr Array() : data(nullptr), length(0) {}
+	constexpr Array() : length(0), data(nullptr) {}
 
 	template <int N>
-	constexpr Array(T const (&array)[N]) : data(array), length(N) {}
+	constexpr Array(T const (&array)[N]) : length(N), data(array) {}
 
-	Array(T const *data, int length) : data(data), length(length) {}
+	Array(int length, T const *data) : length(length), data(data) {}
 
 	bool empty() {return this->length <= 0;}
 

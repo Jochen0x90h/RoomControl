@@ -40,7 +40,7 @@ Array<EndpointType> BusInterface::getEndpoints(DeviceId deviceId) {
 		if (deviceId == this->deviceIds[i]) {
 			int start = this->endpointStarts[i];
 			int len = this->endpointStarts[i + 1] - start;
-			return {reinterpret_cast<EndpointType *>(&this->endpointTypes[start]), len};
+			return {len, reinterpret_cast<EndpointType *>(&this->endpointTypes[start])};
 		}
 	}
 	return {};
