@@ -6,7 +6,7 @@
 
 Coroutine handlePoti() {
 	while (true) {
-		int d;
+		int8_t d;
 		bool activated;
 		
 		// wait until poti has changed for up to 2 seconds
@@ -33,7 +33,7 @@ int main(void) {
 	loop::init();
 	timer::init();
 	poti::init();
-	debug::init();	
+	out::init();	
 
 	handlePoti();
 

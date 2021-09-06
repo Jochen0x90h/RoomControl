@@ -1,52 +1,59 @@
 #include "LocalInterface.hpp"
 #include <timer.hpp>
+#include <out.hpp>
 #include <util.hpp>
 
 
-// device id's
-constexpr int BME680_ID = 0x00000001;
-constexpr int BRIGHTNESS_SENSOR_ID = 0x00000002;
-constexpr int MOTION_DETECTOR_ID = 0x00000003;
 
-// endpoint indices
-constexpr int BME680_ENDPOINTS = 1;
-constexpr int TEMPERATURE_SENSOR_ENDPOINT = BME680_ENDPOINTS + 0;
-constexpr int AIR_PRESSURE_SENSOR_ENDPOINT = BME680_ENDPOINTS + 1;
-constexpr int AIR_HUMIDITY_SENSOR_ENDPOINT = BME680_ENDPOINTS + 2;
-constexpr int AIR_VOC_SENSOR_ENDPOINT = BME680_ENDPOINTS + 3;
-constexpr int BRIGHTNESS_SENSOR_ENDPOINT = BME680_ENDPOINTS + 4;
-constexpr int MOTION_DETECTOR_ENDPOINT = BRIGHTNESS_SENSOR_ENDPOINT + 1;
+// air sensor endpoints
+constexpr int BME680_TEMPERATURE_ENDPOINT = 0;
+constexpr int BME680_PRESSURE_ENDPOINT = 1;
+constexpr int BME680_HUMIDITY_ENDPOINT = 2;
+constexpr int BME680_VOC_ENDPOINT = 3;
 
-
-// device id's
-constexpr DeviceId deviceIds[] = {
-	BME680_ID,
-	BRIGHTNESS_SENSOR_ID,
-	MOTION_DETECTOR_ID
-};
-
-// endpoint types
+// endpoint type arrays for getEndpoints()
 constexpr EndpointType bme680Endpoints[] = {
-	EndpointType::TEMPERATURE_SENSOR,
-	EndpointType::AIR_PRESSURE_SENSOR,
-	EndpointType::AIR_HUMIDITY_SENSOR,
-	EndpointType::AIR_VOC_SENSOR
+	EndpointType::TEMPERATURE_IN,
+	EndpointType::AIR_PRESSURE_IN,
+	EndpointType::AIR_HUMIDITY_IN,
+	EndpointType::AIR_VOC_IN
 };
+constexpr MessageType bme680MessageTypes[] = {
+	MessageType::CELSIUS, MessageType::HECTOPASCAL, MessageType::HECTOPASCAL, MessageType::OHM
+};
+
 constexpr EndpointType brightnessSensorEndpoints[] = {
-	EndpointType::BRIGHTNESS_SENSOR,
+	EndpointType::ILLUMINANCE_IN,
 };
+
 constexpr EndpointType motionDetectorEndpoints[] = {
-	EndpointType::MOTION_DETECTOR,
+	EndpointType::TRIGGER_IN,
+};
+
+constexpr EndpointType inEndpoints[] = {
+	EndpointType::ON_OFF_IN, EndpointType::ON_OFF_IN, EndpointType::ON_OFF_IN, EndpointType::ON_OFF_IN
+};
+
+constexpr EndpointType outEndpoints[] = {
+	EndpointType::ON_OFF_OUT, EndpointType::ON_OFF_OUT, EndpointType::ON_OFF_OUT, EndpointType::ON_OFF_OUT
 };
 
 
-LocalInterface::LocalInterface(std::function<void (uint8_t, uint8_t const *, int)> const &onReceived)
-	: onReceived(onReceived)
-	//, airSensor([this]() {onAirSensorInitialized();})
-	, subscriptions{}
-{
-	// start coroutine
-	measure();
+
+LocalInterface::LocalInterface() {
+	uint8_t i = 0;
+	this->devices[i++].id = BME680_ID;
+	this->devices[i++].id = BRIGHTNESS_SENSOR_ID;
+	this->devices[i++].id = MOTION_DETECTOR_ID;
+	if (IN_COUNT > 0)
+		this->devices[i++].id = IN_ID;
+	if (OUT_COUNT > 0)
+		this->devices[i++].id = OUT_ID;
+	this->deviceCount = i;
+
+	// start coroutines
+	readAirSensor();
+	publish();
 }
 
 LocalInterface::~LocalInterface() {
@@ -56,15 +63,15 @@ void LocalInterface::setCommissioning(bool enabled) {
 }
 
 int LocalInterface::getDeviceCount() {
-	return array::size(deviceIds);
+	return this->deviceCount;
 }
 
 DeviceId LocalInterface::getDeviceId(int index) {
-	assert(index >= 0 && index < array::size(deviceIds));
-	return deviceIds[index];
+	assert(index >= 0 && index < this->deviceCount);
+	return this->devices[index].id;
 }
 
-Array<EndpointType> LocalInterface::getEndpoints(DeviceId deviceId) {
+Array<EndpointType const> LocalInterface::getEndpoints(DeviceId deviceId) {
 	switch (deviceId) {
 	case BME680_ID:
 		return bme680Endpoints;
@@ -72,122 +79,136 @@ Array<EndpointType> LocalInterface::getEndpoints(DeviceId deviceId) {
 		return brightnessSensorEndpoints;
 	case MOTION_DETECTOR_ID:
 		return motionDetectorEndpoints;
+	case IN_ID:
+		return Array(IN_COUNT, inEndpoints);
+	case OUT_ID:
+		return Array(OUT_COUNT, outEndpoints);
 	}
 	return {};
 }
 
-void LocalInterface::subscribe(uint8_t &endpointId, DeviceId deviceId, uint8_t endpointIndex) {
-	uint8_t id = 0;
-	switch (deviceId) {
-	case BME680_ID:
-		id = BME680_ENDPOINTS + endpointIndex;
-		break;
-	case BRIGHTNESS_SENSOR_ID:
-		id = BRIGHTNESS_SENSOR_ENDPOINT + endpointIndex;
-		break;
-	}
-	
-	if (endpointId == 0 && id != 0) {
-		// count reference
-		++this->subscriptions[id - 1];
-		endpointId = id;
-	} else {
-		// assert that existing endpoint id is the same
-		assert(endpointId == id);
+void LocalInterface::addSubscriber(DeviceId deviceId, Subscriber &subscriber) {
+	for (int i = 0; i < this->deviceCount; ++i) {
+		auto &device = this->devices[i];
+		if (device.id == deviceId && subscriber.endpointIndex < getEndpoints(deviceId).length) {
+			device.subscribers.add(subscriber);
+		}
 	}
 }
 
-void LocalInterface::unsubscribe(uint8_t &endpointId, DeviceId deviceId, uint8_t endpointIndex) {
-	if (endpointId != 0) {
-		--this->subscriptions[endpointId - 1];
-		endpointId = 0;
+void LocalInterface::addPublisher(DeviceId deviceId, Publisher &publisher) {
+	for (int i = 0; i < this->deviceCount; ++i) {
+		auto &device = this->devices[i];
+		if (device.id == deviceId && publisher.endpointIndex < getEndpoints(deviceId).length) {
+			device.publishers.add(publisher);
+			publisher.event = &this->publishEvent;
+		}
 	}
 }
 
-void LocalInterface::send(uint8_t endpointId, uint8_t const *data, int length) {
-}
+Coroutine LocalInterface::readAirSensor() {
+	BME680 airSensor;
 
-Coroutine LocalInterface::measure() {
-	BME680 sensor;
-
-	co_await sensor.init();
-	co_await sensor.setParameters(
+	// initialize the air sensor
+	co_await airSensor.init();
+	co_await airSensor.setParameters(
 		2, 5, 2, // temperature and pressure oversampling and filter
 		1, // humidity oversampling
-		300, 100); // heater temperature and duration
+		300, 100); // heater temperature (celsius) and duration (ms)
 
+	// regularly read the air sensor
+	Device &device = this->devices[BME680_ID - 1];
 	while (true) {
-		co_await sensor.measure();
+		// measure
+		co_await airSensor.measure();
 
-		if (this->subscriptions[TEMPERATURE_SENSOR_ENDPOINT - 1] > 0) {
-			float temperature = this->airSensor.getTemperature();
+		// publish to subscribers of air sensor
+		//for (auto &subscription : device.subscriptions) {
+		for (auto &subscriber : device.subscribers) {
+			// get value
+			FloatWithFlag value;
+			switch (subscriber.endpointIndex) {
+			case BME680_TEMPERATURE_ENDPOINT:
+				// get temperature in celsius
+				value = airSensor.getTemperature();
+				break;
+			case BME680_PRESSURE_ENDPOINT:
+				// get pressure in hectopascal
+				value = airSensor.getPressure();
+				break;
+			case BME680_HUMIDITY_ENDPOINT:
+				value = airSensor.getHumidity();
+				break;
+			case BME680_VOC_ENDPOINT:
+				// get gas resistance in ohm
+				value = airSensor.getGasResistance();
+				break;
+			}
 			
-			// convert to 1/20 Kelvin
-			int k = int((temperature + 273.15f) * 20.0f + 0.5f);
-			
-			uint8_t t[2];
-			t[0] = k;
-			t[1] = k >> 8;
-			this->onReceived(TEMPERATURE_SENSOR_ENDPOINT, t, 2);
-		}
-		if (this->subscriptions[AIR_PRESSURE_SENSOR_ENDPOINT - 1] > 0) {
-			this->airSensor.getPressure();
-
-		}
-		if (this->subscriptions[AIR_HUMIDITY_SENSOR_ENDPOINT - 1] > 0) {
-			this->airSensor.getHumidity();
-
-		}
-		if (this->subscriptions[AIR_VOC_SENSOR_ENDPOINT - 1] > 0) {
-			this->airSensor.getGasResistance();
-
+			// publish to subscriber
+			subscriber.barrier->resumeFirst([&subscriber, value] (Interface::Parameters &p) {
+				p.subscriptionIndex = subscriber.subscriptionIndex;
+				
+				// convert to target unit and type and resume coroutine if conversion was successful
+				MessageType type = bme680MessageTypes[subscriber.endpointIndex];
+				return convert(subscriber.messageType, p.message, type, &value);
+			});
 		}
 		
-		co_await timer::delay(60s);
+		// wait
+		#ifdef DEBUG
+			co_await timer::delay(10s);
+		#else
+			co_await timer::delay(60s);
+		#endif
 	}
 }
-/*
-void LocalInterface::onAirSensorInitialized() {
-	this->airSensor.setParameters(
-		2, 5, 2, // temperature and pressure oversampling and filter
-		1, // humidity oversampling
-		300, 100, // heater temperature and duration
-		[this]() {measure();});
-}
 
-void LocalInterface::measure() {
-	this->airSensor.startMeasurement();
-	timer::start(this->timerIndex, timer::now() + 1s, [this]() {readAirSensor();});
-}
-
-void LocalInterface::readAirSensor() {
-	this->airSensor.readMeasurements([this]() {airSensorGetValues();});
-	timer::start(this->timerIndex, timer::now() + 9s, [this]() {measure();});
-}
-
-void LocalInterface::airSensorGetValues() {
-	
-	if (this->subscriptions[TEMPERATURE_SENSOR_ENDPOINT - 1] > 0) {
-		float temperature = this->airSensor.getTemperature();
+Coroutine LocalInterface::publish() {
+	while (true) {
+		// wait until something was published
+		co_await this->publishEvent.wait();
 		
-		int k = int((temperature + 273.15f) * 20.0f + 0.5f);
+		// iterate over devices
+		for (int i = 0; i < this->deviceCount; ++i) {
+			auto &device = this->devices[i];
 		
-		uint8_t t[2];
-		t[0] = k;
-		t[1] = k >> 8;
-		this->onReceived(TEMPERATURE_SENSOR_ENDPOINT, t, 2);
-	}
-	if (this->subscriptions[AIR_PRESSURE_SENSOR_ENDPOINT - 1] > 0) {
-		this->airSensor.getPressure();
+			// iterate over publishers
+			for (auto &publisher : device.publishers) {
+				// check if publisher wants to publish
+				if (publisher.dirty) {
+					publisher.dirty = false;
 
-	}
-	if (this->subscriptions[AIR_HUMIDITY_SENSOR_ENDPOINT - 1] > 0) {
-		this->airSensor.getHumidity();
+					// set to device
+					switch (device.id) {
+					case OUT_ID:
+						{
+							// convert to on/off
+							uint8_t message;
+							if (convert(MessageType::ON_OFF, &message, publisher.messageType, publisher.message)) {
+								// set output
+								if (message <= 1)
+									out::set(publisher.endpointIndex, message);
+								else
+									out::toggle(publisher.endpointIndex);
+							}
+						}
+					}
 
-	}
-	if (this->subscriptions[AIR_VOC_SENSOR_ENDPOINT - 1] > 0) {
-		this->airSensor.getGasResistance();
-
+					// forward to subscribers
+					for (auto &subscriber : device.subscribers) {
+						if (subscriber.endpointIndex == publisher.endpointIndex) {
+							subscriber.barrier->resumeAll([&subscriber, &publisher] (Interface::Parameters &p) {
+								p.subscriptionIndex = subscriber.subscriptionIndex;
+								
+								// convert to target unit and type and resume coroutine if conversion was successful
+								return convert(subscriber.messageType, p.message,
+									publisher.messageType, publisher.message);
+							});
+						}
+					}
+				}
+			}
+		}
 	}
 }
-*/

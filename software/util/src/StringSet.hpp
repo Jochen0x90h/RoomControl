@@ -13,8 +13,9 @@ struct StringSet {
 		
 	StringSet() : length(0), dataLength(0) {}
 
-	bool isEmpty() {return this->length <= 0;}
-	int size() {return this->length;}
+	bool isEmpty() const {return this->length <= 0;}
+	
+	int count() const {return this->length;}
 
 	void clear() {
 		this->length = 0;
@@ -83,7 +84,7 @@ struct StringSet {
 	String const operator [](int index) const {
 		assert(index >= 0 && index < this->length);
 		Element const &element = this->elements[index];
-		return {this->data + element.offset, element.length};
+		return {element.length, this->data + element.offset};
 	}
 
 	struct Element {
@@ -96,7 +97,7 @@ struct StringSet {
 		char const *data;
 		
 		void operator ++() {++this->element;}
-		String operator *() const {return {this->data + element->offset, element->length};}
+		String operator *() const {return {element->length, this->data + element->offset};}
 		bool operator !=(Iterator it) {return it.element != this->element;}
 	};
 

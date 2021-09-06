@@ -6,6 +6,16 @@ constexpr int PORT0 = 0;
 constexpr int PORT1 = 32;
 
 
+// out
+// ---
+
+constexpr struct {int pin; bool on;} OUT_CONFIGS[3] = {
+	{PORT0 | 23, false},
+	{PORT0 | 22, false},
+	{PORT0 | 24, false}
+};
+
+
 // poti
 // ----
 
@@ -37,11 +47,3 @@ constexpr int DISPLAY_HEIGHT = 64;
 // ---
 
 constexpr int USB_ENDPOINT_COUNT = 3;
-
-
-// debug
-// -----
-
-constexpr int LED_RED_PIN = PORT0 | 23;
-constexpr int LED_GREEN_PIN = PORT0 | 22;
-constexpr int LED_BLUE_PIN = PORT0 | 24;

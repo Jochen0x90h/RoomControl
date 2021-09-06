@@ -262,7 +262,7 @@ int main(void) {
 			}
 			return true;
 		});
-	debug::init();
+	out::init();
 
 	// start radio, enable baseband decoder and pass all packets for sniffer or terminal
 	radio::start(15);

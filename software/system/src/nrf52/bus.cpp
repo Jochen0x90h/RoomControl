@@ -2,6 +2,8 @@
 #include "loop.hpp"
 #include "global.hpp"
 #include <util.hpp>
+#include <functional>
+
 
 // debug
 /*
@@ -13,8 +15,15 @@
 #define setSignal(value)
 #define toggleSignal()
 
-// resources: NRF_UART0, NRF_TIMER1
+/*
+	Resources:
+	NRF_UART0,
+	NRF_TIMER1
+*/ 
 namespace bus {
+
+Waitlist<Parameters> transferWaitlist;
+Waitlist<> requestWaitlist;
 
 enum State {
 	BREAK,
@@ -209,7 +218,7 @@ void TIMER1_IRQHandler(void) {
 		}
 	}
 }
-
+/*
 void transfer(uint8_t const *txData, int txLength, uint8_t *rxData, int rxLength,
 	std::function<void (int)> const &onTransferred)
 {
@@ -249,6 +258,19 @@ void transfer(uint8_t const *txData, int txLength, uint8_t *rxData, int rxLength
 
 void setRequestHandler(std::function<void (uint8_t)> const &onRequest) {
 	bus::onRequest = onRequest;
+}
+*/
+
+Awaitable<Parameters> transfer(int writeLength, uint8_t const *writeData, int &readLength, uint8_t *readData) {
+	
+	// start transfer immediately if bus is idle
+	// todo
+	
+	return {bus::transferWaitlist, writeLength, writeData, readLength, readData};
+}
+
+Awaitable<> request() {
+	return {bus::requestWaitlist};
 }
 
 } // namespace bus

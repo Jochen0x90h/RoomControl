@@ -364,7 +364,7 @@ void MqttSnClient::onUpReceived(uint8_t const *data, int length) {
 					// remove REGISTER message, data stays valid until methods are called on this or return to event loop
 					Message sm = removeSentMessage(msgId, mqttsn::REGISTER);
 					if (sm.data != nullptr) {
-						String topicName(sm.data + 5, sm.length - 5);
+						String topicName(sm.length - 5, sm.data + 5);
 						onRegistered(msgId, topicName, topicId);
 					}
 				} else {
@@ -459,7 +459,7 @@ void MqttSnClient::onUpReceived(uint8_t const *data, int length) {
 					switch (returnCode) {
 					case mqttsn::ReturnCode::ACCEPTED:
 						{
-							String topicName(m.data + 4, m.length - 4);
+							String topicName(m.length - 4, m.data + 4);
 							onSubscribed(msgId, topicName, topicId, qos);
 						}
 						break;

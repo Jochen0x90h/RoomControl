@@ -126,10 +126,11 @@ static float const powTable[] = {1.0f,
 
 int toString(float value, char *str, int length, int digitCount, int decimalCount) {
 	// enforce valid parameters
+	bool suppressTrailingZeros = decimalCount >= 0;
+	if (decimalCount < 0)
+		decimalCount = -decimalCount;
 	if (decimalCount > 9)
 		decimalCount = 9;
-	if (decimalCount < 0)
-		decimalCount = 0;
 	
 	// handle sign
 	int i = 0;
@@ -150,15 +151,17 @@ int toString(float value, char *str, int length, int digitCount, int decimalCoun
 	// convert integer part
 	i += toString(ipart, str + i, length - i, (fpart == 0 && digitCount == 0) ? 1 : digitCount);
 
-	// convert decimal part
-	if (fpart != 0 && decimalCount > 0 && i < length) {
-		str[i++] = '.';
-		
-		// remove trailing zeros
-		while (fpart % 10 == 0) {
+	// remove trailing zeros
+	if (suppressTrailingZeros) {
+		while (decimalCount > 0 && fpart % 10 == 0) {
 			fpart /= 10;
 			--decimalCount;
 		}
+	}
+
+	// convert decimal part
+	if (decimalCount > 0 && i < length) {
+		str[i++] = '.';
 		
 		// truncate to length
 		while (i + decimalCount > length) {

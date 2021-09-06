@@ -1,5 +1,5 @@
 PROJECT_NAME     := SystemTest
-TARGETS          := timerTest calendarTest spiTest displayTest busTest radioSendTest usbTest potiTest rngTest #motionDetectorTest
+TARGETS          := timerTest calendarTest spiTest displayTest busTest radioSendTest usbTest potiTest rngTest
 OUTPUT_DIRECTORY := build
 UTIL_PATH        := ../../../util/src
 SYSTEM_PATH      := ../../src
@@ -14,7 +14,7 @@ INC_FOLDERS += . $(SYSTEM_PATH) ../../../network/src $(UTIL_PATH)
 SRC_FILES += $(TEMPLATE_PATH)/gcc_startup_nrf52840.S
 SRC_FILES += $(TEMPLATE_PATH)/system_nrf52840.c
 SRC_FILES += $(SYSTEM_PATH)/nrf52/loop.cpp
-SRC_FILES += $(SYSTEM_PATH)/nrf52/debug.cpp
+SRC_FILES += $(SYSTEM_PATH)/nrf52/out.cpp
 
 # Target specific source files
 SRC_FILES_timerTest += $(SYSTEM_PATH)/nrf52/timer.cpp
@@ -22,9 +22,12 @@ SRC_FILES_timerTest += ../timerTest.cpp
 SRC_FILES_calendarTest += $(SYSTEM_PATH)/nrf52/calendar.cpp
 SRC_FILES_calendarTest += ../calendarTest.cpp
 SRC_FILES_spiTest += ../spiTest.cpp
-SRC_FILES_spiTest += ../../src/nrf52/spi.cpp
+SRC_FILES_spiTest += $(SYSTEM_PATH)/nrf52/spi.cpp
 SRC_FILES_displayTest += ../displayTest.cpp
 SRC_FILES_displayTest += $(SYSTEM_PATH)/nrf52/spi.cpp
+#SRC_FILES_audioTest += ../audioTest.cpp
+#SRC_FILES_audioTest += $(SYSTEM_PATH)/nrf52/timer.cpp
+#SRC_FILES_audioTest += $(SYSTEM_PATH)/nrf52/audio.cpp
 SRC_FILES_busTest += ../busTest.cpp
 SRC_FILES_busTest += $(SYSTEM_PATH)/nrf52/timer.cpp
 SRC_FILES_busTest += $(SYSTEM_PATH)/nrf52/bus.cpp

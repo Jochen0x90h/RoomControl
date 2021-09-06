@@ -12,8 +12,9 @@ struct ArrayList {
 		
 	ArrayList() : length(0) {}
 
-	bool empty() {return this->length <= 0;}
-	int size() {return this->length;}
+	bool isEmpty() {return this->length <= 0;}
+	
+	int count() {return this->length;}
 
 	void clear() {
 		this->length = 0;

@@ -8,32 +8,32 @@
  */
 template <typename T>
 struct Pointer {
-	T *p;
+	T *ptr;
 		
-	constexpr Pointer() : p(nullptr) {}
+	constexpr Pointer() : ptr(nullptr) {}
 
-	Pointer(T *p) : p(p) {}
+	Pointer(T *ptr) : ptr(ptr) {}
 
-	Pointer(Pointer &&p) : p(p.p) {
-		p.p = nullptr;
+	Pointer(Pointer &&ptr) : ptr(ptr.ptr) {
+		ptr.ptr = nullptr;
 	}
 
 	~Pointer() {
-		if (this->p != nullptr)
-			delete this->p;
+		if (this->ptr != nullptr)
+			delete this->ptr;
 	}
 
-	Pointer & operator =(T *p) {
-		if (this->p != nullptr)
-			delete this->p;
-		this->p = p;		
+	Pointer &operator =(T *ptr) {
+		if (this->ptr != nullptr)
+			delete this->ptr;
+		this->ptr = ptr;
 	}
 
-	T & operator *() {
-		return *this->p;
+	T &operator *() {
+		return *this->ptr;
 	}
 
-	T * operator ->() {
-		return this->p;
+	T *operator ->() {
+		return this->ptr;
 	}
 };

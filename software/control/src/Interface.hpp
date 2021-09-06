@@ -1,8 +1,12 @@
 #pragma once
 
-#include "Array.hpp"
 #include "Device.hpp"
+#include "Message.hpp"
+#include "State.hpp"
+#include <Array.hpp>
+#include <Coroutine.hpp>
 #include <functional>
+
 
 
 /**
@@ -39,40 +43,67 @@ public:
 	 * @param deviceId device id
 	 * @return list of endpoints
 	 */
-	virtual Array<EndpointType> getEndpoints(DeviceId deviceId) = 0;
-	//virtual Array<EndpointType> getEndpoints(int index) = 0;
+	virtual Array<EndpointType const> getEndpoints(DeviceId deviceId) = 0;
 
 
 	struct Parameters {
-		uint8_t endpointIndex;
-		int &length;
-		uint8_t *data;
+		// index of subscription (needed by subscriber to identify the message)
+		uint8_t &subscriptionIndex;
+				
+		// message (length is defined by Subscriber::messageType)
+		void *message;
 	};
-
-	//virtual Awaitable<Parameters> subscribe(DeviceId deviceId, uint8_t endpointIndex) = 0;
-	//virtual void unsubscribe(DeviceId deviceId, uint8_t endpointIndex) = 0;
-
-
-	/**
-	 * Subscribe to an endpoint on the bus
-	 * @param receives the endpoint id. A new reference is counted if it was zero, otherwise it must be the same id
-	 * @param deviceId device id
-	 * @param endpointIndex endpoint index of device
-	 */
-	virtual void subscribe(uint8_t &endpointId, DeviceId deviceId, uint8_t endpointIndex) = 0;
-
-	/**
-	 * Unsubscribe from an endpoint on the bus
-	 * @param endpointId endpoint id, gets set to zero and the reference counter is decremented
-	 */
-	virtual void unsubscribe(uint8_t &endpointId, DeviceId deviceId, uint8_t endpointIndex) = 0;
-
-	/**
-	 * Send a message to a device. Can be called multiple times in a row. When all messages are sent, onSent gets called
-	 * @param endpointId receiver of the message
-	 * @param data message data
-	 * @param length message length, maximum is 8
-	 */
-	virtual void send(uint8_t endpointId, uint8_t const *data, int length) = 0;
 	
+	struct Subscriber : public LinkedListNode<Subscriber> {
+		// index of device endpoint
+		uint8_t endpointIndex;
+		
+		// index of subscription (needed by subscriber to identify the message)
+		uint8_t subscriptionIndex;
+
+		// the message type that a waiting coroutine expects (sender is responsible for conversion)
+		MessageType messageType;
+		
+		// barrier where coroutines wait for new messages (owned by subscriber)
+		Barrier<Parameters> *barrier = nullptr;
+	};
+	using SubscriberList = LinkedListNode<Subscriber>;
+
+	/**
+	 * Add a subscriber to the device. Gets inserted into a linked list
+	 * @param deviceId device id
+	 * @param publisher subscriber to insert
+	 */
+	virtual void addSubscriber(DeviceId deviceId, Subscriber &subscriber) = 0;
+
+	struct Publisher : public LinkedListNode<Publisher> {
+		// index of device endpoint
+		uint8_t endpointIndex;
+
+		// type of message to be published
+		MessageType messageType;
+
+		// message (length is defined by messageType)
+		void const *message;
+
+		// indicates if the data has changed and needs to be published
+		bool dirty = false;
+		
+		// event to notify the interface that the dirty flag was set (set and owned by interface)
+		Event *event = nullptr;
+		
+		void publish() {
+			this->dirty = true;
+			if (this->event != nullptr)
+				this->event->set();
+		}
+	};
+	using PublisherList = LinkedListNode<Publisher>;
+
+	/**
+	 * Add a publisher to the device. Gets inserted into a linked list
+	 * @param deviceId device id
+	 * @param publisher publisher to insert
+	 */
+	virtual void addPublisher(DeviceId deviceId, Publisher &publisher) = 0;
 };

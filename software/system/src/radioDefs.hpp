@@ -58,17 +58,5 @@ enum class Request : uint8_t {
 	SET_PAN = 6,
 	SET_SHORT_ADDRESS = 7
 };
-/*
-// result of energy detection and send for remote controlling, e.g. via usb
-namespace Result {
-	// wait for result to be available, only internal use
-	constexpr uint8_t WAITING = 0;
-	
-	// maximum value of energy detection, range is [0, 127]
-	constexpr uint8_t MAX_ED_VALUE = 127;
-	
-	// start of result values (0: failure, 1: success with one backoff, 2: success with two backoffs...)
-	constexpr uint8_t MIN_RESULT_VALUE = 128;
-}
-*/
+
 } // namespace radio

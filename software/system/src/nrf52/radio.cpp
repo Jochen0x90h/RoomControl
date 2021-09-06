@@ -27,6 +27,11 @@
 	Dependencies:
 	rng
 	
+	Config:
+	RADIO_CONTEXT_COUNT: Number of contexts (virtual radios)
+	RADIO_RECEIVE_QUEUE_LENGTH: length of queue for received messages
+	RADIO_MAX_PAYLOAD_LENGTH: maximum length of payload
+	
 	Resources:
 	NRF_RADIO
 	NRF_TIMER0
@@ -188,9 +193,8 @@ struct Context {
 			}
 			
 			// check destination address
-			if (array::compare(addressLength, destinationAddress, p.packet + 6)) {
-				// set result to 1 to indicate that a data request was received
-				//p.result = 1;
+			if (array::equals(addressLength, destinationAddress, p.packet + 6)) {
+				// clear AWAIT_DATA_REQUEST flag in byte behind packet
 				int length = p.packet[0] - 2;
 				p.packet[1 + length] &= ~SendFlags::AWAIT_DATA_REQUEST;
 				return true;
@@ -220,14 +224,14 @@ struct Receive {
 };
 volatile Queue<Receive, RADIO_RECEIVE_QUEUE_LENGTH> receiveQueue;
 
-// start receiving packets
+// start receiving a packet
 inline void startReceive() {
 	setReceiveSignal(true);
 
 	// continue to receive on END event
 	radio::endAction = EndAction::RECEIVE;
 
-	Receive &receive = radio::receiveQueue.getHead();	
+	Receive &receive = radio::receiveQueue.getNextBack();
 	NRF_RADIO->PACKETPTR = intptr_t(receive.packet);
 	NRF_RADIO->TASKS_START = Trigger; // -> END
 }
@@ -291,7 +295,7 @@ static void selectForSend() {
 		if (context.sendWaitlist.find([index, flags](SendParameters &p) {
 			int length = p.packet[0] - 2;
 			auto sendFlags = SendFlags(p.packet[1 + length]);
-			if (sendFlags == SendFlags::NONE) {
+			if ((sendFlags & SendFlags::AWAIT_DATA_REQUEST) == 0) {
 				prepareForSend(index, flags, p.packet, p.result);
 				return true;
 			}
@@ -307,9 +311,14 @@ static void prepareForSend(int index, ContextFlags flags, uint8_t const *packet,
 	// set context index that initiated the send operation
 	radio::sendIndex = index;
 
+	// check if the packet requests an ACK
+	bool requestAck = (ieee::FrameControl(packet[1]) & ieee::FrameControl::ACKNOWLEDGE_REQUEST) != 0;
+
+	// check if the context is configured for handling ACK
+	bool handleAck = (flags & ContextFlags::HANDLE_ACK) != 0;
+
 	// either wait until packet is sent or until ack was received
-	radio::sendState = (flags & ContextFlags::HANDLE_ACK) != 0
-		? SendState::AWAIT_ACK : SendState::AWAIT_SENT;
+	radio::sendState = (requestAck && handleAck) ? SendState::AWAIT_ACK : SendState::AWAIT_SENT;
 	
 	// copy send packet
 	int length = packet[0] - 2;
@@ -395,7 +404,7 @@ static void setSendResult(uint8_t result) {
 	}
 }
 
-// ack packet, set sequence number to ack[3]
+// ack packet: length (including crc), frame control, mac counter (ackPacket[3])
 uint8_t ackPacket[] = {5, 0x02, 0x00, 0};
 
 // start to send an ack packet
@@ -493,7 +502,7 @@ void handle() {
 		if (NRF_EGU0->EVENTS_TRIGGERED[1]) {
 			NRF_EGU0->EVENTS_TRIGGERED[1] = 0;
 			do {
-				Receive &receive = receiveQueue.get();
+				Receive &receive = radio::receiveQueue.getFront();
 		
 				// resume coroutines
 				uint8_t passFlag = 1;
@@ -514,10 +523,9 @@ void handle() {
 				{
 					lock();
 					bool full = radio::receiveQueue.isFull();
-					
-					// remove entry from receive queue unless queue was emptied in onReceived() by calling stop()
-					if (!receiveQueue.isEmpty())
-						receiveQueue.remove();
+										
+					// remove entry from receive queue
+					radio::receiveQueue.removeFront();
 					
 					// continue receiving if the queue has now space again
 					if (full) {
@@ -631,8 +639,9 @@ void RADIO_IRQHandler(void) {
 			startReceive(); // -> END
 			
 		// check if more to send (this is executed after a send operation completes)
-		if (radio::sendState == SendState::IDLE)
+		if (radio::sendState == SendState::IDLE) {
 			selectForSend();
+		}
 	}
 
 	// check if end of energy detection
@@ -674,7 +683,7 @@ void RADIO_IRQHandler(void) {
 		NRF_RADIO->EVENTS_CRCOK = 0;
 
 		// get received packet
-		Receive &receive = radio::receiveQueue.getHead();
+		Receive &receive = radio::receiveQueue.getNextBack();
 		uint8_t length = receive.packet[0];
 		radio::ifsDuration = length <= maxSifsLength ? minSifsDuration : minLifsDuration;
 
@@ -689,7 +698,7 @@ void RADIO_IRQHandler(void) {
 				// disable ack wait interrupt
 				NRF_TIMER0->INTENCLR = N(TIMER_INTENCLR_COMPARE1, Clear);
 
-				// set state of sent packet to success
+				// set state of sent packet to success, send state becomes idle
 				setSendResult(radio::backoffCount);
 				
 				// check if more to send
@@ -713,7 +722,7 @@ void RADIO_IRQHandler(void) {
 					// we need to send an ack
 					ack = true;
 
-					// check if this is a data request
+					// check if this is a data request packet
 					if ((frameControl & (ieee::FrameControl::TYPE_MASK
 							| ieee::FrameControl::SECURITY
 							| ieee::FrameControl::PAN_ID_COMPRESSION
@@ -725,8 +734,8 @@ void RADIO_IRQHandler(void) {
 							| ieee::FrameControl::DESTINATION_ADDRESSING_FLAG
 							| ieee::FrameControl::SOURCE_ADDRESSING_FLAG))
 					{
-						// length: 1, frameControl: 2, macCounter: 1
-						int i = 4;
+						// skip length, frameControl and macCounter
+						int i = 1 + 2 + 1;
 						
 						// pan id
 						uint16_t panId = receive.packet[i] | (receive.packet[i + 1] << 8);
@@ -737,8 +746,22 @@ void RADIO_IRQHandler(void) {
 							i += 8;
 						else
 							i += 2;
+						
 						// source address
-						uint8_t const *sourceAddress = receive.packet + i;								
+						uint8_t const *sourceAddress = receive.packet + i;
+						int len = (frameControl & ieee::FrameControl::SOURCE_ADDRESSING_LONG_FLAG) == 0 ? 2 : 8;
+						
+						// check if it is a data request command
+						if (receive.packet[i + len] == uint8_t(ieee::Command::DATA_REQUEST)) {
+							// check if there is a packet pending for this source
+							if (c.isPending(panId, len, sourceAddress))
+								radio::ackPacket[1] = 0x12; 
+							
+							// don't pass data request packet to context
+							receive.passFlags &= ~passFlag;
+						}
+
+/*
 						if ((frameControl & ieee::FrameControl::SOURCE_ADDRESSING_LONG_FLAG) == 0) {
 							// short source address
 							if (receive.packet[i + 2] == uint8_t(ieee::Command::DATA_REQUEST)) {
@@ -746,7 +769,7 @@ void RADIO_IRQHandler(void) {
 								if (c.isPending(panId, 2, sourceAddress))
 									radio::ackPacket[1] = 0x12; 
 								
-								// don't pass data request to context
+								// don't pass data request packet to context
 								receive.passFlags &= ~passFlag;
 							}
 						} else {
@@ -756,10 +779,10 @@ void RADIO_IRQHandler(void) {
 								if (c.isPending(panId, 8, sourceAddress))
 									radio::ackPacket[1] = 0x12; 								
 
-								// don't pass data request to context
+								// don't pass data request packet to context
 								receive.passFlags &= ~passFlag;
 							}
-						}			
+						}*/
 					}				
 				}			
 			}
@@ -788,8 +811,8 @@ void RADIO_IRQHandler(void) {
 				ts[3] = timestamp >> 24;
 			}
 			
-			// increment head of queue because received element is ready now
-			radio::receiveQueue.increment();
+			// make the received element valid at the back of the queue
+			radio::receiveQueue.addBack();
 
 			// signal to handle() that a received packet is ready
 			NRF_EGU0->TASKS_TRIGGER[1] = Trigger;			
@@ -814,8 +837,14 @@ void RADIO_IRQHandler(void) {
 		// capture time when last packet was sent or received (done automatically by PPI channel 27)
 		//NRF_TIMER0->TASKS_CAPTURE[2] = Trigger;
 
+		// disable after send (done automatically by SHORTS)
+		//if (radio::sendState != SendState::IDLE)
+		//	NRF_RADIO->TASKS_DISABLE = Trigger; -> DISABLED
+
+		// decide what to do next
 		switch (radio::endAction) {
 		case EndAction::NOP:
+			// do nothing
 			break;
 		case EndAction::RECEIVE:
 			// continue receiving
@@ -831,14 +860,12 @@ void RADIO_IRQHandler(void) {
 				NRF_TIMER0->CC[0] = NRF_TIMER0->CC[2] + ackTurnaroundDuration;
 				NRF_TIMER0->EVENTS_COMPARE[0] = 0;
 				NRF_TIMER0->INTENSET = N(TIMER_INTENSET_COMPARE0, Set); // -> COMPARE[0]
+				
 				// now wait for timeout
 			}
 			break;
 		case EndAction::ON_SENT:
 			{
-				// disable after send (done automatically by SHORTS)
-				//NRF_RADIO->TASKS_DISABLE = Trigger; -> DISABLED
-
 				// determine interframe spacing duration
 				uint8_t length = radio::sendPacket[0];
 				radio::ifsDuration = length <= maxSifsLength ? minSifsDuration : minLifsDuration;
@@ -852,12 +879,12 @@ void RADIO_IRQHandler(void) {
 				
 					// now we either receive an ack packet or timeout 
 				} else {
-					// no: set success (backoff count which is > 0 to indicate success)
+					// no: set state of sent packet to success, send state becomes idle
 					setSendResult(radio::backoffCount);
 				}
 			}
 			break;
-		}
+		}		
 	}
 
 	// check if sender has been disabled
@@ -898,7 +925,7 @@ void TIMER0_IRQHandler(void) {
 			++radio::ackRetryCount;
 			startBackoff();
 		} else {
-			// sent packet was not acknowledged: set result to failed
+			// sent packet was not acknowledged: set result to failed, send state becomes idle
 			setSendResult(0);
 
 			// check if more to send
@@ -913,7 +940,7 @@ void TIMER0_IRQHandler(void) {
 		// disable timer interrupt 3
 		NRF_TIMER0->INTENCLR = N(TIMER_INTENCLR_COMPARE3, Clear);
 
-		// get receive state
+		// check if in receive state
 		bool s = isReceiveState();
 
 		// get time since last packet was received or sent
@@ -943,9 +970,11 @@ void start(int channel) {
 
 	lock();
 	
-	// enable receiving mode (not the baseband decoder, packets will not be received yet)
-	if (isDisabled())
+	// check if the radio is disabled
+	if (isDisabled()) {
+		// enable receiving mode (not the baseband decoder, packets will not be received yet)
 		NRF_RADIO->TASKS_RXEN = Trigger; // -> RXREADY
+	}
 
 	radio::active = true;
 	
@@ -1061,8 +1090,8 @@ Awaitable<SendParameters> send(int index, uint8_t *packet, uint8_t &result) {
 	int length = packet[0] - 2;
 	SendFlags sendFlags = SendFlags(packet[1 + length]);
 	
-	// check if we can immediately start to send
-	if (sendFlags == NONE && radio::sendState == SendState::IDLE)
+	// check if we can immediately start to send (idle and don't need to wait for data request)
+	if (radio::sendState == SendState::IDLE && sendFlags == SendFlags::NONE)
 		prepareForSend(index, context.flags, packet, result);
 
 	return {context.sendWaitlist, packet, result};

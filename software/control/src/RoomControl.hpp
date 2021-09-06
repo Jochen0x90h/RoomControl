@@ -1,13 +1,15 @@
 #pragma once
 
+#include <MqttSnBroker.hpp> // include at first because of strange compiler error
 #include "LocalInterface.hpp"
 #include "BusInterface.hpp"
 #include "RadioInterface.hpp"
-#include <MqttSnBroker.hpp>
-#include <SSD1309.hpp>
-#include <Storage.hpp>
+#include "SSD1309.hpp"
+#include "Storage.hpp"
+#include "Storage2.hpp"
+#include "State.hpp"
+#include "SwapChain.hpp"
 #include <ClockTime.hpp>
-#include <Bitmap.hpp>
 #include <Coroutine.hpp>
 #include <StringBuffer.hpp>
 #include <StringSet.hpp>
@@ -68,24 +70,6 @@ public:
 	static int const timerIndex = TIMER_ROOM_CONTROL;
 
 
-// Display
-// -------
-
-	//void onDisplayReady();
-
-	// display bitmap
-	//Bitmap<DISPLAY_WIDTH, DISPLAY_HEIGHT> bitmap;
-	
-	// display controller
-	//SSD1309 display;
-	
-
-// Poti
-// ----
-
-	//void onPotiChanged(int delta, bool activated);
-
-
 // Menu
 // ----
 
@@ -139,8 +123,6 @@ public:
 	// menu state
 	MenuState menuState = IDLE;
 
-	// menu bitmap
-	Bitmap<DISPLAY_WIDTH, DISPLAY_HEIGHT> bitmap;
 
 
 // Menu System
@@ -222,55 +204,11 @@ public:
 	Storage storage;
 
 
-// Configuration
-// -------------
-/*
-	// global configuration for this room control
-	struct Configuration {
-		// name of this room control
-		char name[16];
 
-		// ieee 802.15.4 long address
-		long address;
-		
-		// pan id for radio devices
-		uint16_t zbPanId;
-
-		// network key
-		uint8_t networkKey[16];
-
-		// network key prepared for aes encryption
-		AesKey networkAesKey;
-
-		/ **
-		 * Returns the size in bytes needed to store the control configuration in flash
-		 * @return size in bytes
-		 * /
-		int getFlashSize() const;
-
-		/ **
-		 * Returns the size in bytes needed to store the contol state in ram
-		 * @return size in bytes
-		 * /
-		int getRamSize() const;
-	};
-*/
-	String getRoomName() {return this->configuration[0].flash->name;}
+//
 
 	// subscribe everything to mqtt topics
 	void subscribeAll();
-
-
-	Storage::Array<Configuration, void> configuration;
-
-	// network key
-	AesKey networkKey;
-
-	// topic id for list of rooms in house (topic: enum)
-	uint16_t houseTopicId;
-
-	// topic id for list of devices in room (topic: enum/<room>)
-	uint16_t roomTopicId;
 
 
 // Devices
@@ -553,16 +491,16 @@ public:
 		uint16_t topicId, String message);
 
 	// update devices for one interface
-	SystemTime updateDevices(SystemTime time, SystemDuration duration, bool reportChanging,
-		Interface &interface, Storage::Array<Device, DeviceState> &devices, uint8_t endpointId, uint8_t const *data,
-		uint16_t topicId, String message, SystemTime nextTimeout);
+	//SystemTime updateDevices(SystemTime time, SystemDuration duration, bool reportChanging,
+	//	Interface &interface, Storage::Array<Device, DeviceState> &devices, uint8_t endpointId, uint8_t const *data,
+	//	uint16_t topicId, String message, SystemTime nextTimeout);
 	//SystemTime updateDevice(SystemTime time, SystemDuration duration, bool reportChanging,
 	//	Interface &interface, Device const &device, DeviceState &deviceState, uint8_t endpointId, uint8_t const *data,
 	//	uint16_t topicId, String message, SystemTime nextTimeout);
 
 	// check compatibility between device endpoint and device element
-	static bool isCompatible(EndpointType endpointType, Device::Component::Type type);
-
+	//static bool isCompatible(EndpointType endpointType, Device::Component::Type type);
+/*
 	// list devices menu
 	void listDevices(Interface &interface, Storage::Array<Device, DeviceState> &devices,
 		MenuState editDevice, MenuState addDevice);
@@ -580,7 +518,7 @@ public:
 
 	// destroy device (unsubscribe command topics)
 	void destroy(Interface &interface, Device const &device, DeviceState &deviceState);
-
+*/
 
 	Storage::Array<Device, DeviceState> localDevices;
 	Storage::Array<Device, DeviceState> busDevices;
@@ -656,19 +594,19 @@ public:
 // ---------
 
 	// subscribe a device to an interface
-	void subscribeInterface(Interface &interface, Storage::Element<Device, DeviceState> e);
+	//void subscribeInterface(Interface &interface, Storage::Element<Device, DeviceState> e);
 	
-	void subscribeInterface(Interface &interface, Storage::Array<Device, DeviceState> &devices);
+	//void subscribeInterface(Interface &interface, Storage::Array<Device, DeviceState> &devices);
 
 
 // LocalInterface
 // --------------
 
 	// called when a local device has sent data
-	void onLocalReceived(uint8_t endpointId, uint8_t const *data, int length);
+	//void onLocalReceived(uint8_t endpointId, uint8_t const *data, int length);
 
 	// interface to locally connected devices
-	LocalInterface localInterface;
+	//LocalInterface localInterface;
 
 
 // BusInterface
@@ -678,14 +616,14 @@ public:
 	//void onBusReady();
 
 	// called after enumeration of bus devices or when send queue became empty
-	void onBusSent();
+	//void onBusSent();
 
 	// called when a device connected to the bus has sent data
-	void onBusReceived(uint8_t endpointId, uint8_t const *data, int length);
+	//void onBusReceived(uint8_t endpointId, uint8_t const *data, int length);
 
 
 	// interface to devices connected via bus
-	BusInterface busInterface;
+	//BusInterface busInterface;
 	
 	// startup: Index of device to subscribe when onBusSent() gets called
 	int busSubscribeIndex = 0;
@@ -699,7 +637,7 @@ public:
 
 
 	// interface to devices connected via radio
-	RadioInterface radioInterface;
+	//RadioInterface radioInterface;
 
 
 // Routes
@@ -720,8 +658,8 @@ public:
 		 */
 		int getRamSize() const;
 	
-		String getSrcTopic() const {return {buffer, this->srcTopicLength};}
-		String getDstTopic() const {return {buffer + this->srcTopicLength, this->dstTopicLength};}
+		String getSrcTopic() const {return {this->srcTopicLength, buffer};}
+		String getDstTopic() const {return {this->dstTopicLength, buffer + this->srcTopicLength};}
 
 		void setSrcTopic(String topic);
 		void setDstTopic(String topic);
@@ -919,7 +857,7 @@ public:
 
 		String getTopic() {
 			Command const &command = *reinterpret_cast<Command const *>(this->command);
-			return {this->command + sizeof(Command), command.topicLength};
+			return {command.topicLength, this->command + sizeof(Command)};
 		}
 
 		uint8_t const *getValue() {
@@ -960,7 +898,7 @@ public:
 
 		String getTopic() {
 			Command &command = *reinterpret_cast<Command *>(this->command);
-			return {this->command + sizeof(Command), command.topicLength};
+			return {command.topicLength, this->command + sizeof(Command)};
 		}
 
 		void setTopic(String topic);
@@ -986,18 +924,11 @@ public:
 	};
 
 
-// Clock
-// -----
-
-	//void onSecondElapsed();
-
-
 // Temporary variables for editing via menu
 // ----------------------------------------
 
 	// first level
 	union {
-		Configuration configuration;
 		Device device;
 		Route route;
 		Timer timer;
@@ -1030,4 +961,225 @@ public:
 	uint16_t topicDepth;
 	StringSet<64, 64 * 16> topicSet;
 	bool onlyCommands;
+
+
+
+
+
+
+//
+//
+
+
+// Storage
+// -------
+
+	Storage2 storage2;
+	PersistentStateManager stateManager;
+	
+
+// Configuration
+// -------------
+
+	String getRoomName() {return this->configurations[0]->name;}
+
+	// global configuration for this room control, see Configuration.hpp (array contains only one entry)
+	Storage2::Array<Configuration> configurations;
+
+	// network key
+	AesKey networkKey;
+
+	// topic id for list of rooms in house (topic: enum)
+	uint16_t houseTopicId;
+
+	// topic id for list of devices in room (topic: enum/<room>)
+	uint16_t roomTopicId;
+
+
+// Interfaces
+// ----------
+
+	LocalInterface localInterface;
+	BusInterface busInterface;
+	RadioInterface radioInterface;
+
+
+// Functions
+// ---------
+	
+	// list of inputs or output
+	struct InOutList {
+		static constexpr int BUFFER_SIZE = 512;
+
+		enum class Domain : uint8_t {
+			// 32 bit device id
+			LOCAL = 0,
+
+			// 32 bit device id
+			BUS = 1,
+
+			// 64 bit device id
+			RADIO = 2,
+			
+			// string topic
+			MQTT = 3,
+		};
+
+		struct Info {
+			Domain domain;
+			
+			// input data should be converted to this unit and type
+			MessageType messageType;
+
+			// index to identify the input
+			uint8_t index;
+		
+			// length of associated device id and endpoint index or topic string
+			uint8_t dataLength;
+		};
+
+		struct Iterator {
+			Info const *info;
+			uint32_t const *buffer;
+		
+			Info const &getInfo() const {return *this->info;}
+			DeviceId getDeviceId() const {
+				if (this->info->dataLength <= 5)
+					return this->buffer[0];
+				return *reinterpret_cast<DeviceId const *>(this->buffer);
+			}
+			uint8_t getEndpointIndex() {return this->buffer[(this->info->dataLength - 1) / 4];}
+			String getTopic() {return String(this->info->dataLength, this->buffer);}
+		
+			Iterator operator ++() {return {this->info + 1, this->buffer + (this->info->dataLength + 3) / 4};}
+			bool operator ==(Iterator const &b) {return this->info == b.info;}
+			bool operator !=(Iterator const &b) {return this->info != b.info;}
+		};
+
+
+		int size() {return this->inputCount;}
+
+		// direct access to info
+		Info const &getInfo(int index) {
+			return reinterpret_cast<Info const *>(this->buffer)[index];
+		}
+		
+		Iterator begin() {
+			auto info = reinterpret_cast<Info const *>(this->buffer);
+			return {info, this->buffer + (this->inputCount * sizeof(Info) + 3) / 4};
+		}
+		
+		Iterator end() {
+			auto info = reinterpret_cast<Info const *>(this->buffer);
+			return {info + this->inputCount, nullptr};
+		}
+		
+		/**
+		 * Size of this input list in flash
+		 */
+		int getFlashSize() {return getOffset(InOutList, buffer[this->bufferSize]);}
+		
+		uint16_t bufferSize;
+		uint8_t inputCount;
+		uint32_t buffer[BUFFER_SIZE / 4];
+	};
+
+	struct DeviceState2 {
+		Coroutine coroutine;
+	};
+
+	struct Device2 {
+		static constexpr int BUFFER_SIZE = 1024;
+		
+		enum class Type : uint8_t {
+			SIMPLE_SWITCH,
+			AUTO_OFF_SWITCH,
+			DELAYED_SWITCH,
+		
+			SIMPLE_BLIND,
+			TRACKED_BLIND,
+			
+			TWO_LEVEL_CONTROLLER,
+		};
+		
+		// device type
+		Type type;
+	
+		// name is at offset 0 in buffer
+		uint8_t nameLength;
+		
+		// offset of device configuration
+		uint8_t configOffset;
+		
+		// offset of device inputs
+		uint8_t inputsOffset;
+	
+		// offset of device outputs
+		uint16_t outputsOffset;
+	
+		// buffer size
+		uint16_t bufferSize;
+
+		/**
+		 * Returns the name of the device
+		 * @return device name
+		 */
+		String getName() const {return String(this->nameLength, this->buffer);}
+
+		/**
+		 * Get type specific configuration
+		 */
+		template <typename T>
+		T const &getConfig() const {return *reinterpret_cast<T const *>(this->buffer + this->configOffset);}
+
+		/**
+		 * Get list of inputs
+		 */
+		InOutList const &getInputList() const {return *reinterpret_cast<InOutList const *>(this->buffer + this->inputsOffset);}
+
+		/**
+		 * Get list of outputs
+		 */
+		InOutList const &getOutputList() const {return *reinterpret_cast<InOutList const *>(this->buffer + this->outputsOffset);}
+
+		/**
+		 * Returns the size in bytes needed to store the device configuration in flash
+		 * @return size in bytes
+		 */
+		int getFlashSize() const {return getOffset(Device2, buffer[this->bufferSize]);}
+
+		/**
+		 * Allocates a state object
+		 * @return new state object
+		 */
+		DeviceState2 *allocate() const {return new DeviceState2;}
+	
+	
+		// buffer for config, inputs and outputs
+		uint32_t buffer[BUFFER_SIZE / 4];
+	};
+
+
+
+	Coroutine testSwitch();
+	
+
+// Menu
+// ----
+
+	// display
+Bitmap<DISPLAY_WIDTH, DISPLAY_HEIGHT> bitmap;
+	//SSD1309 display;
+	SwapChain swapChain;
+
+	Coroutine idleDisplay();
+	AwaitableCoroutine mainMenu();
+	//AwaitableCoroutine devicesMenu(Interface &interface);
+	AwaitableCoroutine devicesMenu(Interface &interface);
+	AwaitableCoroutine deviceMenu(Interface &interface, DeviceId deviceId);
+	AwaitableCoroutine endpointsMenu(Interface &interface, DeviceId deviceId);
+	AwaitableCoroutine messageLogger(Interface &interface, DeviceId deviceId);
+	AwaitableCoroutine messageGenerator(Interface &interface, DeviceId deviceId);
+	//AwaitableCoroutine functionsMenu(Interface &interface, Storage2::Array<Device2, DeviceState2> &devices);
+
 };

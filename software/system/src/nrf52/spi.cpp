@@ -26,7 +26,7 @@ Context contexts[CONTEXT_COUNT];
 
 int transferContext;
 
-void startTransfer(int index, Parameters const &p) {
+static void startTransfer(int index, Parameters const &p) {
 	// set CS pin
 	NRF_SPIM3->PSEL.CSN = SPI_CS_PINS[index];
 
@@ -88,7 +88,7 @@ void handle() {
 	if (NRF_SPIM3->EVENTS_END) {
 		// clear pending interrupt flags at peripheral and NVIC
 		NRF_SPIM3->EVENTS_END = 0;
-		clearInterrupt(SPIM3_IRQn);			
+		clearInterrupt(SPIM3_IRQn);
 		int index = spi::transferContext;
 
 		// resume first waiting coroutine
@@ -114,7 +114,7 @@ void handle() {
 				auto &context = spi::contexts[index];
 				
 				// check if a coroutine is waiting on this context
-				if (context.waitlist.resumeFirst([index](Parameters p) {
+				if (context.waitlist.resumeFirst([index](Parameters const &p) {
 					startTransfer(index, p);
 
 					// don't resume yet
@@ -124,8 +124,8 @@ void handle() {
 				}
 			} else {
 				// display: check if a coroutine is waiting on this context
-				if (display::waitlist.resumeFirst([index](display::Parameters p) {
-					display::startTransfer(index, p);
+				if (display::waitlist.resumeFirst([](display::Parameters const &p) {
+					display::startTransfer(spi::CONTEXT_COUNT, p);
 					
 					// don't resume yet
 					return false;

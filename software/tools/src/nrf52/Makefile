@@ -14,7 +14,7 @@ INC_FOLDERS += . $(SYSTEM_PATH) ../../../network/src $(UTIL_PATH)
 SRC_FILES += $(TEMPLATE_PATH)/gcc_startup_nrf52840.S
 SRC_FILES += $(TEMPLATE_PATH)/system_nrf52840.c
 SRC_FILES += $(SYSTEM_PATH)/nrf52/loop.cpp
-SRC_FILES += $(SYSTEM_PATH)/nrf52/debug.cpp
+SRC_FILES += $(SYSTEM_PATH)/nrf52/out.cpp
 
 # Target specific source files
 SRC_FILES_radioDevice += ../radioDevice.cpp

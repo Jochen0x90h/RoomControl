@@ -9,7 +9,11 @@ namespace flash {
 /**
  * Initialize the flash
  */
+#ifdef EMU
+void init(char const *fileName = "flash.bin");
+#else
 void init();
+#endif
 
 /**
  * Get address of a flash page. Size of a flash page is FLASH_PAGE_SIZE, number of available pages is FLASH_PAGE_COUNT

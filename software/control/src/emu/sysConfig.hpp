@@ -4,10 +4,15 @@
 // flash
 // -----
 
-// https://infocenter.nordicsemi.com/index.jsp?topic=%2Fps_nrf52840%2Fnvmc.html&cp=4_0_0_3_2
 constexpr int FLASH_PAGE_SIZE = 4096;
-constexpr int FLASH_PAGE_COUNT = 16;
+constexpr int FLASH_PAGE_COUNT = 32;
 constexpr int FLASH_WRITE_ALIGN = 4;
+
+
+// out
+// ---
+
+constexpr int OUT_COLORS[4] = {0x0000ff, 0x00ff00, 0xff0000, 0xffffff};
 
 
 // spi

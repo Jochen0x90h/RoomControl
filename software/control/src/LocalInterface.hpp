@@ -5,14 +5,19 @@
 #include <Coroutine.hpp>
 
 
-/**
- * Interface to locally connected devices
- */
 class LocalInterface : public Interface {
 public:
-	//static constexpr int TIMER_INDEX = LOCAL_DEVICES_TIMER_INDEX;
+	// device id's
+	enum DeviceIds {
+		BME680_ID = 1,
+		BRIGHTNESS_SENSOR_ID = 2,
+		MOTION_DETECTOR_ID = 3,
+		IN_ID = 4, // generic binary input
+		OUT_ID = 5, // generic binary output
+		DEVICE_COUNT = 5
+	};
 
-	LocalInterface(std::function<void (uint8_t, uint8_t const *, int)> const &onReceived);
+	LocalInterface();
 
 	~LocalInterface() override;
 
@@ -21,32 +26,28 @@ public:
 	int getDeviceCount() override;
 	DeviceId getDeviceId(int index) override;
 
-	//Array<DeviceId> getDevices() override;
-	Array<EndpointType> getEndpoints(DeviceId deviceId) override;
-
-	void subscribe(uint8_t &endpointId, DeviceId deviceId, uint8_t endpointIndex) override;
-	void unsubscribe(uint8_t &endpointId, DeviceId deviceId, uint8_t endpointIndex) override;
-
-	void send(uint8_t endpointId, uint8_t const *data, int length) override;
+	Array<EndpointType const> getEndpoints(DeviceId deviceId) override;
 	
+	void addSubscriber(DeviceId deviceId, Subscriber &subscriber) override;
+
+	void addPublisher(DeviceId deviceId, Publisher &publisher) override;
+
 protected:
 
-	Coroutine measure();
-/*
-	void onAirSensorInitialized();
+	struct Device {
+		uint8_t id;
+		
+		SubscriberList subscribers;
+		PublisherList publishers;
+	};
 
-	void measure();
-
-	void readAirSensor();
-	void airSensorGetValues();
-*/
+	// reads the air sensor every minute and publishes the values to the subscribers
+	Coroutine readAirSensor();
 	
-	// timer index
-	static int const timerIndex = TIMER_LOCAL_INTERFACE;
+	Coroutine publish();
 
-	std::function<void (uint8_t, uint8_t const *, int)> onReceived;
-
-	BME680 airSensor;
-
-	uint8_t subscriptions[10];
+	uint8_t deviceCount;
+	Device devices[DEVICE_COUNT];
+	
+	Event publishEvent;
 };

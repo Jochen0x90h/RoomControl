@@ -149,6 +149,7 @@ AwaitableCoroutine BME680::measure() {
 				float var2 = x * x * this->par.t3 * 16.0f;
 				t_fine = var1 + var2;
 				this->temperature = t_fine / 5120.0f;
+//std::cout << "BME680 temp " << this->temperature << std::endl;
 			}
 		
 			// calculate pressure

@@ -17,7 +17,7 @@ Coroutine timer1() {
 Coroutine timer2() {
 	while (true) {
 		debug::toggleGreenLed();
-		co_await timer::delay(3s);	
+		co_await timer::delay(3s);
 	}
 }
 
@@ -31,7 +31,7 @@ Coroutine timer3() {
 int main(void) {
 	loop::init();
 	timer::init();
-	debug::init();
+	out::init();
 
 	timer1();
 	timer2();

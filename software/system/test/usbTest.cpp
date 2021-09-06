@@ -140,7 +140,7 @@ int main(void) {
 			}
 			return true;
 		});
-	debug::init();
+	out::init();
 		
 	loop::run();
 }

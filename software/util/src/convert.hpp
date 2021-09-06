@@ -44,7 +44,7 @@ int hexToString(uint64_t value, char *str, int length, int digitCount);
  * @param str string buffer to convert into
  * @param length length of string buffer
  * @param digitCount minimum number of digits to convert before the decimal point
- * @param decimalCount minimum number of digits to convert after the decimal point
+ * @param decimalCount minimum number of digits to convert after the decimal point, negative to keep trailing zeros
  * @return actual length of string
 */
 int toString(float value, char *str, int length, int digitCount, int decimalCount);

@@ -109,7 +109,7 @@ SystemTime now() {
 	return timer::systemTime;
 }
 
-Awaitable<SystemTime> time(SystemTime time) {
+Awaitable<SystemTime> wait(SystemTime time) {
 	// check if this time is the next to elapse
 	if (time < timer::next) {
 		timer::next = time;

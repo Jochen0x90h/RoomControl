@@ -83,7 +83,7 @@ SystemTime now() {
 	return {uint32_t(us.count() * 128 / 125000)};
 }
 
-Awaitable<SystemTime> time(SystemTime time) {
+Awaitable<SystemTime> wait(SystemTime time) {
 	// check if this time is the next to elapse
 	if (time < timer::next) {
 		timer::next = time;

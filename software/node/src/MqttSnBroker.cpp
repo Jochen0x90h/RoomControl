@@ -260,7 +260,7 @@ void MqttSnBroker::onDownReceived(uint16_t clientId, uint8_t const *data, int le
 					uint8_t flags = data[1];
 					uint8_t protocolId = data[2];
 					uint16_t duration = mqttsn::getUShort(data + 3);
-					String clientName(data + 5, length - 5);
+					String clientName(length - 5, data + 5);
 					client->name = clientName;
 
 					m.data[1] = uint8_t(mqttsn::ReturnCode::ACCEPTED);
@@ -320,7 +320,7 @@ void MqttSnBroker::onDownReceived(uint16_t clientId, uint8_t const *data, int le
 			if (client != nullptr) {
 				// deserialize message
 				uint16_t msgId = mqttsn::getUShort(data + 3);
-				String topicName(data + 5, length - 5);
+				String topicName(length - 5, data + 5);
 
 				// create reply message
 				Message m = addSendMessage(6, {clientId});
@@ -490,7 +490,7 @@ void MqttSnBroker::onDownReceived(uint16_t clientId, uint8_t const *data, int le
 					mqttsn::setUShort(m.data + 4, msgId);
 
 					if (topicType == mqttsn::TopicType::NORMAL) {
-						String topicName(data + 4, length - 4);
+						String topicName(length - 4, data + 4);
 
 						// get or add topic by name
 						uint16_t topicId = getTopicId(topicName);
@@ -561,7 +561,7 @@ void MqttSnBroker::onDownReceived(uint16_t clientId, uint8_t const *data, int le
 					mqttsn::setUShort(m.data + 1, msgId);
 
 					if (topicType == mqttsn::TopicType::NORMAL) {
-						String topicName(data + 4, length - 4);
+						String topicName(length - 4, data + 4);
 
 						//todo: check if topicFilter is a topic name or wildcard
 

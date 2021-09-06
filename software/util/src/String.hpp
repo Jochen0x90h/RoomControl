@@ -24,7 +24,7 @@ constexpr int getLength(char const (&str)[N], True) {
 }
 
 template<typename T>
-constexpr int length(T &str) {
+constexpr int length(T const &str) {
 	return getLength(str, IsArray<T>());
 }
 
@@ -33,34 +33,42 @@ constexpr int length(T &str) {
  * String, only references the data
  */
 struct String {
-	char const *const data;
 	int const length;
+	char const *const data;
 
 	constexpr String()
-		: data(), length(0)
+		: length(0), data()
 	{}
 
 	String(String &str) = default;
 
 	String(String const &str) = default;
 
+	/**
+	 * Construct from c-array or c-string
+	 */
 	template<typename T>
-	constexpr String(T &str)
-		: data(str), length(getLength(str, IsArray<T>()))
+	constexpr String(T const &str)
+		: length(getLength(str, IsArray<T>())), data(str)
 	{}
 
-	String(char const *data, int length)
-		: data(data), length(length)
-	{}
-
-	String(uint8_t const *data, int length)
-		: data(reinterpret_cast<char const*>(data)), length(length)
+	/**
+	 * Construct String from any type of data
+	 */
+	String(int length, void const *data)
+		: length(length), data(reinterpret_cast<char const*>(data))
 	{}
 
 	bool isEmpty() {return this->length <= 0;}
 	
+	/**
+	 * Get a substring
+	 * @param startIndex start of substring
+	 * @return substring that references the data of this string
+	 *
+	 */
 	String substring(int startIndex) {
-		return String(this->data + startIndex, max(this->length - startIndex, 0));
+		return String(max(this->length - startIndex, 0), this->data + startIndex);
 	}
 
 	/**
@@ -71,7 +79,7 @@ struct String {
 	 *
 	 */
 	String substring(int startIndex, int endIndex) {
-		return String(this->data + startIndex, max(min(endIndex, this->length) - startIndex, 0));
+		return String(max(min(endIndex, this->length) - startIndex, 0), this->data + startIndex);
 	}
 
 	/**

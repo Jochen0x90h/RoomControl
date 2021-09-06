@@ -8,7 +8,7 @@
 
 namespace radio {
 
-enum SendFlags {
+enum class SendFlags : uint8_t {
 	NONE = 0,
 	AWAIT_DATA_REQUEST = 1,
 };
@@ -54,7 +54,7 @@ struct ReceiveParameters : public WaitlistElement {
 struct SendParameters : public WaitlistElement {
 	uint8_t *packet;
 	uint8_t &result;
-	
+
 	// default constructor
 	SendParameters(uint8_t *packet, uint8_t &result) : packet(packet), result(result) {}
 
@@ -142,3 +142,39 @@ Awaitable<ReceiveParameters> receive(int index, Packet &packet);
 Awaitable<SendParameters> send(int index, uint8_t *packet, uint8_t &result);
 
 } // namespace radio
+
+/*
+template <>
+struct WaitlistElementValue<radio::ReceiveParameters> : public WaitlistElement {
+	radio::ReceiveParameters value;
+
+	// default constructor
+	WaitlistElementValue(radio::Packet &packet) : value{packet} {}
+
+	// move constructor
+	WaitlistElementValue(WaitlistElementValue &&e) noexcept;
+
+	// add to list
+	void add(WaitlistHead &head) noexcept;
+
+	// remove from list
+	void remove() noexcept;
+};
+
+template <>
+struct WaitlistElementValue<radio::SendParameters> : public WaitlistElement {
+	radio::SendParameters value;
+
+	// default constructor
+	WaitlistElementValue(uint8_t *packet, uint8_t &result) : value{packet, result} {}
+
+	// move constructor
+	WaitlistElementValue(WaitlistElementValue &&e) noexcept;
+
+	// add to list
+	void add(WaitlistHead &head) noexcept;
+
+	// remove from list
+	void remove() noexcept;
+};
+*/
