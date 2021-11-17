@@ -45,6 +45,7 @@ enum class Command : uint8_t {
 	ASSOCIATION_REQUEST = 1,
 	ASSOCIATION_RESPONSE = 2,
 	DATA_REQUEST = 4,
+	ORPHAN_NOTIFICATION = 6,
 	BEACON_REQUEST = 7,
 };
 
@@ -62,7 +63,7 @@ enum class AssociationRequest : uint8_t {
 
 	SECURITY_CAPABILITY = 1 << 6,
 
-	ALLOCATE_ADDRESS = 1 << 7
+	ALLOCATE_SHORT_ADDRESS = 1 << 7
 };
 FLAGS_ENUM(AssociationRequest)
 

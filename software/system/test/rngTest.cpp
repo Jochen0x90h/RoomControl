@@ -107,7 +107,7 @@ int main(void) {
 		[](uint8_t bRequest, uint16_t wValue, uint16_t wIndex) {
 			return false;
 		});
-	debug::init();
+	out::init();
 		
 	loop::run();
 }

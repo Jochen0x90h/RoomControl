@@ -31,7 +31,7 @@ void init() {
 	poti::nextHandler = loop::addHandler(handle);
 }
 
-Awaitable<Parameters> change(int& delta, bool& activated) {
+Awaitable<Parameters> change(int8_t& delta, bool& activated) {
 	return {poti::waitlist, delta, activated};
 }
 

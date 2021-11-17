@@ -87,7 +87,3 @@ AwaitableCoroutine SSD1309::setContrast(uint8_t contrast) {
 	this->command[1] = contrast;
 	co_await display::send(2, 0, this->command);
 }
-
-AwaitableCoroutine SSD1309::set(Bitmap<DISPLAY_WIDTH, DISPLAY_HEIGHT> const &bitmap) {
-	co_await display::send(0, array::size(bitmap.data), bitmap.data);
-}

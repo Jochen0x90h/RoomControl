@@ -3,6 +3,8 @@
 #include <Bitmap.hpp>
 #include <appConfig.hpp>
 #include <Coroutine.hpp>
+#include <display.hpp>
+#include <sys.hpp>
 
 
 /**
@@ -11,8 +13,6 @@
 class SSD1309 {
 public:
 	
-	SSD1309() {}
-
 	~SSD1309() {}
 
 	/**
@@ -47,7 +47,9 @@ public:
 	 * Suspend execution using co_await until until whole display content is set
 	 * @param bitmap bitmap to display
 	 */
-	AwaitableCoroutine set(Bitmap<DISPLAY_WIDTH, DISPLAY_HEIGHT> const &bitmap);
+	auto set(Bitmap<DISPLAY_WIDTH, DISPLAY_HEIGHT> const &bitmap) {
+		return display::send(0, array::size(bitmap.data), bitmap.data);
+	}
 
 protected:
 

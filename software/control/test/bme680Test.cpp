@@ -118,13 +118,13 @@ Coroutine measure() {
 	co_await sensor.setParameters(
 		2, 5, 2, // temperature and pressure oversampling and filter
 		1, // humidity oversampling
-		300, 100); // heater temperature and duration
+		300, 100); // heater temperature (celsius) and duration (ms)
 	debug::setBlueLed(true);
 
 	while (true) {
 		co_await sensor.measure();
 
-		string = "Temperature: " + flt(sensor.getTemperature(), 1, 1) + "°C\n"
+		string = "Temperature: " + flt(sensor.getTemperature(), 1) + "°C\n"
 			+ "Pressure: " + flt(sensor.getPressure() / 100.0f, 1, 1) + "hPa\n"
 			+ "Humidity: " + flt(sensor.getHumidity(), 1, 1) + "%\n"
 			+ "Gas: " + flt(sensor.getGasResistance(), 1, 1) + "Ω\n";
@@ -141,6 +141,7 @@ int main(void) {
 	loop::init();
 	timer::init();
 	spi::init();
+	out::init();
 	usb::init(
 		[](usb::DescriptorType descriptorType) {
 			switch (descriptorType) {
@@ -161,7 +162,6 @@ int main(void) {
 		[](uint8_t bRequest, uint16_t wValue, uint16_t wIndex) {
 			return false;
 		});
-	debug::init();	
 	
 	// test raw values
 	//getId();

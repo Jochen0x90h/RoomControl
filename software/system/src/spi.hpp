@@ -1,7 +1,6 @@
 #pragma once
 
 #include <cstdint>
-#include <functional>
 #include <Coroutine.hpp>
 
 
@@ -21,15 +20,19 @@ struct Parameters {
 /**
  * Initialize SPI
  */
+#ifdef EMU
+void init(char const *fileName = "fram.bin");
+#else
 void init();
+#endif
 
 /**
- * Suspend execution using co_await until transfer of data to/from SPI device is finished
+ * Transfer data to/from SPI device. Use co_await to await end of transfer
  * @param index index of spi channel (number of channels defined by SPI_CS_PINS in sysConfig.hpp)
- * @param writeData data to write, must be in ram, not in flash
  * @param writeLength length of data to write
- * @param readData data to read
+ * @param writeData data to write, must be in ram, not in flash
  * @param readLength length of data to read
+ * @param readData data to read
  */
 Awaitable<Parameters> transfer(int index, int writeLength, uint8_t const *writeData, int readLength, uint8_t *readData);
 

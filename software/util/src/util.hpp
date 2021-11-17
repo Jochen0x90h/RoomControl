@@ -1,13 +1,19 @@
 #pragma once
 
+#include "Array.hpp"
 #include <stdint.h>
 
 #define getOffset(Type, member) intptr_t(&((Type*)nullptr)->member)
 
 using uint = unsigned int;
 
+//constexpr int abs(int x) {return x >= 0 ? x : -x;}
+
 constexpr int min(int x, int y) {return x < y ? x : y;}
 constexpr int max(int x, int y) {return x > y ? x : y;}
+
+constexpr int clamp(int x, int lo, int hi) {return x < lo ? lo : (x > hi ? hi : x);}
+constexpr float clamp(float x, float lo, float hi) {return x < lo ? lo : (x > hi ? hi : x);}
 
 
 // helper classes for distinguishing between fixed size array and c-string
@@ -80,16 +86,31 @@ void fill(int length, OutputIt dst, V const &value) {
 	}
 }
 
+/**
+ * Copy data, also cast each value to destination type
+ * @param length length to copy
+ * @param dst destination iterator
+ * @param src source iterator
+ */
 template <typename OutputIt, typename InputIt>
 void copy(int length, OutputIt dst, InputIt src) {
 	auto end = dst + length;
 	for (; dst < end; ++dst, ++src) {
-		*dst = *src;
+		*dst = decltype(*dst)(*src);
+	}
+}
+
+template <typename OutputElement, typename InputIt>
+void copy(Array<OutputElement> dst, InputIt src) {
+	auto it = dst.data;
+	auto end = it + dst.length;
+	for (; it < end; ++it, ++src) {
+		*it = OutputElement(*src);
 	}
 }
 
 template <typename InputIt1, typename InputIt2>
-bool compare(int length, InputIt1 a, InputIt2 b) {
+bool equals(int length, InputIt1 a, InputIt2 b) {
 	auto end = a + length;
 	for (; a < end; ++a, ++b) {
 		if (*a != *b)

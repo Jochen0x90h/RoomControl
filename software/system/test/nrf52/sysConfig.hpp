@@ -4,6 +4,7 @@
 
 constexpr int PORT0 = 0;
 constexpr int PORT1 = 32;
+constexpr int DISCONNECTED = 0x80000000;
 
 
 // flash
@@ -28,19 +29,14 @@ constexpr int CALENDAR_SECOND_WAITING_COUNT = 1;
 constexpr int CALENDAR_SECOND_HANDLER_COUNT = 1;
 
 
-// bus
+// out
 // ---
 
-constexpr int BUS_TX_PIN = PORT0 | 3;
-constexpr int BUS_RX_PIN = PORT0 | 2;
-
-
-// radio
-// -----
-
-constexpr int RADIO_CONTEXT_COUNT = 2;
-constexpr int RADIO_RECEIVE_QUEUE_LENGTH = 4;
-constexpr int RADIO_MAX_PAYLOAD_LENGTH = 125; // payload length without leading length byte and trailing crc
+constexpr struct {int pin; bool on;} OUT_CONFIGS[3] = {
+	{PORT0 | 23, false}, // red led
+	{PORT0 | 22, false}, // green led
+	{PORT0 | 24, false} // blue led
+};
 
 
 // poti
@@ -54,8 +50,6 @@ constexpr int BUTTON_PIN = PORT0 | 6;
 // spi
 // ---
 
-//constexpr int SPI_QUEUE_LENGTH = 2;
-//constexpr int SPI_CONTEXT_COUNT = 3;
 constexpr int SPI_CS_PINS[2] = {PORT0 | 2, PORT0 | 3};
 constexpr int SPI_SCK_PIN = PORT0 | 19;
 constexpr int SPI_MOSI_PIN = PORT0 | 20;
@@ -65,8 +59,31 @@ constexpr int SPI_MISO_PIN = PORT0 | 21; // also connected to display D/C#
 // display
 // -------
 
-//constexpr int DISPLAY_QUEUE_LENGTH = 1;
 constexpr int DISPLAY_CS_PIN = PORT0 | 3;
+
+
+// audio
+// -----
+
+constexpr int I2S_MCK_PIN = DISCONNECTED;
+constexpr int I2S_SCK_PIN = PORT0 | 19;
+constexpr int I2S_LRCK_PIN = PORT0 | 20;
+constexpr int I2S_SDOUT_PIN = PORT0 | 21;
+
+
+// bus
+// ---
+
+constexpr int BUS_TX_PIN = PORT0 | 3;
+constexpr int BUS_RX_PIN = PORT0 | 2;
+
+
+// radio
+// -----
+
+constexpr int RADIO_CONTEXT_COUNT = 2;
+constexpr int RADIO_RECEIVE_QUEUE_LENGTH = 4;
+constexpr int RADIO_MAX_PAYLOAD_LENGTH = 125; // payload length without leading length byte and trailing crc
 
 
 // motion detector
@@ -86,11 +103,3 @@ constexpr int MOTION_DETECTOR_TRACKER_INPUT = 1;
 // ---
 
 constexpr int USB_ENDPOINT_COUNT = 3;
-
-
-// debug
-// -----
-
-constexpr int LED_RED_PIN = PORT0 | 23;
-constexpr int LED_GREEN_PIN = PORT0 | 22;
-constexpr int LED_BLUE_PIN = PORT0 | 24;

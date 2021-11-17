@@ -65,7 +65,7 @@ int main(void) {
 	timer::init();
 	rng::init(); // needed by radio
 	radio::init();
-	debug::init();
+	out::init();
 	
 	radio::setPan(0, 0x1a62);
 	radio::setLongAddress(UINT64_C(0x00124b002268b96b));

@@ -14,7 +14,7 @@ public:
 	StringBuffer() : index(0) {}
 
 	template <typename T>
-	StringBuffer(T str) : index(0) {
+	StringBuffer(T const &str) : index(0) {
 		(*this) += str;
 	}
 
@@ -46,13 +46,13 @@ public:
 
 	template <typename T>
 	StringBuffer &operator +=(Dec<T> dec) {
-		uint32_t value = dec.value;
-		if (dec.value < 0) {
+		int32_t value = int32_t(dec.value);
+		if (std::is_signed<T>::value && value < 0) {
 			if (this->index < L)
 				this->buffer[this->index++] = '-';
-			value = -dec.value;
+			value = -value;
 		}
-		this->index += toString(value, this->buffer + this->index, L - this->index, dec.digitCount);
+		this->index += toString(uint32_t(value), this->buffer + this->index, L - this->index, dec.digitCount);
 		#ifdef DEBUG
 		this->buffer[this->index] = 0;
 		#endif
@@ -65,7 +65,7 @@ public:
 
 	template <typename T>
 	StringBuffer &operator +=(Hex<T> hex) {
-		this->index += hexToString(hex.value, this->buffer + this->index, L - this->index, hex.digitCount);
+		this->index += hexToString(uint64_t(hex.value), this->buffer + this->index, L - this->index, hex.digitCount);
 		#ifdef DEBUG
 		this->buffer[this->index] = 0;
 		#endif
@@ -93,10 +93,10 @@ public:
 	char const *data() const {return this->buffer;}
 
 	operator String() {
-		return {this->buffer, this->index};
+		return {this->index, this->buffer};
 	}
 	String string() const {
-		return {this->buffer, this->index};
+		return {this->index, this->buffer};
 	}
 
 	void clear() {
@@ -124,5 +124,5 @@ protected:
 	#else
 	char buffer[L];
 	#endif
-	uint8_t index;
+	typename UInt<L>::Type index;
 };

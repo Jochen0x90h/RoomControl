@@ -67,7 +67,7 @@ public:
 	 * Get topic as string without prefix. Stays valid until clear() or removeLast() are called
 	 */
 	String string() {
-		return {this->data + MAX_PREFIX_LENGTH + 1, max(this->index - 1, 0)};
+		return {max(this->index - 1, 0), this->data + MAX_PREFIX_LENGTH + 1};
 	}
 	
 	/**

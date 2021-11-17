@@ -1,13 +1,14 @@
 #pragma once
 
 #include <Coroutine.hpp>
+#include <stdint.h>
 
 
 namespace poti {
 
 // Internal helper: Stores references to the result values in the awaitable during co_await
 struct Parameters {
-	int &delta;
+	int8_t &delta;
 	bool &activated;
 };
 
@@ -21,6 +22,6 @@ void init();
  * @param delta delta motion of digital potentiometer
  * @param activated true when the button was pressed
  */
-Awaitable<Parameters> change(int& delta, bool& activated);
+Awaitable<Parameters> change(int8_t& delta, bool& activated);
 
 } // namespace poti

@@ -70,9 +70,11 @@ set(UTIL
 	util/src/Data.hpp
 	util/src/DataQueue.hpp
 	util/src/defines.hpp
+	util/src/DrawMode.hpp
 	util/src/enum.hpp
 	util/src/Font.cpp
 	util/src/Font.hpp
+	util/src/LinkedListNode.hpp
 	util/src/optional.hpp
 	util/src/Pointer.hpp
 	util/src/Queue.hpp
@@ -94,8 +96,8 @@ set(NETWORK
 	network/src/hash.cpp
 	network/src/hash.hpp
 	network/src/Nonce.hpp
-	network/src/PacketReader.hpp
-	network/src/PacketWriter.hpp
+	network/src/DataReader.hpp
+	network/src/DataWriter.hpp
 	network/src/ieee.hpp
 	network/src/zb.hpp
 	network/src/gp.hpp
@@ -117,7 +119,6 @@ set(SYSTEM
 	system/src/emu/calendar.cpp
 	system/src/calendar.hpp
 	system/src/ClockTime.hpp
-	system/src/emu/debug.cpp
 	system/src/debug.hpp
 	system/src/display.hpp
 	system/src/emu/flash.cpp
@@ -129,6 +130,8 @@ set(SYSTEM
 	system/src/emu/loop.cpp
 	system/src/emu/loop.hpp
 	system/src/loop.hpp
+	system/src/emu/out.cpp
+	system/src/out.hpp
 	system/src/emu/poti.cpp
 	system/src/poti.hpp
 	system/src/emu/radio.cpp
@@ -137,6 +140,8 @@ set(SYSTEM
 	system/src/emu/rng.cpp
 	system/src/rng.hpp
 	system/src/spi.hpp
+	system/src/sys.hpp
+	system/src/emu/sys.cpp
 	system/src/SystemTime.hpp
 	system/src/emu/timer.cpp
 	system/src/timer.hpp
@@ -182,6 +187,10 @@ set(CONTROL
 	control/src/Interface.hpp
 	control/src/LocalInterface.cpp
 	control/src/LocalInterface.hpp
+	control/src/Menu.cpp
+	control/src/Menu.hpp
+	control/src/Message.cpp
+	control/src/Message.hpp
 	control/src/emu/Network.cpp
 	control/src/emu/Network.hpp
 	control/src/RadioInterface.cpp
@@ -191,8 +200,14 @@ set(CONTROL
 	control/src/emu/spi.cpp
 	control/src/SSD1309.cpp
 	control/src/SSD1309.hpp
+	control/src/State.cpp
+	control/src/State.hpp
 	control/src/Storage.cpp
 	control/src/Storage.hpp
+	control/src/Storage2.cpp
+	control/src/Storage2.hpp
+	control/src/SwapChain.cpp
+	control/src/SwapChain.hpp
 	control/src/emu/sysConfig.hpp
 	#control/src/tahoma_8pt.cpp
 	#control/src/tahoma_8pt.hpp
@@ -264,7 +279,10 @@ conan_target_link_libraries(terminal)
 # radio packet sniffer that can write .pcap files and analyze packets (needs radioTest on device)
 add_executable(sniffer
 	tools/src/sniffer.cpp
+	${UTIL}
 	${NETWORK}
+	system/src/sys.hpp
+	system/src/emu/sys.cpp
 )
 target_include_directories(sniffer
 	PRIVATE
@@ -331,6 +349,7 @@ conan_target_link_libraries(timerTest)
 # test for BME680 air sensor
 add_executable(bme680Test
 	control/test/bme680Test.cpp
+	control/test/emu/sysConfig.hpp
 	${UTIL}
 	${NETWORK}
 	${SYSTEM}
@@ -353,6 +372,7 @@ conan_target_link_libraries(bme680Test)
 # test for SSD1309 display
 add_executable(ssd1309Test
 	control/test/ssd1309Test.cpp
+	control/test/emu/sysConfig.hpp
 	${UTIL}
 	${NETWORK}
 	${SYSTEM}
@@ -372,6 +392,31 @@ target_include_directories(ssd1309Test
 )
 conan_target_link_libraries(ssd1309Test)
 
+
+# test for Storage class
+add_executable(storageTest
+	control/test/storageTest.cpp
+	control/test/emu/sysConfig.hpp
+	control/src/emu/spi.cpp
+	${UTIL}
+	${NETWORK}
+	${SYSTEM}
+	control/src/State.cpp
+	control/src/State.hpp
+	control/src/Storage2.cpp
+	control/src/Storage2.hpp
+	system/src/emu/flash.cpp
+)
+target_include_directories(storageTest
+	PRIVATE
+	control/test/emu
+	control/src
+	system/src
+	network/src
+	util/src
+	glad
+)
+conan_target_link_libraries(storageTest)
 
 
 # unit tests (GTest)
@@ -394,20 +439,20 @@ add_test(NAME utilTest
 	#WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/../testdata
 )
 
-# crypt test
-add_executable(cryptTest
-	network/test/cryptTest.cpp
+# network test
+add_executable(networkTest
+	network/test/networkTest.cpp
 	#${UTIL}
 	${NETWORK}
 )
-target_include_directories(cryptTest
+target_include_directories(networkTest
 	PRIVATE
 	network/src
 	util/src
 )
-conan_target_link_libraries(cryptTest)
-add_test(NAME cryptTest
-	COMMAND cryptTest --gtest_output=xml:report.xml
+conan_target_link_libraries(networkTest)
+add_test(NAME networkTest
+	COMMAND networkTest --gtest_output=xml:report.xml
 	#WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/../testdata
 )
 

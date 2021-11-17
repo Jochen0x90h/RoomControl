@@ -178,7 +178,6 @@ FILE *pcapIn = nullptr;
 FILE *pcapOut = nullptr;
 
 
-
 ReceiveParameters::ReceiveParameters(ReceiveParameters &&p) noexcept
 	: WaitlistElement(std::move(p)), packet(p.packet)
 {
@@ -217,7 +216,6 @@ void SendParameters::remove() noexcept {
 		}
 	}
 }
-	
 
 
 // event loop handler chain
@@ -632,3 +630,45 @@ Awaitable<SendParameters> send(int index, uint8_t *packet, uint8_t &result) {
 }
 
 } // namespace radio
+
+/*
+WaitlistElementValue<radio::ReceiveParameters>::WaitlistElementValue(WaitlistElementValue &&e) noexcept
+	: WaitlistElement(std::move(e)), value(std::move(e.value))
+{
+}
+	
+void WaitlistElementValue<radio::ReceiveParameters>::add(WaitlistHead &head) noexcept {
+	WaitlistElement::add(head);
+}
+
+void WaitlistElementValue<radio::ReceiveParameters>::remove() noexcept {
+	WaitlistElement::remove();
+}
+
+
+WaitlistElementValue<radio::SendParameters>::WaitlistElementValue(WaitlistElementValue &&e) noexcept
+	: WaitlistElement(std::move(e)), value(std::move(e.value))
+{
+}
+	
+void WaitlistElementValue<radio::SendParameters>::add(WaitlistHead &head) noexcept {
+	WaitlistElement::add(head);
+}
+
+void WaitlistElementValue<radio::SendParameters>::remove() noexcept {
+	WaitlistElement::remove();
+
+	// send mac counter to device to cancel the send operation
+	if (radio::device != nullptr) {
+		uint8_t *packet = this->value.packet;
+		uint8_t &macCounter = packet[3];
+		int length = packet[0] - 2;
+		int index = packet[1 + length]; // index is stored in send extra data
+		int transferred;
+
+		int ret = libusb_bulk_transfer(radio::device, 1 + index | usb::OUT, &macCounter, 1, &transferred, 10000);
+		if (ret == 0) {
+		}
+	}
+}
+*/

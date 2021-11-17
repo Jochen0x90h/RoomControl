@@ -4,7 +4,8 @@
 #include <util.hpp>
 #include <appConfig.hpp>
 #include <sysConfig.hpp>
-#include <iostream>
+#include <fstream>
+//#include <iostream>
 
 
 namespace spi {
@@ -45,6 +46,12 @@ void setTemperature(float celsius) {
 	spi::airSensorRegisters[0x22] = value >> 12;
 }
 
+// fe-ram
+
+static uint8_t framData[FRAM_SIZE + 1];
+static std::fstream framFile;
+
+
 struct Context {
 	Waitlist<Parameters> waitlist;
 };
@@ -54,6 +61,7 @@ Context contexts[SPI_CONTEXT_COUNT];
 // event loop handler chain
 loop::Handler nextHandler;
 void handle(Gui &gui) {
+	// handle pending spi transfers
 	for (int index = 0; index < SPI_CONTEXT_COUNT; ++index) {
 		auto &context = spi::contexts[index];
 		context.waitlist.resumeFirst([index](Parameters p) {
@@ -79,6 +87,32 @@ void handle(Gui &gui) {
 						airSensor[addr] = data;
 					}
 				}
+			} else if (index == SPI_FRAM) {
+				// emulate e.g. MR45V064B (16 bit address)
+				
+				uint8_t op = p.writeData[0];
+				
+				switch (op) {
+				case FRAM_READ:
+					{
+						int addr = (p.writeData[1] << 8) | p.writeData[2];
+						for (int i = 0; i < p.readLength - 3; ++i)
+							p.readData[3 + i] = spi::framData[(addr + i) & (FRAM_SIZE - 1)];
+					}
+					break;
+				case FRAM_WRITE:
+					{
+						int addr = (p.writeData[1] << 8) | p.writeData[2];
+						for (int i = 0; i < p.writeLength - 3; ++i)
+							spi::framData[(addr + i) & (FRAM_SIZE - 1)] = p.writeData[3 + i];
+
+						// write to file
+						spi::framFile.seekg(addr);
+						spi::framFile.write(reinterpret_cast<char const *>(p.writeData + 3), p.writeLength - 3);
+						spi::framFile.flush();
+					}
+					break;
+				}
 			}
 			return true;
 		});
@@ -95,21 +129,48 @@ void handle(Gui &gui) {
 		setTemperature(*temperature);
 }
 
-void init() {
-	spi::airSensor = &spi::airSensorRegisters[128];
+void init(char const *fileName) {
+	// air sensor
+	{
+		spi::airSensor = &spi::airSensorRegisters[128];
 
-	// set chip id
-	spi::airSensorRegisters[0xD0] = CHIP_ID;
+		// set chip id
+		spi::airSensorRegisters[0xD0] = CHIP_ID;
+		
+		// set parameter t2
+		spi::airSensorRegisters[0x8A] = 0;
+		spi::airSensorRegisters[0x8B] = 16384 >> 8;
+
+		// set temperature
+		setTemperature(20.0f);
+
+		// add to event loop handler chain
+		spi::nextHandler = loop::addHandler(handle);
+	}
 	
-	// set parameter t2
-	spi::airSensorRegisters[0x8A] = 0;
-	spi::airSensorRegisters[0x8B] = 16384 >> 8;
+	// fram
+	{
+		// read fram contents from file and one excess byte to check size
+		spi::framFile.open(fileName, std::fstream::in | std::fstream::binary);
+		spi::framFile.read(reinterpret_cast<char *>(spi::framData), sizeof(spi::framData));
+		spi::framFile.clear();
+		size_t size = spi::framFile.tellg();
+		spi::framFile.close();
 
-	// set temperature
-	setTemperature(20.0f);
+		// check if size is ok
+		if (size != FRAM_SIZE) {
+			// no: erase emulated fram
+			array::fill(spi::framData, 0xff);
+			spi::framFile.open(fileName, std::fstream::trunc | std::fstream::in | std::fstream::out | std::fstream::binary);
+			spi::framFile.write(reinterpret_cast<char *>(spi::framData), FRAM_SIZE);
+			spi::framFile.flush();
+		} else {
+			// yes: open file and read emulated flash
+			spi::framFile.open(fileName, std::fstream::in | std::fstream::out | std::fstream::binary);
+			spi::framFile.read(reinterpret_cast<char *>(spi::framData), FRAM_SIZE);
 
-	// add to event loop handler chain
-	spi::nextHandler = loop::addHandler(handle);
+		}
+	}
 }
 
 Awaitable<Parameters> transfer(int index, int writeLength, uint8_t const *writeData, int readLength, uint8_t *readData) {

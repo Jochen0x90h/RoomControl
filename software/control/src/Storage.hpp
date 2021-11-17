@@ -36,9 +36,8 @@ public:
 	 */
 	template <typename... Arrays>
 	Storage(uint8_t pageStart, uint8_t pageCount, Arrays&... arrays) {
-		pageCount >>= 1;
 		this->pageStart = pageStart;
-		this->pageCount = pageCount;
+		this->pageCount = pageCount / 2;
 
 		add(arrays...);
 		

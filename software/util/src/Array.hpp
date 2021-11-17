@@ -3,24 +3,24 @@
 #include <assert.hpp>
 
 /**
- * Array wrapper, only references the data
- * @tparam T array element
+ * Array wrapper, only references the data, similar to std::span
+ * @tparam T type of array element, e.g. int const for an array of constant integers
  */
 template <typename T>
 struct Array {
 	int const length;
-	T const *const data;
+	T *const data;
 		
 	constexpr Array() : length(0), data(nullptr) {}
 
 	template <int N>
-	constexpr Array(T const (&array)[N]) : length(N), data(array) {}
+	constexpr Array(T (&array)[N]) : length(N), data(array) {}
 
-	Array(int length, T const *data) : length(length), data(data) {}
+	Array(int length, T *data) : length(length), data(data) {}
 
-	bool empty() {return this->length <= 0;}
+	bool isEmpty() {return this->length <= 0;}
 
-	T const &operator [](int index) const {
+	T &operator [](int index) const {
 		assert(index >= 0 && index < this->length);
 		return this->data[index];
 	}

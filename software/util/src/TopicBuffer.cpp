@@ -20,19 +20,19 @@ TopicBuffer &TopicBuffer::operator /=(String str) {
 String TopicBuffer::state() {
 	char *data = this->data + MAX_PREFIX_LENGTH - 4;
 	array::copy(data, data + 4, "stat");
-	return {data, 4 + this->index};
+	return {4 + this->index, data};
 }
 
 String TopicBuffer::command() {
 	char *data = this->data + MAX_PREFIX_LENGTH - 4;
 	array::copy(data, data + 4, "cmnd");
-	return {data, 4 + this->index};
+	return {4 + this->index, data};
 }
 
 String TopicBuffer::enumeration() {
 	char *data = this->data + MAX_PREFIX_LENGTH - 4;
 	array::copy(data, data + 4, "enum");
-	return {data, 4 + this->index};
+	return {4 + this->index, data};
 }
 
 void TopicBuffer::removeLast() {

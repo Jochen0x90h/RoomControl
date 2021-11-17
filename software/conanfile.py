@@ -43,7 +43,7 @@ class Project(ConanFile):
         "tools/*"
     requires = \
         "boost/1.76.0", \
-        "glfw/3.3.3", \
+        "glfw/3.3.5", \
         "libusb/1.0.24", \
         "gtest/1.11.0"
 

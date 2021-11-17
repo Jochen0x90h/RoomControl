@@ -13,7 +13,7 @@ Coroutine handleSecondTick() {
 int main(void) {
 	loop::init();
 	calendar::init();
-	debug::init();
+	out::init();
 	
 	handleSecondTick();
 

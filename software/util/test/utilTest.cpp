@@ -1,11 +1,14 @@
-#include "ArrayList.hpp"
-#include "Coroutine.hpp"
-#include "enum.hpp"
-#include "DataQueue.hpp"
-#include "Queue.hpp"
-#include "StringBuffer.hpp"
-#include "StringSet.hpp"
-#include "TopicBuffer.hpp"
+#include <Array.hpp>
+#include <ArrayList.hpp>
+#include <convert.hpp>
+#include <Coroutine.hpp>
+#include <enum.hpp>
+#include <DataQueue.hpp>
+#include <Queue.hpp>
+#include <LinkedListNode.hpp>
+#include <StringBuffer.hpp>
+#include <StringSet.hpp>
+#include <TopicBuffer.hpp>
 #include <gtest/gtest.h>
 #include <random>
 
@@ -14,6 +17,25 @@
 
 constexpr String strings[] = {"a", "bar", "bar2", "foo", "foo2", "foobar", "foobar2", "z"};
 
+
+TEST(utilTest, Array) {
+	int foo[] = {1, 2, 3};
+	int const bar[] = {1, 2, 3};
+
+	Array<int> fooArray(foo);
+	Array<int const> barArray(bar);
+	
+	EXPECT_FALSE(fooArray.isEmpty());
+	EXPECT_FALSE(barArray.isEmpty());
+	EXPECT_EQ(fooArray.length, 3);
+	EXPECT_EQ(barArray.length, 3);
+
+	EXPECT_EQ(foo[0], 1);
+	EXPECT_EQ(bar[2], 3);
+	
+	foo[1] = 50;
+	EXPECT_EQ(foo[1], 50);
+}
 
 TEST(utilTest, ArrayList) {
 	std::mt19937 gen(1337); // standard mersenne_twister_engine seeded with 1337
@@ -31,7 +53,7 @@ TEST(utilTest, ArrayList) {
 				int index = list.binaryLowerBound(s);
 				
 				// check if already exists
-				if (index >= list.size() || !(list[index] == s)) {
+				if (index >= list.count() || !(list[index] == s)) {
 					// insert into list
 					list.insert(index, s);
 				}
@@ -45,7 +67,7 @@ TEST(utilTest, ArrayList) {
 			}*/
 			
 			// check if the list contains unique sorted elements
-			for (int i = 0; i < list.size() - 1; ++i) {
+			for (int i = 0; i < list.count() - 1; ++i) {
 				EXPECT_TRUE(list[i] < list[i + 1]);
 			}
 		}
@@ -136,6 +158,31 @@ TEST(utilTest, flagsEnum) {
 }
 
 
+// LinkedListNode
+// --------------
+
+struct MyListElement : public LinkedListNode<MyListElement> {
+	int foo;
+};
+
+using MyList = LinkedListNode<MyListElement>;
+
+TEST(utilTest, MyList) {
+	MyList list;
+	
+	MyListElement element;
+	element.foo = 10;
+	list.add(element);
+
+	int count = 0;
+	for (auto &e : list) {
+		EXPECT_EQ(e.foo, 10);
+		++count;
+	}
+	EXPECT_EQ(count, 1);
+}
+
+
 // Queue
 // -----
 
@@ -147,34 +194,34 @@ TEST(utilTest, Queue) {
 	EXPECT_TRUE(queue.isEmpty());
 	
 	// add and remove one element
-	queue.add() = 5;
-	EXPECT_EQ(queue.get(), 5);
-	queue.remove();
+	queue.addBack(5);
+	EXPECT_EQ(queue.getBack(), 5);
+	queue.removeFront();
 	EXPECT_TRUE(queue.isEmpty());
 
 	// add elements until queue is full
 	int i = 0;
-	int &head = queue.getHead();
+	int &head = queue.getNextBack();
 	while (!queue.isFull()) {
-		queue.add() = 1000 + i;
+		queue.addBack(1000 + i);
 		++i;
 	}
 	EXPECT_EQ(i, 4);
-	EXPECT_EQ(queue.size(), 4);
+	EXPECT_EQ(queue.count(), 4);
 	EXPECT_EQ(head, 1000);
 
 	// remove one element
-	queue.remove();
+	queue.removeFront();
 	EXPECT_FALSE(queue.isEmpty());
 	EXPECT_FALSE(queue.isFull());
-	EXPECT_EQ(queue.size(), 3);
-	EXPECT_EQ(queue.get(), 1000 + 1);
+	EXPECT_EQ(queue.count(), 3);
+	EXPECT_EQ(queue.getFront(), 1000 + 1);
 	
 	// clear and "resurrect" first element (is used in radio driver)
 	queue.clear();
-	queue.increment();
-	EXPECT_EQ(queue.size(), 1);
-	EXPECT_EQ(queue.get(), 1000 + 1);
+	queue.addBack();
+	EXPECT_EQ(queue.count(), 1);
+	EXPECT_EQ(queue.getFront(), 1000 + 1);
 }
 
 
@@ -182,6 +229,34 @@ TEST(utilTest, Queue) {
 // ------
 
 TEST(utilTest, String) {
+	// constructor from c-string
+	{
+		String foo("foo");
+		EXPECT_EQ(foo, "foo");
+		EXPECT_EQ(foo.length, 3);
+
+		char const *cstr = "bar";
+		EXPECT_EQ(length(cstr), 3);
+		String bar(cstr);
+		EXPECT_EQ(bar, "bar");
+		EXPECT_EQ(bar.length, 3);
+		
+		// from r-value
+		String bar2(reinterpret_cast<char const *>(cstr));
+		EXPECT_EQ(bar2, "bar");
+		EXPECT_EQ(bar2.length, 3);
+	}
+	
+	// constructor from c-array
+	{
+		char ar[] = {'f', 'o', 'o'};
+		EXPECT_EQ(length(ar), 3);
+		String foo(ar);
+		EXPECT_EQ(foo, "foo");
+		EXPECT_EQ(foo.length, 3);
+	}
+
+	// less operator
 	for (int j = 0; j < std::size(strings); ++j) {
 		for (int i = 0; i < std::size(strings); ++i) {
 			EXPECT_EQ(i < j, strings[i] < strings[j]);
@@ -204,22 +279,26 @@ TEST(utilTest, StringBuffer) {
 	b += " ";
 	b += hex(0xabcdef12);
 	b += " ";
-	b += flt(-5.9f);
-	b += " ";
-	b += flt(2000000000);
-	b += " ";
-	b += flt(100.9999f);
-	b += " ";
 	b += flt(0.0f);
-	b += " ";
-	b += flt(0.5f);
 	b += " ";
 	b += flt(0.0f, 0, 2);
 	b += " ";
+	b += flt(0.001234567f, 9);
+	b += " ";
+	b += flt(0.5f);
+	b += " ";
 	b += flt(0.5f, 0, 2);
 	b += " ";
-	b += flt(0.001234567f, 9);
-	EXPECT_EQ(b.string(), "123456 -099 5 abcdef12 -5.9 2000000000 101 0 0.5 0 .5 0.001234567");
+	b += flt(1.0f, 1);
+	b += " ";
+	b += flt(1.0f, -1);
+	b += " ";
+	b += flt(-5.9f);
+	b += " ";
+	b += flt(100.9999f);
+	b += " ";
+	b += flt(2000000000);
+	EXPECT_EQ(b.string(), "123456 -099 5 abcdef12 0 0 0.001234567 0.5 .5 1 1.0 -5.9 101 2000000000");
 
 	StringBuffer<5> c = flt(0.000000001f, 9);
 	EXPECT_EQ(c.string(), "0.000");
@@ -251,7 +330,7 @@ TEST(utilTest, StringSet) {
 			*/
 			
 			// check if the set contains unique sorted elements
-			for (int i = 0; i < set.size() - 1; ++i) {
+			for (int i = 0; i < set.count() - 1; ++i) {
 				EXPECT_TRUE(set[i] < set[i + 1]);
 			}
 		}
@@ -358,13 +437,13 @@ TEST(utilTest, Return) {
 // Coroutine
 // ---------
 
-Waitlist<void> waitlist1;
-Awaitable<void> wait1() {
+Waitlist<> waitlist1;
+Awaitable<> wait1() {
 	return {waitlist1};
 }
 
-Waitlist<void> waitlist2;
-Awaitable<void> wait2() {
+Waitlist<> waitlist2;
+Awaitable<> wait2() {
 	return {waitlist2};
 }
 
@@ -395,10 +474,10 @@ AwaitableCoroutine inner() {
 	co_await wait2();
 }
 
-CoroutineHandle outerHandle;
+//CoroutineHandle outerHandle;
 Coroutine outer() {
 	// obtain handle of outer coroutine
-	co_await outerHandle;
+	//co_await outerHandle;
 
 	co_await inner();
 
@@ -454,14 +533,12 @@ TEST(utilTest, NestedCoroutine) {
 }
 
 TEST(utilTest, DestroyNestedCoroutine) {
-	// start outer coroutine
-	outer();
-
-	//waitlist1.head.next->handle.destroy();
+	// start outer coroutine (enters inner() and waits on wait1())
+	Coroutine c = outer();
 
 	// destroy outer coroutine
 	std::cout << "!destroy outer" << std::endl;
-	outerHandle.handle.destroy();
+	c.destroy();
 }
 
 TEST(utilTest, awaitAwaitableCoroutine) {
@@ -524,8 +601,13 @@ struct Parameters2 : public WaitlistElement {
 	}
 };
 
-Waitlist<Parameters1> waitListValue1;
+Waitlist<int> waitListValue0; // only tested if it compiles
+Waitlist<Parameters1> waitListValue1; // only tested if it compiles
 Waitlist<Parameters2> waitListValue2;
+
+Awaitable<int> delay0(int value) {
+	return {waitListValue0, value};
+}
 
 Awaitable<Parameters1> delay1(int value) {
 	return {waitListValue1, value};
@@ -610,7 +692,7 @@ TEST(utilTest, AwaitableList) {
 // Barrier
 // -------
 
-Barrier<> barrier;
+Waitlist<> barrier;
 
 Coroutine waitForBarrier() {
 	std::cout << "wait on barrier" << std::endl;

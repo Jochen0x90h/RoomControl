@@ -33,7 +33,7 @@ int main(void) {
 	timer::init();
 	display::init();
 	poti::init();
-	debug::init();
+	out::init();
 	
 	draw();
 	

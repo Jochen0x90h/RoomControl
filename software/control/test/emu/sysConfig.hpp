@@ -9,6 +9,12 @@ constexpr int FLASH_PAGE_COUNT = 16;
 constexpr int FLASH_WRITE_ALIGN = 4;
 
 
+// out
+// ---
+
+constexpr int OUT_COLORS[4] = {0x0000ff, 0x00ff00, 0xff0000, 0xffffff};
+
+
 // spi
 // ---
 

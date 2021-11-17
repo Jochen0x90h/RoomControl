@@ -26,7 +26,7 @@ int main(void) {
 	loop::init();
 	spi::init();
 	display::init();
-	debug::init();
+	out::init();
 
 	writeDisplay();
 	transferSpi();
