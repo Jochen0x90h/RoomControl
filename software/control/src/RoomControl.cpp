@@ -211,16 +211,16 @@ static Configuration &initConfiguration(Storage2::Array<Configuration> &configur
 		assign(configuration.name, "room");
 		
 		// generate a random 64 bit address
-		configuration.longAddress = rng::int64();
+		configuration.radioLongAddress = rng::int64();
 		
 		// set default pan
-		configuration.zbPanId = 0x1a62;
+		configuration.radioPanId = 0x1a62;
 		
 		// generate random network key
-		for (uint8_t &b : configuration.networkKey) {
+		for (uint8_t &b : configuration.key) {
 			b = rng::int8();
 		}
-		setKey(configuration.networkAesKey, configuration.networkKey);
+		setKey(configuration.aesKey, configuration.key);
 		
 		
 		// state offsets for interfaces
@@ -275,8 +275,8 @@ RoomControl::~RoomControl() {
 
 void RoomControl::applyConfiguration() {
 	auto const &configuration = *this->configurations[0];
-	radio::setLongAddress(configuration.longAddress);
-	radio::setPan(RADIO_ZB, configuration.zbPanId);
+	radio::setLongAddress(configuration.radioLongAddress);
+	radio::setPan(RADIO_ZB, configuration.radioPanId);
 }
 
 // UpLink

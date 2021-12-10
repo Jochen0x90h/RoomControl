@@ -166,8 +166,8 @@ Coroutine send(int index) {
 	radio::Packet packet;
 	while (true) {
 		// receive from usb host
-		int length;
-		co_await usb::receive(1 + index, RADIO_MAX_PAYLOAD_LENGTH + radio::SEND_EXTRA_LENGTH, length, packet + 1);
+		int length = RADIO_MAX_PAYLOAD_LENGTH + radio::SEND_EXTRA_LENGTH;
+		co_await usb::receive(1 + index, length, packet + 1);
 
 		if (length == 1) {
 			// cancel by mac counter

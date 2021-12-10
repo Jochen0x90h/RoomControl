@@ -15,8 +15,20 @@ constexpr int FLASH_WRITE_ALIGN = 4;
 constexpr int OUT_COLORS[4] = {0x0000ff, 0x00ff00, 0xff0000, 0xffffff};
 
 
+// spi
+// ---
+
+constexpr int SPI_CONTEXT_COUNT = 2;
+
+
 // radio
 // -----
 
 constexpr int RADIO_CONTEXT_COUNT = 2;
 constexpr int RADIO_MAX_PAYLOAD_LENGTH = 125; // payload length without leading length byte and trailing crc
+
+
+// network
+// -------
+
+constexpr int NETWORK_CONTEXT_COUNT = 1;

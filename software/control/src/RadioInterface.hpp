@@ -263,7 +263,7 @@ public:
 		 */
 		void finish(radio::SendFlags sendFlags) {
 #ifdef EMU
-			assert(this->current < this->end);
+			assert(this->current < this->end - 1);
 #endif
 			*this->current = uint8_t(sendFlags);
 			this->begin[0] = this->current - (this->begin + 1) + 2; // for crc

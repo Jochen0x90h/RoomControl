@@ -233,7 +233,7 @@ void RadioInterface::writeNwkBroadcastCommand(PacketWriter &w, zb::NwkCommand co
 	w.uint8(this->macCounter++);
 	
 	// destination pan
-	w.uint16(configuration.zbPanId);
+	w.uint16(configuration.radioPanId);
 
 	// ieee broadcast
 	w.uint16(0xffff);
@@ -266,7 +266,7 @@ void RadioInterface::writeNwkBroadcastCommand(PacketWriter &w, zb::NwkCommand co
 	w.uint8(this->nwkCounter++);
 	
 	// extended source
-	w.uint64(configuration.longAddress);
+	w.uint64(configuration.radioLongAddress);
 
 
 	// security header
@@ -281,7 +281,7 @@ void RadioInterface::writeNwkBroadcastCommand(PacketWriter &w, zb::NwkCommand co
 		w.uint32(this->securityCounter);
 
 		// extended source
-		w.uint64(configuration.longAddress);
+		w.uint64(configuration.radioLongAddress);
 
 		// key sequence number
 		w.uint8(0);
@@ -315,7 +315,7 @@ void RadioInterface::writeNwk(PacketWriter &w, zb::NwkFrameControl nwkFrameContr
 	w.uint8(this->macCounter++);
 	
 	// destination pan
-	w.uint16(configuration.zbPanId);
+	w.uint16(configuration.radioPanId);
 
 	// ieee destination address (address of first hop)
 	w.uint16(device.firstHop);
@@ -356,7 +356,7 @@ void RadioInterface::writeNwk(PacketWriter &w, zb::NwkFrameControl nwkFrameContr
 
 	// extended source
 	if ((nwkFrameControl & zb::NwkFrameControl::EXTENDED_SOURCE) != 0)
-		w.uint64(configuration.longAddress);
+		w.uint64(configuration.radioLongAddress);
 
 
 	// security header
@@ -371,7 +371,7 @@ void RadioInterface::writeNwk(PacketWriter &w, zb::NwkFrameControl nwkFrameContr
 		w.uint32(this->securityCounter);
 
 		// extended source
-		w.uint64(configuration.longAddress);
+		w.uint64(configuration.radioLongAddress);
 
 		// key sequence number
 		w.uint8(0);
@@ -420,7 +420,7 @@ void RadioInterface::writeApsCommand(PacketWriter &w, zb::ApsFrameControl apsFra
 		w.uint32(this->securityCounter);
 
 		// extended source
-		w.uint64(configuration.longAddress);
+		w.uint64(configuration.radioLongAddress);
 	} else {
 		w.securityControlPtr = nullptr;
 	}
@@ -559,12 +559,12 @@ void RadioInterface::writeFooter(PacketWriter &w, radio::SendFlags sendFlags) {
 		auto securityControl = zb::SecurityControl(*w.securityControlPtr);
 		
 		// nonce (4.5.2.2)
-		Nonce nonce(configuration.longAddress, this->securityCounter, securityControl);
+		Nonce nonce(configuration.radioLongAddress, this->securityCounter, securityControl);
 
 		// encrypt
 		int micLength = 4;
 		AesKey const &key = (securityControl & zb::SecurityControl::KEY_MASK) == zb::SecurityControl::KEY_NETWORK
-			? configuration.networkAesKey : hashedTrustCenterLinkAesKey;
+			? configuration.aesKey : hashedTrustCenterLinkAesKey;
 		//encrypt(w.message, nonce, w.header, headerLength, w.message, payloadLength, micLength, key);
 		w.encrypt(micLength, nonce, key);
 
@@ -670,7 +670,7 @@ Coroutine RadioInterface::sendBeacon() {
 			w.uint8(this->macCounter++);
 
 			// source pan
-			w.uint16(configuration.zbPanId);
+			w.uint16(configuration.radioPanId);
 
 			// source address
 			w.uint16(0x0000);
@@ -716,7 +716,7 @@ Coroutine RadioInterface::sendBeacon() {
 		co_await radio::send(RADIO_ZB, packet, sendResult);
 		
 		// "cool down" before a new beacon can be sent
-		co_await timer::delay(100ms);
+		co_await timer::sleep(100ms);
 	}
 }
 
@@ -1206,7 +1206,7 @@ void RadioInterface::handleNwk(PacketReader &r, ZbDevice &device) {
 		
 		// decrypt
 		int micLength = 4;
-		if (!r.decrypt(micLength, nonce, configuration.networkAesKey)) {
+		if (!r.decrypt(micLength, nonce, configuration.aesKey)) {
 			// decryption failed
 			return;
 		}
@@ -1614,13 +1614,13 @@ sys::out.write("handleAssociationRequest\n");
 		w.uint8(this->macCounter++);
 
 		// destination pan
-		w.uint16(configuration.zbPanId);
+		w.uint16(configuration.radioPanId);
 
 		// destination address
 		w.uint64(flash.deviceId);
 		
 		// source address
-		w.uint64(configuration.longAddress);
+		w.uint64(configuration.radioLongAddress);
 		
 		
 		// association response
@@ -1657,10 +1657,10 @@ sys::out.write("Send Association Response Result " + dec(sendResult) + '\n');
 				| zb::ApsFrameControl::SECURITY);
 			w.enum8(zb::ApsCommand::TRANSPORT_KEY);
 			w.enum8(zb::KeyIdentifier::NETWORK); // standard network key
-			w.data(configuration.networkKey);
+			w.data(configuration.key);
 			w.uint8(0); // key sequence number
 			w.uint64(flash.deviceId); // extended destination address
-			w.uint64(configuration.longAddress); // extended source address
+			w.uint64(configuration.radioLongAddress); // extended source address
 		
 			writeFooter(w, sendFlags);
 		}
@@ -1696,7 +1696,7 @@ sys::out.write("Send Node Descriptor Request Result " + dec(sendResult) + '\n');
 		if (sendResult != 0) {
 			// wait for a response from the device
 			int r = co_await select(device->zdpResponseBarrier.wait(zb::ZdpCommand::NODE_DESCRIPTOR_RESPONSE, zdpCounter,
-				length, packet1), timer::delay(1s));
+				length, packet1), timer::sleep(1s));
 			
 			// check if response was received
 			if (r == 1)
@@ -1736,7 +1736,7 @@ sys::out.write("Node Descriptor Status " + dec(status) + '\n');
 		if (sendResult != 0) {
 			// wait for a response from the device
 			int r = co_await select(device->zdpResponseBarrier.wait(zb::ZdpCommand::ACTIVE_ENDPOINT_RESPONSE, zdpCounter,
-				length, packet1), timer::delay(1s));
+				length, packet1), timer::sleep(1s));
 
 			// check if response was received
 			if (r == 1)
@@ -1786,7 +1786,7 @@ sys::out.write("active endpoints status " + dec(status) + '\n');
 			if (sendResult != 0) {
 				// wait for a response from the device
 				int r = co_await select(device->zdpResponseBarrier.wait(zb::ZdpCommand::SIMPLE_DESCRIPTOR_RESPONSE,
-					zdpCounter, length, packet2), timer::delay(timeout));
+					zdpCounter, length, packet2), timer::sleep(timeout));
 
 				// check if response was received
 				if (r == 1)
@@ -1886,7 +1886,7 @@ sys::out.write("Endpoint Descriptor " + dec(endpoint) + " Status " + dec(status)
 					// wait for a response from the device
 					int r = co_await select(device->zclResponseBarrier.wait(endpoint, zb::ZclCluster::BASIC,
 						zb::ZclProfile::HOME_AUTOMATION, endpoint, zclCounter,
-						zb::ZclCommand::READ_ATTRIBUTES_RESPONSE, length, packet2), timer::delay(timeout));
+						zb::ZclCommand::READ_ATTRIBUTES_RESPONSE, length, packet2), timer::sleep(timeout));
 
 					// check if response was received
 					if (r == 1)
@@ -1960,7 +1960,7 @@ sys::out.write("Bind Request to Endpoint " + dec(endpoint) + ", Cluster " + hex(
 					w.uint8(3);
 					
 					// destination
-					w.uint64(configuration.longAddress);
+					w.uint64(configuration.radioLongAddress);
 					
 					// destination endpoint
 					w.uint8(endpoint);
@@ -1975,7 +1975,7 @@ sys::out.write("Bind Request to Endpoint " + dec(endpoint) + ", Cluster " + hex(
 
 				// wait for a response from the device
 				int r = co_await select(device->zdpResponseBarrier.wait(zb::ZdpCommand::BIND_RESPONSE, zdpCounter,
-					length, packet1), timer::delay(300ms));
+					length, packet1), timer::sleep(300ms));
 				if (r == 2)
 					continue;
 			} while (false);
@@ -2074,7 +2074,7 @@ Coroutine RadioInterface::publish() {
 								continue;
 								
 							// wait for route reply or timeout
-							co_await select(device.routeBarrier.wait(), timer::delay(timeout));
+							co_await select(device.routeBarrier.wait(), timer::sleep(timeout));
 
 				sys::out.write("Route for " + hex(device->shortAddress) + ": " + hex(device.firstHop) + '\n');
 						}
@@ -2125,7 +2125,7 @@ Coroutine RadioInterface::publish() {
 								uint16_t length;
 								int r = co_await select(device.zclResponseBarrier.wait(zbEndpointIndex,
 									endpointInfo.cluster, zb::ZclProfile::HOME_AUTOMATION, zbEndpointIndex, zclCounter,
-									zb::ZclCommand::DEFAULT_RESPONSE, length, packet), timer::delay(timeout));
+									zb::ZclCommand::DEFAULT_RESPONSE, length, packet), timer::sleep(timeout));
 
 								// check if response was received
 								if (r == 1) {

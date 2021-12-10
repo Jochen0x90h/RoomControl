@@ -36,6 +36,12 @@ template <typename T, int N>
 constexpr int size(T (&array)[N]) {return N;}
 
 template <typename T, int N>
+constexpr int length(const T (&array)[N]) {return N;}
+
+template <typename T, int N>
+constexpr int length(T (&array)[N]) {return N;}
+
+template <typename T, int N>
 constexpr T *end(T (&array)[N]) {return array + N;}
 
 template <typename T, int N>

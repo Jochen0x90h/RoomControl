@@ -22,13 +22,13 @@ SystemTime now();
  * Suspend execution using co_await until a given time. Only up to TIMER_COUNT coroutines can wait simultaneously.
  * @param time time point
  */
-Awaitable<SystemTime> wait(SystemTime time);
+Awaitable<SystemTime> sleep(SystemTime time);
 
 /**
  * Suspend execution using co_await for a given duration. Only up to TIMER_COUNT coroutines can wait simultaneously.
  * @param duration duration
  */
-inline Awaitable<SystemTime> delay(SystemDuration duration) {return wait(now() + duration);}
+inline Awaitable<SystemTime> sleep(SystemDuration duration) {return sleep(now() + duration);}
 
 
 /**

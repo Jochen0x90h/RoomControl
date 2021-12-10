@@ -186,7 +186,7 @@ void handle() {
 					
 					// resume first waiting coroutine
 					ep.receiveWaitlist.resumeFirst([length](ReceiveParameters p){
-						p.receivedLength = length;
+						p.length = length;
 						return true;
 					});
 					
@@ -312,7 +312,7 @@ void enableEndpoints(uint8_t inFlags, uint8_t outFlags) {
 	NRF_USBD->EPOUTEN = outFlags;
 }
 
-Awaitable<ReceiveParameters> receive(int index, int length, int &receivedLength, void *data) {
+Awaitable<ReceiveParameters> receive(int index, int &length, void *data) {
 	assert(index >= 1 && endpoint < USB_ENDPOINT_COUNT);
 	auto& ep = usb::endpoints[index - 1];
 	
@@ -328,7 +328,7 @@ Awaitable<ReceiveParameters> receive(int index, int length, int &receivedLength,
 		NRF_USBD->SIZE.EPOUT[index] = 0;
 	}
 
-	return {ep.receiveWaitlist, length, receivedLength, data};
+	return {ep.receiveWaitlist, length, data};
 }
 
 Awaitable<SendParameters> send(int index, int length, void const *data) {

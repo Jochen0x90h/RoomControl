@@ -113,9 +113,9 @@ void setLongAddress(uint64_t address);
 void setFlags(int index, ContextFlags flags);
 
 /**
- * Set pan, default is 0xffff (broadcast)
+ * Set pan id, default is 0xffff (broadcast)
  * @param index context index (number of contexts defined by RADIO_CONTEXT_COUNT in sysConfig.hpp)
- * @param pan pan
+ * @param pan pan id
  */
 void setPan(int index, uint16_t pan);
 
@@ -127,16 +127,16 @@ void setPan(int index, uint16_t pan);
 void setShortAddress(int index, uint16_t shortAddress); 
 
 /**
- * Suspend execution using co_await until data was received
+ * Suspend execution using co_await until a packet was received
  * @param index context index (number of contexts defined by RADIO_CONTEXT_COUNT in sysConfig.hpp)
- * @param data received data, first byte is length of the following payload + 2 for CRC (not included in data)
+ * @param packet received packet, first byte is length of the following payload + 2 for CRC (not included in data)
  */
 Awaitable<ReceiveParameters> receive(int index, Packet &packet);
 
 /**
  * Suspend execution using co_await until send is finished
  * @param index context index (number of contexts defined by RADIO_CONTEXT_COUNT in sysConfig.hpp)
- * @param data data to send, first byte is length of the following payload + 2 for CRC (not included in data)
+ * @param packet packet to send, first byte is length of the following payload + 2 for CRC (not included in data)
  * @param result number of backoffs needed when successful, zero on failure
  */
 Awaitable<SendParameters> send(int index, uint8_t *packet, uint8_t &result);

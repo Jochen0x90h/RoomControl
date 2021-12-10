@@ -210,7 +210,7 @@ sys::out.write("bus device " + hex(flash.deviceId) + ": assigned address " + dec
 			w.uint8(flash.address);
 			
 			// key
-			w.data(configuration.networkKey);
+			w.data(configuration.key);
 
 			// set start of message (is empty, everything is in the header)
 			w.setMessage();
@@ -414,7 +414,7 @@ bool BusInterface::receive(MessageReader &r) {
 
 	// decrypt
 	Nonce nonce(address, securityCounter);
-	if (!r.decrypt(micLength, nonce, this->configuration->networkAesKey))
+	if (!r.decrypt(micLength, nonce, this->configuration->aesKey))
 		return false;
 
 	for (auto &device : this->devices) {
@@ -612,7 +612,7 @@ Coroutine BusInterface::publish() {
 
 								// encrypt
 								Nonce nonce(flash.address, this->securityCounter);
-								w.encrypt(micLength, nonce, this->configuration->networkAesKey);
+								w.encrypt(micLength, nonce, this->configuration->aesKey);
 
 								//bool ok = decrypt(message, nonce, header, headerLength, message, payloadLength, micLength, this->configuration->networkAesKey);
 

@@ -300,10 +300,10 @@ int main(int argc, const char **argv) {
 
 	// set configuration
 	ConfigurationFlash configuration = *roomControl.configurations[0];
-	configuration.longAddress = UINT64_C(0x00124b00214f3c55);
+	configuration.radioLongAddress = UINT64_C(0x00124b00214f3c55);
 	static uint8_t const networkKey[] = {0xe6, 0x63, 0x2b, 0xa3, 0x55, 0xd4, 0x76, 0x82, 0x63, 0xe8, 0xb5, 0x9a, 0x2a, 0x6b, 0x41, 0x44};
-	configuration.networkKey.setData(0, networkKey, 16);
-	setKey(configuration.networkAesKey, configuration.networkKey);
+	configuration.key.setData(0, networkKey, 16);
+	setKey(configuration.aesKey, configuration.key);
 	roomControl.configurations.write(0, configuration);
 	roomControl.applyConfiguration();
 

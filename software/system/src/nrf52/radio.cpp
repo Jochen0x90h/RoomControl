@@ -497,6 +497,19 @@ void handle() {
 			NRF_EGU0->EVENTS_TRIGGERED[0] = 0;
 			radio::onEdReady(NRF_RADIO->EDSAMPLE);
 		}
+
+		// check if a send operation has finished
+		if (NRF_EGU0->EVENTS_TRIGGERED[2]) {
+			NRF_EGU0->EVENTS_TRIGGERED[2] = 0;
+
+			// resume coroutines for finished send operations
+			for (auto &c : radio::contexts) {
+				c.sendWaitlist.resumeAll([](SendParameters &p) {
+					// check if the send operation has finished
+					return p.result != 255;					
+				});				
+			}
+		}
 		
 		// check receive queue
 		if (NRF_EGU0->EVENTS_TRIGGERED[1]) {
@@ -534,19 +547,6 @@ void handle() {
 					unlock();
 				}
 			} while (!radio::receiveQueue.isEmpty());
-		}
-				
-		// check if a send operation has finished
-		if (NRF_EGU0->EVENTS_TRIGGERED[2]) {
-			NRF_EGU0->EVENTS_TRIGGERED[2] = 0;
-
-			// resume coroutines for finished send operations
-			for (auto &c : radio::contexts) {
-				c.sendWaitlist.resumeAll([](SendParameters &p) {
-					// check if the send operation has finished
-					return p.result != 255;					
-				});				
-			}
 		}
 
 		// clear pending interrupt flag at NVIC

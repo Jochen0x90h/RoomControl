@@ -11,8 +11,7 @@ namespace usb {
 
 // Internal helper: Stores the parameters and a reference to the result value in the awaitable during co_await
 struct ReceiveParameters {
-	int length;
-	int &receivedLength;
+	int &length;
 	void *data;
 };
 
@@ -48,7 +47,7 @@ void enableEndpoints(uint8_t inFlags, uint8_t outFlags);
  * @param receivedLength number of bytes actually received
  * @param data data to receive, must be in ram and 32 bit aligned
  */
-Awaitable<ReceiveParameters> receive(int index, int length, int &receivedLength, void *data);
+Awaitable<ReceiveParameters> receive(int index, int &length, void *data);
 
 /**
  * Suspend execution using co_await until data is sent over an endpoint (IN transfer)

@@ -11,6 +11,11 @@
  */
 class DataReader {
 public:
+
+	/**
+	 * Constructor. Data is not const to support in-place decryption
+	 * @param data data to read from
+	 */
 	DataReader(uint8_t *data) : current(data) {}
 
 	uint8_t uint8() {

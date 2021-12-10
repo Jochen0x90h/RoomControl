@@ -279,6 +279,39 @@ public:
 	}
 
 	/**
+	 * Resume one waiting coroutines for which the filter returns true
+	 * @param filter filter returns true to resume and false to leave the coroutine in the list
+	 */
+	template <typename V>
+	void resumeOne(V const &filter) {
+		Element *head = static_cast<Element*>(&this->head);
+		Element *current = head;
+		Element *next = static_cast<Element*>(current->next);
+		Element *last = static_cast<Element*>(head->prev);
+
+		// iterate over all elements that were in the list at this point, omit any new elements added during resume()
+		while (current != last) {
+			current = next;
+			next = static_cast<Element*>(current->next);
+
+			if (filter(Selector::getValue(current))) {
+				// remove element from list (special implementation of remove() may lock interrupts to avoid race condition)
+				current->remove();
+				//current->next->prev = current->prev;
+				//current->prev->next = current->next;
+
+				// indicate that element is ready (await_ready() returns true on subsequent co_await)
+				current->next = nullptr;
+
+				// resume coroutine if it is waiting
+				if (current->handle)
+					current->handle.resume();
+				return;
+			}
+		}
+	}
+
+	/**
 	 * Resume all waiting coroutines for which the filter returns true
 	 * @param filter filter returns true to resume and false to leave the coroutine in the list
 	 */

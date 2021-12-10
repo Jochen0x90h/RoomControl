@@ -73,6 +73,15 @@ public:
 	}
 
 	/**
+	 * Add string contents without length 
+	 */
+	void data(String str) {
+		for (int i = 0; i < str.length; ++i)
+			this->current[i] = uint8_t(str.data[i]);
+		this->current += str.length;
+	}
+
+	/**
 	 * Skip bytes (does not modify the skipped bytes)
 	 */
 	void skip(int n) {

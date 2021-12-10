@@ -32,3 +32,9 @@ constexpr int DISPLAY_QUEUE_LENGTH = 1;
 
 constexpr int RADIO_CONTEXT_COUNT = 2;
 constexpr int RADIO_MAX_PAYLOAD_LENGTH = 125; // payload length without leading length byte and trailing crc
+
+
+// network
+// -------
+
+constexpr int NETWORK_CONTEXT_COUNT = 2;

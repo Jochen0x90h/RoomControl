@@ -1,9 +1,9 @@
 #pragma once
 
-#include "Device.hpp"
 #include "Storage2.hpp"
+#include <network.hpp>
 #include <crypt.hpp>
-#include <iostream>
+#include <String.hpp>
 
 
 class Configuration;
@@ -13,25 +13,39 @@ class Configuration;
  */
 struct ConfigurationFlash {
 	
-	// name of this room control
+	// name of this node
 	char name[16];
 
+	// encryption key
+	DataBuffer<16> key;
+
+	// encryption key prepared for aes encryption
+	AesKey aesKey;
+
+
+// bus interface
+
+	// state offsets for bus interface
+	uint16_t busSecurityCounterOffset;
+
+
+// radio interface
+
 	// ieee 802.15.4 long address
-	DeviceId longAddress;
+	uint64_t radioLongAddress;
 	
 	// pan id for RadioInterface
-	uint16_t zbPanId;
+	uint16_t radioPanId;
 
-	// network key
-	DataBuffer<16> networkKey;
-
-	// network key prepared for aes encryption
-	AesKey networkAesKey;
-
-
-	// state offsets for interfaces
-	uint16_t busSecurityCounterOffset;
+	// state offsets for radio interface
 	uint16_t radioSecurityCounterOffset;
+
+
+// network
+
+	network::Endpoint networkGateway;
+	uint16_t networkLocalPort;
+
 
 
 	/**
@@ -39,6 +53,8 @@ struct ConfigurationFlash {
 	 * @return size in bytes
 	 */
 	int size() const {return sizeof(ConfigurationFlash);}
+	
+	String getName() const {return String(this->name);}
 	
 	/**
 	 * Allocate configuration

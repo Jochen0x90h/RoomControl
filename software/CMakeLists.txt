@@ -88,30 +88,31 @@ set(UTIL
 )
 source_group(util FILES ${UTIL})
 
-# network utilities
-set(NETWORK
-	network/src/crypt.cpp
-	network/src/crypt.hpp
-	network/src/DataBuffer.hpp
-	network/src/hash.cpp
-	network/src/hash.hpp
-	network/src/Nonce.hpp
-	network/src/DataReader.hpp
-	network/src/DataWriter.hpp
-	network/src/ieee.hpp
-	network/src/zb.hpp
-	network/src/gp.hpp
+# protocol utilities
+set(PROTOCOL
+	protocol/src/crypt.cpp
+	protocol/src/crypt.hpp
+	protocol/src/DataBuffer.hpp
+	protocol/src/DataReader.hpp
+	protocol/src/DataWriter.hpp
+	protocol/src/gp.hpp
+	protocol/src/hash.cpp
+	protocol/src/hash.hpp
+	protocol/src/ieee.hpp
+	protocol/src/mqttsn.hpp
+	protocol/src/Nonce.hpp
+	protocol/src/zb.hpp
 )
 set(TINYCRYPT
-	network/src/tinycrypt/aes.h
-	network/src/tinycrypt/aes_encrypt.c
-	network/src/tinycrypt/constants.h
-	network/src/tinycrypt/utils.c
-	network/src/tinycrypt/utils.h
+	protocol/src/tinycrypt/aes.h
+	protocol/src/tinycrypt/aes_encrypt.c
+	protocol/src/tinycrypt/constants.h
+	protocol/src/tinycrypt/utils.c
+	protocol/src/tinycrypt/utils.h
 )
-source_group(network FILES ${NETWORK})
-source_group(network/tinycrypt FILES ${TINYCRYPT})
-list(APPEND NETWORK ${TINYCRYPT})
+source_group(protocol FILES ${PROTOCOL})
+source_group(protocol/tinycrypt FILES ${TINYCRYPT})
+list(APPEND PROTOCOL ${TINYCRYPT})
 
 # system
 set(SYSTEM
@@ -132,6 +133,8 @@ set(SYSTEM
 	system/src/loop.hpp
 	system/src/emu/out.cpp
 	system/src/out.hpp
+	system/src/emu/network.cpp
+	system/src/network.hpp
 	system/src/emu/poti.cpp
 	system/src/poti.hpp
 	system/src/emu/radio.cpp
@@ -140,6 +143,7 @@ set(SYSTEM
 	system/src/emu/rng.cpp
 	system/src/rng.hpp
 	system/src/spi.hpp
+	system/src/emu/spi.cpp
 	system/src/sys.hpp
 	system/src/emu/sys.cpp
 	system/src/SystemTime.hpp
@@ -165,10 +169,15 @@ list(APPEND SYSTEM ${GLAD})
 
 # base code for nodes (control and gateway)
 set(NODE
+	node/src/Configuration.hpp
 	node/src/MqttSnClient.cpp
 	node/src/MqttSnClient.hpp
-	node/src/MqttSnBroker.cpp
-	node/src/MqttSnBroker.hpp
+	#node/src/MqttSnBroker.cpp
+	#node/src/MqttSnBroker.hpp
+	node/src/State.cpp
+	node/src/State.hpp
+	node/src/Storage2.cpp
+	node/src/Storage2.hpp
 )
 source_group(node FILES ${NODE})
 
@@ -179,7 +188,6 @@ set(CONTROL
 	control/src/BME680.hpp
 	control/src/BusInterface.cpp
 	control/src/BusInterface.hpp
-	control/src/Configuration.hpp
 	control/src/emu/bus.cpp
 	control/src/Device.hpp
 	control/src/emu/display.cpp
@@ -191,21 +199,14 @@ set(CONTROL
 	control/src/Menu.hpp
 	control/src/Message.cpp
 	control/src/Message.hpp
-	control/src/emu/Network.cpp
-	control/src/emu/Network.hpp
 	control/src/RadioInterface.cpp
 	control/src/RadioInterface.hpp
 	control/src/RoomControl.cpp
 	control/src/RoomControl.hpp
-	control/src/emu/spi.cpp
 	control/src/SSD1309.cpp
 	control/src/SSD1309.hpp
-	control/src/State.cpp
-	control/src/State.hpp
 	control/src/Storage.cpp
 	control/src/Storage.hpp
-	control/src/Storage2.cpp
-	control/src/Storage2.hpp
 	control/src/SwapChain.cpp
 	control/src/SwapChain.hpp
 	control/src/emu/sysConfig.hpp
@@ -218,7 +219,7 @@ source_group(control FILES ${CONTROL})
 add_executable(emulator
 	control/src/main.cpp
 	${UTIL}
-	${NETWORK}
+	${PROTOCOL}
 	${SYSTEM}
 	${NODE}
 	${CONTROL}
@@ -229,7 +230,7 @@ target_include_directories(emulator
 	control/src
 	node/src
 	system/src
-	network/src
+	protocol/src
 	util/src
 	glad
 )
@@ -242,6 +243,98 @@ install(TARGETS emulator
 	RUNTIME DESTINATION bin
 )
 
+
+# system/timer test (command line tool)
+add_executable(timerTest
+	system/test/timerTest.cpp
+	${UTIL}
+	${PROTOCOL}
+	${SYSTEM}
+)
+target_include_directories(timerTest
+	PRIVATE
+	control/src
+	system/test/emu
+	system/src
+	protocol/src
+	util/src
+	glad
+)
+conan_target_link_libraries(timerTest)
+
+
+# system/radio test that sends radio packets (command line tool)
+add_executable(radioSendTest
+	system/test/radioSendTest.cpp
+	${UTIL}
+	${PROTOCOL}
+	${SYSTEM}
+)
+target_include_directories(radioSendTest
+	PRIVATE
+	control/src
+	system/test/emu
+	system/src
+	protocol/src
+	util/src
+	glad
+
+)
+conan_target_link_libraries(radioSendTest)
+
+
+# system/network test that sends udp packets (command line tool)
+add_executable(networkTest
+	system/test/networkTest.cpp
+	${UTIL}
+	${PROTOCOL}
+	${SYSTEM}
+)
+target_include_directories(networkTest
+	PRIVATE
+	system/test/emu
+	system/src
+	protocol/src
+	util/src
+	glad
+)
+conan_target_link_libraries(networkTest)
+
+
+# system/usb test host, host for usbTest on device (command line tool)
+add_executable(usbTestHost
+	system/test/usbTestHost.cpp
+)
+target_include_directories(usbTestHost
+	PRIVATE
+	system/src
+	util/src
+)
+conan_target_link_libraries(usbTestHost)
+
+
+# node/MqttSnClient test
+add_executable(MqttSnClientTest
+	node/test/MqttSnClientTest.cpp
+	node/test/appConfig.hpp
+	system/test/emu/sysConfig.hpp
+	${UTIL}
+	${PROTOCOL}
+	${SYSTEM}
+	${NODE}
+)
+target_include_directories(MqttSnClientTest
+	PRIVATE
+	control/src # font
+	node/test
+	node/src
+	system/src
+	system/test/emu # sysConfig.hpp
+	protocol/src
+	util/src
+	glad
+)
+conan_target_link_libraries(MqttSnClientTest)
 
 
 # broker test (command line tool)
@@ -280,70 +373,20 @@ conan_target_link_libraries(terminal)
 add_executable(sniffer
 	tools/src/sniffer.cpp
 	${UTIL}
-	${NETWORK}
+	${PROTOCOL}
 	system/src/sys.hpp
 	system/src/emu/sys.cpp
 )
 target_include_directories(sniffer
 	PRIVATE
 	util/src
-	network/src
+	protocol/src
 	system/src
 )
 conan_target_link_libraries(sniffer)
 
 
 
-# host for usbTest on device (command line tool)
-add_executable(usbTestHost
-	system/test/usbTestHost.cpp
-)
-target_include_directories(usbTestHost
-	PRIVATE
-	system/src
-	util/src
-)
-conan_target_link_libraries(usbTestHost)
-
-
-
-# test that sends packets using the radio
-add_executable(radioSendTest
-	system/test/radioSendTest.cpp
-	${UTIL}
-	${NETWORK}
-	${SYSTEM}
-)
-target_include_directories(radioSendTest
-	PRIVATE
-	control/src
-	system/test/emu
-	system/src
-	network/src
-	util/src
-	glad
-
-)
-conan_target_link_libraries(radioSendTest)
-
-
-# timer test
-add_executable(timerTest
-	system/test/timerTest.cpp
-	${UTIL}
-	${NETWORK}
-	${SYSTEM}
-)
-target_include_directories(timerTest
-	PRIVATE
-	control/src
-	system/test/emu
-	system/src
-	network/src
-	util/src
-	glad
-)
-conan_target_link_libraries(timerTest)
 
 
 # test for BME680 air sensor
@@ -351,18 +394,17 @@ add_executable(bme680Test
 	control/test/bme680Test.cpp
 	control/test/emu/sysConfig.hpp
 	${UTIL}
-	${NETWORK}
+	${PROTOCOL}
 	${SYSTEM}
 	control/src/BME680.cpp
 	control/src/BME680.hpp
-	control/src/emu/spi.cpp
 )
 target_include_directories(bme680Test
 	PRIVATE
 	control/test/emu
 	control/src
 	system/src
-	network/src
+	protocol/src
 	util/src
 	glad
 )
@@ -374,11 +416,10 @@ add_executable(ssd1309Test
 	control/test/ssd1309Test.cpp
 	control/test/emu/sysConfig.hpp
 	${UTIL}
-	${NETWORK}
+	${PROTOCOL}
 	${SYSTEM}
 	control/src/SSD1309.cpp
 	control/src/SSD1309.hpp
-	control/src/emu/spi.cpp
 	control/src/emu/display.cpp
 )
 target_include_directories(ssd1309Test
@@ -386,7 +427,7 @@ target_include_directories(ssd1309Test
 	control/test/emu
 	control/src
 	system/src
-	network/src
+	protocol/src
 	util/src
 	glad
 )
@@ -397,14 +438,13 @@ conan_target_link_libraries(ssd1309Test)
 add_executable(storageTest
 	control/test/storageTest.cpp
 	control/test/emu/sysConfig.hpp
-	control/src/emu/spi.cpp
 	${UTIL}
-	${NETWORK}
+	${PROTOCOL}
 	${SYSTEM}
-	control/src/State.cpp
-	control/src/State.hpp
-	control/src/Storage2.cpp
-	control/src/Storage2.hpp
+	node/src/State.cpp
+	node/src/State.hpp
+	node/src/Storage2.cpp
+	node/src/Storage2.hpp
 	system/src/emu/flash.cpp
 )
 target_include_directories(storageTest
@@ -412,7 +452,7 @@ target_include_directories(storageTest
 	control/test/emu
 	control/src
 	system/src
-	network/src
+	protocol/src
 	util/src
 	glad
 )
@@ -439,20 +479,20 @@ add_test(NAME utilTest
 	#WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/../testdata
 )
 
-# network test
-add_executable(networkTest
-	network/test/networkTest.cpp
+# crypt test
+add_executable(cryptTest
+	protocol/test/cryptTest.cpp
 	#${UTIL}
-	${NETWORK}
+	${PROTOCOL}
 )
-target_include_directories(networkTest
+target_include_directories(cryptTest
 	PRIVATE
-	network/src
+	protocol/src
 	util/src
 )
-conan_target_link_libraries(networkTest)
-add_test(NAME networkTest
-	COMMAND networkTest --gtest_output=xml:report.xml
+conan_target_link_libraries(cryptTest)
+add_test(NAME cryptTest
+	COMMAND cryptTest --gtest_output=xml:report.xml
 	#WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/../testdata
 )
 

@@ -64,11 +64,11 @@ void init(
 void enableEndpoints(uint8_t inFlags, uint8_t outFlags) {
 }
 
-Awaitable<ReceiveParameters> receive(int index, int length, int& receivedLength, void *data) {
+Awaitable<ReceiveParameters> receive(int index, int &length, void *data) {
 	assert(index == 1);
 	auto &endpoint = usb::endpoints[index - 1];
 
-	return {endpoint.receiveWaitlist, length, receivedLength, data};
+	return {endpoint.receiveWaitlist, length, data};
 }
 
 Awaitable<SendParameters> send(int index, int length, void const *data) {
