@@ -28,9 +28,9 @@ public:
 
 	Array<EndpointType const> getEndpoints(DeviceId deviceId) override;
 	
-	void addSubscriber(DeviceId deviceId, Subscriber &subscriber) override;
+	void addPublisher(DeviceId deviceId, uint8_t endpointIndex, Publisher &publisher) override;
 
-	void addPublisher(DeviceId deviceId, Publisher &publisher) override;
+	void addSubscriber(DeviceId deviceId, uint8_t endpointIndex, Subscriber &subscriber) override;
 
 protected:
 

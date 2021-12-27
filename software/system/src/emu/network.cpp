@@ -1,5 +1,6 @@
 #include "../network.hpp"
 #include "loop.hpp"
+//#include "sys.hpp"
 #include <boost/asio.hpp>
 
 
@@ -13,7 +14,7 @@ Endpoint Endpoint::fromString(String s, uint16_t defaultPort) {
 	asio::ip::address_v6 address = asio::ip::make_address(std::string(s.data, s.length), ec).to_v6();
 	
 	Endpoint endpoint;
-	array::copy(16, endpoint.address, address.to_bytes().data());
+	array::copy(16, endpoint.address.u8, address.to_bytes().data());
 	endpoint.port = defaultPort;
 	
 	return endpoint;
@@ -52,11 +53,14 @@ void handle(Gui &gui) {
 			}
 			return false;
 		});
-			
+
+//auto &x = context.sendWaitlist;
+//sys::out.write(hex(size_t(&x.head)) + ' ' + hex(size_t(x.head.next)) + '\n');
 		context.sendWaitlist.resumeFirst([&context](SendParameters &p) {
+//sys::out.write("send...\n");
 			// build destination endpoint
 			std::array<unsigned char, 16> bytes;
-			std::copy(std::begin(p.destination->address), std::end(p.destination->address), std::begin(bytes));
+			std::copy(std::begin(p.destination->address.u8), std::end(p.destination->address.u8), std::begin(bytes));
 			asio::ip::address_v6 address(bytes);
 			asio::ip::udp::endpoint destination(address, p.destination->port);
 			

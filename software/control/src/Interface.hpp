@@ -1,12 +1,12 @@
 #pragma once
 
 #include "Device.hpp"
-#include "Message.hpp"
-#include "State.hpp"
+#include <Message.hpp>
+#include <Publisher.hpp>
+#include <State.hpp>
+#include <Subscriber.hpp>
 #include <Array.hpp>
 #include <Coroutine.hpp>
-#include <functional>
-
 
 
 /**
@@ -45,37 +45,7 @@ public:
 	 */
 	virtual Array<EndpointType const> getEndpoints(DeviceId deviceId) = 0;
 
-
-	struct Parameters {
-		// index of subscription (needed by subscriber to identify the message)
-		uint8_t &subscriptionIndex;
-				
-		// message (length is defined by Subscriber::messageType)
-		void *message;
-	};
-	
-	struct Subscriber : public LinkedListNode<Subscriber> {
-		// index of device endpoint
-		uint8_t endpointIndex;
-		
-		// index of subscription (needed by subscriber to identify the message)
-		uint8_t subscriptionIndex;
-
-		// the message type that a waiting coroutine expects (sender is responsible for conversion)
-		MessageType messageType;
-		
-		// barrier where coroutines wait for new messages (owned by subscriber)
-		Barrier<Parameters> *barrier = nullptr;
-	};
-	using SubscriberList = LinkedListNode<Subscriber>;
-
-	/**
-	 * Add a subscriber to the device. Gets inserted into a linked list
-	 * @param deviceId device id
-	 * @param publisher subscriber to insert
-	 */
-	virtual void addSubscriber(DeviceId deviceId, Subscriber &subscriber) = 0;
-
+/*
 	struct Publisher : public LinkedListNode<Publisher> {
 		// index of device endpoint
 		uint8_t endpointIndex;
@@ -99,11 +69,44 @@ public:
 		}
 	};
 	using PublisherList = LinkedListNode<Publisher>;
-
+*/
 	/**
 	 * Add a publisher to the device. Gets inserted into a linked list
 	 * @param deviceId device id
 	 * @param publisher publisher to insert
 	 */
-	virtual void addPublisher(DeviceId deviceId, Publisher &publisher) = 0;
+	virtual void addPublisher(DeviceId deviceId, uint8_t endpointIndex, Publisher &publisher) = 0;
+
+/*
+	struct Subscriber : public LinkedListNode<Subscriber> {
+		// index of device endpoint
+		uint8_t endpointIndex;
+		
+		// index of subscription, set by subscriber to identify the message
+		uint8_t subscriptionIndex;
+
+		// the message type that the subscriber expects (interface is responsible for conversion)
+		MessageType messageType;
+		
+		struct Parameters {
+			// index of subscription (needed by subscriber to identify the message)
+			uint8_t &subscriptionIndex;
+					
+			// message (length is defined by Subscriber::messageType)
+			void *message;
+		};
+
+		// barrier where the subscriber waits for new messages (owned by subscriber)
+		using Barrier = Barrier<Parameters>;
+		Barrier *barrier = nullptr;
+	};
+	using SubscriberList = LinkedListNode<Subscriber>;
+*/
+
+	/**
+	 * Add a subscriber to the device. Gets inserted into a linked list
+	 * @param deviceId device id
+	 * @param publisher subscriber to insert
+	 */
+	virtual void addSubscriber(DeviceId deviceId, uint8_t endpointIndex, Subscriber &subscriber) = 0;
 };

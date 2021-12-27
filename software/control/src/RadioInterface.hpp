@@ -1,9 +1,9 @@
 #pragma once
 
-#include "Configuration.hpp"
 #include "Interface.hpp"
-#include "Storage2.hpp"
-#include "State.hpp"
+#include <Configuration.hpp>
+#include <State.hpp>
+#include <Storage.hpp>
 #include <radio.hpp>
 #include <crypt.hpp>
 #include <DataReader.hpp>
@@ -38,9 +38,9 @@ public:
 
 	Array<EndpointType const> getEndpoints(DeviceId deviceId) override;
 
-	void addSubscriber(DeviceId deviceId, Subscriber &subscriber) override;
+	void addPublisher(DeviceId deviceId, uint8_t endpointIndex, Publisher &publisher) override;
 
-	void addPublisher(DeviceId deviceId, Publisher &publisher) override;
+	void addSubscriber(DeviceId deviceId, uint8_t endpointIndex, Subscriber &subscriber) override;
 
 private:
 
@@ -87,10 +87,10 @@ private:
 		GpDevice *allocate() const;
 	};
 
-	class GpDevice : public Storage2::Element<GpDeviceFlash> {
+	class GpDevice : public Storage::Element<GpDeviceFlash> {
 	public:
 	
-		GpDevice(GpDeviceFlash const &flash) : Storage2::Element<GpDeviceFlash>(flash) {}
+		GpDevice(GpDeviceFlash const &flash) : Storage::Element<GpDeviceFlash>(flash) {}
 
 	
 		// last security counter value of device
@@ -143,11 +143,11 @@ private:
 		uint8_t const *getEndpointIndices() const {return this->endpoints + this->endpointCount;}
 	};
 
-	class ZbDevice : public Storage2::Element<ZbDeviceFlash> {
+	class ZbDevice : public Storage::Element<ZbDeviceFlash> {
 	public:
 	
 		ZbDevice(ZbDeviceFlash const &flash)
-			: Storage2::Element<ZbDeviceFlash>(flash)
+			: Storage::Element<ZbDeviceFlash>(flash)
 			, sendFlags(flash.sendFlags)
 			, defaultResponseFlags{}
 		{}
@@ -227,8 +227,8 @@ private:
 public:
 	
 	// list of commissioned devices
-	Storage2::Array<GpDevice> gpDevices;
-	Storage2::Array<ZbDevice> zbDevices;
+	Storage::Array<GpDevice> gpDevices;
+	Storage::Array<ZbDevice> zbDevices;
 	
 
 	// data reader for radio packets

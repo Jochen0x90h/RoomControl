@@ -53,10 +53,11 @@ constexpr int DISPLAY_HEIGHT = 64;
 // radio
 // -----
 
-constexpr int RADIO_ZB = 0;
+constexpr int RADIO_ZBEE = 0;
+constexpr int RADIO_MQTT = 1;
 
 
 // network
 // -------
 
-constexpr int NETWORK_MQTTSN = 0;
+constexpr int NETWORK_MQTT = 0;

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Configuration.hpp"
+#include <network.hpp>
 #include <timer.hpp>
 #include <DataReader.hpp>
 #include <DataWriter.hpp>
@@ -13,7 +13,7 @@
 /**
  * MQTT-SN client
  * https://www.oasis-open.org/committees/download.php/66091/MQTT-SN_spec_v1.2.pdf
- * Authentication extension: https://modelbasedtesting.co.uk/2020/10/22/mqtt-sn-authentication/
+ * Authentication extension (not supported yet): https://modelbasedtesting.co.uk/2020/10/22/mqtt-sn-authentication/
  * Gateway search is not supported, the gateway ip address and port must be configured
  * Default gateway port: 47193
  * Default local port of mqtt client: 47194
@@ -21,47 +21,22 @@
 class MqttSnClient {
 public:
 
-	// Default retransmission time
-	static constexpr SystemDuration RETRANSMISSION_INTERVAL = 1s;
-
-	// The MQTT broker disconnects us if we don't send anything in one and a half times the keep alive interval
-	static constexpr SystemDuration KEEP_ALIVE_INTERVAL = 60s;
-
-	// Default time in seconds for which MQTT-SN Client is considered alive by the MQTT-SN Gateway
-	//static constexpr SystemDuration DEFAULT_ALIVE_DURATION = 60s;
-
-	// Default time in seconds for which MQTT-SN Client is considered asleep by the MQTT-SN Gateway
-	//static constexpr SystemDuration DEFAULT_SLEEP_DURATION = 30s;
-
 	// Maximum length of Client ID according to the protocol spec in bytes
 	static constexpr int MAX_CLIENT_ID_LENGTH = 23;
 
 	// Maximum length of a message
 	static constexpr int MAX_MESSAGE_LENGTH = 64;
 
+	// Default retransmission time
+	static constexpr SystemDuration RETRANSMISSION_TIME = 1s;
+
+	// The MQTT broker disconnects us if we don't send anything in one and a half times the keep alive time
+	static constexpr SystemDuration KEEP_ALIVE_TIME = 60s;
+
 	// Maximum length of will feature buffers. For internal use only
 	static constexpr int WILL_TOPIC_MAX_LENGTH = 32;
 	static constexpr int WILL_MSG_MAX_LENGTH = 32;
 
-
-	// maximum number of queued messages
-	static constexpr int MAX_SEND_COUNT = 128; // must be power of 2
-	
-	// size of message buffer
-	static constexpr int SEND_BUFFER_SIZE = 2048;
-
-
-	// error types
-	
-	// error parsing the message, e.g. too short
-	static constexpr int ERROR_MESSAGE = 0;
-	
-	// gateway returned mqttsn::ReturnCode::REJECTED_CONGESTED
-	static constexpr int ERROR_CONGESTED = 1;
-	
-	// message type is not supported
-	static constexpr int ERROR_UNSUPPORTED = 2;
-	
 
 	// request result
 	enum class Result {
@@ -100,7 +75,7 @@ public:
 	};
 	
 
-	MqttSnClient(Configuration &configuration);
+	MqttSnClient(uint16_t localPort);
 
 	virtual ~MqttSnClient();
 
@@ -115,7 +90,16 @@ public:
 	bool canConnect() {return isDisconnected() || isAsleep() || isAwake();}
 
 
-	AwaitableCoroutine connect(Result &result, bool cleanSession = false, bool willFlag = false);
+	/**
+	 * Connect to the gateway
+	 * @param result result
+	 * @param gatewayEndpoint udp endpoint of gateway
+	 * @param name name of this client
+	 * @param cleanSession start with a clean session, i.e. clear all previous subscriptions and will topic/message
+	 * @param willFlag if set, the gateway will request will topic and message
+	 */
+	AwaitableCoroutine connect(Result &result, network::Endpoint const &gatewayEndpoint, String name,
+		bool cleanSession = true, bool willFlag = false);
 	
 	/**
 	 * Disconnect from gateway. Always succeeds as we assume to be disconnected when the gateway does not reply
@@ -193,7 +177,6 @@ public:
 	 */
 	static bool isValid(String topic) {return uint32_t(topic.length - 1) <= uint32_t(MAX_MESSAGE_LENGTH - 5 - 1);}
 
-protected:
 
 	// data reader for radio packets
 	class MessageReader : public DataReader {
@@ -201,7 +184,7 @@ protected:
 		/**
 		 * Construct on message where the length is in first one or three bytes
 		 */
-		MessageReader(uint8_t *message) : DataReader(message + 1) {
+		MessageReader(uint8_t *message) : DataReader(2, message + 1) {
 			if (message[0] == 1) {
 				// length is three bytes
 				int length = uint16();
@@ -213,7 +196,7 @@ protected:
 			}
 		}
 
-		MessageReader(int length, uint8_t *message) : DataReader(message), end(message + length) {}
+		MessageReader(int length, uint8_t *message) : DataReader(length, message) {}
 
 		uint16_t uint16() {
 			int16_t value = (this->current[0] << 8) | this->current[1];
@@ -238,8 +221,6 @@ protected:
 		int getRemaining() {
 			return this->end - this->current;
 		}
-		
-		uint8_t const *end;
 	};
 
 	// data writer for mqtt-sn messages
@@ -284,18 +265,24 @@ protected:
 		uint8_t *end;
 #endif
 	};
+
+protected:
 	
-	// Get a message id. Use only for retries of the same message until it was acknowledged by the gateway
+	// get an id for publish messages of qos 1 or 2 to detect resent messages and associate acknowledge
 	uint16_t getNextMsgId() {
 		int i = this->nextMsgId + 1;
 		return this->nextMsgId = i + (i >> 16);
 	}
 
-	Configuration &configuration;
+	//Configuration &configuration;
+	network::Endpoint gatewayEndpoint;
 
 private:
 
+	// ping gateway to reset keep alive timer
 	AwaitableCoroutine ping();
+	
+	// receive and distribute messages
 	AwaitableCoroutine receive();
 	
 	void disconnectInternal();
@@ -304,13 +291,13 @@ private:
 	// state
 	State state = State::DISCONNECTED;
 
-	AwaitableCoroutine pingCoroutine;
-	AwaitableCoroutine receiveCoroutine;
-
-	// id for next message to gateway to be able to associate the reply with a request
+	// message id generator
 	uint16_t nextMsgId = 0;
 
-	uint8_t tempMessage[MAX_MESSAGE_LENGTH];	
+	uint8_t tempMessage[MAX_MESSAGE_LENGTH];
+
+	AwaitableCoroutine pingCoroutine;
+	AwaitableCoroutine receiveCoroutine;
 
 	struct AckParameters {
 		mqttsn::MessageType msgType;

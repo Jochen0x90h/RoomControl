@@ -47,9 +47,9 @@ Coroutine PersistentStateManager::updater() {
 int PersistentStateManager::allocateInternal(int size) {
 	assert(size <= 4);
 	
-	int half = array::size(this->allocationTable) / 2;
+	int half = array::count(this->allocationTable) / 2;
 	int start = size <= 2 ? 0 : half;
-	for (int i = start; i < array::size(this->allocationTable); ++i) {
+	for (int i = start; i < array::count(this->allocationTable); ++i) {
 		
 		uint32_t a = this->allocationTable[i];
 		
@@ -90,7 +90,7 @@ AwaitableCoroutine PersistentStateManager::restore(PersistentStateBase &state) {
 	uint32_t bit = 1 << (blockIndex & 31);
 	int index = blockIndex / 32;
 	if ((offset & 15) > 0)
-		index += array::size(state.manager->allocationTable) / 2;
+		index += array::count(state.manager->allocationTable) / 2;
 	state.manager->allocationTable[index] |= bit;
 
 	// read back counters

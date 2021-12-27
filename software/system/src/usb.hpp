@@ -47,7 +47,7 @@ void enableEndpoints(uint8_t inFlags, uint8_t outFlags);
  * @param receivedLength number of bytes actually received
  * @param data data to receive, must be in ram and 32 bit aligned
  */
-Awaitable<ReceiveParameters> receive(int index, int &length, void *data);
+[[nodiscard]] Awaitable<ReceiveParameters> receive(int index, int &length, void *data);
 
 /**
  * Suspend execution using co_await until data is sent over an endpoint (IN transfer)
@@ -55,6 +55,6 @@ Awaitable<ReceiveParameters> receive(int index, int &length, void *data);
  * @param length data length
  * @param data data to send, must be in ram and 32 bit aligned
  */
-Awaitable<SendParameters> send(int index, int length, void const *data);
+[[nodiscard]] Awaitable<SendParameters> send(int index, int length, void const *data);
 
 } // namespace usb

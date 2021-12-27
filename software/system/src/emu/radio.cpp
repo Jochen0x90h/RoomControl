@@ -1,6 +1,6 @@
 #include "../radio.hpp"
 #include <usbDefs.hpp>
-#include <emu/global.hpp>
+//#include <emu/global.hpp>
 #include <emu/loop.hpp>
 #include <crypt.hpp>
 #include <ieee.hpp>
@@ -238,7 +238,8 @@ void handle(Gui &gui) {
 				radio::Packet packet;
 
 				int length;
-				int ret = libusb_bulk_transfer(radio::device, 1 + index | usb::IN, packet + 1, array::size(packet) - 1, &length, 1);
+				int ret = libusb_bulk_transfer(radio::device, 1 + index | usb::IN, packet + 1,
+					array::count(packet) - 1, &length, 1);
 				if (ret != LIBUSB_SUCCESS)
 					break;
 				if (length == 1) {
@@ -312,7 +313,7 @@ void handle(Gui &gui) {
 					LE_INT32(0), // mic
 					LE_INT32(device.counter), // counter
 					50}; // LQI
-				packet[0] = array::size(packet) - 1 - 1 + 2; // + 2 for crc which is not in the packet
+				packet[0] = array::count(packet) - 1 - 1 + 2; // + 2 for crc which is not in the packet
 
 				// nonce
 				Nonce nonce(device.deviceId, device.deviceId);
@@ -347,7 +348,7 @@ void handle(Gui &gui) {
 					command,
 					0x00, 0x00, 0x00, 0x00, // mic
 					50}; // LQI
-				packet[0] = array::size(packet) - 1 - 1 + 2; // + 2 for crc which is not in the packet
+				packet[0] = array::count(packet) - 1 - 1 + 2; // + 2 for crc which is not in the packet
 
 				// nonce
 				Nonce nonce(device.deviceId, device.counter);
@@ -440,7 +441,7 @@ void init() {
 	
 	
 	// initialize emulated green power devices (on user interface)
-	for (int i = 0; i < array::size(devices); ++i) {
+	for (int i = 0; i < array::count(devices); ++i) {
 		GreenPowerDeviceData const &d = deviceData[i];
 		GreenPowerDevice &device = devices[i];
 		device.channel = 11; // default channel

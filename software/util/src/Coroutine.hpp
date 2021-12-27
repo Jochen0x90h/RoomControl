@@ -679,7 +679,7 @@ struct Awaitable2 {
  * }
  */
 template <typename A1, typename A2>
-inline Awaitable2<A1, A2> select(A1 const& a1, A2 const& a2) {
+[[nodiscard]] inline Awaitable2<A1, A2> select(A1 const& a1, A2 const& a2) {
 	//assert((void *)a1.list != (void *)a2.list);
 	return {a1, a2};
 }
@@ -716,7 +716,7 @@ struct Awaitable3 {
 };
 
 template <typename A1, typename A2, typename A3>
-inline Awaitable3<A1, A2, A3> select(A1 const& a1, A2 const& a2, A3 const &a3) {
+[[nodiscard]] inline Awaitable3<A1, A2, A3> select(A1 const& a1, A2 const& a2, A3 const &a3) {
 	return {a1, a2, a3};
 }
 
@@ -738,16 +738,22 @@ public:
 	 * Set the event
 	 */
 	void set() {
-		this->state = this->waitlist.isEmpty();
-		this->waitlist.resumeFirst();
+		//this->state = this->waitlist.isEmpty();
+		//this->waitlist.resumeFirst();
+		this->state = true;
+		this->waitlist.resumeAll();
+	}
+
+	void clear() {
+		this->state = false;
 	}
 
 	/**
 	 * Wait until the event is set
 	 */
-	Awaitable<> wait() {
+	[[nodiscard]] Awaitable<> wait() {
 		if (this->state) {
-			this->state = false;
+			//this->state = false;
 			return {};
 		}
 		return {this->waitlist};
@@ -778,7 +784,7 @@ public:
 	/**
 	 * Wait for a token to become available
 	 */
-	Awaitable<> wait() {
+	[[nodiscard]] Awaitable<> wait() {
 		// check if tokens are available
 		if (this->n > 0) {
 			--this->n;

@@ -7,6 +7,25 @@
 #include <iostream>
 #endif
 
+template <typename T>
+struct IsCString {
+	static constexpr bool value = false;
+};
+
+template <int N>
+struct IsCString<char[N]> {
+	static constexpr bool value = true;
+};
+
+template <>
+struct IsCString<char const *> {
+	static constexpr bool value = true;
+};
+
+// c-string concept, either char array or char pointer
+template <typename T>
+concept CString = IsCString<T>::value;
+
 
 constexpr int getLength(char const *str, False) {
 	int length = 0;
@@ -15,7 +34,7 @@ constexpr int getLength(char const *str, False) {
 	return length;
 }
 
-template<int N>
+template <int N>
 constexpr int getLength(char const (&str)[N], True) {
 	int length = 0;
 	while (length < N && str[length] != 0)
@@ -23,7 +42,7 @@ constexpr int getLength(char const (&str)[N], True) {
 	return length;
 }
 
-template<typename T>
+template <typename T> requires CString<T>
 constexpr int length(T const &str) {
 	return getLength(str, IsArray<T>());
 }
@@ -45,9 +64,9 @@ struct String {
 	String(String const &str) = default;
 
 	/**
-	 * Construct from c-array or c-string
+	 * Construct from c-string
 	 */
-	template<typename T>
+	template <typename T> requires CString<T>
 	constexpr String(T const &str)
 		: length(getLength(str, IsArray<T>())), data(str)
 	{}
@@ -60,6 +79,8 @@ struct String {
 	{}
 
 	bool isEmpty() {return this->length <= 0;}
+	
+	int count() {return this->length;}
 	
 	/**
 	 * Get a substring

@@ -1,5 +1,4 @@
 #include <MqttSnClient.hpp>
-#include <Configuration.hpp>
 #include <network.hpp>
 #include <timer.hpp>
 #include <sys.hpp>
@@ -23,7 +22,7 @@ AwaitableCoroutine subscribe(MqttSnClient &client) {
 		uint16_t topicId;
 		mqttsn::Flags flags;
 		uint8_t data[32];
-		int length = array::length(data);
+		int length = array::count(data);
 		co_await client.receive(result, msgId, topicId, flags, length, data);
 		if (result == MqttSnClient::Result::OK) {
 			int8_t qos = mqttsn::getQos(flags);
@@ -39,17 +38,14 @@ AwaitableCoroutine subscribe(MqttSnClient &client) {
 }
 
 Coroutine publish() {
-	ConfigurationFlash flash;
-	assign(flash.name, "myClient");
-	flash.networkLocalPort = 1337;
-	flash.networkGateway = network::Endpoint::fromString("::1", 10000);
-	Configuration config(flash);
+	uint16_t localPort = 1337;
+	network::Endpoint gatewayEndpoint = network::Endpoint::fromString("::1", 10000);
 	
-	MqttSnClient client(config);
+	MqttSnClient client(localPort);
 	MqttSnClient::Result result;
 
 	// connect to gateway
-	co_await client.connect(result);
+	co_await client.connect(result, gatewayEndpoint, "MyClient");
 	
 	auto s = subscribe(client);
 

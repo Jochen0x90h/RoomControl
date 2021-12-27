@@ -62,6 +62,7 @@ set(UTIL
 	util/src/Array.hpp
 	util/src/ArrayList.hpp
 	util/src/assert.hpp
+	util/src/BitField.hpp
 	util/src/Bitmap.cpp
 	util/src/Bitmap.hpp
 	util/src/convert.cpp
@@ -124,8 +125,8 @@ set(SYSTEM
 	system/src/display.hpp
 	system/src/emu/flash.cpp
 	system/src/flash.hpp
-	system/src/emu/global.cpp
-	system/src/emu/global.hpp
+	#system/src/emu/global.cpp
+	#system/src/emu/global.hpp
 	system/src/emu/Gui.cpp
 	system/src/emu/Gui.hpp
 	system/src/emu/loop.cpp
@@ -170,14 +171,18 @@ list(APPEND SYSTEM ${GLAD})
 # base code for nodes (control and gateway)
 set(NODE
 	node/src/Configuration.hpp
+	node/src/Message.cpp
+	node/src/Message.hpp
 	node/src/MqttSnClient.cpp
 	node/src/MqttSnClient.hpp
-	#node/src/MqttSnBroker.cpp
-	#node/src/MqttSnBroker.hpp
+	node/src/MqttSnBroker.cpp
+	node/src/MqttSnBroker.hpp
+	node/src/Publisher.hpp
 	node/src/State.cpp
 	node/src/State.hpp
-	node/src/Storage2.cpp
-	node/src/Storage2.hpp
+	node/src/Storage.cpp
+	node/src/Storage.hpp
+	node/src/Subscriber.hpp
 )
 source_group(node FILES ${NODE})
 
@@ -197,16 +202,14 @@ set(CONTROL
 	control/src/LocalInterface.hpp
 	control/src/Menu.cpp
 	control/src/Menu.hpp
-	control/src/Message.cpp
-	control/src/Message.hpp
 	control/src/RadioInterface.cpp
 	control/src/RadioInterface.hpp
 	control/src/RoomControl.cpp
 	control/src/RoomControl.hpp
 	control/src/SSD1309.cpp
 	control/src/SSD1309.hpp
-	control/src/Storage.cpp
-	control/src/Storage.hpp
+	#control/src/Storage.cpp
+	#control/src/Storage.hpp
 	control/src/SwapChain.cpp
 	control/src/SwapChain.hpp
 	control/src/emu/sysConfig.hpp
@@ -230,6 +233,7 @@ target_include_directories(emulator
 	control/src
 	node/src
 	system/src
+	system/src/emu
 	protocol/src
 	util/src
 	glad
@@ -292,6 +296,7 @@ add_executable(networkTest
 )
 target_include_directories(networkTest
 	PRIVATE
+	control/src # font
 	system/test/emu
 	system/src
 	protocol/src
@@ -335,6 +340,30 @@ target_include_directories(MqttSnClientTest
 	glad
 )
 conan_target_link_libraries(MqttSnClientTest)
+
+
+# node/MqttSnBroker test
+add_executable(MqttSnBrokerTest
+	node/test/MqttSnBrokerTest.cpp
+	node/test/appConfig.hpp
+	system/test/emu/sysConfig.hpp
+	${UTIL}
+	${PROTOCOL}
+	${SYSTEM}
+	${NODE}
+)
+target_include_directories(MqttSnBrokerTest
+	PRIVATE
+	control/src # font
+	node/test
+	node/src
+	system/src
+	system/test/emu # sysConfig.hpp
+	protocol/src
+	util/src
+	glad
+)
+conan_target_link_libraries(MqttSnBrokerTest)
 
 
 # broker test (command line tool)
@@ -443,14 +472,15 @@ add_executable(storageTest
 	${SYSTEM}
 	node/src/State.cpp
 	node/src/State.hpp
-	node/src/Storage2.cpp
-	node/src/Storage2.hpp
+	node/src/Storage.cpp
+	node/src/Storage.hpp
 	system/src/emu/flash.cpp
 )
 target_include_directories(storageTest
 	PRIVATE
 	control/test/emu
 	control/src
+	node/src
 	system/src
 	protocol/src
 	util/src

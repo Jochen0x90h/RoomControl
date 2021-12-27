@@ -3,6 +3,7 @@
 #include "crypt.hpp"
 #include "Nonce.hpp"
 #include <enum.hpp>
+#include <String.hpp>
 #include <cstdint>
 
 
@@ -16,7 +17,15 @@ public:
 	 * Constructor. Data is not const to support in-place decryption
 	 * @param data data to read from
 	 */
-	DataReader(uint8_t *data) : current(data) {}
+	template <int N>
+	DataReader(uint8_t (&data)[N]) : current(data), end(data + N) {}
+		
+	/**
+	 * Constructor. Data is not const to support in-place decryption
+	 * @param length length of data to read from
+	 * @param data data to read from
+	 */
+	DataReader(int length, uint8_t *data) : current(data), end(data + length) {}
 
 	uint8_t uint8() {
 		uint8_t value = this->current[0];
@@ -65,18 +74,55 @@ public:
 		return lo | (uint64_t(int32()) << 32);
 	}
 
+	/**
+	 * Read a string until end of data
+	 * @return string
+	 */
+	String string() {
+		String str(this->end - this->current, this->current);
+		this->current = this->end;
+		return str;
+	}
+
+	/**
+	 * Read a string that represents a floating point number (e.g. 1.3, no exponential notation)
+	 * @return string
+	 */
+	String floatString() {
+		auto str = this->current;
+		while (this->current < this->end) {
+			if ((*this->current < '0' || *this->current > '9') && *this->current != '.')
+				break;
+			++this->current;
+		}
+		return String(this->end - str, str);
+	}
+
 	void skip(int n) {
 		this->current += n;
 	}
 
+	void skipSpace() {
+		while (this->current < this->end && (*this->current == ' ' || *this->current == '\t'))
+			++this->current;
+	}
+
+	/**
+	 * Get remaining number of bytes in the message
+	 */
+	int getRemaining() {
+		return this->end - this->current;
+	}
+
 
 	uint8_t *current;
+	uint8_t *end;
 };
 
 
 class DecryptReader : public DataReader {
 public:
-	DecryptReader(int length, uint8_t *data) : DataReader(data), end(data + length) {}
+	DecryptReader(int length, uint8_t *data) : DataReader(length, data) {}
 
 	/**
 	 * Set start of header at current position ("string a" for encryption)
@@ -114,15 +160,7 @@ public:
 		return ::decrypt(message, nonce, header, headerLength, message, payloadLength, micLength, aesKey);
 	}
 
-	/**
-	 * Get remaining number of bytes in the message
-	 */
-	int getRemaining() {
-		return this->end - this->current;
-	}
 
-
-	uint8_t *end;
 	uint8_t const *header;
 	uint8_t *message;
 };

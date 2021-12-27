@@ -72,10 +72,16 @@ public:
 		this->current += array.length;
 	}
 
+	void data(int length, uint8_t const *data) {
+		for (int i = 0; i < length; ++i)
+			this->current[i] = data[i];
+		this->current += length;
+	}
+
 	/**
 	 * Add string contents without length 
 	 */
-	void data(String str) {
+	void string(String str) {
 		for (int i = 0; i < str.length; ++i)
 			this->current[i] = uint8_t(str.data[i]);
 		this->current += str.length;

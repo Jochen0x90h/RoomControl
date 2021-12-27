@@ -36,6 +36,8 @@ enum class MessageType : uint8_t {
 };
 
 enum class Flags : uint8_t {
+	NONE = 0,
+	
 	TOPIC_TYPE_MASK = 0x03,
 	TOPIC_TYPE_NORMAL = 0x00,
 	TOPIC_TYPE_PREDEFINED = 0x01,

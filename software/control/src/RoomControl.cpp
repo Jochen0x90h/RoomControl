@@ -11,6 +11,7 @@
 #include <crypt.hpp>
 #include <Queue.hpp>
 #include "tahoma_8pt.hpp" // font
+#include <cmath>
 
 
 constexpr String weekdays[7] = {"Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"};
@@ -33,7 +34,7 @@ constexpr int8_t QOS = 1;
 
 // EndpointInfo
 // ------------
-
+/*
 struct EndpointInfo {
 	// type of endpoint
 	EndpointType type;
@@ -46,7 +47,7 @@ struct EndpointInfo {
 };
 
 constexpr EndpointInfo endpointInfos[1] = {
-/*	//{EndpointType::BINARY_SENSOR, "Binary Sensor", 0},
+/ *	//{EndpointType::BINARY_SENSOR, "Binary Sensor", 0},
 	{EndpointType::BUTTON, "Button Sensor", 0},
 	{EndpointType::ON_OFF, "Switch Sensor", 0},
 	{EndpointType::ROCKER, "Rocker Sensor", 2},
@@ -56,7 +57,7 @@ constexpr EndpointInfo endpointInfos[1] = {
 	{EndpointType::TEMPERATURE_IN, "Temperature Sensor", 0},
 	{EndpointType::AIR_PRESSURE_IN, "Air Pressure Sensor", 0},
 	{EndpointType::AIR_HUMIDITY_IN, "Air Humidity Sensor", 0},
-	{EndpointType::AIR_VOC_IN, "Air VOC Sensor", 0},*/
+	{EndpointType::AIR_VOC_IN, "Air VOC Sensor", 0},* /
 };
 
 EndpointInfo const *findEndpointInfo(EndpointType type) {
@@ -195,12 +196,12 @@ ValueInfo valueInfos[] = {
 	{RoomControl::Command::ValueType::COLOR_RGB, "Color RGB", 3, 3},
 	{RoomControl::Command::ValueType::VALUE8, "Value 0-255", 1, 1},
 };
-
+*/
 
 // RoomControl
 // -----------
 
-static Configuration &initConfiguration(Storage2::Array<Configuration> &configurations,
+static Configuration &initConfiguration(Storage::Array<Configuration> &configurations,
 	PersistentStateManager &stateManager)
 {
 	// set default configuration if necessary
@@ -211,10 +212,10 @@ static Configuration &initConfiguration(Storage2::Array<Configuration> &configur
 		assign(configuration.name, "room");
 		
 		// generate a random 64 bit address
-		configuration.radioLongAddress = rng::int64();
+		configuration.ieeeLongAddress = rng::int64();
 		
 		// set default pan
-		configuration.radioPanId = 0x1a62;
+		configuration.zbeePanId = 0x1a62;
 		
 		// generate random network key
 		for (uint8_t &b : configuration.key) {
@@ -225,7 +226,7 @@ static Configuration &initConfiguration(Storage2::Array<Configuration> &configur
 		
 		// state offsets for interfaces
 		configuration.busSecurityCounterOffset = stateManager.allocate<uint32_t>();
-		configuration.radioSecurityCounterOffset = stateManager.allocate<uint32_t>();
+		configuration.zbeeSecurityCounterOffset = stateManager.allocate<uint32_t>();
 
 		
 		// write to flash
@@ -236,14 +237,14 @@ static Configuration &initConfiguration(Storage2::Array<Configuration> &configur
 }
 
 RoomControl::RoomControl()
-	: storage(FLASH_PAGE_COUNT/2, FLASH_PAGE_COUNT/2, localDevices, busDevices, radioDevices, routes, timers)
-	, storage2(0, FLASH_PAGE_COUNT/2, configurations, busInterface.devices, radioInterface.gpDevices, radioInterface.zbDevices)
+	//: storage(FLASH_PAGE_COUNT/2, FLASH_PAGE_COUNT/2, localDevices, busDevices, radioDevices, routes, timers)
+	: storage(0, FLASH_PAGE_COUNT, configurations, busInterface.devices, radioInterface.gpDevices, radioInterface.zbDevices)
 	, stateManager()
 	, houseTopicId(), roomTopicId()
 	, busInterface(initConfiguration(configurations, stateManager), stateManager)
 	, radioInterface(initConfiguration(configurations, stateManager), stateManager)
 {
-	timer::setHandler(this->timerIndex, [this]() {onTimeout();});
+	//timer::setHandler(this->timerIndex, [this]() {onTimeout();});
 
 	applyConfiguration();
 	
@@ -252,18 +253,18 @@ RoomControl::RoomControl()
 
 	// subscribe to mqtt broker (has to be repeated when connection to gateway is established because the broker does
 	// not store the topic names)
-	subscribeAll();
-	
+	//subscribeAll();
+/*
 	// start device update
 	auto now = timer::now();
 	this->lastUpdateTime = now;
 	this->nextReportTime = now;
 	onTimeout();
-	
+*/
 	// start coroutines
 	idleDisplay();
 	//doMenu();
-	doTimers();
+	//doTimers();
 
 
 //	testSwitch();
@@ -275,10 +276,11 @@ RoomControl::~RoomControl() {
 
 void RoomControl::applyConfiguration() {
 	auto const &configuration = *this->configurations[0];
-	radio::setLongAddress(configuration.radioLongAddress);
-	radio::setPan(RADIO_ZB, configuration.radioPanId);
+	radio::setLongAddress(configuration.ieeeLongAddress);
+	radio::setPan(RADIO_ZBEE, configuration.zbeePanId);
 }
 
+/*
 // UpLink
 // ------
 
@@ -320,12 +322,12 @@ void RoomControl::onError(int error, mqttsn::MessageType messageType) {
 //todo: prevent recursion by enqueuing also messages to local client
 void RoomControl::onPublished(uint16_t topicId, uint8_t const *data, int length, int8_t qos, bool retain) {
 	String message(length, data);
-/*
+/ *
 	std::cout << "onPublished " << topicId << " message " << message << " qos " << int(qos);
 	if (retain)
 		std::cout << " retain";
 	std::cout << std::endl;
-*/
+* /
 
 	// topic list of house, room or device (depending on topicDepth)
 	if (topicId == this->selectedTopicId && !message.isEmpty()) {
@@ -378,7 +380,7 @@ void RoomControl::onPublished(uint16_t topicId, uint8_t const *data, int length,
 	auto nextTimeout = updateDevices(now, 0, 0, 0, nullptr, topicId, message);
 	timer::start(this->timerIndex, nextTimeout);
 }
-
+*/
 
 // LocalInterface
 // --------------
@@ -419,7 +421,7 @@ void RoomControl::onBusReceived(uint8_t endpointId, uint8_t const *data, int len
 }
  */
 
-
+/*
 // RadioInterface
 // --------------
 
@@ -442,12 +444,12 @@ void RoomControl::onTimeout() {
 	//std::cout << "next: " << nextTimeout.value << std::endl;
 	timer::start(this->timerIndex, nextTimeout);
 }
-
+*/
 
 
 // Menu
 // ----
-
+/*
 Coroutine RoomControl::doMenu() {
 	SSD1309 display;
 	co_await display.init();
@@ -509,7 +511,7 @@ bool RoomControl::updateMenu(int delta, bool activated) {
 				+ dec(now.getMinutes(), 2) + ':'
 				+ dec(now.getSeconds(), 2);
 			bitmap.drawText(20, 10, tahoma_8pt, b, 1);
-/*
+/ *
 			// update target temperature
 			int targetTemperature = this->targetTemperature = clamp(this->targetTemperature + delta, 10 << 1, 30 << 1);
 			this->temperature.setTargetValue(targetTemperature);
@@ -521,7 +523,7 @@ bool RoomControl::updateMenu(int delta, bool activated) {
 			bitmap.drawText(20, 30, tahoma_8pt, this->buffer, 1);
 			this->buffer = decimal(targetTemperature >> 1), (targetTemperature & 1) ? ".5" : ".0" , " oC";
 			bitmap.drawText(70, 30, tahoma_8pt, this->buffer, 1);
-*/
+* /
 			// enter menu if poti-switch was pressed
 			if (activated) {
 				this->stack[0] = {MAIN, 0, 0, 0};
@@ -551,7 +553,7 @@ bool RoomControl::updateMenu(int delta, bool activated) {
 			this->stackHasChanged = true;
 		}
 		break;
-/*
+/ *
 	case LOCAL_DEVICES:
 		menu(delta, activated);
 		listDevices(this->localInterface, this->localDevices, EDIT_LOCAL_DEVICE, ADD_LOCAL_DEVICE);
@@ -599,7 +601,7 @@ bool RoomControl::updateMenu(int delta, bool activated) {
 		menu(delta, activated);
 		editComponent(delta, this->radioInterface, this->menuState == ADD_RADIO_COMPONENT);
 		break;
-*/
+* /
 	case ROUTES:
 		menu(delta, activated);
 		{
@@ -1138,7 +1140,7 @@ void RoomControl::menu(int delta, bool activated) {
 	// set activated state for selecting the current menu entry
 	this->activated = activated;
 
-/*
+/ *
 	const int lineHeight = tahoma_8pt.height + 4;
 
 	// adjust yOffset so that selected entry is visible
@@ -1148,7 +1150,7 @@ void RoomControl::menu(int delta, bool activated) {
 		this->yOffset = upper;
 	if (lower > this->yOffset + bitmap.HEIGHT)
 		this->yOffset = lower - bitmap.HEIGHT;
-*/
+* /
 	this->entryIndex = 0;
 	this->entryY = 0;
 }
@@ -1256,7 +1258,7 @@ void RoomControl::pop() {
 	--this->stackIndex;
 	this->stackHasChanged = true;
 }
-
+*/
 
 // Configuration
 // -------------
@@ -1269,7 +1271,7 @@ int RoomControl::Configuration::getRamSize() const {
 	return 0;
 }
 */
-
+/*
 // todo don't register all topics in one go, message buffer may overflow
 void RoomControl::subscribeAll() {
 	
@@ -1315,7 +1317,7 @@ Plus<String, Dec<uint8_t>> RoomControl::Device::Component::getName() const {
 }
 
 void RoomControl::Device::Component::init(EndpointType endpointType) {
-/*	auto type = Device::Component::BUTTON;
+/ *	auto type = Device::Component::BUTTON;
 	
 	int i = array::size(componentInfos);
 	while (i > 0 && !isCompatible(endpointType, type)) {
@@ -1328,11 +1330,11 @@ void RoomControl::Device::Component::init(EndpointType endpointType) {
 	auto dst = reinterpret_cast<uint32_t *>(this);
 	array::fill(dst, dst + newSize, 0);
 
-	this->type = type;*/
+	this->type = type;* /
 }
 
 void RoomControl::Device::Component::rotateType(EndpointType endpointType, int delta) {
-/*	auto type = this->type;
+/ *	auto type = this->type;
 	int oldSize = componentInfos[type].component.size;
 	
 	int dir = delta >= 0 ? 1 : -1;
@@ -1351,7 +1353,7 @@ void RoomControl::Device::Component::rotateType(EndpointType endpointType, int d
 	if (newSize > oldSize) {
 		auto dst = reinterpret_cast<uint32_t *>(this) + oldSize;
 		array::fill(dst, dst + (newSize - oldSize), 0);
-	}*/
+	}* /
 }
 
 bool RoomControl::Device::Component::checkClass(uint8_t classFlags) const {
@@ -1475,7 +1477,7 @@ SystemTime RoomControl::updateDevices(SystemTime time,
 //		radioEndpointId, data, topicId, message, nextTimeout);
 
 	return nextTimeout;
-}
+}*/
 /*
 SystemTime RoomControl::updateDevices(SystemTime time, SystemDuration duration, bool reportChanging,
 	Interface &interface, Storage::Array<Device, DeviceState> &devices, uint8_t endpointId, uint8_t const *data,
@@ -2390,7 +2392,7 @@ void RoomControl::destroy(Interface &interface, Device const &device, DeviceStat
 
 // ComponentIterator
 // -----------------
-
+/*
 void RoomControl::ComponentIterator::next() {
 	auto type = getComponent().type;
 	this->component += componentInfos[type].component.size;
@@ -2463,19 +2465,19 @@ void RoomControl::ComponentEditor::erase() {
 	array::erase(this->state, this->statesEnd, componentInfo.state.size);
 }
 
-/*
+/ *
 void RoomControl::ComponentEditor::next() {
 	auto type = getComponent().type;
 	++this->componentIndex;
 	this->component += componentInfos[type].component.size;
 	this->state += componentInfos[type].state.size;
 }
-*/
+* /
 
 
 // Interface
 // ---------
-/*
+/ *
 void RoomControl::subscribeInterface(Interface &interface, Storage::Element<Device, DeviceState> e) {
 	Device const &device = *e.flash;
 	DeviceState &deviceState = *e.ram;
@@ -2531,7 +2533,7 @@ void RoomControl::subscribeInterface(Interface &interface, Storage::Array<Device
 		}
 	}
 }
-*/
+* /
 
 // Routes
 // ------
@@ -2823,7 +2825,7 @@ void RoomControl::enterTopicSelector(String topic, bool onlyCommands, int index)
 	push(SELECT_TOPIC);
 	this->tempIndex = index;
 }
-
+*/
 
 // Functions
 // ---------
@@ -2862,16 +2864,16 @@ static void printDevices(Interface &interface) {
 }
 
 Coroutine RoomControl::testSwitch() {
-	Barrier<Interface::Parameters> barrier;
+	Subscriber::Barrier barrier;
 
 	printDevices(this->radioInterface);
 
-	Interface::Subscriber subscriber;
+	Subscriber subscriber;
 	subscriber.subscriptionIndex = 0;
 	subscriber.messageType = MessageType::ON_OFF;
 	subscriber.barrier = &barrier;
 
-	Interface::Publisher publisher;
+	Publisher publisher;
 	uint8_t message;
 	publisher.messageType = MessageType::ON_OFF;
 	publisher.message = &message;
@@ -2887,13 +2889,11 @@ Coroutine RoomControl::testSwitch() {
 			auto endpointType = endpoints[endpointIndex];
 			if (!haveIn && (endpointType == EndpointType::ON_OFF_IN || endpointType == EndpointType::UP_DOWN_IN)) {
 				haveIn = true;
-				subscriber.endpointIndex = endpointIndex;
-				interface.addSubscriber(deviceId, subscriber);
+				interface.addSubscriber(deviceId, endpointIndex, subscriber);
 			}
 			if (!haveOut && endpointType == EndpointType::ON_OFF_OUT) {
 				haveOut = true;
-				publisher.endpointIndex = endpointIndex;
-				interface.addPublisher(deviceId, publisher);
+				interface.addPublisher(deviceId, endpointIndex, publisher);
 			}
 		}
 	}
@@ -3353,7 +3353,7 @@ AwaitableCoroutine RoomControl::devicesMenu(Interface &interface) {
 			break;
 		
 		// show menu and wait for new event until timeout so that we can show newly commissioned devices
-		co_await select(menu.show(), timer::delay(500ms));
+		co_await select(menu.show(), timer::sleep(500ms));
 	}
 	interface.setCommissioning(false);
 }
@@ -3493,19 +3493,18 @@ static Message getDefaultMessage(EndpointType endpointType) {
 
 AwaitableCoroutine RoomControl::messageLogger(Interface &interface, DeviceId deviceId) {
 	Array<EndpointType const> endpoints = interface.getEndpoints(deviceId);
-	Barrier<Interface::Parameters> barrier;
+	Subscriber::Barrier barrier;
 
-	Interface::Subscriber subscribers[32];
+	Subscriber subscribers[32];
 
 	// subscribe to all endpoints
-	for (uint8_t endpointIndex = 0; endpointIndex < min(endpoints.length, array::size(subscribers)); ++endpointIndex) {
+	for (uint8_t endpointIndex = 0; endpointIndex < min(endpoints.count(), array::count(subscribers)); ++endpointIndex) {
 		auto &subscriber = subscribers[endpointIndex];
-		subscriber.endpointIndex = endpointIndex;
 		subscriber.subscriptionIndex = endpointIndex;
 		auto endpointType = endpoints[endpointIndex];
 		subscriber.messageType = getDefaultMessageType(endpointType);
 		subscriber.barrier = &barrier;
-		interface.addSubscriber(deviceId, subscriber);
+		interface.addSubscriber(deviceId, endpointIndex, subscriber);
 	}
 
 	// event queue
@@ -3574,8 +3573,9 @@ AwaitableCoroutine RoomControl::messageGenerator(Interface &interface, DeviceId 
 	auto endpointType = endpoints[0];
 	auto message = getDefaultMessage(endpointType);
 
-	Interface::Publisher publisher;
-	publisher.endpointIndex = 0;
+	uint8_t endpointIndex = 0;
+	Publisher publisher;
+	//publisher.endpointIndex = 0;
 	publisher.messageType = getDefaultMessageType(endpointType);
 	publisher.message = &message;
 	
@@ -3592,8 +3592,8 @@ AwaitableCoroutine RoomControl::messageGenerator(Interface &interface, DeviceId 
 		// endpoint index
 		if (editIndex) {
 			publisher.remove();
-			publisher.endpointIndex = clamp(publisher.endpointIndex + delta, 0, endpoints.length - 1);
-			endpointType = endpoints[publisher.endpointIndex];
+			endpointIndex = clamp(endpointIndex + delta, 0, endpoints.length - 1);
+			endpointType = endpoints[endpointIndex];
 			auto newMessageType = getDefaultMessageType(endpointType);
 			if (newMessageType != publisher.messageType)
 				message = getDefaultMessage(endpointType);
@@ -3658,17 +3658,18 @@ AwaitableCoroutine RoomControl::messageGenerator(Interface &interface, DeviceId 
 
 		// menu entry
 		if (valueString2.isEmpty()) {
-			menu.entry(underline(dec(publisher.endpointIndex), editIndex) + ": "
+			menu.entry(underline(dec(endpointIndex), editIndex) + ": "
 				+ underline(valueString, editMessage) + unitString);
 		} else {
-			menu.entry(underline(dec(publisher.endpointIndex), editIndex) + ": "
+			menu.entry(underline(dec(endpointIndex), editIndex) + ": "
 				+ underline(valueString, editMessage) + ' '
 				+ underline(valueString2, editMessage2) + unitString);
 		}
 		
 		if (menu.entry("Publish")) {
-			if (publisher.isEmpty())
-				interface.addPublisher(deviceId, publisher);
+			interface.addPublisher(deviceId, endpointIndex, publisher);
+			//if (publisher.isEmpty())
+			//	interface.addPublisher(deviceId, publisher);
 			publisher.publish();
 		}
 		

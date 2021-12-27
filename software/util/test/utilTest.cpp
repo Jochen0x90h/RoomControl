@@ -39,7 +39,7 @@ TEST(utilTest, Array) {
 
 TEST(utilTest, ArrayList) {
 	std::mt19937 gen(1337); // standard mersenne_twister_engine seeded with 1337
-	std::uniform_int_distribution<> distrib(0, array::size(strings) - 1);
+	std::uniform_int_distribution<> distrib(0, array::count(strings) - 1);
 	for (int count = 1; count < 7; ++count) {
 		for (int round = 0; round < count * count; ++round) {
 			ArrayList<String, 20> list;
@@ -250,6 +250,7 @@ TEST(utilTest, String) {
 	// constructor from c-array
 	{
 		char ar[] = {'f', 'o', 'o'};
+		char dummy = 'x';
 		EXPECT_EQ(length(ar), 3);
 		String foo(ar);
 		EXPECT_EQ(foo, "foo");
@@ -310,7 +311,7 @@ TEST(utilTest, StringBuffer) {
 TEST(utilTest, StringSet) {
 	// test StringSet
 	std::mt19937 gen(1337); // standard mersenne_twister_engine seeded with 1337
-	std::uniform_int_distribution<> distrib(0, array::size(strings) - 1);
+	std::uniform_int_distribution<> distrib(0, array::count(strings) - 1);
 	for (int count = 1; count < 7; ++count) {
 		for (int round = 0; round < count * count; ++round) {
 			StringSet<20, 1024> set;

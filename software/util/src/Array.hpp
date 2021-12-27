@@ -20,6 +20,8 @@ struct Array {
 
 	bool isEmpty() {return this->length <= 0;}
 
+	int count() {return this->length;}
+
 	T &operator [](int index) const {
 		assert(index >= 0 && index < this->length);
 		return this->data[index];

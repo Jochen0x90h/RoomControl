@@ -21,14 +21,24 @@ struct False {};
 struct True {};
 
 template <typename T>
-struct IsArray : False {};
+struct IsArray : False {
+	static constexpr bool value = false;
+};
   
 template <typename T, int N>
-struct IsArray<T[N]> : True {};
+struct IsArray<T[N]> : True {
+	static constexpr bool value = true;
+};
 
 
 namespace array {
 
+template <typename T, int N>
+constexpr int count(const T (&array)[N]) {return N;}
+
+template <typename T, int N>
+constexpr int count(T (&array)[N]) {return N;}
+/*
 template <typename T, int N>
 constexpr int size(const T (&array)[N]) {return N;}
 
@@ -40,7 +50,7 @@ constexpr int length(const T (&array)[N]) {return N;}
 
 template <typename T, int N>
 constexpr int length(T (&array)[N]) {return N;}
-
+*/
 template <typename T, int N>
 constexpr T *end(T (&array)[N]) {return array + N;}
 

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Storage2.hpp"
+#include "Storage.hpp"
 #include <network.hpp>
 #include <crypt.hpp>
 #include <String.hpp>
@@ -16,35 +16,38 @@ struct ConfigurationFlash {
 	// name of this node
 	char name[16];
 
-	// encryption key
+// encryption
+
+	// same key used for all interfaces
 	DataBuffer<16> key;
 
-	// encryption key prepared for aes encryption
+	// key prepared for aes encryption
 	AesKey aesKey;
 
 
-// bus interface
+// bus
 
 	// state offsets for bus interface
 	uint16_t busSecurityCounterOffset;
 
 
-// radio interface
+// radio
 
 	// ieee 802.15.4 long address
-	uint64_t radioLongAddress;
+	uint64_t ieeeLongAddress;
 	
 	// pan id for RadioInterface
-	uint16_t radioPanId;
+	uint16_t zbeePanId;
 
 	// state offsets for radio interface
-	uint16_t radioSecurityCounterOffset;
+	uint16_t zbeeSecurityCounterOffset;
 
 
 // network
 
-	network::Endpoint networkGateway;
-	uint16_t networkLocalPort;
+	// local port and endpoint for connection to mqtt-sn gateway
+	uint16_t mqttLocalPort;
+	network::Endpoint mqttGateway;
 
 
 
@@ -62,10 +65,10 @@ struct ConfigurationFlash {
 	Configuration *allocate() const;
 };
 
-class Configuration : public Storage2::Element<ConfigurationFlash> {
+class Configuration : public Storage::Element<ConfigurationFlash> {
 public:
 
-	Configuration(ConfigurationFlash const &flash) : Storage2::Element<ConfigurationFlash>(flash) {}
+	Configuration(ConfigurationFlash const &flash) : Storage::Element<ConfigurationFlash>(flash) {}
 
 };
 

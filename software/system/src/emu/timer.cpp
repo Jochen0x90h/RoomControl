@@ -17,14 +17,6 @@ Waitlist<SystemTime> waitlist;
 asio::steady_timer *timer = nullptr;
 
 
-constexpr int TIMER_WAITING_COUNT = 4;
-struct TimerOld {
-	asio::steady_timer *timer = nullptr;
-	std::function<void ()> onTimeout;
-};
-TimerOld timersOld[TIMER_WAITING_COUNT];
-
-
 std::chrono::steady_clock::time_point toChronoTime(SystemTime time) {
 	auto now = std::chrono::steady_clock::now();
 	auto us = std::chrono::duration_cast<std::chrono::microseconds>(now - timer::startTime);
@@ -71,10 +63,6 @@ void init() {
 		if (!error)
 			handle();
 	});
-
-	for (TimerOld &timer : timersOld) {
-		timer.timer = new asio::steady_timer(loop::context);
-	}
 }
 
 SystemTime now() {
@@ -95,32 +83,6 @@ Awaitable<SystemTime> sleep(SystemTime time) {
 	}
 
 	return {timer::waitlist, time};
-}
-
-void setHandler(int index, std::function<void ()> const &onTimeout) {
-	assert(uint(index) < TIMER_WAITING_COUNT);
-	TimerOld &timer = timer::timersOld[index];
-
-	timer.onTimeout = onTimeout;
-}
-
-void start(int index, SystemTime time) {
-	assert(uint(index) < TIMER_WAITING_COUNT);
-	TimerOld &timer = timer::timersOld[index];
-
-	timer.timer->expires_at(toChronoTime(time));
-	timer.timer->async_wait([&timer] (boost::system::error_code error) {
-		if (!error && timer.onTimeout) {
-			timer.onTimeout();
-		}
-	});
-}
-
-void stop(int index) {
-	assert(uint(index) < TIMER_WAITING_COUNT);
-	TimerOld &t = timer::timersOld[index];
-
-	t.timer->cancel();
 }
 
 } // namespace timer

@@ -187,3 +187,4 @@ bool convert(MessageType dstType, void *dstMessage, MessageType srcType, void co
 	// conversion successful
 	return true;
 }
+

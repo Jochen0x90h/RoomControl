@@ -13,6 +13,7 @@
 #include <util.hpp>
 #include <boost/filesystem.hpp>
 #include <array>
+#include <map>
 #include <string>
 #include <chrono>
 #include <libusb.h>

@@ -14,7 +14,7 @@ SystemTime next;
 // waiting coroutines
 Waitlist<SystemTime> waitlist;
 
-
+/*
 enum State : uint8_t {
 	STOPPED = 0,
 	RUNNING = 1
@@ -33,7 +33,7 @@ struct TimerOld {
 
 // list of timers
 TimerOld timersOld[4];
-
+*/
 
 
 // event loop handler chain
@@ -54,7 +54,7 @@ void handle() {
 					timer::next = time;
 				return false;
 			});
-
+/*
 			for (TimerOld &t : timersOld) {
 				// check if timer is running
 				if (t.state == RUNNING) {
@@ -72,7 +72,7 @@ void handle() {
 							timer::next = t.time;
 					}
 				}
-			}
+			}*/
 			NRF_RTC0->CC[0] = timer::next.value << 4;
 		
 			// repeat until next timeout is in the future
@@ -123,7 +123,7 @@ Awaitable<SystemTime> wait(SystemTime time) {
 	
 	return {timer::waitlist, time};
 }
-
+/*
 void setHandler(int index, std::function<void ()> const &onTimeout) {
 	assert(uint(index) < TIMER_WAITING_COUNT);
 	TimerOld &t = timer::timersOld[index];
@@ -160,5 +160,5 @@ void stop(int index) {
 	// set state to stopped
 	t.state = STOPPED;	
 }
-
+*/
 } // namespace timer

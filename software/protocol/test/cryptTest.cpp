@@ -27,8 +27,8 @@ TEST(cryptTest, security01) {
 	setKey(aesKey, key);
 
 	Nonce nonce(deviceId, counter);
-	bool result1 = decrypt(nullptr, nonce, header1, array::size(header1), message1, 0, 2, aesKey);
-	bool result2 = decrypt(nullptr, nonce, header2, array::size(header2), message2, 0, 2, aesKey);
+	bool result1 = decrypt(nullptr, nonce, header1, array::count(header1), message1, 0, 2, aesKey);
+	bool result2 = decrypt(nullptr, nonce, header2, array::count(header2), message2, 0, 2, aesKey);
 	EXPECT_TRUE(result1);
 	EXPECT_TRUE(result2);
 }
@@ -46,7 +46,7 @@ TEST(cryptTest, security10) {
 	setKey(aesKey, key);
 
 	Nonce nonce(deviceId, counter);
-	bool result = decrypt(nullptr, nonce, header, array::size(header), message, 0, 4, aesKey);
+	bool result = decrypt(nullptr, nonce, header, array::count(header), message, 0, 4, aesKey);
 	EXPECT_TRUE(result);
 }
 
@@ -64,12 +64,12 @@ TEST(cryptTest, security11) {
 	Nonce nonce(deviceId, counter);
 
 	uint8_t decrypted[1];
-	bool result = decrypt(decrypted, nonce, header, array::size(header), message, 1, 4, aesKey);
+	bool result = decrypt(decrypted, nonce, header, array::count(header), message, 1, 4, aesKey);
 	EXPECT_TRUE(result);
 	EXPECT_EQ(decrypted[0], 0x20);
 
 	uint8_t encrypted[5];
-	encrypt(encrypted, nonce, header, array::size(header), decrypted, 1, 4, aesKey);
+	encrypt(encrypted, nonce, header, array::count(header), decrypted, 1, 4, aesKey);
 	EXPECT_EQ(encrypted[0], 0x83);
 	EXPECT_EQ(encrypted[1], 0x5F);
 	EXPECT_EQ(encrypted[2], 0x1A);
@@ -84,7 +84,7 @@ TEST(cryptTest, hash1) {
 
 	DataBuffer<16> output;
 	
-	hash(output, input, array::size(input));
+	hash(output, input, array::count(input));
 	
 	for (int i = 0; i < 16; ++i) {
 		EXPECT_EQ(output[i], expectedOutput[i]);
@@ -98,7 +98,7 @@ TEST(cryptTest, hash2) {
 
 	DataBuffer<16> output;
 	
-	hash(output, input, array::size(input));
+	hash(output, input, array::count(input));
 	
 	for (int i = 0; i < 16; ++i) {
 		EXPECT_EQ(output[i], expectedOutput[i]);
@@ -110,11 +110,11 @@ TEST(cryptTest, hash3) {
 	uint8_t input[8191];
 	static uint8_t const expectedOutput[] = {0x24, 0xEC, 0x2F, 0xE7, 0x5B, 0xBF, 0xFC, 0xB3, 0x47, 0x89, 0xBC, 0x06, 0x10, 0xE7, 0xF1, 0x65};
 
-	for (int i = 0; i < array::size(input); ++i)
+	for (int i = 0; i < array::count(input); ++i)
 		input[i] = i;
 	DataBuffer<16> output;
 	
-	hash(output, input, array::size(input));
+	hash(output, input, array::count(input));
 	
 	for (int i = 0; i < 16; ++i) {
 		EXPECT_EQ(output[i], expectedOutput[i]);

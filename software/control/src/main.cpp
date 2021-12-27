@@ -1,4 +1,5 @@
 #include "RoomControl.hpp"
+//#include <global.hpp>
 #include <calendar.hpp>
 #include <display.hpp>
 #include <flash.hpp>
@@ -166,7 +167,7 @@ namespace radio {
 	}
 }
 */
-
+/*
 struct DeviceData {
 	uint32_t deviceId;
 	String name;
@@ -268,17 +269,17 @@ constexpr TimerData timerData[] = {
 	{ClockTime(1, 10, 00), "room/switch1/rl0"},
 	{ClockTime(2, 22, 41), "room/switch1/rl1"}
 };
-
+*/
 
 /**
  * Emulator main, start without parameters
  */
 int main(int argc, const char **argv) {
 	// set global variables
-	boost::system::error_code ec;
+	/*boost::system::error_code ec;
 	asio::ip::address localhost = asio::ip::address::from_string("::1", ec);
 	global::local = asio::ip::udp::endpoint(asio::ip::udp::v6(), 1337);
-	global::upLink = asio::ip::udp::endpoint(localhost, 47193);
+	global::upLink = asio::ip::udp::endpoint(localhost, 47193);*/
 
 	// init drivers
 	loop::init();
@@ -300,13 +301,15 @@ int main(int argc, const char **argv) {
 
 	// set configuration
 	ConfigurationFlash configuration = *roomControl.configurations[0];
-	configuration.radioLongAddress = UINT64_C(0x00124b00214f3c55);
 	static uint8_t const networkKey[] = {0xe6, 0x63, 0x2b, 0xa3, 0x55, 0xd4, 0x76, 0x82, 0x63, 0xe8, 0xb5, 0x9a, 0x2a, 0x6b, 0x41, 0x44};
 	configuration.key.setData(0, networkKey, 16);
 	setKey(configuration.aesKey, configuration.key);
+	configuration.ieeeLongAddress = UINT64_C(0x00124b00214f3c55);
+	configuration.mqttLocalPort = 1337;
+	configuration.mqttGateway = network::Endpoint::fromString("::1", 10000);
 	roomControl.configurations.write(0, configuration);
 	roomControl.applyConfiguration();
-
+/*
 	// add test data
 	setDevices(localDeviceData, roomControl.localDevices);
 	setDevices(busDeviceData, roomControl.busDevices);
@@ -374,6 +377,7 @@ int main(int argc, const char **argv) {
 	// subscribe devices after test data has been added
 	//roomControl.subscribeInterface(roomControl.localInterface, roomControl.localDevices);
 	roomControl.subscribeAll();
+*/
 
 	loop::run();
 

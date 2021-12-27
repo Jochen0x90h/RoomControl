@@ -78,22 +78,26 @@ Array<EndpointType const> BusInterface::getEndpoints(DeviceId deviceId) {
 	return {};
 }
 
-void BusInterface::addSubscriber(DeviceId deviceId, Subscriber &subscriber) {
+void BusInterface::addPublisher(DeviceId deviceId, uint8_t endpointIndex, Publisher &publisher) {
 	for (auto &device : this->devices) {
 		auto const &flash = *device;
-		if (flash.deviceId == deviceId && subscriber.endpointIndex < flash.endpointCount) {
-			device.subscribers.add(subscriber);
+		if (flash.deviceId == deviceId && endpointIndex < flash.endpointCount) {
+			publisher.remove();
+			publisher.index = endpointIndex;
+			publisher.event = &this->publishEvent;
+			device.publishers.add(publisher);
 			break;
 		}
 	}
 }
 
-void BusInterface::addPublisher(DeviceId deviceId, Publisher &publisher) {
+void BusInterface::addSubscriber(DeviceId deviceId, uint8_t endpointIndex, Subscriber &subscriber) {
 	for (auto &device : this->devices) {
 		auto const &flash = *device;
-		if (flash.deviceId == deviceId && publisher.endpointIndex < flash.endpointCount) {
-			device.publishers.add(publisher);
-			publisher.event = &this->publishEvent;
+		if (flash.deviceId == deviceId && endpointIndex < flash.endpointCount) {
+			subscriber.remove();
+			subscriber.index = endpointIndex;
+			device.subscribers.add(subscriber);
 			break;
 		}
 	}
@@ -120,7 +124,7 @@ AwaitableCoroutine BusInterface::commission() {
 	while (true) {
 		DeviceFlash flash;
 
-		co_await timer::delay(1s);
+		co_await timer::sleep(1s);
 
 		// write zero as command prefix to bus and check if a device gets enumerated
 		outMessage[0] = 0;
@@ -230,7 +234,7 @@ sys::out.write("bus device " + hex(flash.deviceId) + ": assigned address " + dec
 	}
 }
 
-bool readMessage(MessageType dstType, void *dstMessage, BusInterface::MessageReader &r, EndpointType srcType) {
+bool readMessage(MessageType dstType, void *dstMessage, DataReader r, EndpointType srcType) {
 	Message &dst = *reinterpret_cast<Message *>(dstMessage);
 
 	switch (dstType) {
@@ -425,12 +429,12 @@ bool BusInterface::receive(MessageReader &r) {
 			// publish to subscribers
 			for (auto &subscriber : device.subscribers) {
 				// check if this is the right endpoint
-				if (subscriber.endpointIndex == endpointIndex) {
+				if (subscriber.index == endpointIndex) {
 					EndpointType endpointType = flash.endpoints[endpointIndex];
-					subscriber.barrier->resumeFirst([&subscriber, &r, endpointType] (Interface::Parameters &p) {
+					subscriber.barrier->resumeFirst([&subscriber, &r, endpointType] (Subscriber::Parameters &p) {
 						p.subscriptionIndex = subscriber.subscriptionIndex;
 
-						// read message
+						// read message (note r is passed by value for multiple subscribers)
 						return readMessage(subscriber.messageType, p.message, r, endpointType);
 					});
 				}
@@ -512,7 +516,9 @@ bool writeMessage(BusInterface::MessageWriter &w, EndpointType endpointType,
 			break;
 		case MessageType::UP_DOWN2:
 			// invert up/down (0, 1, 2 -> 1, 0, 2)
-			w.uint8(src.upDown ^ 1 ^ (src.upDown >> 1));
+			//w.uint8(src.upDown ^ 1 ^ (src.upDown >> 1));
+			// invert up/down (0, 1, 2 -> 0, 2, 1)
+			w.uint8((src.upDown << 1) | (src.upDown >> 1));
 		default:
 			// conversion failed
 			return false;
@@ -568,6 +574,9 @@ Coroutine BusInterface::publish() {
 		// wait until something was published
 		co_await this->publishEvent.wait();
 		
+		// clear immediately as we have only one instance of this coroutine
+		this->publishEvent.clear();
+		
 		// iterate over devices
 		for (auto &device : this->devices) {
 			// iterate over publishers
@@ -577,7 +586,7 @@ Coroutine BusInterface::publish() {
 					publisher.dirty = false;
 
 					// get endpoint info
-					uint8_t endpointIndex = publisher.endpointIndex;
+					uint8_t endpointIndex = publisher.index;
 					EndpointType endpointType = device->endpoints[endpointIndex];
 
 					if ((endpointType & EndpointType::OUT) == EndpointType::OUT) {
@@ -628,7 +637,7 @@ Coroutine BusInterface::publish() {
 							if (readLength == writeLength && array::equals(readLength, inMessage, outMessage))
 								break;
 							
-							// maybe a device has sent a message and has overridden our message
+							// maybe a device has sent a message and has overridden our message (don't count as retry)
 							if (readLength >= minMessageLength) {
 								MessageReader r(readLength, inMessage);
 								if (!receive(r))
@@ -641,8 +650,8 @@ Coroutine BusInterface::publish() {
 	
 					// forward to subscribers
 					for (auto &subscriber : device.subscribers) {
-						if (subscriber.endpointIndex == publisher.endpointIndex) {
-							subscriber.barrier->resumeAll([&subscriber, &publisher] (Interface::Parameters &p) {
+						if (subscriber.index == publisher.index) {
+							subscriber.barrier->resumeAll([&subscriber, &publisher] (Subscriber::Parameters &p) {
 								p.subscriptionIndex = subscriber.subscriptionIndex;
 								
 								// convert to target unit and type and resume coroutine if conversion was successful

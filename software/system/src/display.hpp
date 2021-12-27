@@ -30,6 +30,6 @@ inline void enableVcc(bool enable) {}
  * @param dataLength length of data to write (may be 0)
  * @param data command and/or data to write, must be in ram, not in flash
  */
-Awaitable<Parameters> send(int commandLength, int dataLength, uint8_t const *data);
+[[nodiscard]] Awaitable<Parameters> send(int commandLength, int dataLength, uint8_t const *data);
 
 } // namespace display

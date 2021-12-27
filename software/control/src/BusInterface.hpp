@@ -1,8 +1,8 @@
 #pragma once
 
-#include "Configuration.hpp"
-#include <Interface.hpp>
-#include "Storage2.hpp"
+#include "Interface.hpp"
+#include "Storage.hpp"
+#include <Configuration.hpp>
 #include <DataReader.hpp>
 #include <DataWriter.hpp>
 #include <appConfig.hpp>
@@ -32,9 +32,9 @@ public:
 
 	Array<EndpointType const> getEndpoints(DeviceId deviceId) override;
 
-	void addSubscriber(DeviceId deviceId, Subscriber &subscriber) override;
+	void addPublisher(DeviceId deviceId, uint8_t endpointIndex, Publisher &publisher) override;
 
-	void addPublisher(DeviceId deviceId, Publisher &publisher) override;
+	void addSubscriber(DeviceId deviceId, uint8_t endpointIndex, Subscriber &subscriber) override;
 
 	class MessageReader : public DecryptReader {
 	public:
@@ -109,9 +109,9 @@ private:
 		Device *allocate() const;
 	};
 
-	class Device : public Storage2::Element<DeviceFlash> {
+	class Device : public Storage::Element<DeviceFlash> {
 	public:
-		Device(DeviceFlash const &flash) : Storage2::Element<DeviceFlash>(flash) {}
+		Device(DeviceFlash const &flash) : Storage::Element<DeviceFlash>(flash) {}
 		
 		SubscriberList subscribers;
 		PublisherList publishers;
@@ -119,7 +119,7 @@ private:
 
 public:
 	// list of commissioned devices
-	Storage2::Array<Device> devices;
+	Storage::Array<Device> devices;
 	
 private:
 	bool receive(MessageReader &r);

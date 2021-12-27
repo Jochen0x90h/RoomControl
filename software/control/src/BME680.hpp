@@ -24,7 +24,7 @@ public:
 	/**
 	 * Suspend execution using co_await until initialization is done
 	 */
-	AwaitableCoroutine init();
+	[[nodiscard]] AwaitableCoroutine init();
 
 	/**
 	 * Returns the current state of the sensor
@@ -42,13 +42,13 @@ public:
 	 * @param heaterDuration time between the beginning of the heat phase and the start of gas sensor resistance
 	 * 	conversion in milliseconds
 	 */
-	AwaitableCoroutine setParameters(int temperatureOversampling, int pressureOversampling, int filter,
+	[[nodiscard]] AwaitableCoroutine setParameters(int temperatureOversampling, int pressureOversampling, int filter,
 		int humidityOversampling, int heaterTemperature, int heaterDuration);
 
 	/**
 	 * Suspend execution using co_await until measurement is done. Then use get-methods to obtain the measured values
 	 */
-	AwaitableCoroutine measure();
+	[[nodiscard]] AwaitableCoroutine measure();
 
 	/**
 	 * Get current temperature
@@ -115,15 +115,7 @@ protected:
 		
 		uint16_t h1; // 0xE2<3:0> / 0xE3
 	};
-/*
-	void init1();
-	void init2();
-	void init3();
-	void init4();
-	void init5();
 
-	void onMeasurementsReady();
-*/
 	// spi index
 	static int const spiIndex = SPI_AIR_SENSOR;
 
@@ -146,8 +138,4 @@ protected:
 	float pressure;
 	float humidity;
 	float gasResistance;
-	
-	
-	//std::function<void ()> onReady;
-	//bool busy;
 };

@@ -39,6 +39,7 @@ void SwapChain::show(Bitmap<DISPLAY_WIDTH, DISPLAY_HEIGHT> *bitmap) {
 }
 
 Coroutine SwapChain::transfer() {
+	// initialize and enable display
 	co_await this->display.init();
 	co_await this->display.enable();
 

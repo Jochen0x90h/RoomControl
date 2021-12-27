@@ -22,6 +22,6 @@ void init();
  * @param delta delta motion of digital potentiometer
  * @param activated true when the button was pressed
  */
-Awaitable<Parameters> change(int8_t& delta, bool& activated);
+[[nodiscard]] Awaitable<Parameters> change(int8_t& delta, bool& activated);
 
 } // namespace poti

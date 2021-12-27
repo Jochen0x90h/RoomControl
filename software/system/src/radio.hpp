@@ -131,7 +131,7 @@ void setShortAddress(int index, uint16_t shortAddress);
  * @param index context index (number of contexts defined by RADIO_CONTEXT_COUNT in sysConfig.hpp)
  * @param packet received packet, first byte is length of the following payload + 2 for CRC (not included in data)
  */
-Awaitable<ReceiveParameters> receive(int index, Packet &packet);
+[[nodiscard]] Awaitable<ReceiveParameters> receive(int index, Packet &packet);
 
 /**
  * Suspend execution using co_await until send is finished
@@ -139,42 +139,6 @@ Awaitable<ReceiveParameters> receive(int index, Packet &packet);
  * @param packet packet to send, first byte is length of the following payload + 2 for CRC (not included in data)
  * @param result number of backoffs needed when successful, zero on failure
  */
-Awaitable<SendParameters> send(int index, uint8_t *packet, uint8_t &result);
+[[nodiscard]] Awaitable<SendParameters> send(int index, uint8_t *packet, uint8_t &result);
 
 } // namespace radio
-
-/*
-template <>
-struct WaitlistElementValue<radio::ReceiveParameters> : public WaitlistElement {
-	radio::ReceiveParameters value;
-
-	// default constructor
-	WaitlistElementValue(radio::Packet &packet) : value{packet} {}
-
-	// move constructor
-	WaitlistElementValue(WaitlistElementValue &&e) noexcept;
-
-	// add to list
-	void add(WaitlistHead &head) noexcept;
-
-	// remove from list
-	void remove() noexcept;
-};
-
-template <>
-struct WaitlistElementValue<radio::SendParameters> : public WaitlistElement {
-	radio::SendParameters value;
-
-	// default constructor
-	WaitlistElementValue(uint8_t *packet, uint8_t &result) : value{packet, result} {}
-
-	// move constructor
-	WaitlistElementValue(WaitlistElementValue &&e) noexcept;
-
-	// add to list
-	void add(WaitlistHead &head) noexcept;
-
-	// remove from list
-	void remove() noexcept;
-};
-*/

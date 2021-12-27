@@ -11,9 +11,9 @@ network::Endpoint destination;
 Coroutine sender() {
 	uint8_t data[] = {1, 2, 3, 4};
 	while (true) {
-		co_await network::send(0, destination, array::size(data), data);
+		co_await network::send(0, destination, array::count(data), data);
 		debug::toggleRedLed();
-		co_await timer::delay(1s);
+		co_await timer::sleep(1s);
 	}
 }
 
@@ -27,18 +27,17 @@ Coroutine receiver() {
 	}
 }
 
+uint16_t localPort = 1337;
+uint16_t remotePort = 1338;
+
 #ifdef EMU
 int main(int argc, char const **argv) {
-	uint16_t localPort = 1337;
-	uint16_t remotePort = 1338;
 	if (argc >= 3) {
 		localPort = std::stoi(argv[1]);
 		remotePort = std::stoi(argv[2]);
 	}
 #else
 int main(void) {
-	uint16_t localPort = 1337;
-	uint16_t remotePort = 1338;
 #endif
 	loop::init();
 	timer::init();
