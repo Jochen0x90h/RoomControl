@@ -85,6 +85,16 @@ public:
 	}
 
 	/**
+	 * Read a string with given length
+	 * @return string
+	 */
+	String string(int length) {
+		String str(length, this->current);
+		this->current += length;
+		return str;
+	}
+
+	/**
 	 * Read a string that represents a floating point number (e.g. 1.3, no exponential notation)
 	 * @return string
 	 */

@@ -253,12 +253,12 @@ public:
 	}
 	
 	/**
-	 * Resume first waiting coroutine when the filter returns true
-	 * @param filter filter returns true to resume and false to leave the coroutine in the list
+	 * Resume first waiting coroutine when the predicate is true (and remove it from the list)
+	 * @param predicate boolean predicate function for the list elements
 	 * @return true when list was not empty
 	 */
-	template <typename V>
-	bool resumeFirst(V const &filter) {
+	template <typename P>
+	bool resumeFirst(P const &predicate) {
 		Element *head = static_cast<Element*>(&this->head);
 		Element *current = static_cast<Element*>(head->next);
 
@@ -266,7 +266,7 @@ public:
 		if (current == head)
 			return false;
 
-		if (filter(Selector::getValue(current))) {
+		if (predicate(Selector::getValue(current))) {
 			// remove element from list (special implementation of remove() may lock interrupts to avoid race condition)
 			current->remove();
 			
@@ -279,11 +279,11 @@ public:
 	}
 
 	/**
-	 * Resume one waiting coroutines for which the filter returns true
-	 * @param filter filter returns true to resume and false to leave the coroutine in the list
+	 * Resume one waiting coroutine for which the predicate is true (and remove it from the list)
+	 * @param predicate boolean predicate function for the list elements
 	 */
-	template <typename V>
-	void resumeOne(V const &filter) {
+	template <typename P>
+	void resumeOne(P const &predicate) {
 		Element *head = static_cast<Element*>(&this->head);
 		Element *current = head;
 		Element *next = static_cast<Element*>(current->next);
@@ -294,7 +294,7 @@ public:
 			current = next;
 			next = static_cast<Element*>(current->next);
 
-			if (filter(Selector::getValue(current))) {
+			if (predicate(Selector::getValue(current))) {
 				// remove element from list (special implementation of remove() may lock interrupts to avoid race condition)
 				current->remove();
 				//current->next->prev = current->prev;
@@ -312,11 +312,11 @@ public:
 	}
 
 	/**
-	 * Resume all waiting coroutines for which the filter returns true
-	 * @param filter filter returns true to resume and false to leave the coroutine in the list
+	 * Resume all waiting coroutines for which the predicate is true (and remove them from the list)
+	 * @param predicate boolean predicate function for the list elements
 	 */
-	template <typename V>
-	void resumeAll(V const &filter) {
+	template <typename P>
+	void resumeAll(P const &predicate) {
 		Element *head = static_cast<Element*>(&this->head);
 		Element *current = head;
 		Element *next = static_cast<Element*>(current->next);
@@ -327,7 +327,7 @@ public:
 			current = next;
 			next = static_cast<Element*>(current->next);
 
-			if (filter(Selector::getValue(current))) {
+			if (predicate(Selector::getValue(current))) {
 				// remove element from list (special implementation of remove() may lock interrupts to avoid race condition)
 				current->remove();
 				//current->next->prev = current->prev;
@@ -344,11 +344,11 @@ public:
 	}
 	
 	/**
-	 * Find the first element for wich the predicate returns true
-	 * @param predicate boolean predicate for the list elements
+	 * Find the first element for wich the predicate is true
+	 * @param predicate boolean predicate function for the list elements
 	 */
-	template <typename V>
-	bool find(V const &predicate) {
+	template <typename P>
+	bool find(P const &predicate) {
 		Element *head = static_cast<Element*>(&this->head);
 		Element *current = static_cast<Element*>(head->next);
 

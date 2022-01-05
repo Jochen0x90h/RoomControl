@@ -7,6 +7,7 @@
 #include <BitField.hpp>
 #include <LinkedListNode.hpp>
 #include <StringBuffer.hpp>
+#include <StringHash.hpp>
 
 
 /**
@@ -32,9 +33,16 @@ public:
 	// maximum number of connections (first for gateway, others for clients)
 	static constexpr int MAX_CONNECTION_COUNT = 32;
 	
+	// maximum length of a topic
+	static constexpr int MAX_TOPIC_LENGTH = 40;
+	
 	// maximum number of topics that can be handled
 	static constexpr int MAX_TOPIC_COUNT = 1024;
 
+	// number of coroutines for receiving and publishing
+	static constexpr int RECEIVE_COUNT = 8;
+	static constexpr int PUBLISH_COUNT = 8;
+	
 
 	MqttSnBroker(uint16_t localPort);
 
@@ -53,9 +61,9 @@ public:
 	}
 
 	/**
-	 * Ping gateway to reset keep alive timer
+	 * Keep connection to gateway alive
 	 */
-	[[nodiscard]] AwaitableCoroutine ping();
+	[[nodiscard]] AwaitableCoroutine keepAlive();
 	
 
 	/**
@@ -64,7 +72,6 @@ public:
 	 * @param publisher publisher to insert
 	 */
 	void addPublisher(String topicName, Publisher &publisher);
-	[[nodiscard]] AwaitableCoroutine registerPublisher(String topicName);
 
 	/**
 	 * Add a subscriber to the device. Gets inserted into a linked list
@@ -72,7 +79,6 @@ public:
 	 * @param publisher subscriber to insert
 	 */
 	void addSubscriber(String topicName, Subscriber &subscriber);
-	[[nodiscard]] AwaitableCoroutine registerSubscriber(String topicName);
 
 
 	using MessageReader = MqttSnClient::MessageReader;
@@ -139,7 +145,7 @@ protected:
 	 * @param add add new topic if true
 	 * @return -1 if no new topic could be found or added
 	 */
-	int getTopicIndex(String name, bool add = true);
+	int obtainTopicIndex(String name);
 
 	// get a message id for publish messages of qos 1 or 2 to detect resent messages and associate acknowledge
 	uint16_t getNextMsgId() {
@@ -166,21 +172,27 @@ protected:
 	};
 	
 	struct TopicInfo {
-		// hash of topic string or zero for unused entry
-		uint32_t hash;
-		
-		// retained message
-		//uint16_t retainedOffset;
-		//uint8_t retainedAllocated;
-		//uint8_t retainedLength;
-
 		// for each connection two bits that indicate subscription qos (0-2: qos, 3: not subscribed)
 		BitField<MAX_CONNECTION_COUNT, 2> qosArray;
 
 		// topic id at gateway (broker at other side of up-link)
 		uint16_t gatewayTopicId;
+					
+		// true if a client has subscribed to the topic and therefore it needs to be subscribed at the gateway
+		bool subscribed;
+		
+		// identification of last message to suppress duplicates
+		uint8_t lastConnectionIndex;
+		uint16_t lastMsgId;
+		
+		// retained message
+		//uint16_t retainedOffset;
+		//uint8_t retainedAllocated;
+		//uint8_t retainedLength;
 	};
 	
+	// barrier to wake up keepAlive()
+	Event keepAliveEvent;
 
 	// message id generator
 	uint16_t nextMsgId = 0;
@@ -190,9 +202,7 @@ protected:
 	BitField<MAX_CONNECTION_COUNT, 1> connectedFlags;
 	
 	// topics
-	int topicCount = 0;
-	TopicInfo topics[MAX_TOPIC_COUNT];
-
+	StringHash<MAX_TOPIC_COUNT * 4 / 3, MAX_TOPIC_COUNT, MAX_TOPIC_COUNT * 32, TopicInfo> topics;
 	
 	// subscribers
 	SubscriberList subscribers;

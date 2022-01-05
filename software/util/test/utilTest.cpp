@@ -7,6 +7,7 @@
 #include <Queue.hpp>
 #include <LinkedListNode.hpp>
 #include <StringBuffer.hpp>
+#include <StringHash.hpp>
 #include <StringSet.hpp>
 #include <TopicBuffer.hpp>
 #include <gtest/gtest.h>
@@ -309,17 +310,22 @@ TEST(utilTest, StringBuffer) {
 }
 
 TEST(utilTest, StringSet) {
-	// test StringSet
 	std::mt19937 gen(1337); // standard mersenne_twister_engine seeded with 1337
 	std::uniform_int_distribution<> distrib(0, array::count(strings) - 1);
+
+	// number of elements to add to set
 	for (int count = 1; count < 7; ++count) {
+		// do several testing rounds
 		for (int round = 0; round < count * count; ++round) {
 			StringSet<20, 1024> set;
-			
-			// add elements to list
+            std::set<String> stdSet;
+			EXPECT_TRUE(set.isEmpty());
+
+			// add elements to set
 			for (int i = 0; i < count; ++i) {
 				String s = strings[distrib(gen)];
 				set.add(s);
+                stdSet.insert(s);
 			}
 			
 			// print list
@@ -330,12 +336,77 @@ TEST(utilTest, StringSet) {
 			}
 			*/
 			
+            // check if both sets have the same number of values
+            EXPECT_EQ(set.count(), stdSet.size());
+            
+            // check if both sets contain the same number of elements
+            auto it1 = set.begin();
+            auto it2 = stdSet.begin();
+            for (; it1 != set.end(); ++it1, ++it2) {
+                EXPECT_EQ(*it1, *it2);
+            }
+            
 			// check if the set contains unique sorted elements
 			for (int i = 0; i < set.count() - 1; ++i) {
 				EXPECT_TRUE(set[i] < set[i + 1]);
 			}
 		}
 	}
+}
+
+TEST(utilTest, StringHash) {
+	std::mt19937 gen(1337); // standard mersenne_twister_engine seeded with 1337
+	std::uniform_int_distribution<> distrib(0, array::count(strings) - 1);
+
+	// number of elements to add to set
+	for (int count = 1; count < 7; ++count) {
+		// do several testing rounds
+		for (int round = 0; round < count * count; ++round) {
+			StringHash<128, 100, 1024, int> hash;
+			std::map<String, std::pair<int, int>> stdMap;
+			EXPECT_TRUE(hash.isEmpty());
+
+			// add elements to set
+			for (int i = 0; i < count; ++i) {
+				int index = distrib(gen);
+				String s = strings[index];
+				int location = hash.obtain(s, [index](int) {return index;});
+				stdMap[s] = std::make_pair(location, index);
+			}
+	
+			// compare contents to std::map
+			for (int i = 0; i < array::count(strings); ++i) {
+				String s = strings[i];
+				auto it = hash.find(s);
+				auto it2 = stdMap.find(s);
+				if (it2 == stdMap.end()) {
+					EXPECT_EQ(-1, hash.locate(s));
+					EXPECT_EQ(hash.end(), it);
+				} else {
+					EXPECT_EQ(it2->second.first, hash.locate(s));
+					EXPECT_EQ(it2->second.second, it->value);
+				}
+			}
+			EXPECT_EQ(stdMap.size(), hash.count());
+
+			// iterate over all entries in the hash
+			int count = 0;
+			for (auto const [key, value] : hash) {
+				// key is a const value
+				static_assert(!std::is_reference<decltype(key)>::value);
+				static_assert(std::is_const<decltype(key)>::value);
+
+				// value is a non-const reference
+				static_assert(std::is_reference<decltype(value)>::value);
+				static_assert(!std::is_const<decltype(value)>::value);
+				
+				EXPECT_EQ(stdMap[key].second, value);
+				++count;
+			}
+			EXPECT_EQ(hash.count(), count);
+		}
+	}
+	
 }
 
 

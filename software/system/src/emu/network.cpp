@@ -49,15 +49,17 @@ void handle(Gui &gui) {
 			
 			if (receivedCount > 0) {
 				*p.length = receivedCount;
+				
+				// convert source
+				asio::ip::address_v6 address = source.address().to_v6();
+				array::copy(16, p.source->address.u8, address.to_bytes().data());
+				p.source->port = source.port();
 				return true;
 			}
 			return false;
 		});
 
-//auto &x = context.sendWaitlist;
-//sys::out.write(hex(size_t(&x.head)) + ' ' + hex(size_t(x.head.next)) + '\n');
 		context.sendWaitlist.resumeFirst([&context](SendParameters &p) {
-//sys::out.write("send...\n");
 			// build destination endpoint
 			std::array<unsigned char, 16> bytes;
 			std::copy(std::begin(p.destination->address.u8), std::end(p.destination->address.u8), std::begin(bytes));

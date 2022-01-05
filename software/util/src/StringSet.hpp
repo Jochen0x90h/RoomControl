@@ -5,21 +5,24 @@
 
 /**
  * Alphabetically sorted set of strings
- * @tparam N maximum size
- * @tparam M array element
+ * @tparam N maximum number of elements
+ * @tparam M size of buffer for string data of all elements, maximum is 65535
  */
 template <int N, int M>
-struct StringSet {
-		
-	StringSet() : length(0), dataLength(0) {}
+class StringSet {
+    static_assert(M < 65536);
 
-	bool isEmpty() const {return this->length <= 0;}
+public:
+    
+    StringSet() = default;
+
+	bool isEmpty() const {return this->elementCount <= 0;}
 	
-	int count() const {return this->length;}
+	int count() const {return this->elementCount;}
 
 	void clear() {
-		this->length = 0;
-		this->dataLength = 0;
+		this->elementCount = 0;
+		this->dataSize = 0;
 	}
 	
 	/**
@@ -29,47 +32,44 @@ struct StringSet {
 	 */
 	bool add(String element) {
 		// check if data has enough space for new element
-		if (M - this->dataLength < element.length)
+		if (this->dataSize + element.count() > M)
 			return false;
 
 		// find insert position
 		int index = binaryLowerBound(element);
 		
 		// check if element is already in the set
-		if (index < this->length && (*this)[index] == element)
+		if (index < this->elementCount && (*this)[index] == element)
 			return false;
 		
-		// enlarge by one element if possible
-		length = this->length;
-		bool result = length < N;
-		if (result)
-			++length;
-		if (index >= length)
-			return false;
-		this->length = length;
+        // enlarge by one element and check if new element fits
+        int elementCount = this->elementCount;
+        if (elementCount >= N)
+            return false;
 
 		// move elements behind insert position to mace space for new element
-		for (int i = length - 1; i > index; --i) {
+		for (int i = elementCount; i > index; --i) {
 			this->elements[i] = this->elements[i - 1];
 		}
-		
+        this->elementCount = elementCount + 1;
+        
 		// add new element
-		this->elements[index] = {uint16_t(this->dataLength), uint16_t(element.length)};
-		char *data = this->data + this->dataLength;
-		array::copy(data, data + element.length, element.data);
-		this->dataLength += element.length;
+		this->elements[index] = {uint16_t(element.count()), uint16_t(this->dataSize)};
+		char *data = this->data + this->dataSize;
+		array::copy(data, data + element.count(), element.data);
+		this->dataSize += element.length;
 
-		return result;
+		return true;
 	}
 
 	/**
 	 * Determine the lower bound for the given element using binary search
 	 * @param element element for which the lower bound is calculated
-	 * @return index of lower bound, can be size() if the element is greater than the last element in the list
+	 * @return index of the first element that is greater or equal to the given element. Returns count() if the element is greater than the last element in the set
 	 */
 	int binaryLowerBound(String element) {
 		int l = 0;
-		int h = this->length;
+		int h = this->elementCount;
 		while (l < h) {
 			int mid = l + (h - l) / 2;
 			if ((*this)[mid] < element) {
@@ -81,15 +81,18 @@ struct StringSet {
 		return l;
 	}
 
+	/**
+	 * Index operator
+	 */
 	String const operator [](int index) const {
-		assert(index >= 0 && index < this->length);
+		assert(index >= 0 && index < this->elementCount);
 		Element const &element = this->elements[index];
 		return {element.length, this->data + element.offset};
 	}
 
 	struct Element {
-		uint16_t offset;
 		uint16_t length;
+		uint16_t offset;
 	};
 
 	struct Iterator {
@@ -102,12 +105,15 @@ struct StringSet {
 	};
 
 	Iterator begin() const {return {this->elements, this->data};}
-	Iterator end() const {return {this->elements + this->length, this->data};}
+	Iterator end() const {return {this->elements + this->elementCount, this->data};}
 
 protected:
 
-	Element elements[N];
-	int length;
+	// list of elements
+    int elementCount = 0;
+    Element elements[N];
+	
+    // string data
+    int dataSize = 0;
 	char data[M];
-	int dataLength;
 };

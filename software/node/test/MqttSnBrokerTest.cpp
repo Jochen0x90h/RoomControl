@@ -6,24 +6,33 @@
 #include <debug.hpp>
 
 
+StringBuffer<32> name;
+uint16_t localPort = 1337;
+uint16_t gatewayPort = 10000;
+StringBuffer<32> inTopic;
+StringBuffer<32> outTopic;
+
 struct Test {
 	MqttSnBroker broker;
 	
-	Test() : broker(1337) {}
+	Test(uint16_t localPort) : broker(localPort) {}
 	
 
-	Coroutine connect() {
-		network::Endpoint gatewayEndpoint = network::Endpoint::fromString("::1", 10000);
+	Coroutine connect(uint16_t gatewayPort, String name) {
+		network::Endpoint gatewayEndpoint = network::Endpoint::fromString("::1", gatewayPort);
 
 		while (true) {
 			while (!this->broker.isGatewayConnected()) {
 				// connect to gateway
-				co_await this->broker.connect(gatewayEndpoint, "MyBroker");
+				sys::out.write(name + " connect\n");
+				co_await this->broker.connect(gatewayEndpoint, name);
 			}
-			co_await this->broker.registerSubscriber("f/in");
-			co_await this->broker.registerPublisher("f/out");
-
-			co_await this->broker.ping();
+			//sys::out.write(name + " registerSubscriber\n");
+			//co_await this->broker.registerSubscriber(inTopic);
+			//sys::out.write(name + " registerPublisher\n");
+			//co_await this->broker.registerPublisher(outTopic);
+			sys::out.write(name + " keepAlive\n");
+			co_await this->broker.keepAlive();
 		}
 	}
 
@@ -40,8 +49,8 @@ struct Test {
 		publisher.messageType = MessageType::ON_OFF;
 		publisher.message = &message;
 
-		this->broker.addSubscriber("f/in", subscriber);
-		this->broker.addPublisher("f/out", publisher);
+		this->broker.addSubscriber(inTopic, subscriber);
+		this->broker.addPublisher(outTopic, publisher);
 		
 		while (true) {
 			uint8_t subscriptionIndex;
@@ -55,14 +64,31 @@ struct Test {
 	}
 };
 
+
+#ifdef EMU
+int main(int argc, char const **argv) {
+	name = "Client";
+	if (argc >= 3) {
+		localPort = std::stoi(argv[1]);
+		gatewayPort = std::stoi(argv[2]);
+		inTopic = dec(localPort) + '/';
+		outTopic = dec(localPort) + '/';
+	}
+	name += dec(localPort);
+#else
 int main(void) {
+	name = "Client";
+#endif
+	inTopic += "in";
+	outTopic += "out";
+
 	loop::init();
 	timer::init();
 	network::init();
 	out::init();
 	
-	Test test;
-	test.connect();
+	Test test(localPort);
+	test.connect(gatewayPort, name);
 	test.function();
 
 	loop::run();	

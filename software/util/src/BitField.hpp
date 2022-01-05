@@ -7,15 +7,17 @@ template <int N, int W>
 class BitField {
 public:
 
-	void clear() {
+	BitField &clear() {
 		for (uint32_t &d : this->data)
 			d = 0;
+		return *this;
 	}
 	
-	void set() {
+	BitField &set() {
 		uint32_t mask = 0xffffffff >> (32 - (32 / W) * W);
 		for (uint32_t &d : this->data)
 			d = mask;
+		return *this;
 	}
 	
 	BitField &set(int index, int value) {

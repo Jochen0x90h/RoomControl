@@ -81,6 +81,7 @@ set(UTIL
 	util/src/Queue.hpp
 	util/src/String.hpp
 	util/src/StringBuffer.hpp
+	util/src/StringHash.hpp
 	util/src/StringOperators.hpp
 	util/src/StringSet.hpp
 	util/src/TopicBuffer.cpp
