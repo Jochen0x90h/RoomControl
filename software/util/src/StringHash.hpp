@@ -14,11 +14,11 @@ template <int N, int M, int B, typename V>
 class StringHash {
 	static constexpr int OFFSET_SHIFT = 14;
 	static constexpr int LENGTH_MASK = ~(0xffffffff << OFFSET_SHIFT);
-	
+
     static_assert(B <= 1 << (32 - OFFSET_SHIFT));
 
 public:
-    
+
 	struct Element {
 		// key (string length and offset of string data)
 		uint32_t key;
@@ -26,14 +26,14 @@ public:
 		// value
 		V value;
 	};
-	
+
 	struct KeyValue {
 		String const key;
 		V &value;
-		
+
 		KeyValue *operator ->() {return this;}
 	};
-	
+
 	/**
 	 * Iterator of the string hash table. Use it->key and it->value to access key and value or for (auto keyValue : hash) {...}
 	 */
@@ -49,11 +49,11 @@ public:
 			auto key = this->element->key;
 			return {{int(key & LENGTH_MASK), this->data + (key >> OFFSET_SHIFT)}, this->element->value};
 		}
-		
+
 		bool operator ==(Iterator const &b) const {
 			return this->element == b.element;
 		}
-		
+
 		Iterator& operator ++() {
 			auto element = this->element;
 			do {
@@ -62,17 +62,17 @@ public:
 			this->element = element;
 			return *this;
 		}
-		
+
 		//int operator -(Iterator const &b) const {
 		//	return this->element - b.element;
 		//}
 	};
-	
-	
+
+
 	StringHash() {clear();}
 
 	bool isEmpty() const {return this->elementCount <= 0;}
-	
+
 	int count() const {return this->elementCount;}
 
 	void clear() {
@@ -82,7 +82,7 @@ public:
 		}
 		this->dataSize = 0;
 	}
-	
+
 	/**
 	 * Find a value by key string
 	 * @param key key string
@@ -90,7 +90,7 @@ public:
 	 */
 	Iterator find(String const &key) {
 		int index = key.hash() % N;
-		
+
 		// search for the key in the hash table
 		Element *element;
 		while ((element = &this->hashTable[index])->key != 0xffffffff) {
@@ -106,7 +106,7 @@ public:
 		}
 		return end();
 	}
-	
+
 	/**
 	 * Locate a key string in the hash table
 	 * @param key key string
@@ -114,7 +114,7 @@ public:
 	 */
 	int locate(String const &key) {
 		int index = key.hash() % N;
-		
+
 		// search for the key in the hash table
 		Element *element;
 		while ((element = &this->hashTable[index])->key != 0xffffffff) {
@@ -130,7 +130,7 @@ public:
 		}
 		return -1;//end();
 	}
-	
+
 	/**
 	 * Obtain the value for a key string, add if not found
 	 * @param key key string
@@ -140,7 +140,7 @@ public:
 	template <typename T>
 	int obtain(String const &key, T const &init) {
 		int index = key.hash() % N;
-		
+
 		// search for the key in the hash table
 		Element *element;
 		while ((element = &this->hashTable[index])->key != 0xffffffff) {
@@ -154,7 +154,7 @@ public:
 			if (index == N)
 				index = 0;
 		}
-		
+
 		// not found: check if new key will fit
 		if (this->elementCount >= M || this->dataSize + key.count() > B)
 			return -1;//end();
@@ -162,27 +162,26 @@ public:
 
 		// set key
 		element->key = key.count() + (this->dataSize << OFFSET_SHIFT);
-		
+
 		// add key string to data
 		array::copy(key.count(), this->data + this->dataSize, key.data);
 		this->dataSize += key.count();
 
 		element->value = init(index);
 		//element->value = defaultValue;
-		
+
 		return index;//{element, this->data};
 	}
-	
+
 	bool isValid(int index) {
-		assert(uint32_t(index) < N);
-		return this->hashTable[index].key != 0xffffffff;
+		return uint32_t(index) < N && this->hashTable[index].key != 0xffffffff;
 	}
-	
+
 	V &operator [](int index) {
 		assert(uint32_t(index) < N);
 		return this->hashTable[index].value;
 	}
-	
+
 	Iterator get(int index) {
 		return {this->hashTable + index, this->data};
 	}

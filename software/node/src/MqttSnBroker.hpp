@@ -32,17 +32,18 @@ public:
 
 	// maximum number of connections (first for gateway, others for clients)
 	static constexpr int MAX_CONNECTION_COUNT = 32;
-	
+
 	// maximum length of a topic
 	static constexpr int MAX_TOPIC_LENGTH = 40;
-	
+
 	// maximum number of topics that can be handled
 	static constexpr int MAX_TOPIC_COUNT = 1024;
 
 	// number of coroutines for receiving and publishing
-	static constexpr int RECEIVE_COUNT = 8;
 	static constexpr int PUBLISH_COUNT = 8;
-	
+	static constexpr int RECEIVE_COUNT = 4;
+	static constexpr int FORWARD_COUNT = 8;
+
 
 	MqttSnBroker(uint16_t localPort);
 
@@ -64,7 +65,7 @@ public:
 	 * Keep connection to gateway alive
 	 */
 	[[nodiscard]] AwaitableCoroutine keepAlive();
-	
+
 
 	/**
 	 * Add a publisher to the device. Gets inserted into a linked list
@@ -131,13 +132,10 @@ public:
 	};
 
 protected:
-	
+
 	bool isConnected(int connectionIndex) {
 		return this->connectedFlags.get(connectionIndex) != 0;
 	}
-	
-	// initialize a connection to gateway or client
-	void initConnection(int connectionIndex);
 
 	/**
 	 * Get or add topic by name and return its index
@@ -152,58 +150,73 @@ protected:
 		int i = this->nextMsgId + 1;
 		return this->nextMsgId = i + (i >> 16);
 	}
-	
-	// publish messages to gateway and clients
+
+	// publish messages of local publishers to gateway and clients
 	Coroutine publish();
-	
+
 	// receive and distribute messages
 	Coroutine receive();
+
+	// publish messages from one connection to other connections (gateway and clients)
+	Coroutine forward();
 
 
 	struct ConnectionInfo {
 		// endpoint (address and port) of client or gateway
 		network::Endpoint endpoint;
-				
+
 		// name of client or this broker
 		StringBuffer<MAX_CLIENT_ID_LENGTH> name;
-		
+
 		// check if connection is active
 		//bool isConnected() {return this->endpoint.port != 0;}
 	};
-	
+
 	struct TopicInfo {
 		// for each connection two bits that indicate subscription qos (0-2: qos, 3: not subscribed)
 		BitField<MAX_CONNECTION_COUNT, 2> qosArray;
 
 		// topic id at gateway (broker at other side of up-link)
 		uint16_t gatewayTopicId;
-					
-		// true if a client has subscribed to the topic and therefore it needs to be subscribed at the gateway
+
+		// true if locally subscribed to a topic (using addSubsriber)
 		bool subscribed;
-		
+
 		// identification of last message to suppress duplicates
 		uint8_t lastConnectionIndex;
 		uint16_t lastMsgId;
-		
+
 		// retained message
 		//uint16_t retainedOffset;
 		//uint8_t retainedAllocated;
 		//uint8_t retainedLength;
+
+		bool isRegisteredAtGateway() {return this->gatewayTopicId != 0;}
+		bool isSubscribedAtGateway() {return this->qosArray.get(0) != 3;}
+		bool isClientSubscribed() {
+			if (this->subscribed)
+				return true;
+			for (int i = 1; i < MAX_CONNECTION_COUNT; ++i) {
+				if (this->qosArray.get(i) != 3)
+					return true;
+			}
+			return false;
+		}
 	};
-	
+
 	// barrier to wake up keepAlive()
 	Event keepAliveEvent;
 
 	// message id generator
 	uint16_t nextMsgId = 0;
-	
+
 	// connections to gateway and clients
 	ConnectionInfo connections[MAX_CONNECTION_COUNT];
 	BitField<MAX_CONNECTION_COUNT, 1> connectedFlags;
-	
+
 	// topics
 	StringHash<MAX_TOPIC_COUNT * 4 / 3, MAX_TOPIC_COUNT, MAX_TOPIC_COUNT * 32, TopicInfo> topics;
-	
+
 	// subscribers
 	SubscriberList subscribers;
 
@@ -213,7 +226,7 @@ protected:
 	Publisher *currentPublisher = nullptr;
 	BitField<MAX_CONNECTION_COUNT, 1> dirtyFlags;
 
-	
+
 	struct AckParameters {
 		uint8_t connectionIndex;
 		mqttsn::MessageType msgType;
@@ -223,9 +236,11 @@ protected:
 	};
 	Waitlist<AckParameters> ackWaitlist;
 
-	struct ReceiveParameters {
+	struct ForwardParameters {
+		uint16_t &sourceConnectionIndex;
+		uint16_t &topicIndex;
 		int &length;
 		uint8_t *message;
 	};
-	Waitlist<ReceiveParameters> receiveWaitlist;
+	Waitlist<ForwardParameters> forwardWaitlist;
 };

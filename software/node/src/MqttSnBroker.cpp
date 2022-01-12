@@ -1,5 +1,10 @@
 #include "MqttSnBroker.hpp"
+
+#define DEBUG_PRINT
+
+#ifdef DEBUG_PRINT
 #include <sys.hpp>
+#endif
 
 
 // default quality of service
@@ -16,18 +21,20 @@ constexpr int8_t min(int8_t x, int8_t y) {return x < y ? x : y;}
 MqttSnBroker::MqttSnBroker(uint16_t localPort)
 {
 	network::setLocalPort(NETWORK_MQTT, localPort);
-	
+
 	// init connections
 	for (ConnectionInfo &connection : this->connections) {
 		connection.endpoint.port = 0;
 	}
 	this->connectedFlags.clear();
-	
-	// start receiving coroutine
-	for (int i = 0; i < RECEIVE_COUNT; ++i)
-		receive();
+
+	// start coroutines
 	for (int i = 0; i < PUBLISH_COUNT; ++i)
 		publish();
+	for (int i = 0; i < RECEIVE_COUNT; ++i)
+		receive();
+	for (int i = 0; i < FORWARD_COUNT; ++i)
+		forward();
 }
 
 AwaitableCoroutine MqttSnBroker::connect(network::Endpoint const &gatewayEndpoint, String name,
@@ -46,13 +53,13 @@ AwaitableCoroutine MqttSnBroker::connect(network::Endpoint const &gatewayEndpoin
 	gateway.endpoint = gatewayEndpoint;
 	gateway.name = name;
 	this->connectedFlags.set(0, 1);
-	
+
 	for (int retry = 0; retry <= MAX_RETRY; ++retry) {
 		// send connect message
 		{
 			auto flags = (cleanSession ? mqttsn::Flags::CLEAN_SESSION : mqttsn::Flags::NONE)
 				| (willFlag ? mqttsn::Flags::WILL : mqttsn::Flags::NONE);
-		
+
 			MessageWriter w(message);
 			w.enum8<mqttsn::MessageType>(mqttsn::MessageType::CONNECT);
 			w.enum8(flags); // flags
@@ -87,7 +94,7 @@ AwaitableCoroutine MqttSnBroker::connect(network::Endpoint const &gatewayEndpoin
 			}
 		}
 	}
-	
+
 	// mark connection to gateway as not connected again
 	this->connectedFlags.set(0, 0);
 }
@@ -95,11 +102,14 @@ AwaitableCoroutine MqttSnBroker::connect(network::Endpoint const &gatewayEndpoin
 AwaitableCoroutine MqttSnBroker::keepAlive() {
 	uint8_t message[MAX_MESSAGE_LENGTH];
 	ConnectionInfo &gateway = this->connections[0];
-	
+
+	// set event so that all existing topics get registered/subscribed immediately
+	this->keepAliveEvent.set();
+
 	// ping gateway as long as we are connected
 	while (isGatewayConnected()) {
 		int s = co_await select(timer::sleep(KEEP_ALIVE_TIME), this->keepAliveEvent.wait());
-		
+
 		if (s == 1) {
 			if (isGatewayConnected()) {
 				int retry;
@@ -110,7 +120,7 @@ AwaitableCoroutine MqttSnBroker::keepAlive() {
 						w.enum8<mqttsn::MessageType>(mqttsn::MessageType::PINGREQ);
 						co_await network::send(NETWORK_MQTT, gateway.endpoint, w.finish());
 					}
-					
+
 					// wait for ping response
 					{
 						int length = array::count(message);
@@ -131,52 +141,18 @@ AwaitableCoroutine MqttSnBroker::keepAlive() {
 			// register/subscribe topics at gateway
 			this->keepAliveEvent.clear();
 			for (auto [topicName, topic] : this->topics) {
-				bool subscribe = topic.subscribed && topic.qosArray.get(0) == 3;
-				if (isGatewayConnected() && (topic.gatewayTopicId == 0 || subscribe)) {
+				bool clientSubscribed = topic.isClientSubscribed();
+
+				// determine action for this topic
+				bool reg = !topic.isRegisteredAtGateway();
+				bool sub = clientSubscribed && !topic.isSubscribedAtGateway();
+				bool unsub = !clientSubscribed && topic.isSubscribedAtGateway();
+				if (isGatewayConnected() && (reg || sub || unsub)) {
 					// generate message id
 					uint16_t msgId = getNextMsgId();
 
 					int retry;
-					if (!subscribe) {
-						// register
-						for (retry = 0; retry <= MAX_RETRY; ++retry) {
-							// send register message
-							{
-								MessageWriter w(message);
-								w.enum8<mqttsn::MessageType>(mqttsn::MessageType::REGISTER);
-								w.uint16(0); // topic id not known yet
-								w.uint16(msgId);
-								w.string(topicName);
-								co_await network::send(NETWORK_MQTT, gateway.endpoint, w.finish());
-							}
-
-							// wait for acknowledge from gateway
-							{
-								int length = array::count(message);
-								int s = co_await select(this->ackWaitlist.wait(uint8_t(0), mqttsn::MessageType::REGACK, msgId, length,
-									message), timer::sleep(RETRANSMISSION_TIME));
-								
-								// check if still connected
-								if (!isGatewayConnected())
-									break;
-
-								// check if we received a message
-								if (s == 1) {
-									// get topic id and return code
-									MessageReader r(length, message);
-									auto topicId = r.uint16();
-									r.skip(2); // msgId
-									auto returnCode = r.enum8<mqttsn::ReturnCode>();
-									
-									// check if successful
-									if (r.isValid() && returnCode == mqttsn::ReturnCode::ACCEPTED) {
-										topic.gatewayTopicId = topicId;
-										break;
-									}
-								}
-							}
-						}
-					} else {
+					if (sub) {
 						// subscribe
 						for (retry = 0; retry <= MAX_RETRY; ++retry) {
 							// send subscribe message
@@ -203,7 +179,7 @@ AwaitableCoroutine MqttSnBroker::keepAlive() {
 								// check if we received a message
 								if (s == 1) {
 									MessageReader r(length, message);
-										
+
 									// get flags, topic id and return code
 									auto flags = r.enum8<mqttsn::Flags>();
 									auto qos = mqttsn::getQos(flags);
@@ -214,7 +190,7 @@ AwaitableCoroutine MqttSnBroker::keepAlive() {
 									// check if successful
 									if (r.isValid() && returnCode == mqttsn::ReturnCode::ACCEPTED) {
 										topic.gatewayTopicId = topicId;
-										
+
 										// set quality of service level granted by the gateway
 										topic.qosArray.set(0, qos);
 										break;
@@ -222,8 +198,85 @@ AwaitableCoroutine MqttSnBroker::keepAlive() {
 								}
 							}
 						}
+					} else if (unsub) {
+						// unsubscribe
+						for (retry = 0; retry <= MAX_RETRY; ++retry) {
+							// send subscribe message
+							{
+								MessageWriter w(message);
+								w.enum8(mqttsn::MessageType::UNSUBSCRIBE);
+								auto flags = mqttsn::Flags::TOPIC_TYPE_NORMAL;
+								w.enum8(flags);
+								w.uint16(msgId);
+								w.string(topicName);
+								co_await network::send(NETWORK_MQTT, gateway.endpoint, w.finish());
+							}
+
+							// wait for acknowledge from gateway
+							{
+								int length = array::count(message);
+								int s = co_await select(this->ackWaitlist.wait(uint8_t(0), mqttsn::MessageType::UNSUBACK, msgId, length,
+									message), timer::sleep(RETRANSMISSION_TIME));
+
+								// check if still connected
+								if (!isGatewayConnected())
+									break;
+
+								// check if we received a message
+								if (s == 1) {
+									MessageReader r(length, message);
+									r.skip(2); // msgId
+
+									// check if successful
+									if (r.isValid()) {
+										// reset quality of service level granted by the gateway
+										topic.qosArray.set(0, 3);
+										break;
+									}
+								}
+							}
+						}
+					} else {
+						// register
+						for (retry = 0; retry <= MAX_RETRY; ++retry) {
+							// send register message
+							{
+								MessageWriter w(message);
+								w.enum8<mqttsn::MessageType>(mqttsn::MessageType::REGISTER);
+								w.uint16(0); // topic id not known yet
+								w.uint16(msgId);
+								w.string(topicName);
+								co_await network::send(NETWORK_MQTT, gateway.endpoint, w.finish());
+							}
+
+							// wait for acknowledge from gateway
+							{
+								int length = array::count(message);
+								int s = co_await select(this->ackWaitlist.wait(uint8_t(0), mqttsn::MessageType::REGACK, msgId, length,
+									message), timer::sleep(RETRANSMISSION_TIME));
+
+								// check if still connected
+								if (!isGatewayConnected())
+									break;
+
+								// check if we received a message
+								if (s == 1) {
+									// get topic id and return code
+									MessageReader r(length, message);
+									auto topicId = r.uint16();
+									r.skip(2); // msgId
+									auto returnCode = r.enum8<mqttsn::ReturnCode>();
+
+									// check if successful
+									if (r.isValid() && returnCode == mqttsn::ReturnCode::ACCEPTED) {
+										topic.gatewayTopicId = topicId;
+										break;
+									}
+								}
+							}
+						}
 					}
-					
+
 					// if maximum number of retries is exceeded, we assume to be disconnected from the gateway
 					if (retry > MAX_RETRY) {
 						this->connectedFlags.set(0, 0);
@@ -251,7 +304,7 @@ void MqttSnBroker::addPublisher(String topicName, Publisher &publisher) {
 	TopicInfo &topic = this->topics[topicIndex];
 
 	// wake up keepAlive() unless already registered at gateway
-	if (isGatewayConnected() && topic.gatewayTopicId == 0)
+	if (topic.gatewayTopicId == 0)
 		this->keepAliveEvent.set();
 }
 
@@ -271,24 +324,14 @@ void MqttSnBroker::addSubscriber(String topicName, Subscriber &subscriber) {
 	topic.subscribed = true;
 
 	// wake up keepAlive() unless already subscribed at gateway
-	if (isGatewayConnected() && topic.qosArray.get(0) == 3)
+	if (topic.qosArray.get(0) == 3)
 		this->keepAliveEvent.set();
-}
-
-void MqttSnBroker::initConnection(int connectionIndex) {
-	// set connected flag
-	this->connectedFlags.set(connectionIndex, 1);
-
-	// reset qos entry of this connection for all topics
-	for (auto [topicName, topic] : this->topics) {
-		topic.qosArray.set(connectionIndex, 3);
-	}
 }
 
 int MqttSnBroker::obtainTopicIndex(String name) {
 	if (name.isEmpty())
 		return -1;
-	return this->topics.obtain(name, [](int) {return TopicInfo{BitField<MAX_CONNECTION_COUNT, 2>().set(), 0, 0};});
+	return this->topics.obtain(name, [](int) {return TopicInfo{BitField<MAX_CONNECTION_COUNT, 2>().set(), 0, false, 0, 0};});
 }
 
 static bool writeMessage(MqttSnBroker::MessageWriter &w, MessageType srcType, void const *srcMessage) {
@@ -339,7 +382,7 @@ static bool writeMessage(MqttSnBroker::MessageWriter &w, MessageType srcType, vo
 		// conversion failed
 		return false;
 	}
-	
+
 	// conversion successful
 	return true;
 }
@@ -390,7 +433,7 @@ static bool readMessage(MessageType dstType, void *dstMessage, DataReader r) {
 			dst.onOff = v ^ 1 ^ (v >> 1);
 		}
 		break;
-	
+
 	case MessageType::TRIGGER:
 	case MessageType::TRIGGER2:
 		{
@@ -400,7 +443,7 @@ static bool readMessage(MessageType dstType, void *dstMessage, DataReader r) {
 			dst.trigger = v;
 		}
 		break;
-	
+
 	case MessageType::UP_DOWN:
 		{
 			int v = find(r.string(), upDown);
@@ -418,7 +461,7 @@ static bool readMessage(MessageType dstType, void *dstMessage, DataReader r) {
 			dst.upDown = (v << 1) | (v >> 1);
 		}
 		break;
-	
+
 	case MessageType::LEVEL:
 	case MessageType::MOVE_TO_LEVEL:
 		{
@@ -433,7 +476,7 @@ static bool readMessage(MessageType dstType, void *dstMessage, DataReader r) {
 			if (!level)
 				return false; // conversion failed
 			dst.level.set(*level, relative);
-			
+
 			if (dstType == MessageType::MOVE_TO_LEVEL) {
 				r.skipSpace();
 				String moveString = r.floatString();
@@ -453,12 +496,12 @@ static bool readMessage(MessageType dstType, void *dstMessage, DataReader r) {
 			}
 		}
 		break;
-		
+
 	default:
 		// conversion failed
 		return false;
 	}
-	
+
 	// conversion successful
 	return true;
 }
@@ -466,18 +509,20 @@ static bool readMessage(MessageType dstType, void *dstMessage, DataReader r) {
 Coroutine MqttSnBroker::publish() {
 	uint8_t message[MAX_MESSAGE_LENGTH];
 	while (true) {
+		auto &thisName = this->connections[0].name;
+
 		// wait until something was published
 		co_await this->publishEvent.wait();
-		
+
 		// check if there is a current publisher
 		if (this->currentPublisher != nullptr) {
 			int connectionIndex;
 			while ((connectionIndex = (this->dirtyFlags & this->connectedFlags).findFirstNonzero()) != -1) {
 				Publisher &publisher = *this->currentPublisher;
-				
+
 				// clear flag
 				this->dirtyFlags.set(connectionIndex, 0);
-				
+
 				// get connection info
 				ConnectionInfo &connection = this->connections[connectionIndex];
 
@@ -492,7 +537,7 @@ Coroutine MqttSnBroker::publish() {
 
 					// message flags
 					auto flags = mqttsn::makeQos(qos);
-					
+
 					// topic id
 					uint16_t topicId = connectionIndex == 0 ? topic.gatewayTopicId : publisher.index + 1;
 
@@ -505,17 +550,27 @@ Coroutine MqttSnBroker::publish() {
 							w.enum8(flags);
 							w.uint16(topicId);
 							w.uint16(msgId);
+							auto c = w.current;
 
 							// message data
 							if (!writeMessage(w, publisher.messageType, publisher.message))
 								break;
-							
+
+#ifdef DEBUG_PRINT
+							sys::out.write(thisName.string() + " publishes " + dec(w.current - c) + " bytes to ");
+							if (connectionIndex == 0)
+								sys::out.write("gateway");
+							else
+								sys::out.write(connection.name.string());
+							sys::out.write(" on topic " + this->topics.get(publisher.index)->key + " msgid " + dec(msgId) + '\n');
+#endif
+
 							co_await network::send(NETWORK_MQTT, connection.endpoint, w.finish());
 						}
-		
+
 						if (qos <= 0)
 							break;
-						
+
 						// wait for acknowledge from other end of connection (client or gateway)
 						{
 							int length = array::count(message);
@@ -530,18 +585,18 @@ Coroutine MqttSnBroker::publish() {
 							// check if we received a message
 							if (s == 1) {
 								MessageReader r(length, message);
-								
+
 								// get topic id and return code
 								topicId = r.uint16();
 								r.skip(2); // msgId
 								auto returnCode = r.enum8<mqttsn::ReturnCode>();
-								
+
 								// check if successful
 								if (r.isValid() && returnCode == mqttsn::ReturnCode::ACCEPTED)
 									break;
 							}
 						}
-						
+
 						// set duplicate flag and try again
 						flags |= mqttsn::Flags::DUP;
 					}
@@ -549,33 +604,33 @@ Coroutine MqttSnBroker::publish() {
 			}
 			this->currentPublisher = nullptr;
 		}
-		
+
 		// iterate over publishers
 		//bool dirty = false;
 		for (auto &publisher : this->publishers) {
 			// check if publisher wants to publish
 			if (publisher.dirty) {
 				publisher.dirty = false;
-				
+
 				// forward to subscribers
 				for (auto &subscriber : this->subscribers) {
 					if (subscriber.index == publisher.index) {
 						subscriber.barrier->resumeAll([&subscriber, &publisher] (Subscriber::Parameters &p) {
 							p.subscriptionIndex = subscriber.subscriptionIndex;
-							
+
 							// convert to target unit and type and resume coroutine if conversion was successful
 							return convert(subscriber.messageType, p.message,
 								publisher.messageType, publisher.message);
 						});
 					}
 				}
-				
+
 				this->currentPublisher = &publisher;
 				this->dirtyFlags.set();
 				break;
 			}
 		}
-		
+
 		// clear event when no dirty publisher was found
 		if (this->currentPublisher == nullptr)
 			this->publishEvent.clear();
@@ -587,18 +642,18 @@ Coroutine MqttSnBroker::receive() {
 
 	while (true) {
 		auto &thisName = this->connections[0].name;
-		
+
 		// receive a message from the gateway or a client
 		network::Endpoint source;
 		int length = MAX_MESSAGE_LENGTH;
 		co_await network::receive(NETWORK_MQTT, source, length, message);
 
 		MessageReader r(message);
-		
+
 		// check if message is complete
 		if (r.end - message > length)
 			continue;
-		
+
 		// get message type
 		auto msgType = r.enum8<mqttsn::MessageType>();
 
@@ -606,7 +661,7 @@ Coroutine MqttSnBroker::receive() {
 		if (!r.isValid()) {
 			continue;
 		}
-				
+
 		// search connection
 		int connectionIndex = -1;
 		for (int i = 0; i < MAX_CONNECTION_COUNT; ++i) {
@@ -622,8 +677,9 @@ Coroutine MqttSnBroker::receive() {
 			auto protocolId = r.uint8();
 			auto keepAliveDuration = r.uint16();
 			auto clientId = r.string();
+#ifdef DEBUG_PRINT
 			sys::out.write(clientId + " connects to " + thisName.string() + '\n');
-			
+#endif
 			if (connectionIndex == -1) {
 				// try to find an unused connection
 				connectionIndex = (~this->connectedFlags).set(0, 0).findFirstNonzero();
@@ -640,9 +696,17 @@ Coroutine MqttSnBroker::receive() {
 				// initialize the connection
 				this->connections[connectionIndex].endpoint = source;
 				this->connections[connectionIndex].name = clientId;
-				initConnection(connectionIndex);
+
+				// set connected flag
+				this->connectedFlags.set(connectionIndex, 1);
+
+				// reset qos entry of this connection for all topics
+				// todo: to support persistent sessions, don't do this when a client reconnects without clean session flag
+				for (auto [topicName, topic] : this->topics) {
+					topic.qosArray.set(connectionIndex, 3);
+				}
 			}
-			
+
 			// reply with CONNACK
 			MessageWriter w(message);
 			w.enum8(mqttsn::MessageType::CONNACK);
@@ -663,8 +727,9 @@ Coroutine MqttSnBroker::receive() {
 			auto topicId = r.uint16();
 			auto msgId = r.uint16();
 			auto topicName = r.string();
+#ifdef DEBUG_PRINT
 			sys::out.write(this->connections[connectionIndex].name.string() + " registers " + topicName + " at " + thisName.string() + '\n');
-
+#endif
 			// register the topic
 			auto returnCode = mqttsn::ReturnCode::ACCEPTED;
 			int topicIndex = obtainTopicIndex(topicName);
@@ -672,15 +737,20 @@ Coroutine MqttSnBroker::receive() {
 				// error: out of topic ids
 				returnCode = mqttsn::ReturnCode::REJECTED_CONGESTED;
 			} else {
+				TopicInfo &topic = this->topics[topicIndex];
 				if (connectionIndex == 0) {
 					// gateway: set gateway topic id
-					this->topics[topicIndex].gatewayTopicId = topicId;
+					topic.gatewayTopicId = topicId;
 				} else {
 					// client: return our topic id to client
 					topicId = topicIndex + 1;
+
+					// wake up keepAlive() to register the topic at gateway unless already registered
+					if (!topic.isRegisteredAtGateway())
+						this->keepAliveEvent.set();
 				}
 			}
-			
+
 			// reply with REGACK
 			{
 				MessageWriter w(message);
@@ -690,23 +760,16 @@ Coroutine MqttSnBroker::receive() {
 				w.enum8(returnCode);
 				co_await network::send(NETWORK_MQTT, source, w.finish());
 			}
-			
-			// register at gateway
-			if (isGatewayConnected() && returnCode == mqttsn::ReturnCode::ACCEPTED && connectionIndex != 0) {
-				TopicInfo &topic = this->topics[topicIndex];
-
-				// wake up keepAlive() unless already registered at gateway
-				if (topic.gatewayTopicId == 0)
-					this->keepAliveEvent.set();
-			}
 		} else if (msgType == mqttsn::MessageType::SUBSCRIBE) {
 			// a client wants to subscribe to a topic
 			auto flags = r.enum8<mqttsn::Flags>();
 			auto qos = min(mqttsn::getQos(flags), QOS);
+			//auto topicType = flags & mqttsn::Flags::TOPIC_TYPE_MASK;
 			auto msgId = r.uint16();
 			auto topicName = r.string();
+#ifdef DEBUG_PRINT
 			sys::out.write(this->connections[connectionIndex].name.string() + " subscribes " + topicName + " at " + thisName.string() + '\n');
-
+#endif
 			// register the topic
 			int topicIndex = -1;
 			auto returnCode = mqttsn::ReturnCode::ACCEPTED;
@@ -722,7 +785,10 @@ Coroutine MqttSnBroker::receive() {
 					// client: set qos and return our topic id to client
 					TopicInfo &topic = this->topics[topicIndex];
 					topic.qosArray.set(connectionIndex, qos);
-					topic.subscribed = true;
+
+					// wake up keepAlive() to subscribe at gateway unless already subscribed
+					if (!topic.isSubscribedAtGateway())
+						this->keepAliveEvent.set();
 				}
 			}
 			uint16_t topicId = topicIndex + 1;
@@ -737,14 +803,40 @@ Coroutine MqttSnBroker::receive() {
 				w.enum8(returnCode);
 				co_await network::send(NETWORK_MQTT, source, w.finish());
 			}
+		} else if (msgType == mqttsn::MessageType::UNSUBSCRIBE) {
+			// a client wants to unsubscribe to a topic
+			auto flags = r.enum8<mqttsn::Flags>();
+			auto qos = min(mqttsn::getQos(flags), QOS);
+			//auto topicType = flags & mqttsn::Flags::TOPIC_TYPE_MASK;
+			auto msgId = r.uint16();
+			auto topicName = r.string();
+#ifdef DEBUG_PRINT
+			sys::out.write(this->connections[connectionIndex].name.string() + " subscribes " + topicName + " from " + thisName.string() + '\n');
+#endif
+			// register the topic
+			if (connectionIndex == 0) {
+				// gateway: the gateway can't subscribe to topics
+			} else {
+				int topicIndex = topics.locate(topicName);
+				if (topicIndex == -1) {
+					// error: nopic name not found
+				} else {
+					// client: reset qos
+					TopicInfo &topic = this->topics[topicIndex];
+					topic.qosArray.set(connectionIndex, 3);
 
-			// subscribe at gateway
-			if (isGatewayConnected() && returnCode == mqttsn::ReturnCode::ACCEPTED) {
-				TopicInfo &topic = this->topics[topicIndex];
-				
-				// wake up keepAlive() unless already subscribed at gateway
-				if (topic.qosArray.get(0) == 3)
-					this->keepAliveEvent.set();
+					// wake up keepAlive() to unsubscribe from gateway when no client is subscribed any more
+					if (!topic.isClientSubscribed() && topic.isSubscribedAtGateway())
+						this->keepAliveEvent.set();
+				}
+			}
+
+			// reply with UNSUBACK
+			{
+				MessageWriter w(message);
+				w.enum8(mqttsn::MessageType::UNSUBACK);
+				w.uint16(msgId);
+				co_await network::send(NETWORK_MQTT, source, w.finish());
 			}
 		} else if (msgType == mqttsn::MessageType::PUBLISH) {
 			// the gateway or a client published to a topic
@@ -781,9 +873,8 @@ Coroutine MqttSnBroker::receive() {
 				break;
 			case mqttsn::Flags::TOPIC_TYPE_SHORT:
 				{
-					char topic[2] = {char(topicId >> 8), char(topicId)};
-					//topicIndex = getTopicIndex(topic, false);
-					topicIndex = this->topics.locate(topic);
+					char topicName[2] = {char(topicId >> 8), char(topicId)};
+					topicIndex = this->topics.locate(topicName);
 				}
 				break;
 			default:
@@ -791,10 +882,11 @@ Coroutine MqttSnBroker::receive() {
 			}
 
 			// check if topic is ok
-			bool topicOk = uint32_t(topicIndex) < MAX_TOPIC_COUNT && this->topics.isValid(topicIndex);
-			
+			bool topicOk = this->topics.isValid(topicIndex);
+
 			// acknowledge or report error
 			if (qos >= 1 || !topicOk) {
+				uint8_t message2[12];
 				MessageWriter w(message2);
 				w.enum8(mqttsn::MessageType::PUBACK);
 				w.uint16(topicId);
@@ -802,11 +894,20 @@ Coroutine MqttSnBroker::receive() {
 				w.enum8(topicOk ? mqttsn::ReturnCode::ACCEPTED : mqttsn::ReturnCode::REJECTED_INVALID_TOPIC_ID);
 				co_await network::send(NETWORK_MQTT, connection.endpoint, w.finish());
 			}
-			
+
 			// check if topic index is valid
 			if (!topicOk)
 				continue;
 			TopicInfo &topic = this->topics[topicIndex];
+
+#ifdef DEBUG_PRINT
+			sys::out.write(thisName.string() + " receives " + dec(pubLength) + " bytes from ");
+			if (connectionIndex == 0)
+				sys::out.write("gateway");
+			else
+				sys::out.write(connection.name.string());
+			sys::out.write(" on topic " + this->topics.get(topicIndex)->key + " msgid " + dec(msgId) + '\n');
+#endif
 
 			// check if message is duplicate
 			if (qos > 0) {
@@ -815,7 +916,7 @@ Coroutine MqttSnBroker::receive() {
 				topic.lastConnectionIndex = connectionIndex;
 				topic.lastMsgId = msgId;
 			}
-			
+
 			// publish to subscribers
 			for (auto &subscriber : this->subscribers) {
 				// check if this is the right topic
@@ -828,93 +929,23 @@ Coroutine MqttSnBroker::receive() {
 					});
 				}
 			}
-						
-			// publish to other connections
-			for (int connectionIndex2 = 0; connectionIndex2 < MAX_CONNECTION_COUNT; ++connectionIndex2) {
-				ConnectionInfo &connection2 = this->connections[connectionIndex2];
 
-				// get quality of service and topic id
-				int qos2;
-				uint16_t topicId2;
-				if (connectionIndex2 == 0) {
-					// publish to gateway (set qos to 3 if topic is not registered at gateway)
-					qos2 = topic.gatewayTopicId == 0 ? 3 : QOS;
-					topicId2 = topic.gatewayTopicId;
-				} else {
-					// publish to client (qos is 3 if client is not subscribed on the topic)
-					qos2 = topic.qosArray.get(connectionIndex2);
-					topicId2 = topicIndex + 1;
-				}
-				
-				// don't publish on connection over which we received the message
-				if (connectionIndex2 != connectionIndex && isConnected(connectionIndex2) && qos2 != 3) {
-					sys::out.write(thisName.string() + " publishes " + dec(pubLength) + " bytes to ");
-					if (connectionIndex2 == 0)
-						sys::out.write("gateway");
-					else
-						sys::out.write(connection2.name.string());
-					sys::out.write(" on topic " + this->topics.get(topicIndex)->key + '\n');
+			// forward to other connections
+			this->forwardWaitlist.resumeFirst([connectionIndex, topicIndex, pubLength, pubData](ForwardParameters &p) {
+				p.sourceConnectionIndex = connectionIndex;
+				p.topicIndex = topicIndex;
+				p.length = min(p.length, pubLength);
+				array::copy(p.length, p.message, pubData);
+				return true;
+			});
 
-					// generate message id
-					uint16_t msgId2 = qos2 <= 0 ? 0 : getNextMsgId();
-
-					// message flags
-					auto flags2 = mqttsn::makeQos(qos2);
-					
-					// send to gateway or client
-					for (int retry = 0; retry <= MAX_RETRY; ++retry) {
-						// send publish message
-						{
-							MessageWriter w(message2);
-							w.enum8(mqttsn::MessageType::PUBLISH);
-							w.enum8(flags2);
-							w.uint16(topicId2);
-							w.uint16(msgId2);
-							w.data(pubLength, pubData);
-							co_await network::send(NETWORK_MQTT, connection2.endpoint, w.finish());
-						}
-		
-						if (qos2 <= 0)
-							break;
-						
-						// wait for acknowledge from other end of connection (client or gateway)
-						{
-							int length2 = array::count(message2);
-							int s = co_await select(this->ackWaitlist.wait(uint8_t(connectionIndex2),
-								mqttsn::MessageType::PUBACK, msgId2, length2, message2),
-								timer::sleep(RETRANSMISSION_TIME));
-
-							// check if still connected
-							if (!isConnected(connectionIndex2))
-								break;
-
-							// check if we received a message
-							if (s == 1) {
-								MessageReader r(length2, message2);
-								
-								// get topic id and return code
-								topicId = r.uint16();
-								r.skip(2); // msgId
-								auto returnCode = r.enum8<mqttsn::ReturnCode>();
-								
-								// check if successful
-								if (r.isValid() && topicId == topicId2 && returnCode == mqttsn::ReturnCode::ACCEPTED)
-									break;
-							}
-						}
-						
-						// set duplicate flag and try again
-						flags |= mqttsn::Flags::DUP;
-					}
-				}
-			}
 		} else {
 			// handle acknowledge and disconnect messages
-			
+
 			// get message without length and type
 			int l = r.end - r.current;
 			uint8_t *m = r.current;
-			
+
 			uint16_t msgId;
 			String typeString;
 			switch (msgType) {
@@ -942,28 +973,42 @@ Coroutine MqttSnBroker::receive() {
 				msgId = r.uint16();
 				break;
 			case mqttsn::MessageType::UNSUBACK:
+				typeString = "UNSUBACK";
 				msgId = r.uint16();
 				break;
 			case mqttsn::MessageType::DISCONNECT:
-				// disconnect
-				this->connectedFlags.set(0, 0);
-				co_return;
+				typeString = "DISCONNECT";
+
+				// clear connected flag
+				this->connectedFlags.set(connectionIndex, 0);
+
+				// reset qos entry of this connection for all topics
+				// todo: to support persistent sessions, this should be done after some timeout
+				for (auto [topicName, topic] : this->topics) {
+					topic.qosArray.set(connectionIndex, 3);
+				}
+
+				this->keepAliveEvent.set();
+				continue;
 			default:
 				// unsupported message type
 				continue;
 			}
+
+#ifdef DEBUG_PRINT
 			sys::out.write(thisName.string() + " received " + typeString + " from ");
 			if (connectionIndex == 0)
 				sys::out.write("gateway");
 			else
 				sys::out.write(this->connections[connectionIndex].name.string());
 			sys::out.write(" msgid " + dec(msgId) + '\n');
+#endif
 
 			// check if we read past the end of the message
 			if (!r.isValid()) {
 				continue;
 			}
-			
+
 			// resume the coroutine that waits for msgId
 			this->ackWaitlist.resumeOne([connectionIndex, msgType, msgId, l, m](AckParameters &p) {
 				// check message type and id
@@ -978,3 +1023,106 @@ Coroutine MqttSnBroker::receive() {
 		}
 	}
 }
+
+Coroutine MqttSnBroker::forward() {
+	uint8_t message[MAX_MESSAGE_LENGTH];
+	while (true) {
+		auto &thisName = this->connections[0].name;
+
+		// wait for data to publish (place it at the right position)
+		uint16_t sourceConnectionIndex;
+		uint16_t topicIndex;
+		int length;
+		{
+			MessageWriter w(message);
+			w.skip(6);
+			length = message + MAX_MESSAGE_LENGTH - w.current;
+			co_await this->forwardWaitlist.wait(sourceConnectionIndex, topicIndex, length, w.current);
+		}
+		TopicInfo &topic = this->topics[topicIndex];
+
+		// publish to other connections
+		for (int connectionIndex = 0; connectionIndex < MAX_CONNECTION_COUNT; ++connectionIndex) {
+			ConnectionInfo &connection = this->connections[connectionIndex];
+
+			// get quality of service and topic id
+			int qos;
+			uint16_t topicId;
+			if (connectionIndex == 0) {
+				// publish to gateway (set qos to 3 if topic is not registered at gateway)
+				qos = topic.gatewayTopicId == 0 ? 3 : QOS;
+				topicId = topic.gatewayTopicId;
+			} else {
+				// publish to client (qos is 3 if client is not subscribed on the topic)
+				qos = topic.qosArray.get(connectionIndex);
+				topicId = topicIndex + 1;
+			}
+
+			// don't publish on connection over which we received the message
+			if (connectionIndex != sourceConnectionIndex && isConnected(connectionIndex) && qos != 3) {
+				// generate message id
+				uint16_t msgId = qos <= 0 ? 0 : getNextMsgId();
+
+#ifdef DEBUG_PRINT
+				sys::out.write(thisName.string() + " forwards " + dec(length) + " bytes to ");
+				if (connectionIndex == 0)
+					sys::out.write("gateway");
+				else
+					sys::out.write(connection.name.string());
+				sys::out.write(" on topic " + this->topics.get(topicIndex)->key + " msgid " + dec(msgId) + '\n');
+#endif
+
+				// message flags
+				auto flags = mqttsn::makeQos(qos);
+
+				// send to gateway or client
+				for (int retry = 0; retry <= MAX_RETRY; ++retry) {
+					// send publish message
+					{
+						MessageWriter w(message);
+						w.enum8(mqttsn::MessageType::PUBLISH);
+						w.enum8(flags);
+						w.uint16(topicId);
+						w.uint16(msgId);
+						w.skip(length); // data is already in the message
+						co_await network::send(NETWORK_MQTT, connection.endpoint, w.finish());
+					}
+
+					if (qos <= 0)
+						break;
+
+					// wait for acknowledge from gateway or client
+					{
+						uint8_t message2[8];
+						int length2 = array::count(message);
+						int s = co_await select(this->ackWaitlist.wait(uint8_t(connectionIndex),
+							mqttsn::MessageType::PUBACK, msgId, length2, message2),
+							timer::sleep(RETRANSMISSION_TIME));
+
+						// check if still connected
+						if (!isConnected(connectionIndex))
+							break;
+
+						// check if we received a message
+						if (s == 1) {
+							MessageReader r(length2, message2);
+
+							// get topic id and return code
+							auto topicId2 = r.uint16();
+							r.skip(2); // msgId
+							auto returnCode = r.enum8<mqttsn::ReturnCode>();
+
+							// check if successful
+							if (r.isValid() && topicId == topicId2 && returnCode == mqttsn::ReturnCode::ACCEPTED)
+								break;
+						}
+					}
+
+					// set duplicate flag and try again
+					flags |= mqttsn::Flags::DUP;
+				}
+			}
+		}
+	}
+}
+

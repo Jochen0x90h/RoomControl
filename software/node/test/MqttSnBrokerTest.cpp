@@ -14,9 +14,9 @@ StringBuffer<32> outTopic;
 
 struct Test {
 	MqttSnBroker broker;
-	
+
 	Test(uint16_t localPort) : broker(localPort) {}
-	
+
 
 	Coroutine connect(uint16_t gatewayPort, String name) {
 		network::Endpoint gatewayEndpoint = network::Endpoint::fromString("::1", gatewayPort);
@@ -27,10 +27,6 @@ struct Test {
 				sys::out.write(name + " connect\n");
 				co_await this->broker.connect(gatewayEndpoint, name);
 			}
-			//sys::out.write(name + " registerSubscriber\n");
-			//co_await this->broker.registerSubscriber(inTopic);
-			//sys::out.write(name + " registerPublisher\n");
-			//co_await this->broker.registerPublisher(outTopic);
 			sys::out.write(name + " keepAlive\n");
 			co_await this->broker.keepAlive();
 		}
@@ -44,21 +40,21 @@ struct Test {
 		subscriber.subscriptionIndex = 0;
 		subscriber.messageType = MessageType::ON_OFF;
 		subscriber.barrier = &barrier;
-		
+
 		Publisher publisher;
 		publisher.messageType = MessageType::ON_OFF;
 		publisher.message = &message;
 
 		this->broker.addSubscriber(inTopic, subscriber);
 		this->broker.addPublisher(outTopic, publisher);
-		
+
 		while (true) {
 			uint8_t subscriptionIndex;
 			co_await barrier.wait(subscriptionIndex, &message);
-			
+
 			if (message.onOff < 2)
 				message.onOff = message.onOff ^ 1;
-			
+
 			publisher.publish();
 		}
 	}
@@ -86,10 +82,10 @@ int main(void) {
 	timer::init();
 	network::init();
 	out::init();
-	
+
 	Test test(localPort);
 	test.connect(gatewayPort, name);
 	test.function();
 
-	loop::run();	
+	loop::run();
 }
