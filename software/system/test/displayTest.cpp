@@ -26,7 +26,7 @@ int main(void) {
 	loop::init();
 	spi::init();
 	display::init();
-	out::init();
+	gpio::init(); // for debug signals on pins
 
 	writeDisplay();
 	transferSpi();

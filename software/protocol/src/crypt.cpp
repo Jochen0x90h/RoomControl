@@ -5,15 +5,15 @@
 
 constexpr int L = 2; // size of message length field
 
-static void crypt(uint8_t *p, uint8_t *u, DataBuffer<13> const &nonce,
-	uint8_t const *c, int payloadLength, uint8_t const *t, int micLength, AesKey const &aesKey)
+static void crypt(uint8_t *p, uint8_t *u, uint8_t const *c, int payloadLength, uint8_t const *t, int micLength,
+	Array<uint8_t const, 13> nonce, AesKey const &aesKey)
 {
 	// C.4.1 Decryption Transformation
 	uint8_t const flags = L - 1;
 
 	// AES in counter mode, see https://de.wikipedia.org/wiki/Counter_Mode
 	DataBuffer<16> Ai;
-	Ai.setInt8(0, flags);
+	Ai.setU8(0, flags);
 	Ai.setData(1, nonce);
 
 	DataBuffer<16> Si;
@@ -22,7 +22,7 @@ static void crypt(uint8_t *p, uint8_t *u, DataBuffer<13> const &nonce,
 
 	while (length > 0) {
 		// set CTR-counter for Ai (starts with A1)
-		Ai.setBigEndianInt16(14, i++);
+		Ai.setU16B(14, i++);
 
 		// Si = E(Key, Ai)
 		encrypt(Si, Ai, aesKey);
@@ -38,7 +38,7 @@ static void crypt(uint8_t *p, uint8_t *u, DataBuffer<13> const &nonce,
 	}
 	
 	// set CTR-counter for A0
-	Ai.setBigEndianInt16(14, 0);
+	Ai.setU16B(14, 0);
 
 	// S0 = E(Key, A0)
 	encrypt(Si, Ai, aesKey);
@@ -51,8 +51,8 @@ static void crypt(uint8_t *p, uint8_t *u, DataBuffer<13> const &nonce,
 	}
 }
 
-void encrypt(uint8_t *result, DataBuffer<13> const &nonce, uint8_t const *header, int headerLength,
-	uint8_t const *message, int payloadLength, int micLength, AesKey const &aesKey)
+void encrypt(uint8_t *result, uint8_t const *header, int headerLength, uint8_t const *message, int payloadLength,
+	int micLength, Array<uint8_t const, 13> nonce, AesKey const &aesKey)
 {
 	int L = 2; // size of message length field
 	int M = 4; // size of authentication field (is 4 also for GP security level 1 where only 2 byte MIC is transferred)
@@ -64,16 +64,16 @@ void encrypt(uint8_t *result, DataBuffer<13> const &nonce, uint8_t const *header
 	DataBuffer<16> Xi;
 
 	// X0 ^ B0 (X0 is zero)
-	Xi.setInt8(0, flags);
+	Xi.setU8(0, flags);
 	Xi.setData(1, nonce);
-	Xi.setBigEndianInt16(14, payloadLength);
+	Xi.setU16B(14, payloadLength);
 
 	// X1 = E(key, X0 ^ B0)
 	encrypt(Xi, Xi, aesKey);
 	
 	// X1 ^ B1
-	Xi.xorBigEndianInt16(0, headerLength);
-	Xi.xorData(2, header, headerLength);
+	Xi.xorU16B(0, headerLength);
+	Xi.xorData(2, headerLength, header);
 	header += 14;
 	headerLength -= 14;
 
@@ -83,7 +83,7 @@ void encrypt(uint8_t *result, DataBuffer<13> const &nonce, uint8_t const *header
 	// repeat for remainder of header
 	while (headerLength > 0) {
 		// Xi ^ Bi
-		Xi.xorData(0, header, headerLength);
+		Xi.xorData(0, headerLength, header);
 		header += 16;
 		headerLength -= 16;
 
@@ -108,17 +108,17 @@ void encrypt(uint8_t *result, DataBuffer<13> const &nonce, uint8_t const *header
 
 	// authentication tag T is in Xi (message integrity code)
 
-	crypt(result, result + payloadLength, nonce, message, payloadLength, Xi.data, micLength, aesKey);
+	crypt(result, result + payloadLength, message, payloadLength, Xi.data, micLength, nonce, aesKey);
 }
 
-bool decrypt(uint8_t *result, DataBuffer<13> const &nonce, uint8_t const *header, int headerLength,
-	uint8_t const *message, int payloadLength, int micLength, AesKey const &aesKey)
+bool decrypt(uint8_t *result, uint8_t const *header, int headerLength, uint8_t const *message, int payloadLength,
+	int micLength, Array<uint8_t const, 13> nonce, AesKey const &aesKey)
 {
 	int M = 4; // size of authentication field (is 4 also for security level 1)
 	uint8_t const flags = 0x40 | ((M - 2) / 2 << 3) | (L - 1);
 
 	uint8_t T[4];
-	crypt(result, T, nonce, message, payloadLength, message + payloadLength, micLength, aesKey);
+	crypt(result, T, message, payloadLength, message + payloadLength, micLength, nonce, aesKey);
 	
 	// C.4.2 Authentication Checking Transformation
 	// C.3.2 Authentication Transformation
@@ -127,16 +127,16 @@ bool decrypt(uint8_t *result, DataBuffer<13> const &nonce, uint8_t const *header
 		DataBuffer<16> Xi;
 
 		// X0 ^ B0 (X0 is zero)
-		Xi.setInt8(0, flags);
+		Xi.setU8(0, flags);
 		Xi.setData(1, nonce);
-		Xi.setBigEndianInt16(14, payloadLength);
+		Xi.setU16B(14, payloadLength);
 
 		// X1 = E(key, X0 ^ B0)
 		encrypt(Xi, Xi, aesKey);
 		
 		// X1 ^ B1
-		Xi.xorBigEndianInt16(0, headerLength);
-		Xi.xorData(2, header, headerLength);
+		Xi.xorU16B(0, headerLength);
+		Xi.xorData(2, headerLength, header);
 		header += 14;
 		headerLength -= 14;
 		
@@ -146,7 +146,7 @@ bool decrypt(uint8_t *result, DataBuffer<13> const &nonce, uint8_t const *header
 		// repeat for remainder of header
 		while (headerLength > 0) {
 			// Xi ^ Bi
-			Xi.xorData(0, header, headerLength);
+			Xi.xorData(0, headerLength, header);
 			header += 16;
 			headerLength -= 16;
 

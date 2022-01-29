@@ -65,6 +65,7 @@ set(UTIL
 	util/src/BitField.hpp
 	util/src/Bitmap.cpp
 	util/src/Bitmap.hpp
+	#util/src/Buffer.hpp
 	util/src/convert.cpp
 	util/src/convert.hpp
 	util/src/Coroutine.hpp
@@ -79,6 +80,7 @@ set(UTIL
 	util/src/optional.hpp
 	util/src/Pointer.hpp
 	util/src/Queue.hpp
+	util/src/Stream.hpp
 	util/src/String.hpp
 	util/src/StringBuffer.hpp
 	util/src/StringHash.hpp
@@ -95,8 +97,10 @@ set(PROTOCOL
 	protocol/src/crypt.cpp
 	protocol/src/crypt.hpp
 	protocol/src/DataBuffer.hpp
-	protocol/src/DataReader.hpp
-	protocol/src/DataWriter.hpp
+	#protocol/src/DataReader.hpp
+	#protocol/src/DataWriter.hpp
+	protocol/src/MessageReader.hpp
+	protocol/src/MessageWriter.hpp
 	protocol/src/gp.hpp
 	protocol/src/hash.cpp
 	protocol/src/hash.hpp
@@ -128,13 +132,13 @@ set(SYSTEM
 	system/src/flash.hpp
 	#system/src/emu/global.cpp
 	#system/src/emu/global.hpp
+	system/src/emu/gpio.cpp
+	system/src/gpio.hpp
 	system/src/emu/Gui.cpp
 	system/src/emu/Gui.hpp
 	system/src/emu/loop.cpp
 	system/src/emu/loop.hpp
 	system/src/loop.hpp
-	system/src/emu/out.cpp
-	system/src/out.hpp
 	system/src/emu/network.cpp
 	system/src/network.hpp
 	system/src/emu/poti.cpp
@@ -144,11 +148,11 @@ set(SYSTEM
 	system/src/radioDefs.hpp
 	system/src/emu/rng.cpp
 	system/src/rng.hpp
-	system/src/spi.hpp
 	system/src/emu/spi.cpp
-	system/src/sys.hpp
-	system/src/emu/sys.cpp
+	system/src/spi.hpp
 	system/src/SystemTime.hpp
+	system/src/emu/terminal.cpp
+	system/src/terminal.hpp
 	system/src/emu/timer.cpp
 	system/src/timer.hpp
 	system/src/emu/usb.cpp
@@ -404,8 +408,8 @@ add_executable(sniffer
 	tools/src/sniffer.cpp
 	${UTIL}
 	${PROTOCOL}
-	system/src/sys.hpp
-	system/src/emu/sys.cpp
+	system/src/terminal.hpp
+	system/src/emu/terminal.cpp
 )
 target_include_directories(sniffer
 	PRIVATE
@@ -510,20 +514,20 @@ add_test(NAME utilTest
 	#WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/../testdata
 )
 
-# crypt test
-add_executable(cryptTest
-	protocol/test/cryptTest.cpp
-	#${UTIL}
+# protocol test
+add_executable(protocolTest
+	protocol/test/protocolTest.cpp
+	${UTIL}
 	${PROTOCOL}
 )
-target_include_directories(cryptTest
+target_include_directories(protocolTest
 	PRIVATE
 	protocol/src
 	util/src
 )
-conan_target_link_libraries(cryptTest)
-add_test(NAME cryptTest
-	COMMAND cryptTest --gtest_output=xml:report.xml
+conan_target_link_libraries(protocolTest)
+add_test(NAME protocolTest
+	COMMAND protocolTest --gtest_output=xml:report.xml
 	#WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/../testdata
 )
 

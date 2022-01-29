@@ -7,7 +7,9 @@
 #include <spi.hpp>
 #include <rng.hpp>
 #include <radio.hpp>
-#include <out.hpp>
+#include <gpio.hpp>
+#include <terminal.hpp>
+#include <timer.hpp>
 #include <crypt.hpp>
 #include <Queue.hpp>
 #include "tahoma_8pt.hpp" // font
@@ -200,7 +202,7 @@ ValueInfo valueInfos[] = {
 
 // RoomControl
 // -----------
-
+/*
 static Configuration &initConfiguration(Storage::Array<Configuration> &configurations,
 	PersistentStateManager &stateManager)
 {
@@ -235,17 +237,48 @@ static Configuration &initConfiguration(Storage::Array<Configuration> &configura
 
 	return configurations[0];
 }
-
+*/
 RoomControl::RoomControl()
 	//: storage(FLASH_PAGE_COUNT/2, FLASH_PAGE_COUNT/2, localDevices, busDevices, radioDevices, routes, timers)
 	: storage(0, FLASH_PAGE_COUNT, configurations, busInterface.devices, radioInterface.gpDevices, radioInterface.zbDevices)
 	, stateManager()
 	, houseTopicId(), roomTopicId()
-	, busInterface(initConfiguration(configurations, stateManager), stateManager)
-	, radioInterface(initConfiguration(configurations, stateManager), stateManager)
+	, busInterface(stateManager)
+	, radioInterface(stateManager)
 {
-	//timer::setHandler(this->timerIndex, [this]() {onTimeout();});
+	// set default configuration if necessary
+	if (configurations.isEmpty()) {
+		ConfigurationFlash configuration;
+		
+		// name
+		assign(configuration.name, "room");
+		
+		// generate a random 64 bit address
+		configuration.ieeeLongAddress = rng::int64();
+		
+		// set default pan
+		configuration.zbeePanId = 0x1a62;
+		
+		// generate random network key
+		for (uint8_t &b : configuration.key) {
+			b = rng::int8();
+		}
+		setKey(configuration.aesKey, configuration.key);
+		
+		
+		// state offsets for interfaces
+		//configuration.busSecurityCounterOffset = stateManager.allocate<uint32_t>();
+		//configuration.zbeeSecurityCounterOffset = stateManager.allocate<uint32_t>();
 
+		
+		// write to flash
+		configurations.write(0, new Configuration(configuration));
+	}
+	auto &configuration = *configurations[0];
+	
+	this->busInterface.start(configuration.key, configuration.aesKey);
+	this->radioInterface.start(configuration.zbeePanId, configuration.key, configuration.aesKey);
+	
 	applyConfiguration();
 	
 	// subscribe to local devices
@@ -277,7 +310,7 @@ RoomControl::~RoomControl() {
 void RoomControl::applyConfiguration() {
 	auto const &configuration = *this->configurations[0];
 	radio::setLongAddress(configuration.ieeeLongAddress);
-	radio::setPan(RADIO_ZBEE, configuration.zbeePanId);
+	//radio::setPan(RADIO_ZBEE, configuration.zbeePanId);
 }
 
 /*
@@ -2833,32 +2866,32 @@ void RoomControl::enterTopicSelector(String topic, bool onlyCommands, int index)
 static void printDevices(Interface &interface) {
 	for (int i = 0; i < interface.getDeviceCount(); ++i) {
 		auto deviceId = interface.getDeviceId(i);
-		sys::out.write(hex(deviceId) + '\n');
+		terminal::out << (hex(deviceId) + '\n');
 		Array<EndpointType const> endpoints = interface.getEndpoints(deviceId);
 		for (auto endpoint : endpoints) {
-			sys::out.write('\t');
+			terminal::out << ('\t');
 			switch (endpoint & EndpointType::TYPE_MASK) {
 			case EndpointType::ON_OFF:
-				sys::out.write("ON_OFF");
+				terminal::out << ("ON_OFF");
 				break;
 			case EndpointType::TRIGGER:
-				sys::out.write("TRIGGER");
+				terminal::out << ("TRIGGER");
 				break;
 			case EndpointType::UP_DOWN:
-				sys::out.write("UP_DOWN");
+				terminal::out << ("UP_DOWN");
 				break;
 			case EndpointType::BATTERY_LEVEL:
-				sys::out.write("BATTERY_LEVEL");
+				terminal::out << ("BATTERY_LEVEL");
 				break;
 			default:
-				sys::out.write("unknown");
+				terminal::out << ("unknown");
 				break;
 			}
 			if ((endpoint & EndpointType::DIRECTION_MASK) == EndpointType::IN)
-				sys::out.write(" IN");
+				terminal::out << (" IN");
 			else
-				sys::out.write(" OUT");
-			sys::out.write('\n');
+				terminal::out << (" OUT");
+			terminal::out << ('\n');
 		}
 	}
 }
@@ -2885,7 +2918,7 @@ Coroutine RoomControl::testSwitch() {
 	for (int i = 0; i < interface.getDeviceCount(); ++i) {
 		auto deviceId = interface.getDeviceId(i);
 		Array<EndpointType const> endpoints = interface.getEndpoints(deviceId);
-		for (int endpointIndex = 0; endpointIndex < endpoints.length; ++endpointIndex) {
+		for (int endpointIndex = 0; endpointIndex < endpoints.count(); ++endpointIndex) {
 			auto endpointType = endpoints[endpointIndex];
 			if (!haveIn && (endpointType == EndpointType::ON_OFF_IN || endpointType == EndpointType::UP_DOWN_IN)) {
 				haveIn = true;
@@ -2907,9 +2940,9 @@ Coroutine RoomControl::testSwitch() {
 		publisher.publish();
 
 		if (message <= 1)
-			out::set(0, message);
+			gpio::set(0, message);
 		else if (message == 2)
-			out::toggle(0);
+			gpio::toggle(0);
 	}
 }
 
@@ -3360,7 +3393,7 @@ AwaitableCoroutine RoomControl::devicesMenu(Interface &interface) {
 
 
 AwaitableCoroutine RoomControl::deviceMenu(Interface &interface, DeviceId deviceId) {
-	bool hasEndpoints = interface.getEndpoints(deviceId).length > 0;
+	bool hasEndpoints = interface.getEndpoints(deviceId).count() > 0;
 
 	Menu menu(this->swapChain);
 	while (true) {
@@ -3385,7 +3418,7 @@ AwaitableCoroutine RoomControl::endpointsMenu(Interface &interface, DeviceId dev
 
 	Menu menu(this->swapChain);
 	while (true) {
-		for (int i = 0; i < endpoints.length; ++i) {
+		for (int i = 0; i < endpoints.count(); ++i) {
 			auto endpointType = endpoints[i];
 			StringBuffer<24> b = dec(i) + ": ";
 			switch (endpointType & EndpointType::TYPE_MASK) {
@@ -3514,7 +3547,7 @@ AwaitableCoroutine RoomControl::messageLogger(Interface &interface, DeviceId dev
 	};
 	Queue<Event, 16> queue;
 	
-	// add an empty back element to receive the first message
+	// add an empty event at the back of the queue to receive the first message
 	queue.addBack();
 
 	// menu loop
@@ -3554,13 +3587,13 @@ AwaitableCoroutine RoomControl::messageLogger(Interface &interface, DeviceId dev
 		if (menu.entry("Exit"))
 			break;
 
-		// get back element from queue
+		// get the empty event at the back of the queue
 		Event &event = queue.getBack();
 
-		// show menu or receive data
+		// show menu or receive event (event gets filled in)
 		int selected = co_await select(menu.show(), barrier.wait(event.endpointIndex, &event.message));
 		if (selected == 2) {
-			// add a new back element to receive the next message
+			// received an event: add new empty event at the back of the queue
 			queue.addBack();
 		}
 	}
@@ -3592,7 +3625,7 @@ AwaitableCoroutine RoomControl::messageGenerator(Interface &interface, DeviceId 
 		// endpoint index
 		if (editIndex) {
 			publisher.remove();
-			endpointIndex = clamp(endpointIndex + delta, 0, endpoints.length - 1);
+			endpointIndex = clamp(endpointIndex + delta, 0, endpoints.count() - 1);
 			endpointType = endpoints[endpointIndex];
 			auto newMessageType = getDefaultMessageType(endpointType);
 			if (newMessageType != publisher.messageType)
@@ -3628,9 +3661,9 @@ AwaitableCoroutine RoomControl::messageGenerator(Interface &interface, DeviceId 
 			break;
 		case EndpointType::LEVEL:
 			if (editMessage)
-				message.moveToLevel.level = clamp(message.moveToLevel.level + delta * 0.05, 0.0f, 1.0f);
+				message.moveToLevel.level = clamp(float(message.moveToLevel.level) + delta * 0.05f, 0.0f, 1.0f);
 			if (editMessage2)
-				message.moveToLevel.move = clamp(message.moveToLevel.move + delta * 0.5, 0.0f, 100.0f);
+				message.moveToLevel.move = clamp(float(message.moveToLevel.move) + delta * 0.5f, 0.0f, 100.0f);
 			valueString = flt(message.moveToLevel.level, 2);
 			valueString2 = flt(message.moveToLevel.move, 1);
 			unitString = "s";

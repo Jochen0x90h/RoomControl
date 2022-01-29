@@ -9,6 +9,7 @@
 #include <StringBuffer.hpp>
 #include <StringHash.hpp>
 #include <StringSet.hpp>
+#include <StringOperators.hpp>
 #include <TopicBuffer.hpp>
 #include <gtest/gtest.h>
 #include <random>
@@ -18,25 +19,92 @@
 
 constexpr String strings[] = {"a", "bar", "bar2", "foo", "foo2", "foobar", "foobar2", "z"};
 
-
-TEST(utilTest, Array) {
-	int foo[] = {1, 2, 3};
-	int const bar[] = {1, 2, 3};
-
-	Array<int> fooArray(foo);
-	Array<int const> barArray(bar);
+// array with fixed size
+TEST(utilTest, ArrayN) {
+	int a1[] = {1, 2, 3};
+	int const a2[] = {11, 12, 13};
 	
-	EXPECT_FALSE(fooArray.isEmpty());
-	EXPECT_FALSE(barArray.isEmpty());
-	EXPECT_EQ(fooArray.length, 3);
-	EXPECT_EQ(barArray.length, 3);
-
-	EXPECT_EQ(foo[0], 1);
-	EXPECT_EQ(bar[2], 3);
+	// construct arrays from c-arrays
+	Array<int, 3> b1(a1);
+	Array<int const, 3> b2(a2);
+	Array<char const, 4> str("foo");
 	
-	foo[1] = 50;
-	EXPECT_EQ(foo[1], 50);
+	EXPECT_EQ(b1[1], a1[1]);
+	EXPECT_EQ(b2[1], a2[1]);
+	EXPECT_EQ(str[1], 'o');
+
+	EXPECT_FALSE(b1.isEmpty());
+	EXPECT_FALSE(b2.isEmpty());
+	EXPECT_EQ(b1.count(), 3);
+	EXPECT_EQ(b2.count(), 3);
+	
+	// construct const array from non-const array
+	Array<int const, 3> b3(b1);
+
+	// assign a value
+	b1[1] = 10;
+	EXPECT_EQ(b1[1], 10);
+	//b2[1] = 10; // should not compile
+	
+	// assign from other buffer
+	b3 = b1;
+	EXPECT_EQ(b3[1], b1[1]);
+	b3 = b2;
+	EXPECT_EQ(b3[1], b2[1]);
+
+	// fill with value and check count
+	b1.fill(50);
+	int count = 0;
+	for (int i : b1) {
+		++count;
+		EXPECT_EQ(i, 50);
+	}
+	EXPECT_EQ(count, 3);
 }
+
+// array with variable size
+TEST(utilTest, Array) {
+	int a1[] = {1, 2, 3};
+	int const a2[] = {11, 12, 13};
+	
+	// construct arrays from c-arrays
+	Array<int> b1(a1);
+	Array<int const> b2(a2);
+	Array<char const> str("foo");
+	
+	EXPECT_EQ(b1[1], a1[1]);
+	EXPECT_EQ(b2[1], a2[1]);
+	EXPECT_EQ(str[1], 'o');
+
+	EXPECT_FALSE(b1.isEmpty());
+	EXPECT_FALSE(b2.isEmpty());
+	EXPECT_EQ(b1.count(), 3);
+	EXPECT_EQ(b2.count(), 3);
+
+	// construct const array from non-const array
+	Array<int const> b3(b1);
+
+	// assign a value
+	b1[1] = 10;
+	EXPECT_EQ(b1[1], 10);
+	//b2[1] = 10; // should not compile
+
+	// assign from other buffer
+	b3 = b1;
+	EXPECT_EQ(b3[1], b1[1]);
+	b3 = b2;
+	EXPECT_EQ(b3[1], b2[1]);
+
+	// fill with value and check count
+	b1.fill(50);
+	int count = 0;
+	for (int i : b1) {
+		++count;
+		EXPECT_EQ(i, 50);
+	}
+	EXPECT_EQ(count, 3);
+}
+
 
 TEST(utilTest, ArrayList) {
 	std::mt19937 gen(1337); // standard mersenne_twister_engine seeded with 1337
@@ -74,6 +142,7 @@ TEST(utilTest, ArrayList) {
 		}
 	}
 }
+
 
 TEST(utilTest, DataQueue) {
 	using Q = DataQueue<int, 32, 256>;
@@ -168,7 +237,7 @@ struct MyListElement : public LinkedListNode<MyListElement> {
 
 using MyList = LinkedListNode<MyListElement>;
 
-TEST(utilTest, MyList) {
+TEST(utilTest, LinkedListNode) {
 	MyList list;
 	
 	MyListElement element;
@@ -287,19 +356,12 @@ TEST(utilTest, StringBuffer) {
 	b += " ";
 	b += flt(0.001234567f, 9);
 	b += " ";
-	b += flt(0.5f);
-	b += " ";
-	b += flt(0.5f, 0, 2);
-	b += " ";
+	b += flt(0.5f) + ' ';
+	b += flt(0.5f, 0, 2) + " ";
 	b += flt(1.0f, 1);
-	b += " ";
-	b += flt(1.0f, -1);
-	b += " ";
-	b += flt(-5.9f);
-	b += " ";
-	b += flt(100.9999f);
-	b += " ";
-	b += flt(2000000000);
+	b += ' ' + flt(1.0f, -1);
+	b += " " + flt(-5.9f);
+	b += " " + flt(100.9999f) + " " + flt(2000000000);
 	EXPECT_EQ(b.string(), "123456 -099 5 abcdef12 0 0 0.001234567 0.5 .5 1 1.0 -5.9 101 2000000000");
 
 	StringBuffer<5> c = flt(0.000000001f, 9);
@@ -370,7 +432,7 @@ TEST(utilTest, StringHash) {
 			for (int i = 0; i < count; ++i) {
 				int index = distrib(gen);
 				String s = strings[index];
-				int location = hash.obtain(s, [index](int) {return index;});
+				int location = hash.getOrPut(s, [index]() {return index;});
 				stdMap[s] = std::make_pair(location, index);
 			}
 	

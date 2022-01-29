@@ -1,9 +1,13 @@
 #include <MqttSnBroker.hpp>
 #include <network.hpp>
 #include <timer.hpp>
-#include <sys.hpp>
+#include <terminal.hpp>
 #include <loop.hpp>
 #include <debug.hpp>
+#include <StringOperators.hpp>
+#ifdef EMU
+#include <string>
+#endif
 
 
 StringBuffer<32> name;
@@ -17,21 +21,27 @@ struct Test {
 
 	Test(uint16_t localPort) : broker(localPort) {}
 
-
+	// connect to gateway and keep the connection alive
 	Coroutine connect(uint16_t gatewayPort, String name) {
 		network::Endpoint gatewayEndpoint = network::Endpoint::fromString("::1", gatewayPort);
 
 		while (true) {
+			// connect to gateway
 			while (!this->broker.isGatewayConnected()) {
 				// connect to gateway
-				sys::out.write(name + " connect\n");
+				terminal::out << name << " connect to gateway\n";
 				co_await this->broker.connect(gatewayEndpoint, name);
 			}
-			sys::out.write(name + " keepAlive\n");
+			
+			// now we are connected and need to keep the connection alive
+			terminal::out << name << " keep connection alive\n";
 			co_await this->broker.keepAlive();
+			
+			// connection lost, try to connect again
 		}
 	}
 
+	// simple "function" that subscribes to a topic, processes the data and publishes it on another topic
 	Coroutine function() {
 		Message message;
 
@@ -45,6 +55,8 @@ struct Test {
 		publisher.messageType = MessageType::ON_OFF;
 		publisher.message = &message;
 
+		terminal::out << name << " subscribe to '" << inTopic << "'\n";
+		terminal::out << name << " publish on '" << outTopic << "'\n";
 		this->broker.addSubscriber(inTopic, subscriber);
 		this->broker.addPublisher(outTopic, publisher);
 
@@ -81,7 +93,7 @@ int main(void) {
 	loop::init();
 	timer::init();
 	network::init();
-	out::init();
+	gpio::init();
 
 	Test test(localPort);
 	test.connect(gatewayPort, name);

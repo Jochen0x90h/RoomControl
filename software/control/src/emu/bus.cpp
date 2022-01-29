@@ -77,7 +77,7 @@ void handle(Gui &gui) {
 			// read from device: search for a device that has requested to be read
 			for (Device &device : bus::devices) {
 				if (device.flash.commissioned && device.requestFlags != 0) {
-					for (int endpointIndex = 0; endpointIndex < device.endpoints.length; ++endpointIndex) {
+					for (int endpointIndex = 0; endpointIndex < device.endpoints.count(); ++endpointIndex) {
 						EndpointType endpointType = device.endpoints[endpointIndex];
 						int flag = 1 << endpointIndex;
 						if ((device.requestFlags & flag) != 0) {
@@ -86,30 +86,31 @@ void handle(Gui &gui) {
 							BusInterface::MessageWriter w(p.readData);
 														
 							// set start of header
-							w.setHeader();
+							//w.setHeader();
+							EncryptWriter c(w);
 
 							// encoded address
 							w.arbiter((device.flash.address & 7) + 1);
 							w.arbiter(device.flash.address >> 3);
 
 							// security counter
-							w.uint32(device.securityCounter);
+							w.u32L(device.securityCounter);
 							
 							// set start of message
-							w.setMessage();
+							c.setMessage();
 							
 							// endpoint index
-							w.uint8(endpointIndex);
+							w.u8(endpointIndex);
 
 							int state = device.states[endpointIndex];
 							switch (endpointType) {
 							case EndpointType::ON_OFF_IN:
 							case EndpointType::TRIGGER_IN:
 							case EndpointType::UP_DOWN_IN:
-								w.uint8(state);
+								w.u8(state);
 								break;
 							case EndpointType::TEMPERATURE_IN:
-								w.uint16(state);
+								w.u16L(state);
 								break;
 							default:
 								break;
@@ -117,7 +118,7 @@ void handle(Gui &gui) {
 							
 							// encrypt
 							Nonce nonce(device.flash.address, device.securityCounter);
-							w.encrypt(4, nonce, device.flash.aesKey);
+							c.encrypt(4, nonce, device.flash.aesKey);
 							
 							// increment security counter
 							++device.securityCounter;
@@ -134,31 +135,32 @@ void handle(Gui &gui) {
 			uint8_t data[64];
 			array::copy(Array<uint8_t>(data), p.writeData);
 			BusInterface::MessageReader r(p.writeLength, data);
-			r.setHeader();
+			DecryptReader c(r);
+			//r.setHeader();
 			uint8_t address = (r.arbiter() - 1) | (r.arbiter() << 3);
 			for (Device &device : bus::devices) {
 				if (device.flash.address == address) {
 					// security counter
-					uint32_t securityCounter = r.int32();
+					uint32_t securityCounter = r.u32L();
 					
 					// todo: check security counter
 					
-					r.setMessage();
+					c.setMessage();
 					
 					// decrypt
 					Nonce nonce(address, securityCounter);
-					if (!r.decrypt(4, nonce, device.flash.aesKey))
+					if (!c.decrypt(4, nonce, device.flash.aesKey))
 						break;
 					
-					uint8_t endpointIndex = r.uint8();
-					if (endpointIndex < device.endpoints.length) {
+					uint8_t endpointIndex = r.u8();
+					if (endpointIndex < device.endpoints.count()) {
 						EndpointType endpointType = device.endpoints[endpointIndex];
 						int &state = device.states[endpointIndex];
 						
 						switch (endpointType) {
 						case EndpointType::ON_OFF:
 							{
-								uint8_t s = r.uint8();
+								uint8_t s = r.u8();
 								if (s < 2)
 									state = s;
 								else
@@ -167,10 +169,10 @@ void handle(Gui &gui) {
 							break;
 						case EndpointType::TRIGGER:
 						case EndpointType::UP_DOWN:
-							state = (state & ~3) | r.uint8();
+							state = (state & ~3) | r.u8();
 							break;
 						case EndpointType::TEMPERATURE:
-							state = r.uint16();
+							state = r.u16L();
 							break;
 						default:
 							break;
@@ -186,7 +188,10 @@ void handle(Gui &gui) {
 				for (Device &device : bus::devices) {
 					if (!device.flash.commissioned) {
 						BusInterface::MessageWriter w(p.readData);
-						w.setHeader();
+						EncryptWriter c(w);
+						//w.setHeader();
+						
+						// skip zero
 						w.skip(1);
 						
 						// encode device id
@@ -200,11 +205,11 @@ void handle(Gui &gui) {
 						w.data(device.endpoints);
 						
 						// start of message (is empty, everything is in the header)
-						w.setMessage();
+						c.setMessage();
 
 						// encrypt
 						Nonce nonce(0, 0);
-						w.encrypt(micLength, nonce, busDefaultAesKey);
+						c.encrypt(micLength, nonce, busDefaultAesKey);
 						
 						p.readLength = w.getLength();
 						
@@ -216,26 +221,28 @@ void handle(Gui &gui) {
 				uint8_t data[64];
 				array::copy(p.writeLength, data, p.writeData);
 				BusInterface::MessageReader r(p.writeLength, data);
-				r.setHeader();
+				DecryptReader c(r);
+				//r.setHeader();
 				r.skip(2);
 								
 				// search device with given device id
-				uint32_t deviceId = r.int32();
+				uint32_t deviceId = r.u32L();
 				int offset = 0;
 				for (Device &device : bus::devices) {
 					if (device.id == deviceId) {
-						r.setMessage(data + p.writeLength - 4);
+						//r.setMessage(data + p.writeLength - 4);
+						c.setMessageFromEnd(micLength);
 						
 						// decrypt
 						Nonce nonce(0, 0);
-						if (!r.decrypt(4, nonce, busDefaultAesKey))
+						if (!c.decrypt(micLength, nonce, busDefaultAesKey))
 							break;
 						
 						// set address
-						device.flash.address = r.uint8();
+						device.flash.address = r.u8();
 						
 						// set key
-						setKey(device.flash.aesKey, r.current);
+						setKey(device.flash.aesKey, r.data<16>());
 						
 						// write to file
 						device.flash.commissioned = true;
@@ -272,7 +279,7 @@ void handle(Gui &gui) {
 			continue;
 
 		// iterate over endpoints
-		for (int endpointIndex = 0; endpointIndex < device.endpoints.length; ++endpointIndex) {
+		for (int endpointIndex = 0; endpointIndex < device.endpoints.count(); ++endpointIndex) {
 			EndpointType endpointType = device.endpoints[endpointIndex];
 			int &state = device.states[endpointIndex];
 		

@@ -5,7 +5,7 @@
 #include <debug.hpp>
 #include <loop.hpp>
 #include <StringBuffer.hpp>
-
+#include <StringOperators.hpp>
 
 
 // device descriptor
@@ -129,7 +129,7 @@ Coroutine measure() {
 			+ "Humidity: " + flt(sensor.getHumidity(), 1, 1) + "%\n"
 			+ "Gas: " + flt(sensor.getGasResistance(), 1, 1) + "Ω\n";
 
-		co_await usb::send(1, string.length(), string.data());
+		co_await usb::send(1, string.count(), string.data());
 		debug::toggleRedLed();
 
 		co_await timer::sleep(10s);
@@ -141,7 +141,7 @@ int main(void) {
 	loop::init();
 	timer::init();
 	spi::init();
-	out::init();
+	gpio::init();
 	usb::init(
 		[](usb::DescriptorType descriptorType) {
 			switch (descriptorType) {

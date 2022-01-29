@@ -3,9 +3,7 @@
 #include "util.hpp"
 #include "defines.hpp"
 #include <limits>
-#ifdef EMU
-#include <iostream>
-#endif
+
 
 template <typename T>
 struct IsCString {
@@ -162,7 +160,7 @@ struct String {
 		}
 		return h;
 	}
-	
+		
 	char const *begin() const {return this->data;}
 	char const *end() const {return this->data + this->length;}
 };
@@ -199,7 +197,7 @@ inline bool operator <(String a, String b) {
  * @param s source string
  */
 template <int N>
-inline void assign(char (&str)[N], String s) {
+inline void assign(char (&str)[N], String const &s) {
 	// copy string
 	int count = min(N, s.length);
 	for (int i = 0; i < count; ++i) {
@@ -211,10 +209,3 @@ inline void assign(char (&str)[N], String s) {
 		str[i] = 0;
 	}
 }
-
-#ifdef EMU
-inline std::ostream &operator <<(std::ostream &s, String str) {
-	s.write(str.data, str.length);
-	return s;
-}
-#endif

@@ -59,7 +59,7 @@ Context contexts[SPI_CONTEXT_COUNT];
 
 
 // event loop handler chain
-loop::Handler nextHandler;
+loop::Handler nextHandler = nullptr;
 void handle(Gui &gui) {
 	// handle pending spi transfers
 	for (int index = 0; index < SPI_CONTEXT_COUNT; ++index) {
@@ -130,6 +130,14 @@ void handle(Gui &gui) {
 }
 
 void init(char const *fileName) {
+	// check if already initialized
+	if (spi::nextHandler != nullptr)
+		return;
+
+	// add to event loop handler chain
+	spi::nextHandler = loop::addHandler(handle);
+
+	
 	// air sensor
 	{
 		spi::airSensor = &spi::airSensorRegisters[128];
@@ -143,9 +151,6 @@ void init(char const *fileName) {
 
 		// set temperature
 		setTemperature(20.0f);
-
-		// add to event loop handler chain
-		spi::nextHandler = loop::addHandler(handle);
 	}
 	
 	// fram

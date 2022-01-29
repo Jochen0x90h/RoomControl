@@ -1,4 +1,4 @@
-#include "../out.hpp"
+#include "../gpio.hpp"
 #include "loop.hpp"
 #include <util.hpp>
 #include <sysConfig.hpp>
@@ -9,7 +9,7 @@
 	Config:
 	OUT_COLORS: Array of colors for the emulated digital outputs
 */
-namespace out {
+namespace gpio {
 
 bool states[array::count(OUT_COLORS)];
 
@@ -18,18 +18,18 @@ bool states[array::count(OUT_COLORS)];
 loop::Handler nextHandler;
 void handle(Gui &gui) {
 	// call next handler in chain
-	out::nextHandler(gui);
+	gpio::nextHandler(gui);
 
 	// draw debug led's on gui
 	gui.newLine();
 	for (int i = 0; i < array::count(OUT_COLORS); ++i) {
-		gui.led(out::states[i] ? OUT_COLORS[i] : 0);
+		gui.led(gpio::states[i] ? OUT_COLORS[i] : 0);
 	}
 }
 
 void init() {
 	// add to event loop handler chain
-	out::nextHandler = loop::addHandler(handle);
+	gpio::nextHandler = loop::addHandler(handle);
 }
 
 void set(int index, bool value) {
@@ -42,4 +42,4 @@ void toggle(int index) {
 	states[index] ^= true;
 }
 
-} // namespace out
+} // namespace gpio

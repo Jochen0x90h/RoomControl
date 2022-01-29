@@ -1,7 +1,10 @@
 #pragma once
 
 
-namespace out {
+/**
+ * Support for general purpose input/output pins
+ */
+namespace gpio {
 
 void init();
 
@@ -24,4 +27,4 @@ inline void clear(int index) {set(index, false);}
  */
 void toggle(int index);
 
-} // namespace out
+} // namespace gpio

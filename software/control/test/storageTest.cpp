@@ -87,14 +87,12 @@ Coroutine testStateCoroutine() {
 	PersistentStateManager stateManager;
 	
 	// state 1
-	int o1 = stateManager.allocate<int>();
-	PersistentState<int> s1(o1);
-	co_await s1.restore(&stateManager);
+	PersistentState<int> s1(stateManager);
+	co_await s1.restore();
 
 	// state 2
-	int o2 = stateManager.allocate<uint8_t>();
-	PersistentState<uint8_t> s2(o2);
-	co_await s2.restore(&stateManager);
+	PersistentState<uint8_t> s2(stateManager);
+	co_await s2.restore();
 
 	while (true) {
 		std::cout << "s1: " << int(s1) << std::endl;

@@ -1,13 +1,18 @@
 #pragma once
 
-#include "MqttSnClient.hpp"
 #include "Message.hpp"
 #include "Publisher.hpp"
 #include "Subscriber.hpp"
+#include <network.hpp>
+#include <SystemTime.hpp>
+#include <MessageReader.hpp>
+#include <MessageWriter.hpp>
+#include <mqttsn.hpp>
 #include <BitField.hpp>
 #include <LinkedListNode.hpp>
 #include <StringBuffer.hpp>
 #include <StringHash.hpp>
+#include <convert.hpp>
 
 
 /**
@@ -81,40 +86,37 @@ public:
 	 */
 	void addSubscriber(String topicName, Subscriber &subscriber);
 
-
-	using MessageReader = MqttSnClient::MessageReader;
-
-	// data writer for mqtt-sn messages
-	class MessageWriter : public DataWriter {
-	public:
+	
+	struct PacketReader : public MessageReader {
 		/**
-		 * Construct on radio packet where the length (including 2 byte crc) is in the first byte
+		 * Construct on message and get length from first bytes of messages
+		 */
+		PacketReader(uint8_t *message) {
+			if (message[0] == 1) {
+				// length is three bytes
+				this->current = message + 3;
+				this->end = message + ((message[1] << 8) | message[2]);
+			} else {
+				// length is one byte
+				this->current = message + 1;
+				this->end = message + message[0];
+			}
+		}
+	};
+	
+	struct PacketWriter : public MessageWriter {
+		/**
+		 * Construct on message and allocate space for the length byte
 		 */
 		template <int N>
-		MessageWriter(uint8_t (&message)[N]) : DataWriter(message + 1), begin(message)
+		PacketWriter(uint8_t (&message)[N]) : MessageWriter(message + 1), begin(message)
 #ifdef EMU
 			, end(message + N)
 #endif
 		{}
-
-		void uint16(uint16_t value) {
-			this->current[0] = value >> 8;
-			this->current[1] = value;
-			this->current += 2;
-		}
-
-		template <typename T>
-		void enum16(T value) {
-			static_assert(std::is_same<typename std::underlying_type<T>::type, uint16_t>::value);
-			uint16(uint16_t(value));
-		}
-
-		void floatString(float value, int digitCount, int decimalCount) {
-			this->current += toString(value, reinterpret_cast<char *>(this->current), 10, digitCount, decimalCount);
-		}
-
+		
 		/**
-		 * Set send flags and length of packet
+		 * Set length of packet and return as array
 		 */
 		Array<uint8_t const> finish() {
 #ifdef EMU
@@ -124,7 +126,7 @@ public:
 			this->begin[0] = length;
 			return {length, this->begin};
 		}
-
+		
 		uint8_t *begin;
 #ifdef EMU
 		uint8_t *end;

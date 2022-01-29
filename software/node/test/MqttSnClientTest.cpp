@@ -1,9 +1,10 @@
 #include <MqttSnClient.hpp>
 #include <network.hpp>
 #include <timer.hpp>
-#include <sys.hpp>
+#include <terminal.hpp>
 #include <loop.hpp>
 #include <debug.hpp>
+#include <StringOperators.hpp>
 
 
 constexpr int defaultQos = 0;
@@ -16,7 +17,7 @@ AwaitableCoroutine subscribe(MqttSnClient &client) {
 	uint16_t foo;
 	int8_t qos = defaultQos;
 	co_await client.subscribeTopic(result, foo, qos, "foo");
-	sys::out.write(String("subscribed foo ") + dec(foo) + " qos " + dec(qos) + "\n");
+	terminal::out << "subscribed to topic 'foo' " << dec(foo) << " qos " << dec(qos) << "\n";
 	while (client.isConnected()) {
 		uint16_t msgId;
 		uint16_t topicId;
@@ -32,7 +33,7 @@ AwaitableCoroutine subscribe(MqttSnClient &client) {
 				co_await client.ackReceive(msgId, topicId, topicId == foo);
 			
 			String str(length, data);
-			sys::out.write(str);
+			terminal::out << (str);
 		}
 	}
 }
@@ -52,10 +53,10 @@ Coroutine publish() {
 	// register topics
 	uint16_t foo;
 	co_await client.registerTopic(result, foo, "foo");
-	sys::out.write(String("registered foo ") + dec(foo) + "\n");
+	terminal::out << "registered topic 'foo' " << dec(foo) << "\n";
 	uint16_t bar;
 	co_await client.registerTopic(result, bar, "bar");
-	sys::out.write(String("registered bar ") + dec(bar) + "\n");
+	terminal::out << "registered topic 'bar' " << dec(bar) << "\n";
 
 	while (client.isConnected()) {
 		co_await timer::sleep(1s);
@@ -68,14 +69,14 @@ Coroutine publish() {
 	// wait for subsrcibe coroutine
 	co_await s;
 
-	sys::out.write(String("exit\n"));
+	terminal::out << "exit\n";
 }
 
 int main(void) {
 	loop::init();
 	timer::init();
 	network::init();
-	out::init();
+	gpio::init();
 		
 	publish();
 

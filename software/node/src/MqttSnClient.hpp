@@ -2,8 +2,8 @@
 
 #include <network.hpp>
 #include <timer.hpp>
-#include <DataReader.hpp>
-#include <DataWriter.hpp>
+#include <MessageReader.hpp>
+#include <MessageWriter.hpp>
 #include <mqttsn.hpp>
 #include <String.hpp>
 #include <appConfig.hpp>
@@ -178,78 +178,36 @@ public:
 	static bool isValid(String topic) {return uint32_t(topic.length - 1) <= uint32_t(MAX_MESSAGE_LENGTH - 5 - 1);}
 
 
-	// data reader for radio packets
-	class MessageReader : public DataReader {
-	public:
+	struct PacketReader : public MessageReader {
 		/**
-		 * Construct on message where the length is in first one or three bytes
+		 * Construct on message and get length from first bytes of messages
 		 */
-		MessageReader(uint8_t *message) : DataReader(2, message + 1) {
+		PacketReader(uint8_t *message) {
 			if (message[0] == 1) {
 				// length is three bytes
-				int length = uint16();
-				this->end = message + length;
+				this->current = message + 3;
+				this->end = message + ((message[1] << 8) | message[2]);
 			} else {
 				// length is one byte
-				int length = message[0];
-				this->end = message + length;
+				this->current = message + 1;
+				this->end = message + message[0];
 			}
 		}
-
-		MessageReader(int length, uint8_t *message) : DataReader(length, message) {}
-
-		uint16_t uint16() {
-			int16_t value = (this->current[0] << 8) | this->current[1];
-			this->current += 2;
-			return value;
-		}
-
-		template <typename T>
-		T enum16() {
-			static_assert(std::is_same<typename std::underlying_type<T>::type, uint16_t>::value);
-			return T(uint16());
-		}
-		
-		/**
-		 * Returns true if the reader is still valid, i.e. did not read past the end
-		 * @return true when valid
-		 */
-		bool isValid() {
-			return this->current <= this->end;
-		}
-		
-		int getRemaining() {
-			return this->end - this->current;
-		}
 	};
-
-	// data writer for mqtt-sn messages
-	class MessageWriter : public DataWriter {
-	public:
+	
+	struct PacketWriter : public MessageWriter {
 		/**
-		 * Construct on radio packet where the length (including 2 byte crc) is in the first byte
+		 * Construct on message and allocate space for the length byte
 		 */
 		template <int N>
-		MessageWriter(uint8_t (&message)[N]) : DataWriter(message + 1), begin(message)
+		PacketWriter(uint8_t (&message)[N]) : MessageWriter(message + 1), begin(message)
 #ifdef EMU
 			, end(message + N)
 #endif
 		{}
-
-		void uint16(uint16_t value) {
-			this->current[0] = value >> 8;
-			this->current[1] = value;
-			this->current += 2;
-		}
-
-		template <typename T>
-		void enum16(T value) {
-			static_assert(std::is_same<typename std::underlying_type<T>::type, uint16_t>::value);
-			uint16(uint16_t(value));
-		}
-
+		
 		/**
-		 * Set send flags and length of packet
+		 * Set length of packet and return as array
 		 */
 		Array<uint8_t const> finish() {
 #ifdef EMU
@@ -259,7 +217,7 @@ public:
 			this->begin[0] = length;
 			return {length, this->begin};
 		}
-
+		
 		uint8_t *begin;
 #ifdef EMU
 		uint8_t *end;

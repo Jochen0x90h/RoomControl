@@ -14,10 +14,10 @@ Coroutine PersistentStateManager::updater() {
 			uint8_t offset = state.command[2];
 			uint8_t counter = state.command[3 + size];
 
-			// increment counter
+			// increment sequence counter (4 bit counter, each bit is stored as 01 or 10 for robustness)
 			for (uint8_t bit = 1; bit != 0; bit <<= 2) {
 				// 01 -> 10
-				// 10 -> 11 -> 01 + carry
+				// 10 -> 11 -> 01 + carry (continue with next bit)
 				counter += bit;
 				if ((counter & bit) != 0)
 					counter &= ~(bit << 1);
@@ -79,8 +79,6 @@ int PersistentStateManager::allocateInternal(int size) {
 }
 
 AwaitableCoroutine PersistentStateManager::restore(PersistentStateBase &state) {
-	//auto &state = *reinterpret_cast<PersistentState<uint8_t> *>(element);
-
 	// get offset and size
 	int offset = (state.command[1] << 8) | state.command[2];
 	int size = state.size;
@@ -93,16 +91,18 @@ AwaitableCoroutine PersistentStateManager::restore(PersistentStateBase &state) {
 		index += array::count(state.manager->allocationTable) / 2;
 	state.manager->allocationTable[index] |= bit;
 
-	// read back counters
+	// read back sequence counters which determine which of the two values is the latest one
 	uint8_t command[3];
 	command[0] = FRAM_READ;
 	command[1] = offset >> 8; // upper 8 bit of offset
 	uint8_t read[4];
 	
+	// read sequence counter 1
 	command[2] = offset + size;
 	co_await spi::transfer(SPI_FRAM, 3, command, 3 + 1, read);
 	uint8_t c1 = read[3];
 
+	// read sequence counter 2
 	command[2] = offset + size * 2 + 1;
 	co_await spi::transfer(SPI_FRAM, 3, command, 3 + 1, read);
 	uint8_t c2 = read[3];
@@ -111,10 +111,11 @@ AwaitableCoroutine PersistentStateManager::restore(PersistentStateBase &state) {
 		std::cout << "c1: " << std::hex << int(c1) << " c2: " << int(c2) << std::dec << std::endl;
 	#endif
 
+	// check if any counter is valid (bits 1, 3, 5, 7 must be the inverse of bits 0, 2, 4, 6)
 	bool c1Valid = ((c1 ^ (c1 >> 1)) & 0x55) == 0x55;
 	bool c2Valid = ((c2 ^ (c2 >> 1)) & 0x55) == 0x55;
 	
-	// read back state value and counter (overwrites ths->command)
+	// read back state value and sequence counter (overwrites state.command)
 	if (c1Valid || c2Valid) {
 		command[2] = offset;
 		if (int8_t(c1 - c2) < 0)

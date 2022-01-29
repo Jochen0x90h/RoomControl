@@ -4,6 +4,9 @@
 #include <stdint.h>
 
 
+/**
+ * Support for a digital potentiometer with push button
+ */
 namespace poti {
 
 // Internal helper: Stores references to the result values in the awaitable during co_await

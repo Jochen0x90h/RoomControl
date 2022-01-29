@@ -6,12 +6,10 @@
 #include <Storage.hpp>
 #include <radio.hpp>
 #include <crypt.hpp>
-#include <DataReader.hpp>
-#include <DataWriter.hpp>
+#include <MessageReader.hpp>
+#include <MessageWriter.hpp>
 #include <Coroutine.hpp>
 #include <appConfig.hpp>
-#include <vector>
-#include <list>
 
 
 /**
@@ -26,10 +24,13 @@ public:
 	 * @param configuration global configuration
 	 * @param stateManager persistent state manager for counters
 	 */
-	RadioInterface(Configuration &configuration, PersistentStateManager &stateManager);
+	RadioInterface(PersistentStateManager &stateManager);
 
 	~RadioInterface() override;
 
+	// start the interface
+	Coroutine start(uint16_t panId, DataBuffer<16> const &key, AesKey const &aesKey);
+	
 	void setCommissioning(bool enabled) override;
 
 	int getDeviceCount() override;
@@ -43,13 +44,20 @@ public:
 	void addSubscriber(DeviceId deviceId, uint8_t endpointIndex, Subscriber &subscriber) override;
 
 private:
-
-	// initialize the interface
-	Coroutine init(PersistentStateManager &stateManager);
-
-	// reference to global configuration (array contains only one element)
-	Configuration &configuration;
-
+	
+	// counters
+	uint8_t macCounter = 0;
+	uint8_t nwkCounter = 0;
+	uint8_t apsCounter = 0;
+	uint8_t zdpCounter = 0;
+	uint8_t zclCounter = 0;
+	PersistentState<uint32_t> securityCounter;
+	uint8_t routeCounter = 0;
+	
+	// configuration
+	uint16_t panId;
+	DataBuffer<16> const *key;
+	AesKey const *aesKey;
 	
 	// self-powered devices
 	struct GpDevice;
@@ -164,8 +172,7 @@ private:
 		
 		// first hop on route towards the device (0xffff means that the route is unknown)
 		uint16_t firstHop = 0xffff;
-
-
+		
 		static constexpr int RESPONSE_LENGTH = 64;
 
 				
@@ -176,7 +183,7 @@ private:
 			uint8_t *response;
 		};
 		
-		// the query coroutine waits on this barrier until a zdp response arrives
+		// a coroutine (handleAssociationRequest()) waits on this barrier until a zdp response arrives
 		Waitlist<ZdpResponse> zdpResponseBarrier;
 		
 
@@ -200,7 +207,7 @@ private:
 		// list of publishers
 		PublisherList publishers;
 		
-		// pending default responses for each endpoint
+		// pending default responses for each endpoint (get processed by publisher coroutine)
 		struct DefaultResponse {
 			uint8_t zclCounter;
 			uint8_t command;
@@ -208,7 +215,7 @@ private:
 		uint32_t defaultResponseFlags[(ZbDeviceFlash::MAX_ENDPOINT_COUNT + 31) / 32];
 		DefaultResponse defaultResponses[ZbDeviceFlash::MAX_ENDPOINT_COUNT];
 
-		// pending rejoin
+		// pending rejoin (get processed by publisher coroutine)
 		bool rejoinPending = false;
 		
 		// routing
@@ -222,6 +229,7 @@ private:
 
 	void allocateNextAddress();
 
+	// next short address "on stock" to be fast when a device sends an association request
 	uint16_t nextShortAddress;
 
 public:
@@ -266,18 +274,21 @@ public:
 			assert(this->current < this->end - 1);
 #endif
 			*this->current = uint8_t(sendFlags);
-			this->begin[0] = this->current - (this->begin + 1) + 2; // for crc
+			this->begin[0] = this->current - (this->begin + 1) + 2; // + 2 for crc added by hardware
 		}
 
 		uint8_t *begin;
 #ifdef EMU
 		uint8_t *end;
 #endif
-		uint8_t *securityControlPtr;
+		uint8_t *securityControlPtr = nullptr;
 	};
 
 private:
 	// write helpers
+	void writeIeeeBroadcastData(PacketWriter &w);
+	void writeIeeeData(PacketWriter &w, ZbDevice &device);
+	
 	void writeNwkBroadcastCommand(PacketWriter &w, zb::NwkCommand command);
 	void writeNwk(PacketWriter &w, zb::NwkFrameControl nwkFrameControl, uint8_t radius, ZbDevice &device);
 	void writeNwkCommand(PacketWriter &w, ZbDevice &device, zb::NwkCommand command) {
@@ -288,7 +299,7 @@ private:
 			| zb::NwkFrameControl::DESTINATION
 			| zb::NwkFrameControl::EXTENDED_SOURCE;
 		writeNwk(w, nwkFrameControl, 1, device);
-		w.enum8(command);
+		w.e8(command);
 	}
 	void writeNwkData(PacketWriter &w, ZbDevice &device) {
 		zb::NwkFrameControl nwkFrameControl = zb::NwkFrameControl::TYPE_DATA
@@ -303,7 +314,9 @@ private:
 			| zb::NwkFrameControl::DISCOVER_ROUTE_ENABLE;
 		writeNwk(w, nwkFrameControl, 30, device);
 	}
-	void writeApsCommand(PacketWriter &w, zb::ApsFrameControl apsFrameControl);
+	void writeNwkSecurity(PacketWriter &w);
+	
+	void writeApsCommandSecurity(PacketWriter &w);
 	void writeApsData(PacketWriter &w, uint8_t destinationEndpoint, zb::ZclCluster clusterId, zb::ZclProfile profile,
 		uint8_t sourceEndpoint);
 	uint8_t writeZdpData(PacketWriter &w, zb::ZdpCommand command);
@@ -347,14 +360,4 @@ private:
 
 	
 	Event publishEvent;
-
-
-	// counters
-	uint8_t macCounter = 0;
-	uint8_t nwkCounter = 0;
-	uint8_t apsCounter = 0;
-	uint8_t zdpCounter = 0;
-	uint8_t zclCounter = 0;
-	PersistentState<uint32_t> securityCounter;
-	uint8_t routeCounter = 0;
 };

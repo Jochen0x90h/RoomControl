@@ -74,6 +74,10 @@ struct FloatWithFlag {
 	}
 };
 
+inline float operator +(FloatWithFlag const &a, float b) {
+	return float(a) + b;
+}
+
 struct MoveToLevelMessage {
 	// flag false: absolute level (text command e.g. "0.5"), true: relative level (text command e.g. "+ 0.1" "- +0.1")
 	FloatWithFlag level;

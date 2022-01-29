@@ -24,12 +24,12 @@ struct PersistentStateBase : public LinkedListNode<PersistentStateBase> {
 	
 	// size of PersistentStateBase must be a multiple of 4
 
-	PersistentStateBase(PersistentStateManager *manager, uint8_t size, uint8_t command1, uint8_t command2)
+	PersistentStateBase(PersistentStateManager *manager, uint8_t size, uint16_t offset)
 		: manager(manager)
 		, size(size)
 	{
-		this->command[1] = command1;
-		this->command[2] = command2;
+		this->command[1] = offset >> 8;
+		this->command[2] = offset;
 	}
 };
 
@@ -90,8 +90,8 @@ public:
 	 * @param offset offset in non-volatile memory
 	 * @param value initial value
 	 */
-	PersistentState(int offset, T const &value = T())
-		: PersistentStateBase(nullptr, sizeof(T), offset >> 8, uint8_t(offset))
+	PersistentState(PersistentStateManager &manager, T const &value = T())
+		: PersistentStateBase(&manager, sizeof(T), manager.allocate<T>())
 		, value(value)
 		, counter(0x55)
 	{
@@ -101,7 +101,7 @@ public:
 	 * Move constructor
 	 */
 	PersistentState(PersistentState &&state)
-		: PersistentStateBase(state.manager, sizeof(T), state.command[1], state.command[2])
+		: PersistentStateBase(state.manager, sizeof(T), (state.command[1] << 8) | state.command[2])
 		, value(std::move(state.value))
 		, counter(state.counter)
 	{
@@ -118,10 +118,8 @@ public:
 	/**
 	 * Restore state from non-volatile memory
 	 */
-	AwaitableCoroutine restore(PersistentStateManager *manager) {
-		assert(this->manager == nullptr);
-		this->manager = manager;
-		return manager->restore(*this);
+	AwaitableCoroutine restore() {
+		return this->manager->restore(*this);
 	}
 
 	PersistentState &operator =(T const &value) {
@@ -175,5 +173,5 @@ protected:
 
 	// these fields are expected to be at the same offset independent of type T
 	T value;
-	uint8_t counter;
+	uint8_t counter; // sequence counter
 };

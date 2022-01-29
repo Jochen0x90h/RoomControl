@@ -11,13 +11,13 @@ uint8_t receive[10];
 
 Coroutine transferBus() {
 	while (true) {
-		int receiveLength = array::size(receive);
-		co_await bus::transfer(array::size(send), send, receiveLength, receive);
+		int receiveLength = array::count(receive);
+		co_await bus::transfer(array::count(send), send, receiveLength, receive);
 		
 		//bus::transfer(send, 5, receive, array::size(receive), [](int length) {debug::toggleRedLed();});
 	
 		//timer::start(0, timer::now() + 1s, []() {transferBus();});
-		co_await timer::delay(1s);
+		co_await timer::sleep(1s);
 		
 		debug::toggleBlueLed();
 	}
@@ -27,7 +27,7 @@ int main(void) {
 	loop::init();
 	timer::init();
 	bus::init();
-	out::init();
+	gpio::init(); // for debug signals on pins
 
 	transferBus();
 

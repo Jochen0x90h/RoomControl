@@ -7,12 +7,12 @@
 
 using AesKey = tc_aes_key_sched_struct;
 
-inline void setKey(AesKey &aesKey, DataBufferConstRef<16> key) {
-	tc_aes128_set_encrypt_key(&aesKey, key.data);
+inline void setKey(AesKey &aesKey, Array<uint8_t const, 16> key) {
+	tc_aes128_set_encrypt_key(&aesKey, key.data());
 }
 
-inline void encrypt(DataBufferRef<16> out, DataBufferConstRef<16> in, AesKey const &aesKey) {
-	tc_aes_encrypt(out.data, in.data, &aesKey);
+inline void encrypt(Array<uint8_t, 16> out, Array<uint8_t const, 16> in, AesKey const &aesKey) {
+	tc_aes_encrypt(out.data(), in.data(), &aesKey);
 }
 
 /**
@@ -27,8 +27,8 @@ inline void encrypt(DataBufferRef<16> out, DataBufferConstRef<16> in, AesKey con
  * @param payloadLength length of payload in message/result
  * @param micLength length of the MIC in result after payload
 */
-void encrypt(uint8_t *result, DataBuffer<13> const &nonce, uint8_t const *header, int headerLength,
-	uint8_t const *message, int payloadLength, int micLength, AesKey const &aesKey);
+void encrypt(uint8_t *result, uint8_t const *header, int headerLength, uint8_t const *message, int payloadLength,
+	int micLength, Array<uint8_t const, 13> nonce, AesKey const &aesKey);
 
 
 /**
@@ -44,5 +44,5 @@ void encrypt(uint8_t *result, DataBuffer<13> const &nonce, uint8_t const *header
  * @param micLength length of the MIC in message after payload
  * @return true if ok
  */
-bool decrypt(uint8_t *result, DataBuffer<13> const &nonce, uint8_t const *header, int headerLength,
-	uint8_t const *message, int payloadLength, int micLength, AesKey const &aesKey);
+bool decrypt(uint8_t *result, uint8_t const *header, int headerLength, uint8_t const *message, int payloadLength,
+	int micLength, Array<uint8_t const, 13> nonce, AesKey const &aesKey);

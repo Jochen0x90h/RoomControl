@@ -47,7 +47,7 @@ static const UsbConfiguration configurationDescriptor = {
 		.bDescriptorType = usb::DescriptorType::INTERFACE,
 		.bInterfaceNumber = 0,
 		.bAlternateSetting = 0,
-		.bNumEndpoints = array::size(configurationDescriptor.endpoints),
+		.bNumEndpoints = array::count(configurationDescriptor.endpoints),
 		.bInterfaceClass = 0xff, // no class
 		.bInterfaceSubClass = 0xff,
 		.bInterfaceProtocol = 0xff,
@@ -71,14 +71,14 @@ uint8_t sendData[16] __attribute__((aligned(4)));
 Coroutine send() {
 	while (true) {
 		// generate random numbers
-		for (int i = 0; i < array::size(sendData); ++i)
+		for (int i = 0; i < array::count(sendData); ++i)
 			sendData[i] = rng::int8();
 		
 		// send to host	
-		co_await usb::send(1, array::size(sendData), sendData);
+		co_await usb::send(1, array::count(sendData), sendData);
 		debug::toggleBlueLed();
 		
-		co_await timer::delay(1s);
+		co_await timer::sleep(1s);
 	}
 }
 
@@ -107,7 +107,7 @@ int main(void) {
 		[](uint8_t bRequest, uint16_t wValue, uint16_t wIndex) {
 			return false;
 		});
-	out::init();
+	gpio::init(); // for debug signals on pins
 		
 	loop::run();
 }

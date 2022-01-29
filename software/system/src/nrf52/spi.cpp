@@ -16,7 +16,7 @@
 */
 namespace spi {
 
-constexpr int CONTEXT_COUNT = array::size(SPI_CS_PINS);
+constexpr int CONTEXT_COUNT = array::count(SPI_CS_PINS);
 
 struct Context {
 	Waitlist<Parameters> waitlist;
@@ -141,8 +141,12 @@ void handle() {
 }
 
 void init() {
+	// check if already initialized
 	if (spi::nextHandler != nullptr)
 		return;
+
+	// add to event loop handler chain
+	spi::nextHandler = loop::addHandler(handle);
 
 	configureOutput(SPI_SCK_PIN);
 	setOutput(SPI_MOSI_PIN, true);
@@ -164,9 +168,6 @@ void init() {
 	NRF_SPIM3->CONFIG = N(SPIM_CONFIG_CPOL, ActiveHigh)
 		| N(SPIM_CONFIG_CPHA, Leading)
 		| N(SPIM_CONFIG_ORDER, MsbFirst);
-
-	// add to event loop handler chain
-	spi::nextHandler = loop::addHandler(handle);
 }
 
 Awaitable<Parameters> transfer(int index, int writeLength, uint8_t const *writeData, int readLength, uint8_t *readData) {

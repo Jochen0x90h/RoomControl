@@ -3,6 +3,9 @@
 #include <loop.hpp>
 #include <debug.hpp>
 #include <Coroutine.hpp>
+#ifdef EMU
+#include <string>
+#endif
 
 
 network::Endpoint destination;
@@ -41,8 +44,8 @@ int main(void) {
 #endif
 	loop::init();
 	timer::init();
-	out::init();
 	network::init();
+	gpio::init(); // for debug signals on pins
 
 	network::setLocalPort(0, localPort);
 	

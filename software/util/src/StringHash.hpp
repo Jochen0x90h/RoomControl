@@ -132,13 +132,13 @@ public:
 	}
 
 	/**
-	 * Obtain the value for a key string, add if not found
+	 * Gat the value for a key string or put it if not found
 	 * @param key key string
-	 * @param init init function for new elements
+	 * @param default value function that obtains the default value if a new key was inserted
 	 * @return location in hash table or -1 if not found and no new element could be added
 	 */
 	template <typename T>
-	int obtain(String const &key, T const &init) {
+	int getOrPut(String const &key, T const &defaultValue) {
 		int index = key.hash() % N;
 
 		// search for the key in the hash table
@@ -167,8 +167,7 @@ public:
 		array::copy(key.count(), this->data + this->dataSize, key.data);
 		this->dataSize += key.count();
 
-		element->value = init(index);
-		//element->value = defaultValue;
+		element->value = defaultValue();//(index);
 
 		return index;//{element, this->data};
 	}

@@ -55,7 +55,7 @@ enum class NwkCommand : uint8_t {
 
 enum class NwkCommandRouteRequestOptions : uint8_t {
 	DISCOVERY_MASK = 3 << 3,
-	DISCOVERY_SINGLE = 0,
+	DISCOVERY_SINGLE = 0, // "Not Many-to-One" in Wireshark
 	DISCOVERY_MANY_TO_ONE_WITH_SOURCE_ROUTING = 1 << 3,
 	
 	EXTENDED_DESTINATION = 1 << 5,
@@ -192,10 +192,11 @@ FLAGS_ENUM(ZclFrameControl)
 
 // profile wide commands
 enum class ZclCommand : uint8_t {
-	READ_ATTRIBUTES = 0,
-	READ_ATTRIBUTES_RESPONSE = 1,
-	CONFIGURE_REPORTING = 6,
-	CONFIGURE_REPORTING_RESPONSE = 7,
+	READ_ATTRIBUTES = 0x00,
+	READ_ATTRIBUTES_RESPONSE = 0x01,
+	CONFIGURE_REPORTING = 0x06,
+	CONFIGURE_REPORTING_RESPONSE = 0x07,
+	REPORT_ATTRIBUTES = 0x0a,
 	DEFAULT_RESPONSE = 0x0b
 };
 

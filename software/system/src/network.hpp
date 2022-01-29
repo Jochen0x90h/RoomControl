@@ -76,7 +76,7 @@ Awaitable<ReceiveParameters> receive(int index, Endpoint& source, int &length, v
  */
 [[nodiscard]] Awaitable<SendParameters> send(int index, Endpoint const &destination, int length, void const *data);
 [[nodiscard]] inline Awaitable<SendParameters> send(int index, Endpoint const &destination, Array<uint8_t const> data) {
-	return send(index, destination, data.length, data.data);
+	return send(index, destination, data.count(), data.data());
 }
 
 } // namespace network

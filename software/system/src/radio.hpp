@@ -106,11 +106,9 @@ void enableReceiver(bool enable);
 void setLongAddress(uint64_t address);
 
 /**
- * Set filter and configuration flags
- * @param index context index (number of contexts defined by RADIO_CONTEXT_COUNT in sysConfig.hpp)
- * @param flags flags
+ * Get current long address
  */
-void setFlags(int index, ContextFlags flags);
+uint64_t getLongAddress();
 
 /**
  * Set pan id, default is 0xffff (broadcast)
@@ -125,6 +123,13 @@ void setPan(int index, uint16_t pan);
  * @param shortAddress short address
  */
 void setShortAddress(int index, uint16_t shortAddress); 
+
+/**
+ * Set filter and configuration flags
+ * @param index context index (number of contexts defined by RADIO_CONTEXT_COUNT in sysConfig.hpp)
+ * @param flags flags
+ */
+void setFlags(int index, ContextFlags flags);
 
 /**
  * Suspend execution using co_await until a packet was received

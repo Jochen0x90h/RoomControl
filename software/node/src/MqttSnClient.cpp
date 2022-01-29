@@ -50,11 +50,11 @@ AwaitableCoroutine MqttSnClient::connect(Result &result, network::Endpoint const
 			auto flags = (cleanSession ? mqttsn::Flags::CLEAN_SESSION : mqttsn::Flags::NONE)
 				| (willFlag ? mqttsn::Flags::WILL : mqttsn::Flags::NONE);
 		
-			MessageWriter w(this->tempMessage);
-			w.enum8<mqttsn::MessageType>(mqttsn::MessageType::CONNECT);
-			w.enum8(flags); // flags
-			w.uint8(0x01); // protocol name/version
-			w.uint16(KEEP_ALIVE_TIME.toSeconds());
+			PacketWriter w(this->tempMessage);
+			w.e8<mqttsn::MessageType>(mqttsn::MessageType::CONNECT);
+			w.e8(flags); // flags
+			w.u8(0x01); // protocol name/version
+			w.u16B(KEEP_ALIVE_TIME.toSeconds());
 			w.string(name);
 			co_await network::send(NETWORK_MQTT, gatewayEndpoint, w.finish());
 		}
@@ -69,7 +69,7 @@ AwaitableCoroutine MqttSnClient::connect(Result &result, network::Endpoint const
 				// check if the message is from the gateway
 				// todo
 
-				MessageReader r(this->tempMessage);
+				PacketReader r(this->tempMessage);
 				
 				// check if message is complete
 				if (r.end - this->tempMessage > length) {
@@ -78,14 +78,14 @@ AwaitableCoroutine MqttSnClient::connect(Result &result, network::Endpoint const
 				}
 				
 				// check if we received a CONNACK
-				auto messageType = r.enum8<mqttsn::MessageType>();
+				auto messageType = r.e8<mqttsn::MessageType>();
 				if (messageType != mqttsn::MessageType::CONNACK) {
 					result = Result::PROTOCOL_ERROR;
 					co_return;
 				}
 
 				// check if connection was accepted
-				auto returnCode = r.enum8<mqttsn::ReturnCode>();
+				auto returnCode = r.e8<mqttsn::ReturnCode>();
 				if (returnCode != mqttsn::ReturnCode::ACCEPTED) {
 					result = Result::REJECTED;
 					co_return;
@@ -116,8 +116,8 @@ AwaitableCoroutine MqttSnClient::disconnect() {
 	for (int retry = 0; retry <= MAX_RETRY; ++retry) {
 		// send connect message
 		{
-			MessageWriter w(message);
-			w.enum8<mqttsn::MessageType>(mqttsn::MessageType::DISCONNECT);
+			PacketWriter w(message);
+			w.e8<mqttsn::MessageType>(mqttsn::MessageType::DISCONNECT);
 			co_await network::send(NETWORK_MQTT, this->gatewayEndpoint, w.finish());
 		}
 
@@ -151,10 +151,10 @@ AwaitableCoroutine MqttSnClient::registerTopic(Result &result, uint16_t &topicId
 	for (int retry = 0; retry <= MAX_RETRY; ++retry) {
 		// send register message
 		{
-			MessageWriter w(message);
-			w.enum8<mqttsn::MessageType>(mqttsn::MessageType::REGISTER);
-			w.uint16(0); // topic id not known yet
-			w.uint16(msgId);
+			PacketWriter w(message);
+			w.e8<mqttsn::MessageType>(mqttsn::MessageType::REGISTER);
+			w.u16B(0); // topic id not known yet
+			w.u16B(msgId);
 			w.string(topicName);
 			co_await network::send(NETWORK_MQTT, this->gatewayEndpoint, w.finish());
 		}
@@ -177,9 +177,9 @@ AwaitableCoroutine MqttSnClient::registerTopic(Result &result, uint16_t &topicId
 			if (s == 1) {
 				// get topic id and return code
 				MessageReader r(length, message);
-				topicId = r.uint16();
+				topicId = r.u16B();
 				r.skip(2); // msgId
-				auto returnCode = r.enum8<mqttsn::ReturnCode>();
+				auto returnCode = r.e8<mqttsn::ReturnCode>();
 				if (!r.isValid())
 					result = Result::PROTOCOL_ERROR;
 				else if (returnCode == mqttsn::ReturnCode::ACCEPTED)
@@ -211,11 +211,11 @@ AwaitableCoroutine MqttSnClient::publish(Result &result, uint16_t topicId, mqtts
 	for (int retry = 0; retry <= MAX_RETRY; ++retry) {
 		// send publish message
 		{
-			MessageWriter w(message);
-			w.enum8(mqttsn::MessageType::PUBLISH);
-			w.enum8(flags);
-			w.uint16(topicId);
-			w.uint16(msgId);
+			PacketWriter w(message);
+			w.e8(mqttsn::MessageType::PUBLISH);
+			w.e8(flags);
+			w.u16B(topicId);
+			w.u16B(msgId);
 			w.data(length, data);
 			co_await network::send(NETWORK_MQTT, this->gatewayEndpoint, w.finish());
 		}
@@ -244,9 +244,9 @@ AwaitableCoroutine MqttSnClient::publish(Result &result, uint16_t topicId, mqtts
 				MessageReader r(length, message);
 				
 				// get topic id and return code
-				topicId = r.uint16();
+				topicId = r.u16B();
 				r.skip(2); // msgId
-				auto returnCode = r.enum8<mqttsn::ReturnCode>();
+				auto returnCode = r.e8<mqttsn::ReturnCode>();
 				if (!r.isValid()) {
 					result = Result::PROTOCOL_ERROR;
 					// try again
@@ -281,11 +281,11 @@ AwaitableCoroutine MqttSnClient::subscribeTopic(Result &result, uint16_t &topicI
 	for (int retry = 0; retry <= MAX_RETRY; ++retry) {
 		// send subscribe message
 		{
-			MessageWriter w(message);
-			w.enum8(mqttsn::MessageType::SUBSCRIBE);
+			PacketWriter w(message);
+			w.e8(mqttsn::MessageType::SUBSCRIBE);
 			auto flags = mqttsn::Flags::TOPIC_TYPE_NORMAL | mqttsn::makeQos(qos);
-			w.enum8(flags);
-			w.uint16(msgId);
+			w.e8(flags);
+			w.u16B(msgId);
 			w.string(topicFilter);
 			co_await network::send(NETWORK_MQTT, this->gatewayEndpoint, w.finish());
 		}
@@ -309,11 +309,11 @@ AwaitableCoroutine MqttSnClient::subscribeTopic(Result &result, uint16_t &topicI
 				MessageReader r(length, message);
 					
 				// get flags, topic id and return code
-				auto flags = r.enum8<mqttsn::Flags>();
+				auto flags = r.e8<mqttsn::Flags>();
 				qos = mqttsn::getQos(flags);
-				topicId = r.uint16();
+				topicId = r.u16B();
 				r.skip(2); // msgId
-				auto returnCode = r.enum8<mqttsn::ReturnCode>();
+				auto returnCode = r.e8<mqttsn::ReturnCode>();
 				if (!r.isValid())
 					result = Result::PROTOCOL_ERROR;
 				else if (returnCode == mqttsn::ReturnCode::ACCEPTED)
@@ -341,10 +341,10 @@ AwaitableCoroutine MqttSnClient::unsubscribeTopic(Result &result, String topicFi
 	for (int retry = 0; retry <= MAX_RETRY; ++retry) {
 		// send unsubscribe message
 		{
-			MessageWriter w(message);
-			w.enum8(mqttsn::MessageType::UNSUBSCRIBE);
-			w.enum8(mqttsn::Flags::TOPIC_TYPE_NORMAL);
-			w.uint16(msgId);
+			PacketWriter w(message);
+			w.e8(mqttsn::MessageType::UNSUBSCRIBE);
+			w.e8(mqttsn::Flags::TOPIC_TYPE_NORMAL);
+			w.u16B(msgId);
 			w.string(topicFilter);
 			co_await network::send(NETWORK_MQTT, this->gatewayEndpoint, w.finish());
 		}
@@ -402,9 +402,9 @@ AwaitableCoroutine MqttSnClient::receive(Result &result, uint16_t &msgId, uint16
 
 	// read message
 	MessageReader r(length2, message);
-	flags = r.enum8<mqttsn::Flags>();
-	topicId = r.uint16();
-	msgId = r.uint16();
+	flags = r.e8<mqttsn::Flags>();
+	topicId = r.u16B();
+	msgId = r.u16B();
 	int l = r.getRemaining();
 	if (l > length) {
 		// error: message too long for given data buffer
@@ -426,11 +426,11 @@ Awaitable<network::SendParameters> MqttSnClient::ackReceive(uint16_t msgId, uint
 		
 	uint8_t message[8];
 
-	MessageWriter w(message);
-	w.enum8(mqttsn::MessageType::PUBACK);
-	w.uint16(topicId);
-	w.uint16(msgId);
-	w.enum8(ok ? mqttsn::ReturnCode::ACCEPTED : mqttsn::ReturnCode::REJECTED_INVALID_TOPIC_ID);
+	PacketWriter w(message);
+	w.e8(mqttsn::MessageType::PUBACK);
+	w.u16B(topicId);
+	w.u16B(msgId);
+	w.e8(ok ? mqttsn::ReturnCode::ACCEPTED : mqttsn::ReturnCode::REJECTED_INVALID_TOPIC_ID);
 	return network::send(NETWORK_MQTT, this->gatewayEndpoint, w.finish());
 }
 
@@ -443,8 +443,8 @@ AwaitableCoroutine MqttSnClient::ping() {
 		for (int retry = 0; ; ++retry) {
 			// send idle ping
 			{
-				MessageWriter w(message);
-				w.enum8<mqttsn::MessageType>(mqttsn::MessageType::PINGREQ);
+				PacketWriter w(message);
+				w.e8<mqttsn::MessageType>(mqttsn::MessageType::PINGREQ);
 				co_await network::send(NETWORK_MQTT, this->gatewayEndpoint, w.finish());
 			}
 			
@@ -480,14 +480,14 @@ AwaitableCoroutine MqttSnClient::receive() {
 		// check if the message is from the gateway
 		// todo
 
-		MessageReader r(message);
+		PacketReader r(message);
 		
 		// check if message is complete
 		if (r.end - message > length)
 			continue;
 		
 		// get message type
-		auto msgType = r.enum8<mqttsn::MessageType>();
+		auto msgType = r.e8<mqttsn::MessageType>();
 
 		// check if we read past the end of the message
 		if (!r.isValid()) {
@@ -513,14 +513,14 @@ AwaitableCoroutine MqttSnClient::receive() {
 			case mqttsn::MessageType::REGACK:
 			case mqttsn::MessageType::PUBACK:
 				r.skip(2);
-				msgId = r.uint16();
+				msgId = r.u16B();
 				break;
 			case mqttsn::MessageType::SUBACK:
 				r.skip(3);
-				msgId = r.uint16();
+				msgId = r.u16B();
 				break;
 			case mqttsn::MessageType::UNSUBACK:
-				msgId = r.uint16();
+				msgId = r.u16B();
 				break;
 			case mqttsn::MessageType::PINGRESP:
 				msgId = 0;

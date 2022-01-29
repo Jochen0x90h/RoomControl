@@ -12,6 +12,6 @@
  * @param input input data that should be hashed
  * @param input input_len length of input data
  */
-void hash(DataBufferRef<16> output, uint8_t const *input, int input_len);
+void hash(Array<uint8_t, 16> output, uint8_t const *input, int input_len);
 
-void keyHash(DataBufferRef<16> output, DataBufferConstRef<16> key, uint8_t input);
+void keyHash(Array<uint8_t, 16> output, Array<uint8_t const, 16> key, uint8_t input);

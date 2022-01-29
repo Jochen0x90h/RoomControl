@@ -6,7 +6,7 @@
 
 namespace radio {
 
-// radio context flags (packets except for PASS_ALL must have a sequence number)
+/// radio context flags (packets except for PASS_ALL must have a sequence number)
 enum class ContextFlags : uint16_t {
 	NONE = 0,
 	
@@ -47,16 +47,19 @@ enum class ContextFlags : uint16_t {
 FLAGS_ENUM(ContextFlags)
 
 
-// enum for remote controlling the radio, e.g. via usb
+/// enum for remote controlling the radio, e.g. via usb
 enum class Request : uint8_t {
+	// global
 	RESET = 0,
 	START = 1,
 	STOP = 2,
 	ENABLE_RECEIVER = 3,
 	SET_LONG_ADDRESS = 4,
-	SET_FLAGS = 5,
-	SET_PAN = 6,
-	SET_SHORT_ADDRESS = 7
+	
+	// per context
+	SET_PAN = 5,
+	SET_SHORT_ADDRESS = 6,
+	SET_FLAGS = 7
 };
 
 } // namespace radio

@@ -118,8 +118,8 @@ void copy(int length, OutputIt dst, InputIt src) {
 
 template <typename OutputElement, typename InputIt>
 void copy(Array<OutputElement> dst, InputIt src) {
-	auto it = dst.data;
-	auto end = it + dst.length;
+	auto it = dst.begin();
+	auto end = dst.end();
 	for (; it < end; ++it, ++src) {
 		*it = OutputElement(*src);
 	}
@@ -163,3 +163,13 @@ struct UIntBase<2> {
 template <int N>
 struct UInt : public UIntBase<(N > 256 ? (N > 65536 ? 4 : 2) : 1)> {
 };
+
+
+
+// concepts
+/*
+template<typename T>
+concept Stringable = requires(T str) {
+	{ toString(0, (char *)nullptr, str) };
+};
+*/

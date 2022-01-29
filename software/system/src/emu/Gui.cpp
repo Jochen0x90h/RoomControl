@@ -1,7 +1,8 @@
 #include "Gui.hpp"
-#include "StringBuffer.hpp"
 #include <tahoma_8pt.hpp>
 #include <Bitmap.hpp>
+#include <StringBuffer.hpp>
+#include <StringOperators.hpp>
 #include <vector>
 #include <stdexcept>
 #include <cmath>

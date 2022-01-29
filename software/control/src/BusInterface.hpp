@@ -3,8 +3,8 @@
 #include "Interface.hpp"
 #include "Storage.hpp"
 #include <Configuration.hpp>
-#include <DataReader.hpp>
-#include <DataWriter.hpp>
+#include <MessageReader.hpp>
+#include <MessageWriter.hpp>
 #include <appConfig.hpp>
 
 
@@ -20,11 +20,15 @@ public:
 	 * @param configuration global configuration
 	 * @param stateManager persistent state manager for counters
 	 */
-	BusInterface(Configuration &configuration, PersistentStateManager &stateManager);
+	BusInterface(PersistentStateManager &stateManager);
 
 	~BusInterface() override;
-
+	
+	// start the interface
+	Coroutine start(DataBuffer<16> const &key, AesKey const &aesKey);
+	
 	void setCommissioning(bool enabled) override;
+	
 
 	int getDeviceCount() override;
 
@@ -66,11 +70,13 @@ public:
 
 private:
 
-	// reference to global configuration (array contains only one element)
-	Configuration &configuration;
+	// counters
+	PersistentState<uint32_t> securityCounter;
+	
+	// configuration
+	DataBuffer<16> const *key;
+	AesKey const *aesKey;
 
-	// initialize the interface
-	Coroutine init(PersistentStateManager &stateManager);
 
 	AwaitableCoroutine commission();
 	
@@ -130,6 +136,5 @@ private:
 	// publish messages to devices
 	Coroutine publish();
 
-	PersistentState<uint32_t> securityCounter;
 	Event publishEvent;
 };

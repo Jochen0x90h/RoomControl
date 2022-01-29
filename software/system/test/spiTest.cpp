@@ -14,7 +14,7 @@ Coroutine transferSpi() {
 int main(void) {
 	loop::init();
 	spi::init();
-	out::init(); // for debug signals on pins
+	gpio::init(); // for debug signals on pins
 
 	transferSpi();
 	

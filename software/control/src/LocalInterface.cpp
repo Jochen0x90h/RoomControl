@@ -1,6 +1,6 @@
 #include "LocalInterface.hpp"
 #include <timer.hpp>
-#include <out.hpp>
+#include <gpio.hpp>
 #include <util.hpp>
 
 
@@ -80,9 +80,9 @@ Array<EndpointType const> LocalInterface::getEndpoints(DeviceId deviceId) {
 	case MOTION_DETECTOR_ID:
 		return motionDetectorEndpoints;
 	case IN_ID:
-		return Array(IN_COUNT, inEndpoints);
+		return Array<EndpointType const>(IN_COUNT, inEndpoints);
 	case OUT_ID:
-		return Array(OUT_COUNT, outEndpoints);
+		return Array<EndpointType const>(OUT_COUNT, outEndpoints);
 	}
 	return {};
 }
@@ -90,7 +90,7 @@ Array<EndpointType const> LocalInterface::getEndpoints(DeviceId deviceId) {
 void LocalInterface::addPublisher(DeviceId deviceId, uint8_t endpointIndex, Publisher &publisher) {
 	for (int i = 0; i < this->deviceCount; ++i) {
 		auto &device = this->devices[i];
-		if (device.id == deviceId && endpointIndex < getEndpoints(deviceId).length) {
+		if (device.id == deviceId && endpointIndex < getEndpoints(deviceId).count()) {
 			publisher.remove();
 			publisher.index = endpointIndex;
 			publisher.event = &this->publishEvent;
@@ -102,7 +102,7 @@ void LocalInterface::addPublisher(DeviceId deviceId, uint8_t endpointIndex, Publ
 void LocalInterface::addSubscriber(DeviceId deviceId, uint8_t endpointIndex, Subscriber &subscriber) {
 	for (int i = 0; i < this->deviceCount; ++i) {
 		auto &device = this->devices[i];
-		if (device.id == deviceId && endpointIndex < getEndpoints(deviceId).length) {
+		if (device.id == deviceId && endpointIndex < getEndpoints(deviceId).count()) {
 			subscriber.remove();
 			subscriber.index = endpointIndex;
 			device.subscribers.add(subscriber);
@@ -196,9 +196,9 @@ Coroutine LocalInterface::publish() {
 							if (convert(MessageType::ON_OFF, &message, publisher.messageType, publisher.message)) {
 								// set output
 								if (message <= 1)
-									out::set(endpointIndex, message);
+									gpio::set(endpointIndex, message);
 								else
-									out::toggle(endpointIndex);
+									gpio::toggle(endpointIndex);
 							}
 						}
 					}
