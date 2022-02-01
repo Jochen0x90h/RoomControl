@@ -8,11 +8,11 @@
 struct MessageReader {
 	uint8_t *current;
 	uint8_t *end;
-	
+
 	MessageReader() = default;
-	MessageReader(uint8_t *current, uint8_t *end) : current(current), end(end) {}
-	MessageReader(int length, uint8_t *data) : current(data), end(data + length) {}
-	
+	MessageReader(uint8_t *message, uint8_t *end) : current(message), end(end) {}
+	MessageReader(int length, uint8_t *message) : current(message), end(message + length) {}
+
 	/**
 	 * Returns true if the read packet is still valid, i.e. did not read past the end
 	 * @return true when valid
@@ -20,7 +20,7 @@ struct MessageReader {
 	bool isValid() {
 		return this->current <= this->end;
 	}
-	
+
 	uint8_t u8() {
 		uint8_t value = this->current[0];
 		++this->current;
@@ -37,7 +37,7 @@ struct MessageReader {
 			++this->current;
 		return result;
 	}
-	
+
 	template <typename T>
 	T e8() {
 		static_assert(std::is_same<typename std::underlying_type<T>::type, uint8_t>::value);
@@ -51,14 +51,14 @@ struct MessageReader {
 		static_assert(std::is_same<typename std::underlying_type<T>::type, uint8_t>::value);
 		return T(this->current[0]);
 	}
-	
+
 	uint16_t u16L() {
 		auto current = this->current;
 		int16_t value = current[0] | (current[1] << 8);
 		this->current += 2;
 		return value;
 	}
-	
+
 	uint16_t u16B() {
 		auto current = this->current;
 		int16_t value = (current[0] << 8) | current[1];
@@ -96,12 +96,12 @@ struct MessageReader {
 		auto lo = uint64_t(u32L());
 		return lo | (uint64_t(u32L()) << 32);
 	}
-	
+
 	uint64_t u64B() {
 		auto hi = uint64_t(u32B()) << 32;
 		return hi | uint64_t(u32B());
 	}
-	
+
 	/**
 	 * Read a string until end of data
 	 * @return string
@@ -134,7 +134,7 @@ struct MessageReader {
 		this->current += N;
 		return Array<uint8_t const, N>(ar);
 	}
-	
+
 	/**
 	 * Read a string that represents a floating point number (e.g. 1.3, no exponential notation)
 	 * @return string containing a floating point number
@@ -172,10 +172,10 @@ struct MessageReader {
 
 class DecryptReader : public MessageReader {
 public:
-	
+
 	DecryptReader() = default;
-	DecryptReader(uint8_t *current, uint8_t *end) : MessageReader(current, end) {}
-	DecryptReader(int length, uint8_t *data) : MessageReader(length, data) {}
+	DecryptReader(uint8_t *message, uint8_t *end) : MessageReader(message, end) {}
+	DecryptReader(int length, uint8_t *message) : MessageReader(length, message) {}
 
 	/**
 	 * Set start of header at current position ("string a" for encryption)
@@ -208,16 +208,16 @@ public:
 		auto mic = this->end - micLength;
 		int headerLength = message - header;
 		int payloadLength = mic - message; // is zero when only the mic is present
-		
+
 		// cut off message integrity code
 		this->end -= micLength;
-		
+
 		// encrypt in-place
 		return ::decrypt(message, header, headerLength, message, payloadLength, micLength, nonce, aesKey);
 	}
 
 protected:
-	
+
 	uint8_t const *header = nullptr;
 	uint8_t *message = nullptr;
 };

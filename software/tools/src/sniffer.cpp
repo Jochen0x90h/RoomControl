@@ -46,19 +46,34 @@ struct PcapPacket {
 	uint8_t data[140];
 };
 
-// zbee alliance 2009 key
-static uint8_t const za09Key[] = {0x5A, 0x69, 0x67, 0x42, 0x65, 0x65, 0x41, 0x6C, 0x6C, 0x69, 0x61, 0x6E, 0x63, 0x65, 0x30, 0x39};
+// zbee alliance 2009 default trust center link key
+static uint8_t const za09LinkKey[] = {0x5A, 0x69, 0x67, 0x42, 0x65, 0x65, 0x41, 0x6C, 0x6C, 0x69, 0x61, 0x6E, 0x63, 0x65, 0x30, 0x39};
 
 // zbee light link key
 static uint8_t const zllKey[] = {0x81, 0x42, 0x86, 0x86, 0x5D, 0xC1, 0xC8, 0xB2, 0xC8, 0xCB, 0xC5, 0x2E, 0x5D, 0x65, 0xD1, 0xB8};
 
 // bus default key
-static uint8_t const busKey[] = {0x13, 0x37, 0xc6, 0xb3, 0xf1, 0x6c, 0x7c, 0xb6, 0x2d, 0xec, 0x18, 0x2d, 0x30, 0x78, 0xd6, 0x18};
+static uint8_t const busDefaultKey[] = {0x13, 0x37, 0xc6, 0xb3, 0xf1, 0x6c, 0x7c, 0xb6, 0x2d, 0xec, 0x18, 0x2d, 0x30, 0x78, 0xd6, 0x18};
 
-AesKey trustCenterLinkAesKey;
-AesKey hashedTrustCenterLinkAesKey;
+// default link key used by aps layer, prepared for aes encryption/decryption
+AesKey za09LinkAesKey;
+
+// hashed default link key used by key-transport, prepared for aes encryption/decryption
+AesKey za09KeyTransportAesKey;
+
+// hashed default link key used by key-load, prepared for aes encryption/decryption
+AesKey za09KeyLoadAesKey;
+
+// security level to use, encrypted + 32 bit message integrity code
+constexpr zb::SecurityControl securityLevel = zb::SecurityControl::LEVEL_ENC_MIC32;
+
+
+// network key used by nwk layer, prepared for aes encryption/decryption
 AesKey networkAesKey;
-constexpr zb::SecurityControl securityLevel = zb::SecurityControl::LEVEL_ENC_MIC32; // encrypted + 32 bit message integrity code
+
+// link key used by aps layer, prepared for aes encryption/decryption
+// todo: one link key per device
+AesKey linkAesKey;
 
 
 
@@ -76,16 +91,31 @@ void printKey(char const *name, AesKey const &key) {
 }
 
 
-void handleGp(uint8_t const *mac, DecryptReader &r);
-void handleGpCommission(uint32_t deviceId, DecryptReader &r);
 
-void handleNwk(DecryptReader &r);
-void handleAps(DecryptReader &r, uint8_t const *extendedSource);
-void handleZdp(DecryptReader &r);
-void handleZcl(DecryptReader &r, uint8_t destinationEndpoint);
+class PacketReader : public DecryptReader {
+public:
+	/**
+	 * Construct on data
+	 */
+	PacketReader(int length, uint8_t *data) : DecryptReader(length, data) {}
+
+	void restoreSecurityLevel(zb::SecurityControl securityLevel) {
+		*this->current |= uint8_t(securityLevel);
+	}
+};
 
 
-void handleIeee(DecryptReader &r) {
+
+void handleGp(uint8_t const *mac, PacketReader &r);
+void handleGpCommission(uint32_t deviceId, PacketReader &r);
+
+void handleNwk(PacketReader &r);
+void handleAps(PacketReader &r, uint8_t const *extendedSource);
+void handleZdp(PacketReader &r);
+void handleZcl(PacketReader &r, uint8_t destinationEndpoint);
+
+
+void handleIeee(PacketReader &r) {
 	// ieee 802.15.4 mac
 	// -----------------
 	uint8_t const *mac = r.current;
@@ -103,47 +133,47 @@ void handleIeee(DecryptReader &r) {
 	bool haveDestination = (frameControl & ieee::FrameControl::DESTINATION_ADDRESSING_FLAG) != 0;
 	if (haveDestination) {
 		// destination address present
-		
+
 		// destination pan
 		uint16_t destinationPan = r.u16L();
 		terminal::out << (hex(destinationPan) + ':');
-	
+
 		// check if short or long addrssing
 		if ((frameControl & ieee::FrameControl::DESTINATION_ADDRESSING_LONG_FLAG) == 0) {
 			// short destination address
 			uint16_t destination = r.u16L();
-			
+
 			terminal::out << (hex(destination));
 		} else {
 			// long destination address
 			uint64_t destination = r.u64L();
-			
+
 			terminal::out << (hex(destination));
 		}
 		terminal::out << (" <- ");
 	}
-	
+
 	// source pan/address
 	bool haveSource = (frameControl & ieee::FrameControl::SOURCE_ADDRESSING_FLAG) != 0;
 	if (haveSource) {
 		// source address present
-		
+
 		// check if pan is present
 		if ((frameControl & ieee::FrameControl::PAN_ID_COMPRESSION) == 0 || !haveDestination) {
 			uint16_t sourcePan = r.u16L();
 			terminal::out << (hex(sourcePan) + ':');
 		}
-	
+
 		// check if short or long addrssing
 		if ((frameControl & ieee::FrameControl::SOURCE_ADDRESSING_LONG_FLAG) == 0) {
 			// short source address
 			uint16_t source = r.u16L();
-			
+
 			terminal::out << (hex(source));
 		} else {
 			// long source address
 			uint64_t source = r.u64L();
-			
+
 			terminal::out << (hex(source));
 		}
 	}
@@ -155,18 +185,18 @@ void handleIeee(DecryptReader &r) {
 	case ieee::FrameControl::TYPE_BEACON:
 		{
 			uint16_t superframeSpecification = r.u16L();
-			
+
 			uint8_t gts = r.u8();
-			
+
 			uint8_t pending = r.u8();
-			
+
 			uint8_t protocolId = r.u8();
-			
+
 			uint16_t stackProfile = r.u16L();
 			int type = stackProfile & 15;
 			int protocolVersion = (stackProfile >> 4) & 15;
 			bool routerFlag = stackProfile & 0x400;
-			
+
 			terminal::out << ("Beacon: " + dec(type) + ", " + dec(protocolVersion));
 			if (routerFlag)
 				terminal::out << (", router");
@@ -176,7 +206,7 @@ void handleIeee(DecryptReader &r) {
 	case ieee::FrameControl::TYPE_COMMAND:
 		{
 			auto command = r.e8<ieee::Command>();
-			
+
 			switch (command) {
 			case ieee::Command::ASSOCIATION_REQUEST:
 				terminal::out << ("Association Request\n");
@@ -231,10 +261,10 @@ struct GpDevice {
 
 std::map<uint32_t, GpDevice> gpDevices;
 
-void handleGp(uint8_t const *mac, DecryptReader &r) {
+void handleGp(uint8_t const *mac, PacketReader &r) {
 	// zgp stub nwk header (encryption header starts here)
 	r.setHeader();
-	
+
 	// frame control
 	auto frameControl = r.e8<gp::NwkFrameControl>();
 
@@ -269,13 +299,13 @@ void handleGp(uint8_t const *mac, DecryptReader &r) {
 	switch (securityLevel) {
 	case gp::NwkExtendedFrameControl::SECURITY_LEVEL_CNT8_MIC16:
 		// security level 1: 1 byte counter, 2 byte mic
-	
+
 		// header starts at mac sequence number and includes also payload
 		r.setHeader(mac + 2);
-		
+
 		// use mac sequence number as security counter
 		securityCounter = mac[2];
-		
+
 		// only decrypt message integrity code of length 2
 		micLength = 2;
 		r.setMessageFromEnd(micLength);
@@ -304,7 +334,7 @@ void handleGp(uint8_t const *mac, DecryptReader &r) {
 		// security is required
 		return;
 	}
-	
+
 	// check message integrity code or decrypt message, depending on security level
 	Nonce nonce(deviceId, securityCounter);
 	if (!r.decrypt(micLength, nonce, device.aesKey)) {
@@ -324,14 +354,14 @@ void handleGp(uint8_t const *mac, DecryptReader &r) {
 	terminal::out << ("\n");
 }
 
-void handleGpCommission(uint32_t deviceId, DecryptReader &r) {
+void handleGpCommission(uint32_t deviceId, PacketReader &r) {
 	// remove commissioning command (0xe0)
 	r.u8();
 
 	GpDevice device;
 
 	// A.4.2.1.1 Commissioning
-		
+
 	// device type
 	// 0x02: on/off switch
 	auto deviceType = r.e8<gp::DeviceType>();
@@ -340,7 +370,7 @@ void handleGpCommission(uint32_t deviceId, DecryptReader &r) {
 	auto options = r.e8<gp::Options>();
 	if ((options & gp::Options::EXTENDED) != 0) {
 		auto extendedOptions = r.e8<gp::ExtendedOptions>();;
-		
+
 		// security level capability (used in messages)
 		auto securityLevel = extendedOptions & gp::ExtendedOptions::SECURITY_LEVEL_CAPABILITY_MASK;
 
@@ -349,20 +379,20 @@ void handleGpCommission(uint32_t deviceId, DecryptReader &r) {
 			uint8_t *key = r.current;
 			if ((extendedOptions & gp::ExtendedOptions::KEY_ENCRYPTED) != 0) {
 				// Green Power A.1.5.3.3.3
-				
+
 				// nonce
 				Nonce nonce(deviceId, deviceId);
 
 				// construct a header containing the device id
 				DataBuffer<4> header;
 				header.setU32L(0, deviceId);
-				
+
 				// in-place decrypt
-				if (!decrypt(key, header.data, 4, key, 16, 4, nonce, trustCenterLinkAesKey)) {
+				if (!decrypt(key, header.data, 4, key, 16, 4, nonce, za09LinkAesKey)) {
 					terminal::out << ("Error while decrypting key!\n");
 					return;
 				}
-				
+
 				// skip key and MIC
 				r.skip(16 + 4);
 			} else {
@@ -395,14 +425,14 @@ void handleGpCommission(uint32_t deviceId, DecryptReader &r) {
 	switch (deviceType) {
 	case gp::DeviceType::ON_OFF_SWITCH:
 		// hue switch
-		
+
 		break;
 	case gp::DeviceType::GENERIC_SWITCH:
 		// generic switch
-		
+
 		break;
 	}
-	
+
 	gpDevices[deviceId] = device;
 }
 
@@ -410,7 +440,7 @@ void handleGpCommission(uint32_t deviceId, DecryptReader &r) {
 // zbee
 // ----
 
-void handleNwk(DecryptReader &r) {
+void handleNwk(PacketReader &r) {
 	// nwk header (encryption header starts here)
 	r.setHeader();
 
@@ -432,7 +462,7 @@ void handleNwk(DecryptReader &r) {
 		uint8_t const *extendedSource = r.current;
 		r.skip(8);
 	}
-	
+
 	// source route
 	if ((frameControl & zb::NwkFrameControl::SOURCE_ROUTE) != 0) {
 		uint8_t relayCount = r.u8();
@@ -444,17 +474,17 @@ void handleNwk(DecryptReader &r) {
 		}
 		terminal::out << ("; ");
 	}
-	
+
 	// security header
 	// note: does in-place decryption of the payload
 	uint8_t const *extendedSource = nullptr;
 	if ((frameControl & zb::NwkFrameControl::SECURITY) != 0) {
 		// restore security level according to 4.3.1.2 step 1.
-		r.current[0] |= securityLevel;
-		
+		r.restoreSecurityLevel(securityLevel);
+
 		// security control field (4.5.1.1)
 		auto securityControl = r.e8<zb::SecurityControl>();
-				
+
 		// security counter
 		uint32_t securityCounter = r.u32L();
 		terminal::out << ("SecCnt " + hex(securityCounter) + "; ");
@@ -464,7 +494,7 @@ void handleNwk(DecryptReader &r) {
 			terminal::out << ("Error: Only network key supported!\n");
 			return;
 		}
-		
+
 		// extended source
 		if ((securityControl & zb::SecurityControl::EXTENDED_NONCE) == 0) {
 			terminal::out << ("Error: Only extended nonce supported!\n");
@@ -472,21 +502,21 @@ void handleNwk(DecryptReader &r) {
 		}
 		extendedSource = r.current;
 		r.skip(8);
-		
+
 		// key sequence number
 		uint8_t keySequenceNumber = r.u8();
-		
+
 		// nonce (4.5.2.2)
 		Nonce nonce(extendedSource, securityCounter, securityControl);
 
 		// decrypt in-place (whole message, mic length of 4)
 		r.setMessage();
 		if (!r.decrypt(4, nonce, networkAesKey)) {
-			terminal::out << "Error: Decryption failed!\n";
+			terminal::out << "Error: NWK Decryption failed!\n";
 			return;
 		}
 	}
-	
+
 	auto frameType = frameControl & zb::NwkFrameControl::TYPE_MASK;
 	if (frameType == zb::NwkFrameControl::TYPE_COMMAND) {
 		// nwk command
@@ -499,7 +529,7 @@ void handleNwk(DecryptReader &r) {
 				uint8_t routeId = r.u8();
 				uint16_t destinationAddress = r.u16L();
 				uint8_t cost = r.u8();
-				
+
 				switch (options & zb::NwkCommandRouteRequestOptions::DISCOVERY_MASK) {
 				case zb::NwkCommandRouteRequestOptions::DISCOVERY_SINGLE:
 					terminal::out << (hex(destinationAddress));
@@ -562,34 +592,30 @@ void handleNwk(DecryptReader &r) {
 	}
 }
 
-void handleAps(DecryptReader &r, uint8_t const *extendedSource) {
+void handleAps(PacketReader &r, uint8_t const *extendedSource) {
 	// application support layer (encryption header starts here)
 	r.setHeader();
-	
+
 	// frame control
 	auto frameControl = r.e8<zb::ApsFrameControl>();
 	auto frameType = frameControl & zb::ApsFrameControl::TYPE_MASK;
 	if (frameType == zb::ApsFrameControl::TYPE_COMMAND) {
 		// aps command
 		uint8_t apsCounter = r.u8();
-		
+
 		// security header
 		// note: does in-place decryption of the payload
 		if ((frameControl & zb::ApsFrameControl::SECURITY) != 0) {
 			// restore security level according to 4.4.1.2 step 5.
-			r.current[0] |= securityLevel;
-			
+			r.restoreSecurityLevel(securityLevel);
+
 			// security control field (4.5.1.1)
 			auto securityControl = r.e8<zb::SecurityControl>();
-			
+
 			// security counter
 			uint32_t securityCounter = r.u32L();
 
-			auto keyType = securityControl & zb::SecurityControl::KEY_MASK;
-			if (keyType != zb::SecurityControl::KEY_LINK && keyType != zb::SecurityControl::KEY_KEY_TRANSPORT) {
-				terminal::out << ("Error: Only link key and key transport key supported!\n");
-				return;
-			}
+			// nonce (4.5.2.2)
 			if ((securityControl & zb::SecurityControl::EXTENDED_NONCE) == 0) {
 				if (extendedSource == nullptr) {
 					terminal::out << ("Error: Only extended nonce supported!\n");
@@ -599,43 +625,73 @@ void handleAps(DecryptReader &r, uint8_t const *extendedSource) {
 				extendedSource = r.current;
 				r.skip(8);
 			}
-
-			// nonce (4.5.2.2)
 			Nonce nonce(extendedSource, securityCounter, securityControl);
 
-			// decrypt in-place (whole message, mic length of 4)
+			// select key
+			auto keyType = securityControl & zb::SecurityControl::KEY_MASK;
+			AesKey const *key;
+			switch (keyType) {
+			case zb::SecurityControl::KEY_LINK:
+				key = &linkAesKey;//za09LinkAesKey;
+				break;
+			case zb::SecurityControl::KEY_KEY_TRANSPORT:
+				key = &za09KeyTransportAesKey;
+				break;
+			case zb::SecurityControl::KEY_KEY_LOAD:
+				key = &za09KeyLoadAesKey;
+				break;
+			default:
+				terminal::out << "Error: Unsupported key type in APS security header!\n";
+				return;
+			}
+
+			// decrypt in-place (mic length of 4)
 			r.setMessage();
-			if (!r.decrypt(4, nonce,
-				keyType == zb::SecurityControl::KEY_LINK ? trustCenterLinkAesKey : hashedTrustCenterLinkAesKey))
-			{
-				terminal::out << ("Error: Decryption failed!\n");
+			if (!r.decrypt(4, nonce, *key)) {
+				terminal::out << ("Error: APS Decryption failed!\n");
 				return;
 			}
 		}
-		
+
 		auto command = r.e8<zb::ApsCommand>();
 		switch (command) {
 		case zb::ApsCommand::TRANSPORT_KEY:
 			{
-				terminal::out << ("Transport Key\n");
-				auto newKeyIdentifier = r.e8<zb::KeyIdentifier>();
-				auto newKey = r.data<16>();
-				uint8_t newKeySequenceNumber = r.u8();
+				terminal::out << "Transport Key\n";
+				auto keyType = r.e8<zb::StandardKeyType>();
+				auto key = r.data<16>();
+				if (keyType == zb::StandardKeyType::NETWORK)
+					uint8_t keySequenceNumber = r.u8();
 				auto extendedDestination = r.data<8>();
 				auto extendedSource = r.data<8>();
-				
-				if (newKeyIdentifier == zb::KeyIdentifier::NETWORK) {
-					setKey(networkAesKey, newKey);
+
+				// set key
+				switch (keyType) {
+				case zb::StandardKeyType::NETWORK:
+					setKey(networkAesKey, key);
+					break;
+				case zb::StandardKeyType::TRUST_CENTER_LINK:
+					setKey(linkAesKey, key);
+					break;
+				default:
+					;
 				}
 			}
 			break;
 		case zb::ApsCommand::UPDATE_DEVICE:
-			{
-				terminal::out << ("Update Device\n");
-			}
+			terminal::out << "Update Device\n";
+			break;
+		case zb::ApsCommand::REQUEST_KEY:
+			terminal::out << "Request Key\n";
+			break;
+		case zb::ApsCommand::VERIFY_KEY:
+			terminal::out << "Verify Key\n";
+			break;
+		case zb::ApsCommand::CONFIRM_KEY:
+			terminal::out << "Confirm Key\n";
 			break;
 		default:
-			terminal::out << ("Unknown APS Command!\n");
+			terminal::out << "Unknown APS Command!\n";
 		}
 	} else if (frameType == zb::ApsFrameControl::TYPE_DATA) {
 		// aps data: zdp or zcl follow
@@ -652,7 +708,7 @@ void handleAps(DecryptReader &r, uint8_t const *extendedSource) {
 	}
 }
 
-void handleZdp(DecryptReader &r) {
+void handleZdp(PacketReader &r) {
 	zb::ZdpCommand command = r.e16L<zb::ZdpCommand>();
 	uint16_t profile = r.u16L();
 	uint8_t sourceEndpoint = r.u8();
@@ -709,7 +765,7 @@ void handleZdp(DecryptReader &r) {
 	}
 }
 
-void handleZcl(DecryptReader &r, uint8_t destinationEndpoint) {
+void handleZcl(PacketReader &r, uint8_t destinationEndpoint) {
 	zb::ZclCluster cluster = r.e16L<zb::ZclCluster>();
 	zb::ZclProfile profile = r.e16L<zb::ZclProfile>();
 	uint8_t sourceEndpoint = r.u8();
@@ -722,7 +778,7 @@ void handleZcl(DecryptReader &r, uint8_t destinationEndpoint) {
 	//bool directionFlag = frameControl & 0x80; // false: client to server, true: server to client
 
 	uint8_t zclCounter = r.u8();
-	
+
 	terminal::out << ("ZclCnt " + dec(zclCounter) + "; ");
 
 	if (frameType == zb::ZclFrameControl::TYPE_PROFILE_WIDE && !manufacturerSpecificFlag) {
@@ -780,10 +836,10 @@ void handleZcl(DecryptReader &r, uint8_t destinationEndpoint) {
 				{
 					auto attribute = r.e16L<zb::ZclBasicAttribute>();
 					uint8_t status = r.u8();
-					
+
 					if (status == 0) {
 						auto dataType = r.e8<zb::ZclDataType>();
-														
+
 						switch (attribute) {
 						case zb::ZclBasicAttribute::MODEL_IDENTIFIER:
 							{
@@ -802,10 +858,10 @@ void handleZcl(DecryptReader &r, uint8_t destinationEndpoint) {
 				{
 					auto attribute = r.e16L<zb::ZclPowerConfigurationAttribute>();
 					uint8_t status = r.u8();
-					
+
 					if (status == 0) {
 						auto dataType = r.e8<zb::ZclDataType>();
-														
+
 						switch (attribute) {
 						case zb::ZclPowerConfigurationAttribute::BATTERY_VOLTAGE:
 							{
@@ -907,24 +963,29 @@ int controlTransfer(libusb_device_handle *handle, radio::Request request, uint16
 int main(int argc, char const *argv[]) {
 	fs::path inputFile;
 	fs::path outputFile;
-	
-	//setKey(trustCenterLinkAesKey, busKey);
-	//printKey("busDefaultAesKey", trustCenterLinkAesKey);
 
-	setKey(trustCenterLinkAesKey, za09Key);
-	//printKey("trustCenterLinkAesKey", trustCenterLinkAesKey);
+	AesKey busDefaultAesKey;
+	//setKey(busDefaultAesKey, busDefaultKey);
+	//printKey("busDefaultAesKey", busDefaultAesKey);
+
+	setKey(za09LinkAesKey, za09LinkKey);
+	//printKey("za09LinkAesKey", za09LinkAesKey);
+	setKey(linkAesKey, za09LinkKey);
 
 	DataBuffer<16> hashedKey;
-	keyHash(hashedKey, za09Key, 0);
-	setKey(hashedTrustCenterLinkAesKey, hashedKey);
-	//printKey("hashedTrustCenterLinkAesKey", hashedTrustCenterLinkAesKey);
-	
+	keyHash(hashedKey, za09LinkKey, 0);
+	setKey(za09KeyTransportAesKey, hashedKey);
+	//printKey("za09KeyTransportAesKey", za09KeyTransportAesKey);
+	keyHash(hashedKey, za09LinkKey, 2);
+	setKey(za09KeyLoadAesKey, hashedKey);
+	//printKey("za09KeyLoadAesKey", za09KeyLoadAesKey);
+
 	bool haveKey = false;
 	int radioChannel = 15;
 	auto radioFlags = radio::ContextFlags::PASS_ALL;
 	for (int i = 1; i < argc; ++i) {
 		std::string arg = argv[i];
-		
+
 		if (arg == "-k" || arg == "--key") {
 			// get network key from argument
 			++i;
@@ -932,11 +993,11 @@ int main(int argc, char const *argv[]) {
 			sscanf(argv[i], "%x:%x:%x:%x:%x:%x:%x:%x:%x:%x:%x:%x:%x:%x:%x:%x",
 				&k[0], &k[1], &k[2], &k[3], &k[4], &k[5], &k[6], &k[7],
 				&k[8], &k[9], &k[10], &k[11], &k[12], &k[13], &k[14], &k[15]);
-			
+
 			uint8_t key[16];
 			for (int i = 0; i < 16; ++i)
 				key[i] = k[i];
-			
+
 			setKey(networkAesKey, key);
 			haveKey = true;
 		} else if (arg == "-i" || arg == "--input") {
@@ -984,7 +1045,7 @@ int main(int argc, char const *argv[]) {
 				terminal::err << ("get device descriptor error: " + dec(ret) + '\n');
 				continue;
 			}
-			
+
 			// check vendor/product
 			if (desc.idVendor != 0x1915 && desc.idProduct != 0x1337)
 				continue;
@@ -999,7 +1060,7 @@ int main(int argc, char const *argv[]) {
 				terminal::err << ("open error: " + dec(ret) + '\n');
 				continue;
 			}
-				
+
 			// set configuration (reset alt_setting, reset toggles)
 			ret = libusb_set_configuration(handle, 1);
 			if (ret != LIBUSB_SUCCESS) {
@@ -1024,7 +1085,7 @@ int main(int argc, char const *argv[]) {
 			controlTransfer(handle, radio::Request::RESET, 0, 0);
 			while (libusb_bulk_transfer(handle, 1 | usb::IN, packet.data, sizeof(packet.data), &length, 10) == LIBUSB_SUCCESS)
 				;
-			
+
 			// configure the radio
 			controlTransfer(handle, radio::Request::START, radioChannel, 0);
 			controlTransfer(handle, radio::Request::ENABLE_RECEIVER, 1, 0);
@@ -1032,7 +1093,7 @@ int main(int argc, char const *argv[]) {
 
 			// open output pcap file
 			FILE *pcap = fopen(outputFile.string().c_str(), "wb");
-			
+
 			// write pcap header
 			if (pcap != nullptr) {
 				terminal::out << "capturing to " << str(outputFile.string().c_str()) << "\n";
@@ -1045,7 +1106,7 @@ int main(int argc, char const *argv[]) {
 				header.network = 0xC3;
 				fwrite(&header, sizeof(header), 1, pcap);
 			}
-			
+
 			// loop
 			terminal::out << "waiting for ieee802.15.4 packets from device on channel " << dec(radioChannel) << " ...\n";
 			//auto startTime = std::chrono::steady_clock::now();
@@ -1076,13 +1137,13 @@ int main(int argc, char const *argv[]) {
 						packet.incl_len = length;
 						packet.orig_len = length + 2; // 2 byte crc not transferred
 						fwrite(&packet, 1, offsetof(PcapPacket, data) + packet.incl_len, pcap);
-						
+
 						// flush file so that we can interrupt any time
 						fflush(pcap);
 					}
-					
+
 					// dissect
-					DecryptReader r(length, packet.data);
+					PacketReader r(length, packet.data);
 					handleIeee(r);
 				}
 			}
@@ -1092,10 +1153,10 @@ int main(int argc, char const *argv[]) {
 		libusb_exit(NULL);
 	} else {
 		// read from file
-	
+
 		// open input pcap file
 		FILE *pcap = fopen(inputFile.string().c_str(), "rb");
-		
+
 		// read pcap header
 		PcapHeader header;
 		fread(&header, sizeof(header), 1, pcap);
@@ -1108,9 +1169,9 @@ int main(int argc, char const *argv[]) {
 		while (fread(&packet, offsetof(PcapPacket, data), 1, pcap) == 1) {
 			// read packet
 			fread(packet.data, 1, packet.incl_len, pcap);
-			
+
 			// dissect packet
-			DecryptReader r(packet.incl_len, packet.data);
+			PacketReader r(packet.incl_len, packet.data);
 			handleIeee(r);
 		}
 	}

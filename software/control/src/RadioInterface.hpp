@@ -17,7 +17,13 @@
  */
 class RadioInterface : public Interface {
 public:
+	// maximum number of devices that can be commissioned
 	static constexpr int MAX_DEVICE_COUNT = 64;
+
+	// number of coroutines for receiving and publishing
+	static constexpr int PUBLISH_COUNT = 4;
+	static constexpr int RECEIVE_COUNT = 4;
+
 
 	/**
 	 * Constructor
@@ -30,7 +36,7 @@ public:
 
 	// start the interface
 	Coroutine start(uint16_t panId, DataBuffer<16> const &key, AesKey const &aesKey);
-	
+
 	void setCommissioning(bool enabled) override;
 
 	int getDeviceCount() override;
@@ -44,7 +50,7 @@ public:
 	void addSubscriber(DeviceId deviceId, uint8_t endpointIndex, Subscriber &subscriber) override;
 
 private:
-	
+
 	// counters
 	uint8_t macCounter = 0;
 	uint8_t nwkCounter = 0;
@@ -53,27 +59,27 @@ private:
 	uint8_t zclCounter = 0;
 	PersistentState<uint32_t> securityCounter;
 	uint8_t routeCounter = 0;
-	
+
 	// configuration
 	uint16_t panId;
 	DataBuffer<16> const *key;
 	AesKey const *aesKey;
-	
+
 	// self-powered devices
 	struct GpDevice;
-	
+
 	struct GpDeviceFlash {
 		static constexpr int MAX_ENDPOINT_COUNT = 32;
-		
+
 		// device id, either 64 bit ieee 802.15.4 long device address or 32 bit green power id
 		DeviceId deviceId;
-		
+
 		// device type from commissioning message
 		uint8_t deviceType;
-		
+
 		// device key
 		AesKey aesKey;
-			
+
 		// number of endpoints of the device
 		uint8_t endpointCount;
 
@@ -97,14 +103,14 @@ private:
 
 	class GpDevice : public Storage::Element<GpDeviceFlash> {
 	public:
-	
+
 		GpDevice(GpDeviceFlash const &flash) : Storage::Element<GpDeviceFlash>(flash) {}
 
-	
+
 		// last security counter value of device
 		// todo: make persistent
 		uint32_t securityCounter = 0;
-		
+
 		uint8_t state = 0;
 
 		// subscriptions
@@ -114,12 +120,12 @@ private:
 
 	// zbee devices
 	struct ZbDevice;
-	
+
 	struct ZbDeviceFlash {
 		static constexpr int MAX_ENDPOINT_COUNT = 32;
-		
+
 		// device id, 64 bit ieee 802.15.4 long device address
-		DeviceId deviceId;
+		uint64_t longAddress;
 
 		// short device address
 		uint16_t shortAddress;
@@ -146,46 +152,48 @@ private:
 		 * @return new state object
 		 */
 		ZbDevice *allocate() const;
-						
+
 		// pairs of endpoint info index and zbee endpoint index
 		uint8_t const *getEndpointIndices() const {return this->endpoints + this->endpointCount;}
 	};
 
 	class ZbDevice : public Storage::Element<ZbDeviceFlash> {
 	public:
-	
+
 		ZbDevice(ZbDeviceFlash const &flash)
 			: Storage::Element<ZbDeviceFlash>(flash)
 			, sendFlags(flash.sendFlags)
-			, defaultResponseFlags{}
 		{}
 
 		// send flags for next hop in route (wait for data request or not)
 		radio::SendFlags sendFlags;
 
-	
+
 		// last security counter value of device
 		// todo: make persistent
 		uint32_t securityCounter = 0;
-		
+
 		//std::vector<uint16_t> route;
-		
-		// first hop on route towards the device (0xffff means that the route is unknown)
-		uint16_t firstHop = 0xffff;
-		
+
+		// short address of router for this device (0xffff means that the route is unknown)
+		uint16_t routerAddress = 0xffff;
+
+		// cost of the route to the device
+		uint8_t cost;
+
 		static constexpr int RESPONSE_LENGTH = 64;
 
-				
+
 		struct ZdpResponse {
 			zb::ZdpCommand command;
 			uint8_t zdpCounter;
 			uint16_t& length;
 			uint8_t *response;
 		};
-		
+
 		// a coroutine (handleAssociationRequest()) waits on this barrier until a zdp response arrives
 		Waitlist<ZdpResponse> zdpResponseBarrier;
-		
+
 
 		struct ZclResponse {
 			uint8_t dstEndpoint;
@@ -197,33 +205,22 @@ private:
 			uint16_t& length;
 			uint8_t *response;
 		};
-		
+
 		// a coroutine (handleAssociationRequest()) waits on this barrier until a zcl response arrives
 		Waitlist<ZclResponse> zclResponseBarrier;
 
 		// list of subscribers
 		SubscriberList subscribers;
-		
+
 		// list of publishers
 		PublisherList publishers;
-		
-		// pending default responses for each endpoint (get processed by publisher coroutine)
-		struct DefaultResponse {
-			uint8_t zclCounter;
-			uint8_t command;
-		};
-		uint32_t defaultResponseFlags[(ZbDeviceFlash::MAX_ENDPOINT_COUNT + 31) / 32];
-		DefaultResponse defaultResponses[ZbDeviceFlash::MAX_ENDPOINT_COUNT];
 
-		// pending rejoin (get processed by publisher coroutine)
-		bool rejoinPending = false;
-		
-		// routing
+		// barrier for waiting until a route is available
 		Barrier<> routeBarrier;
 	};
-	
-	
-	
+
+
+
 	// find zbee device by short address
 	ZbDevice *findZbDevice(uint16_t address);
 
@@ -233,11 +230,11 @@ private:
 	uint16_t nextShortAddress;
 
 public:
-	
+
 	// list of commissioned devices
 	Storage::Array<GpDevice> gpDevices;
 	Storage::Array<ZbDevice> zbDevices;
-	
+
 
 	// data reader for radio packets
 	class PacketReader : public DecryptReader {
@@ -251,8 +248,19 @@ public:
 		 * Construct on data
 		 */
 		PacketReader(int length, uint8_t *data) : DecryptReader(length, data) {}
+
+		void restoreSecurityLevel(zb::SecurityControl securityLevel) {
+			*this->current |= uint8_t(securityLevel);
+		}
 	};
-	
+
+	struct WriterState {
+		uint8_t const *header;
+		uint8_t *message;
+		uint8_t *securityControl;
+		uint32_t securityCounter;
+	};
+
 	// data writer for radio packets with additional fields for building security headers
 	class PacketWriter : public EncryptWriter {
 	public:
@@ -266,6 +274,36 @@ public:
 #endif
 		{}
 
+		void security(zb::SecurityControl securityControl, uint32_t securityCounter) {
+			this->securityControl = this->current;
+			u8(uint8_t(securityControl));
+			u32L(this->securityCounter = securityCounter);
+		}
+
+		zb::SecurityControl getSecurityControl() {return zb::SecurityControl(*this->securityControl);}
+		uint32_t getSecurityCounter() {return this->securityCounter;}
+
+		void clearSecurityLevel() {
+			*this->securityControl &= ~uint8_t(zb::SecurityControl::LEVEL_MASK);
+		}
+
+		bool hasSecurity() {
+			return this->securityControl != nullptr;
+		}
+
+		WriterState push() {
+			auto securityControl = this->securityControl;
+			this->securityControl = nullptr;
+			return {this->header, this->message, securityControl, this->securityCounter};
+		}
+
+		void pop(WriterState const &s) {
+			this->header = s.header;
+			this->message = s.message;
+			this->securityControl = s.securityControl;
+			this->securityCounter = s.securityCounter;
+		}
+
 		/**
 		 * Set send flags and length of packet
 		 */
@@ -277,18 +315,20 @@ public:
 			this->begin[0] = this->current - (this->begin + 1) + 2; // + 2 for crc added by hardware
 		}
 
+	protected:
 		uint8_t *begin;
 #ifdef EMU
 		uint8_t *end;
 #endif
-		uint8_t *securityControlPtr = nullptr;
+		uint8_t *securityControl = nullptr;
+		uint32_t securityCounter;
 	};
 
 private:
 	// write helpers
 	void writeIeeeBroadcastData(PacketWriter &w);
 	void writeIeeeData(PacketWriter &w, ZbDevice &device);
-	
+
 	void writeNwkBroadcastCommand(PacketWriter &w, zb::NwkCommand command);
 	void writeNwk(PacketWriter &w, zb::NwkFrameControl nwkFrameControl, uint8_t radius, ZbDevice &device);
 	void writeNwkCommand(PacketWriter &w, ZbDevice &device, zb::NwkCommand command) {
@@ -315,20 +355,27 @@ private:
 		writeNwk(w, nwkFrameControl, 30, device);
 	}
 	void writeNwkSecurity(PacketWriter &w);
-	
-	void writeApsCommandSecurity(PacketWriter &w);
-	void writeApsData(PacketWriter &w, uint8_t destinationEndpoint, zb::ZclCluster clusterId, zb::ZclProfile profile,
+
+	void writeApsCommand(PacketWriter &w, zb::SecurityControl keyType, zb::ApsCommand command);
+	void writeApsAck(PacketWriter &w, uint8_t apsCounter);
+
+	uint8_t writeApsDataZdp(PacketWriter &w, zb::ZdpCommand request);
+	void writeApsDataZdp(PacketWriter &w, zb::ZdpCommand response, uint8_t zdpCounter);
+	void writeApsAckZdp(PacketWriter &w, uint8_t apsCounter, zb::ZdpCommand command);
+
+	void writeApsDataZcl(PacketWriter &w, uint8_t destinationEndpoint, zb::ZclCluster clusterId, zb::ZclProfile profile,
 		uint8_t sourceEndpoint);
-	uint8_t writeZdpData(PacketWriter &w, zb::ZdpCommand command);
+	void writeApsAckZcl(PacketWriter &w, uint8_t destinationEndpoint, zb::ZclCluster clusterId,
+		zb::ZclProfile profile, uint8_t sourceEndpoint);
 	void writeFooter(PacketWriter &w, radio::SendFlags sendFlags);
 
-	
+
 	// coroutine that sends link status and many-to-one route request in a regular interval
 	Coroutine broadcast();
 
 	// coroutine that sends a beacon on request
 	Coroutine sendBeacon();
-	
+
 	// beacon coroutine waits on this barrier until a beacon request arrives
 	Barrier<> beaconBarrier;
 
@@ -339,10 +386,8 @@ private:
 	void handleGp(uint8_t const *mac, PacketReader &r);
 	void handleGpCommission(uint32_t deviceId, PacketReader& r);
 
-	void handleNwk(PacketReader &r, ZbDevice &device);
-	void handleNwkCommand(PacketReader &r, ZbDevice &device);
-	void handleAps(PacketReader &r, ZbDevice &device, uint8_t const *extendedSource);
-	void handleZdp(PacketReader &r, ZbDevice &device);
+	//void handleAps(PacketReader &r, ZbDevice &device, uint8_t const *extendedSource);
+	//void handleZdp(PacketReader &r, ZbDevice &device);
 	void handleZcl(PacketReader &r, ZbDevice &device, uint8_t destinationEndpoint);
 
 	// coroutine for handling association requests from new devices
@@ -358,6 +403,6 @@ private:
 	AwaitableCoroutine associationCoroutine;
 	ZbDevice *tempDevice;
 
-	
+
 	Event publishEvent;
 };

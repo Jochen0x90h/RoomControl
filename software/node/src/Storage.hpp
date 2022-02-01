@@ -16,10 +16,10 @@ public:
 	static constexpr int MAX_ELEMENT_COUNT = 512;
 	//static constexpr int RAM_SIZE = 16384;
 
-	
+
 	// delete copy constructor
 	Storage(Storage const &) = delete;
-	
+
 	/**
 	 * Constructor
 	 * @param pageStart first flash page to use
@@ -31,12 +31,12 @@ public:
 		assert(pageStart >= 0 && pageStart + pageCount <= FLASH_PAGE_COUNT);
 		assert(pageCount >= 2);
 		this->pageStart = pageStart;
-		
+
 		// we only use half of the pages and copy to the other half if they are full
 		this->pageCount = pageCount / 2;
 
 		add(arrays...);
-		
+
 		init();
 	}
 
@@ -89,12 +89,12 @@ public:
 	public:
 		void const *flash;
 	};
-	
+
 	template <typename T>
 	class Element : public ElementInternal {
 	public:
 		using FlashType = T;
-				
+
 		Element(FlashType const &flash) {this->flash = &flash;}
 		Element(Element const &) = delete;
 
@@ -114,24 +114,24 @@ protected:
 	enum class Op : uint8_t {
 		// todo: first flash header contains version
 		VERSION = 0x55,
-		
+
 		// overwrite elements
 		OVERWRITE = 0x56,
-		
+
 		// erase elements
 		ERASE = 0x59,
-		
+
 		// move an element to a different index
 		MOVE = 0x5a,
 	};
-	
+
 	struct FlashHeader {
 		// index of array to modify
 		uint8_t arrayIndex;
-				
+
 		// element index to modify
 		uint8_t index;
-		
+
 		// operation dependent value
 		// OVERWRITE, ERASE: element count
 		// MOVE: destination index
@@ -140,25 +140,25 @@ protected:
 		// operation (is last so that it can be used to check if the header was fully written to flash)
 		Op op;
 	};
-	
+
 	// size of FlashHeader should be 4
 	static_assert(sizeof(FlashHeader) == 4);
-	
+
 	struct ArrayData {
 		Storage *storage;
 
 		// next array in a linked list
 		ArrayData *next;
-		
+
 		// index of array
 		uint8_t index;
-				
+
 		// number of elements in array
 		uint8_t count;
-		
+
 		// function to determine the flash size of an element
 		int (*sizeElement)(void const *flashElement);
-		
+
 		// function to allocate state in ram
 		ElementInternal *(*allocateElement)(void const *flashElement);
 
@@ -170,7 +170,7 @@ protected:
 		void shrink(int index, int count);
 		bool hasSpace(void const *flashElement);
 		void *write(int index, ElementInternal *element);
-		void erase(int index);
+		void *erase(int index);
 		void move(int oldIndex, int newIndex);
 	};
 
@@ -205,13 +205,13 @@ public:
 	public:
 		// element part that is stored in flash (e.g. permanent configuration)
 		using FlashType = typename T::FlashType;
-		
+
 		// element part that is stored in ram (e.g. current state)
 		using RamType = T;
 
 		static_assert(sizeof(FlashType) <= FLASH_PAGE_SIZE - flashAlign(sizeof(FlashHeader)));
 
-		
+
 		Array() = default;
 		Array(const Array &) = delete;
 
@@ -222,7 +222,7 @@ public:
 		int count() const {
 			return this->data.count;
 		}
-		
+
 		/**
 		 * Returns true when empty
 		 * @return true when empty
@@ -230,7 +230,7 @@ public:
 		bool isEmpty() const {
 			return this->data.count == 0;
 		}
-				
+
 		/**
 		 * Index operator
 		 * @param index element index
@@ -283,7 +283,7 @@ public:
 			assert(index >= 0 && index <= this->data.count);
 			auto old = this->data.write(index, element.ptr);
 			delete reinterpret_cast<RamType *>(old);
-			
+
 			// remove ownership from given element
 			element.ptr = nullptr;
 		}
@@ -293,10 +293,10 @@ public:
 		 */
 		void erase(int index) {
 			assert(index >= 0 && index < this->data.count);
-			delete reinterpret_cast<RamType *>(this->data.ramElements[index]);
-			this->data.erase(index);
+			auto old = this->data.erase(index);
+			delete reinterpret_cast<RamType *>(old);
 		}
-		
+
 		/**
 		 * Move an element from an old index to a new index and move all elements in between by one index
 		 * @param index index of element to move
@@ -310,7 +310,7 @@ public:
 /*
 		Iterator<FlashType, RamType> begin() const {
 			return {this->data.flashElements, this->data.ramElements};
-			
+
 		}
 		Iterator<FlashType, RamType> end() const {
 			return {this->data.flashElements + this->data.count, this->data.ramElements + this->data.count};
@@ -326,18 +326,18 @@ public:
 
 		ArrayData data;
 	};
-		
+
 protected:
-	
+
 	void switchFlashRegions();
 
 	//void ramInsert(uint32_t **ramElement, int sizeChange);
-	
+
 	// configuration
 	uint8_t pageStart;
 	uint8_t pageCount;
 	uint8_t arrayCount = 0;
-	
+
 	// linked list of arrays
 	ArrayData *first = nullptr;
 
@@ -348,10 +348,10 @@ protected:
 	// flash pointers
 	uint8_t const *it;
 	uint8_t const *end;
-	
+
 	// space for array elements of all arrays
 	//void const *flashElements[MAX_ELEMENT_COUNT];
-		
+
 	// accumulated size of all flash elements bytes
 	int flashElementsSize = 0;
 

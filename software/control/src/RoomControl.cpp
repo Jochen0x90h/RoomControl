@@ -3386,7 +3386,7 @@ AwaitableCoroutine RoomControl::devicesMenu(Interface &interface) {
 			break;
 		
 		// show menu and wait for new event until timeout so that we can show newly commissioned devices
-		co_await select(menu.show(), timer::sleep(500ms));
+		co_await select(menu.show(), timer::sleep(250ms));
 	}
 	interface.setCommissioning(false);
 }
@@ -3699,7 +3699,7 @@ AwaitableCoroutine RoomControl::messageGenerator(Interface &interface, DeviceId 
 				+ underline(valueString2, editMessage2) + unitString);
 		}
 		
-		if (menu.entry("Publish")) {
+		if (menu.entry("Send")) {
 			interface.addPublisher(deviceId, endpointIndex, publisher);
 			//if (publisher.isEmpty())
 			//	interface.addPublisher(deviceId, publisher);

@@ -72,7 +72,7 @@ void handle(Gui &gui) {
 		int readLength = p.readLength;
 		p.readLength = min(readLength, p.writeLength);
 		array::copy(p.readLength, p.readData, p.writeData);
-		
+
 		if (p.writeLength == 0) {
 			// read from device: search for a device that has requested to be read
 			for (Device &device : bus::devices) {
@@ -82,12 +82,12 @@ void handle(Gui &gui) {
 						int flag = 1 << endpointIndex;
 						if ((device.requestFlags & flag) != 0) {
 							device.requestFlags &= ~flag;
-							
-							BusInterface::MessageWriter w(p.readData);
-														
+
+							// write into read data of transfer()
+							BusInterface::MessageWriter w(readLength, p.readData);
+
 							// set start of header
-							//w.setHeader();
-							EncryptWriter c(w);
+							w.setHeader();
 
 							// encoded address
 							w.arbiter((device.flash.address & 7) + 1);
@@ -95,10 +95,10 @@ void handle(Gui &gui) {
 
 							// security counter
 							w.u32L(device.securityCounter);
-							
+
 							// set start of message
-							c.setMessage();
-							
+							w.setMessage();
+
 							// endpoint index
 							w.u8(endpointIndex);
 
@@ -115,16 +115,16 @@ void handle(Gui &gui) {
 							default:
 								break;
 							}
-							
+
 							// encrypt
 							Nonce nonce(device.flash.address, device.securityCounter);
-							c.encrypt(4, nonce, device.flash.aesKey);
-							
+							w.encrypt(4, nonce, device.flash.aesKey);
+
 							// increment security counter
 							++device.securityCounter;
 
 							p.readLength = w.getLength();
-							
+
 							return true;
 						}
 					}
@@ -135,28 +135,27 @@ void handle(Gui &gui) {
 			uint8_t data[64];
 			array::copy(Array<uint8_t>(data), p.writeData);
 			BusInterface::MessageReader r(p.writeLength, data);
-			DecryptReader c(r);
-			//r.setHeader();
+			r.setHeader();
 			uint8_t address = (r.arbiter() - 1) | (r.arbiter() << 3);
 			for (Device &device : bus::devices) {
 				if (device.flash.address == address) {
 					// security counter
 					uint32_t securityCounter = r.u32L();
-					
+
 					// todo: check security counter
-					
-					c.setMessage();
-					
+
+					r.setMessage();
+
 					// decrypt
 					Nonce nonce(address, securityCounter);
-					if (!c.decrypt(4, nonce, device.flash.aesKey))
+					if (!r.decrypt(4, nonce, device.flash.aesKey))
 						break;
-					
+
 					uint8_t endpointIndex = r.u8();
 					if (endpointIndex < device.endpoints.count()) {
 						EndpointType endpointType = device.endpoints[endpointIndex];
 						int &state = device.states[endpointIndex];
-						
+
 						switch (endpointType) {
 						case EndpointType::ON_OFF:
 							{
@@ -187,32 +186,32 @@ void handle(Gui &gui) {
 				// enumerate: search a device that has not been commissioned
 				for (Device &device : bus::devices) {
 					if (!device.flash.commissioned) {
-						BusInterface::MessageWriter w(p.readData);
-						EncryptWriter c(w);
-						//w.setHeader();
-						
+						// write into read data of transfer()
+						BusInterface::MessageWriter w(readLength, p.readData);
+						w.setHeader();
+
 						// skip zero
 						w.skip(1);
-						
+
 						// encode device id
 						uint32_t id = device.id;
 						for (int i = 0; i < 11; ++i) {
 							w.arbiter((id & 3) + 1);
 							id >>= 3;
 						}
-						
+
 						// endpoints
 						w.data(device.endpoints);
-						
+
 						// start of message (is empty, everything is in the header)
-						c.setMessage();
+						w.setMessage();
 
 						// encrypt
 						Nonce nonce(0, 0);
-						c.encrypt(micLength, nonce, busDefaultAesKey);
-						
+						w.encrypt(micLength, nonce, busDefaultAesKey);
+
 						p.readLength = w.getLength();
-						
+
 						break;
 					}
 				}
@@ -221,29 +220,30 @@ void handle(Gui &gui) {
 				uint8_t data[64];
 				array::copy(p.writeLength, data, p.writeData);
 				BusInterface::MessageReader r(p.writeLength, data);
-				DecryptReader c(r);
-				//r.setHeader();
+				r.setHeader();
+
+				// skip command prefix (0) and arbitration byte (0)
 				r.skip(2);
-								
+
 				// search device with given device id
 				uint32_t deviceId = r.u32L();
 				int offset = 0;
 				for (Device &device : bus::devices) {
 					if (device.id == deviceId) {
 						//r.setMessage(data + p.writeLength - 4);
-						c.setMessageFromEnd(micLength);
-						
+						r.setMessageFromEnd(micLength);
+
 						// decrypt
 						Nonce nonce(0, 0);
-						if (!c.decrypt(micLength, nonce, busDefaultAesKey))
+						if (!r.decrypt(micLength, nonce, busDefaultAesKey))
 							break;
-						
+
 						// set address
 						device.flash.address = r.u8();
-						
+
 						// set key
 						setKey(device.flash.aesKey, r.data<16>());
-						
+
 						// write to file
 						device.flash.commissioned = true;
 						bus::file.seekg(offset);
@@ -258,15 +258,15 @@ void handle(Gui &gui) {
 		}
 		return true;
 	});
-	
+
 	// call next handler in chain
 	bus::nextHandler(gui);
-	
+
 	// time difference
 	auto now = std::chrono::steady_clock::now();
 	int us = std::chrono::duration_cast<std::chrono::microseconds>(now - bus::time).count();
 	bus::time = now;
-	
+
 	// id for gui
 	int id = 0x81729a00;
 
@@ -282,7 +282,7 @@ void handle(Gui &gui) {
 		for (int endpointIndex = 0; endpointIndex < device.endpoints.count(); ++endpointIndex) {
 			EndpointType endpointType = device.endpoints[endpointIndex];
 			int &state = device.states[endpointIndex];
-		
+
 			switch (endpointType) {
 			case SWITCH:
 				// switch
@@ -290,7 +290,7 @@ void handle(Gui &gui) {
 					int value = gui.switcher(id++);
 					if (value != -1) {
 						state = value;
-						
+
 						// mark dirty and resume coroutine that awaits a request so that it can receive data
 						device.requestFlags |= 1 << endpointIndex;
 						bus::requestWaitlist.resumeFirst();
@@ -354,7 +354,7 @@ void handle(Gui &gui) {
 					}
 				}
 				break;
-				
+
 			default:
 				break;
 			}
@@ -366,7 +366,7 @@ void handle(Gui &gui) {
 void init() {
 	// add to event loop handler chain
 	bus::nextHandler = loop::addHandler(handle);
-	
+
 	// load permanent configuration of devices
 	char const *fileName = "bus.bin";
 	bus::file.open(fileName, std::fstream::in | std::fstream::binary);
@@ -378,7 +378,7 @@ void init() {
 	bus::file.clear();
 	size_t size = bus::file.tellg();
 	bus::file.close();
-	
+
 	// check if size is ok
 	if (size != 3 * sizeof(Device::Flash)) {
 		// no: create new file

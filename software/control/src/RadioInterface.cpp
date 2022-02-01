@@ -3,8 +3,8 @@
 #include <rng.hpp>
 #include <terminal.hpp>
 #include <timer.hpp>
-#include <crypt.hpp>
 #include <Nonce.hpp>
+#include <hash.hpp>
 #include <ieee.hpp>
 #include <zb.hpp>
 #include <gp.hpp>
@@ -20,8 +20,15 @@ constexpr SystemDuration timeout = 500ms;
 // number of retries when a send fails
 constexpr int MAX_RETRY = 2;
 
-static AesKey const trustCenterLinkAesKey = {{0x5a696742, 0x6565416c, 0x6c69616e, 0x63653039, 0x166d75b9, 0x730834d5, 0x1f6155bb, 0x7c046582, 0xe62066a9, 0x9528527c, 0x8a4907c7, 0xf64d6245, 0x018a08eb, 0x94a25a97, 0x1eeb5d50, 0xe8a63f15, 0x2dff5170, 0xb95d0be7, 0xa7b656b7, 0x4f1069a2, 0xf7066bf4, 0x4e5b6013, 0xe9ed36a4, 0xa6fd5f06, 0x83c904d0, 0xcd9264c3, 0x247f5267, 0x82820d61, 0xd01eebc3, 0x1d8c8f00, 0x39f3dd67, 0xbb71d006, 0xf36e8429, 0xeee20b29, 0xd711d64e, 0x6c600648, 0x3801d679, 0xd6e3dd50, 0x01f20b1e, 0x6d920d56, 0x41d66745, 0x9735ba15, 0x96c7b10b, 0xfb55bc5d}};
-static AesKey const hashedTrustCenterLinkAesKey = {{0x4bab0f17, 0x3e1434a2, 0xd572e1c1, 0xef478782, 0xeabc1cc8, 0xd4a8286a, 0x01dac9ab, 0xee9d4e29, 0xb693b9e0, 0x623b918a, 0x63e15821, 0x8d7c1608, 0xa2d489bd, 0xc0ef1837, 0xa30e4016, 0x2e72561e, 0xea65fb8c, 0x2a8ae3bb, 0x8984a3ad, 0xa7f6f5b3, 0xb88396d0, 0x9209756b, 0x1b8dd6c6, 0xbc7b2375, 0xb9a50bb5, 0x2bac7ede, 0x3021a818, 0x8c5a8b6d, 0x479837d1, 0x6c34490f, 0x5c15e117, 0xd04f6a7a, 0x439aeda1, 0x2faea4ae, 0x73bb45b9, 0xa3f42fc3, 0xe78fc3ab, 0xc8216705, 0xbb9a22bc, 0x186e0d7f, 0x4e581106, 0x86797603, 0x3de354bf, 0x258d59c0}};
+static uint8_t const za09LinkKey[] = {0x5A, 0x69, 0x67, 0x42, 0x65, 0x65, 0x41, 0x6C, 0x6C, 0x69, 0x61, 0x6E, 0x63, 0x65, 0x30, 0x39};
+
+static AesKey const za09LinkAesKey = {{0x5a696742, 0x6565416c, 0x6c69616e, 0x63653039, 0x166d75b9, 0x730834d5, 0x1f6155bb, 0x7c046582, 0xe62066a9, 0x9528527c, 0x8a4907c7, 0xf64d6245, 0x018a08eb, 0x94a25a97, 0x1eeb5d50, 0xe8a63f15, 0x2dff5170, 0xb95d0be7, 0xa7b656b7, 0x4f1069a2, 0xf7066bf4, 0x4e5b6013, 0xe9ed36a4, 0xa6fd5f06, 0x83c904d0, 0xcd9264c3, 0x247f5267, 0x82820d61, 0xd01eebc3, 0x1d8c8f00, 0x39f3dd67, 0xbb71d006, 0xf36e8429, 0xeee20b29, 0xd711d64e, 0x6c600648, 0x3801d679, 0xd6e3dd50, 0x01f20b1e, 0x6d920d56, 0x41d66745, 0x9735ba15, 0x96c7b10b, 0xfb55bc5d}};
+
+//static AesKey const hashedTrustCenterLinkAesKey = {{0x4bab0f17, 0x3e1434a2, 0xd572e1c1, 0xef478782, 0xeabc1cc8, 0xd4a8286a, 0x01dac9ab, 0xee9d4e29, 0xb693b9e0, 0x623b918a, 0x63e15821, 0x8d7c1608, 0xa2d489bd, 0xc0ef1837, 0xa30e4016, 0x2e72561e, 0xea65fb8c, 0x2a8ae3bb, 0x8984a3ad, 0xa7f6f5b3, 0xb88396d0, 0x9209756b, 0x1b8dd6c6, 0xbc7b2375, 0xb9a50bb5, 0x2bac7ede, 0x3021a818, 0x8c5a8b6d, 0x479837d1, 0x6c34490f, 0x5c15e117, 0xd04f6a7a, 0x439aeda1, 0x2faea4ae, 0x73bb45b9, 0xa3f42fc3, 0xe78fc3ab, 0xc8216705, 0xbb9a22bc, 0x186e0d7f, 0x4e581106, 0x86797603, 0x3de354bf, 0x258d59c0}};
+
+static AesKey const za09KeyTransportAesKey = {{0x4bab0f17, 0x3e1434a2, 0xd572e1c1, 0xef478782, 0xeabc1cc8, 0xd4a8286a, 0x01dac9ab, 0xee9d4e29, 0xb693b9e0, 0x623b918a, 0x63e15821, 0x8d7c1608, 0xa2d489bd, 0xc0ef1837, 0xa30e4016, 0x2e72561e, 0xea65fb8c, 0x2a8ae3bb, 0x8984a3ad, 0xa7f6f5b3, 0xb88396d0, 0x9209756b, 0x1b8dd6c6, 0xbc7b2375, 0xb9a50bb5, 0x2bac7ede, 0x3021a818, 0x8c5a8b6d, 0x479837d1, 0x6c34490f, 0x5c15e117, 0xd04f6a7a, 0x439aeda1, 0x2faea4ae, 0x73bb45b9, 0xa3f42fc3, 0xe78fc3ab, 0xc8216705, 0xbb9a22bc, 0x186e0d7f, 0x4e581106, 0x86797603, 0x3de354bf, 0x258d59c0}};
+static AesKey const za09KeyLoadAesKey = {{0xc5a47035, 0xc332ccbf, 0x251571d8, 0xbaded188, 0xd99ab4c1, 0x1aa8787e, 0x3fbd09a6, 0x8563d82e, 0x20fb8556, 0x3a53fd28, 0x05eef48e, 0x808d2ca0, 0x798a659b, 0x43d998b3, 0x46376c3d, 0xc6ba409d, 0x85833b2f, 0xc65aa39c, 0x806dcfa1, 0x46d78f3c, 0x9bf0d075, 0x5daa73e9, 0xddc7bc48, 0x9b103374, 0x71334261, 0x2c993188, 0xf15e8dc0, 0x6a4ebeb4, 0x1e9dcf63, 0x3204feeb, 0xc35a732b, 0xa914cd9f, 0x642014b0, 0x5624ea5b, 0x957e9970, 0x3c6a54ef, 0x7d00cb5b, 0x2b242100, 0xbe5ab870, 0x8230ec9f, 0x4fce1048, 0x64ea3148, 0xdab08938, 0x588065a7}};
+
 constexpr zb::SecurityControl securityLevel = zb::SecurityControl::LEVEL_ENC_MIC32; // encrypted + 32 bit message integrity code
 
 
@@ -30,7 +37,7 @@ constexpr zb::SecurityControl securityLevel = zb::SecurityControl::LEVEL_ENC_MIC
 enum class Role : uint8_t {
 	// client sends (cluster specific) commmands to manipulate attributes in server (is in output cluster list)
 	CLIENT,
-	
+
 	// server (is in input cluster list)
 	SERVER
 };
@@ -38,7 +45,7 @@ enum class Role : uint8_t {
 enum class Mode : uint8_t {
 	// commands are received from a cluster (needs binding) or sent to a cluster
 	COMMAND,
-	
+
 	// attributes are reported by a cluster (needs reporting) or sent to a cluster
 	ATTRIBUTE
 };
@@ -46,10 +53,10 @@ enum class Mode : uint8_t {
 struct EndpointInfo {
 	// endpoint type as exposed in Interface
 	EndpointType endpointType;
-	
+
 	// role of cluster (client/output or server/input)
 	Role role;
-	
+
 	// cluster id
 	zb::ZclCluster cluster;
 
@@ -70,7 +77,7 @@ EndpointInfo const endpointInfos[] {
 		Mode::ATTRIBUTE,
 		zb::ZclPowerConfigurationAttribute::BATTERY_PERCENTAGE
 	},
-	
+
 	// wall switch (sends on/off commands, needs binding)
 	{
 		EndpointType::ON_OFF_IN,
@@ -78,7 +85,7 @@ EndpointInfo const endpointInfos[] {
 		zb::ZclCluster::ON_OFF,
 		Mode::COMMAND
 	},
-	
+
 	// power on/off, e.g. light bulb, switchable socket (receives on/off commands)
 	{
 		EndpointType::ON_OFF_OUT,
@@ -121,17 +128,14 @@ Coroutine RadioInterface::start(uint16_t panId, DataBuffer<16> const &key, AesKe
 	// filter packets with the coordinator as destination (and broadcast pan/address)
 	radio::setFlags(RADIO_ZBEE, radio::ContextFlags::PASS_DEST_SHORT | radio::ContextFlags::PASS_DEST_LONG
 		| radio::ContextFlags::HANDLE_ACK);
-	
+
 	// start coroutines
 	broadcast();
 	sendBeacon();
-	
-	// start publish coroutines
-	for (int i = 0; i < 1; ++i)
+	for (int i = 0; i < PUBLISH_COUNT; ++i)
 		publish();
-	
-	// start receiving
-	receive();
+	for (int i = 0; i < RECEIVE_COUNT; ++i)
+		receive();
 }
 
 RadioInterface::~RadioInterface() {
@@ -157,7 +161,7 @@ DeviceId RadioInterface::getDeviceId(int index) {
 	if (index < gpDeviceCount)
 		return this->gpDevices[index]->deviceId;
 	else if (index < gpDeviceCount + this->zbDevices.count())
-		return this->zbDevices[index - gpDeviceCount]->deviceId;
+		return this->zbDevices[index - gpDeviceCount]->longAddress;
 	else
 		assert(false);
 	return 0;
@@ -172,7 +176,7 @@ Array<EndpointType const> RadioInterface::getEndpoints(DeviceId deviceId) {
 	}
 	for (auto &device : this->zbDevices) {
 		auto const &flash = *device;
-		if (flash.deviceId == deviceId) {
+		if (flash.longAddress == deviceId) {
 			return {flash.endpointCount, reinterpret_cast<EndpointType const *>(flash.endpoints)};
 		}
 	}
@@ -182,7 +186,7 @@ Array<EndpointType const> RadioInterface::getEndpoints(DeviceId deviceId) {
 void RadioInterface::addPublisher(DeviceId deviceId, uint8_t endpointIndex, Publisher &publisher) {
 	for (auto &device : this->zbDevices) {
 		auto const &flash = *device;
-		if (flash.deviceId == deviceId && endpointIndex < flash.endpointCount) {
+		if (flash.longAddress == deviceId && endpointIndex < flash.endpointCount) {
 			publisher.remove();
 			publisher.index = endpointIndex;
 			publisher.event = &this->publishEvent;
@@ -204,7 +208,7 @@ void RadioInterface::addSubscriber(DeviceId deviceId, uint8_t endpointIndex, Sub
 	}
 	for (auto &device : this->zbDevices) {
 		auto const &flash = *device;
-		if (flash.deviceId == deviceId && endpointIndex < flash.endpointCount) {
+		if (flash.longAddress == deviceId && endpointIndex < flash.endpointCount) {
 			subscriber.remove();
 			subscriber.index = endpointIndex;
 			device.subscribers.add(subscriber);
@@ -216,8 +220,7 @@ void RadioInterface::addSubscriber(DeviceId deviceId, uint8_t endpointIndex, Sub
 
 RadioInterface::ZbDevice *RadioInterface::findZbDevice(uint16_t address) {
 	for (auto &device : this->zbDevices) {
-		auto const &flash = *device;
-		if (flash.shortAddress == address)
+		if (device->shortAddress == address)
 			return &device;
 	}
 	return nullptr;
@@ -252,7 +255,7 @@ void RadioInterface::writeNwkBroadcastCommand(PacketWriter &w, zb::NwkCommand co
 
 	// sequence number
 	w.u8(this->macCounter++);
-	
+
 	// destination pan
 	w.u16L(this->panId);
 
@@ -261,7 +264,7 @@ void RadioInterface::writeNwkBroadcastCommand(PacketWriter &w, zb::NwkCommand co
 
 	// source address
 	w.u16L(0x0000);
-	
+
 
 	// set start of header for encryption
 	w.setHeader();
@@ -276,51 +279,46 @@ void RadioInterface::writeNwkBroadcastCommand(PacketWriter &w, zb::NwkCommand co
 
 	// zbee broadcast
 	w.u16L(0xfffc);
-	
+
 	// source
 	w.u16L(0x0000);
-	
+
 	// radius
 	w.u8(1);
-	
+
 	// sequence number
 	w.u8(this->nwkCounter++);
-	
+
 	// extended source
 	auto longAddress = radio::getLongAddress();
 	w.u64L(longAddress);
 
-	
+
 	// security header
 	if ((nwkFrameControl & zb::NwkFrameControl::SECURITY) != 0) {
-		// security control field
-		w.securityControlPtr = w.current;
-		w.e8(zb::SecurityControl::LEVEL_ENC_MIC32
+		// security control and counter
+		w.security(zb::SecurityControl::LEVEL_ENC_MIC32
 			| zb::SecurityControl::KEY_NETWORK
-			| zb::SecurityControl::EXTENDED_NONCE);
-
-		// security counter
-		w.u32L(this->securityCounter);
+			| zb::SecurityControl::EXTENDED_NONCE,
+		this->securityCounter++);
 
 		// extended source
 		w.u64L(longAddress);
 
 		// key sequence number
 		w.u8(0);
-	//} else {
-	//	w.securityControlPtr = nullptr;
 	}
-		
-	
+
+
 	// set start of message for encryption
 	w.setMessage();
-	
+
 	// command
 	w.e8(command);
 }
 
 void RadioInterface::writeNwk(PacketWriter &w, zb::NwkFrameControl nwkFrameControl, uint8_t radius, ZbDevice &device) {
-	assert(device.firstHop != 0xffff);
+	assert(device.routerAddress != 0xffff);
 
 	// ieee 802.15.4 frame control
 	auto ieeeFrameControl = ieee::FrameControl::TYPE_DATA
@@ -332,17 +330,17 @@ void RadioInterface::writeNwk(PacketWriter &w, zb::NwkFrameControl nwkFrameContr
 
 	// sequence number
 	w.u8(this->macCounter++);
-	
+
 	// destination pan
 	w.u16L(this->panId);
 
-	// ieee destination address (address of first hop)
-	w.u16L(device.firstHop);
+	// ieee destination address (address of router for the device)
+	w.u16L(device.routerAddress);
 
 	// source address
 	w.u16L(0x0000);
-	
-	
+
+
 	// set start of header for encryption
 	w.setHeader();
 
@@ -359,19 +357,19 @@ void RadioInterface::writeNwk(PacketWriter &w, zb::NwkFrameControl nwkFrameContr
 
 	// zbee broadcast
 	w.u16L(device->shortAddress);
-	
+
 	// source
 	w.u16L(0x0000);
-	
+
 	// radius
 	w.u8(radius);
-	
+
 	// sequence number
 	w.u8(this->nwkCounter++);
 
 	// destination
 	if ((nwkFrameControl & zb::NwkFrameControl::DESTINATION) != 0)
-		w.u64L(device->deviceId);
+		w.u64L(device->longAddress);
 
 	// extended source
 	auto longAddress = radio::getLongAddress();
@@ -381,27 +379,22 @@ void RadioInterface::writeNwk(PacketWriter &w, zb::NwkFrameControl nwkFrameContr
 
 	// security header
 	if ((nwkFrameControl & zb::NwkFrameControl::SECURITY) != 0) {
-		// security control field
-		w.securityControlPtr = w.current;
-		w.e8(zb::SecurityControl::LEVEL_ENC_MIC32
+		// security control and counter
+		w.security(zb::SecurityControl::LEVEL_ENC_MIC32
 			| zb::SecurityControl::KEY_NETWORK
-			| zb::SecurityControl::EXTENDED_NONCE);
-
-		// security counter
-		w.u32L(this->securityCounter);
+			| zb::SecurityControl::EXTENDED_NONCE,
+			this->securityCounter++);
 
 		// extended source
 		w.u64L(longAddress);
 
 		// key sequence number
 		w.u8(0);
-	//} else {
-	//	w.securityControlPtr = nullptr;
 	}
-		
+
 	// set start of message for encryption
 	w.setMessage();
-	
+
 /*
 	// add source route
 	if (routeCount > 0) {
@@ -414,39 +407,132 @@ void RadioInterface::writeNwk(PacketWriter &w, zb::NwkFrameControl nwkFrameContr
 */
 }
 
-void RadioInterface::writeApsCommandSecurity(PacketWriter &w) {
+void RadioInterface::writeApsCommand(PacketWriter &w, zb::SecurityControl keyType,
+	zb::ApsCommand command)
+{
 	// set start of header for encryption
 	w.setHeader();
 
 	// application support layer frame control field
-	w.e8(zb::ApsFrameControl::TYPE_COMMAND
-		 | zb::ApsFrameControl::DELIVERY_UNICAST
-		 | zb::ApsFrameControl::SECURITY);
-	
+	auto apsFrameControl = zb::ApsFrameControl::TYPE_COMMAND
+		| zb::ApsFrameControl::DELIVERY_UNICAST
+		| zb::ApsFrameControl::SECURITY;
+	//if (requestAck)
+	//	apsFrameControl |= zb::ApsFrameControl::ACK_REQUEST;
+	w.e8(apsFrameControl);
+
 	// counter
 	w.u8(this->apsCounter++);
 
-	
+
 	// security header
 	{
-		// security control field
-		w.securityControlPtr = w.current;
-		w.e8(zb::SecurityControl::LEVEL_ENC_MIC32
-			| zb::SecurityControl::KEY_KEY_TRANSPORT
-			| zb::SecurityControl::EXTENDED_NONCE);
-
-		// security counter
-		w.u32L(this->securityCounter);
+		// security control and counter
+		w.security(zb::SecurityControl::LEVEL_ENC_MIC32
+			| keyType
+			| zb::SecurityControl::EXTENDED_NONCE,
+			this->securityCounter++);
 
 		// extended source
 		w.u64L(radio::getLongAddress());
 	}
-	
+
+
 	// set start of message for encryption
 	w.setMessage();
+
+	// aps command
+	w.e8(command);
 }
 
-void RadioInterface::writeApsData(PacketWriter &w, uint8_t destinationEndpoint, zb::ZclCluster clusterId,
+void RadioInterface::writeApsAck(PacketWriter &w, uint8_t apsCounter) {
+	// application support layer frame control field
+	auto apsFrameControl = zb::ApsFrameControl::TYPE_ACK
+		| zb::ApsFrameControl::DELIVERY_UNICAST
+		| zb::ApsFrameControl::ACK_FORMAT;
+	w.e8(apsFrameControl);
+
+	// aps counter
+	w.u8(apsCounter);
+}
+
+uint8_t RadioInterface::writeApsDataZdp(PacketWriter &w, zb::ZdpCommand request) {
+	// application support layer frame control field
+	w.e8(zb::ApsFrameControl::TYPE_DATA
+		| zb::ApsFrameControl::DELIVERY_UNICAST);
+
+	// destination endpoint (device)
+	w.u8(0);
+
+	// zdp command
+	assert((request & zb::ZdpCommand::RESPONSE_FLAG) == 0);
+	w.e16L(request);
+
+	// device profile
+	w.u16L(0x0000);
+
+	// source endpoint (device)
+	w.u8(0);
+
+	// counter
+	w.u8(this->apsCounter++);
+
+
+	// device profile
+	uint8_t zdpCounter = this->zdpCounter++;
+	w.u8(zdpCounter);
+
+	return zdpCounter;
+}
+
+void RadioInterface::writeApsDataZdp(PacketWriter &w, zb::ZdpCommand response, uint8_t zdpCounter) {
+	// application support layer frame control field
+	w.e8(zb::ApsFrameControl::TYPE_DATA
+		| zb::ApsFrameControl::DELIVERY_UNICAST);
+
+	// destination endpoint (device)
+	w.u8(0);
+
+	// zdp command
+	assert((response & zb::ZdpCommand::RESPONSE_FLAG) != 0);
+	w.e16L(response);
+
+	// device profile
+	w.u16L(0x0000);
+
+	// source endpoint (device)
+	w.u8(0);
+
+	// counter
+	w.u8(this->apsCounter++);
+
+
+	// device profile
+	w.u8(zdpCounter);
+}
+
+void RadioInterface::writeApsAckZdp(PacketWriter &w, uint8_t apsCounter, zb::ZdpCommand command) {
+	// application support layer frame control field
+	w.e8(zb::ApsFrameControl::TYPE_ACK
+		| zb::ApsFrameControl::DELIVERY_UNICAST);
+
+	// destination endpoint (device)
+	w.u8(0);
+
+	// zdp command
+	w.e16L(command);
+
+	// device profile
+	w.u16L(0x0000);
+
+	// source endpoint (device)
+	w.u8(0);
+
+	// counter
+	w.u8(apsCounter);
+}
+
+void RadioInterface::writeApsDataZcl(PacketWriter &w, uint8_t destinationEndpoint, zb::ZclCluster clusterId,
 	zb::ZclProfile profile, uint8_t sourceEndpoint)
 {
 	// application support layer frame control field
@@ -455,13 +541,13 @@ void RadioInterface::writeApsData(PacketWriter &w, uint8_t destinationEndpoint, 
 
 	// destination endpoint
 	w.u8(destinationEndpoint);
-	
+
 	// cluster id
 	w.e16L(clusterId);
-	
+
 	// profile
 	w.e16L(profile);
-	
+
 	// source endpoint
 	w.u8(sourceEndpoint);
 
@@ -469,33 +555,29 @@ void RadioInterface::writeApsData(PacketWriter &w, uint8_t destinationEndpoint, 
 	w.u8(this->apsCounter++);
 }
 
-uint8_t RadioInterface::writeZdpData(PacketWriter &w, zb::ZdpCommand command) {
+void RadioInterface::writeApsAckZcl(PacketWriter &w, uint8_t destinationEndpoint, zb::ZclCluster clusterId,
+	zb::ZclProfile profile, uint8_t sourceEndpoint)
+{
 	// application support layer frame control field
-	w.e8(zb::ApsFrameControl::TYPE_DATA
+	w.e8(zb::ApsFrameControl::TYPE_ACK
 		| zb::ApsFrameControl::DELIVERY_UNICAST);
 
-	// destination endpoint (device)
-	w.u8(0);
-	
+	// destination endpoint
+	w.u8(destinationEndpoint);
+
 	// cluster id
-	w.e16L<zb::ZdpCommand>(command);
-	
-	// profile (device profile)
-	w.u16L(0x0000);
-	
-	// source endpoint (device)
-	w.u8(0);
+	w.e16L(clusterId);
+
+	// profile
+	w.e16L(profile);
+
+	// source endpoint
+	w.u8(sourceEndpoint);
 
 	// counter
 	w.u8(this->apsCounter++);
-	
-	
-	// device profile
-	uint8_t zdpCounter = this->zdpCounter++;
-	w.u8(zdpCounter);
-	
-	return zdpCounter;
 }
+
 
 bool writeZclClusterSpecific(RadioInterface::PacketWriter &w, uint8_t zclCounter, EndpointInfo const &info,
 	MessageType srcType, void const *srcMessage)
@@ -563,34 +645,46 @@ bool writeZclClusterSpecific(RadioInterface::PacketWriter &w, uint8_t zclCounter
 		// conversion failed
 		return false;
 	}
-	
+
 	// conversion successful
 	return true;
 }
 
 void RadioInterface::writeFooter(PacketWriter &w, radio::SendFlags sendFlags) {
-	if (w.securityControlPtr != nullptr) {
-		// get global configuration
-		//auto const &configuration = *this->configuration;
+	if (w.hasSecurity()) {
+		auto securityControl = w.getSecurityControl();
+		auto securityCounter = w.getSecurityCounter();
 
-		auto securityControl = zb::SecurityControl(*w.securityControlPtr);
-		
+		// length of message integrity code
+		int micLength = 4;
+
 		// nonce (4.5.2.2)
-		Nonce nonce(radio::getLongAddress(), this->securityCounter, securityControl);
+		Nonce nonce(radio::getLongAddress(), securityCounter, securityControl);
+
+		// select key
+		AesKey const *key;
+		switch (securityControl & zb::SecurityControl::KEY_MASK) {
+		case zb::SecurityControl::KEY_LINK:
+			key = &za09LinkAesKey;
+			break;
+		case zb::SecurityControl::KEY_KEY_TRANSPORT:
+			key = &za09KeyTransportAesKey;
+			break;
+		case zb::SecurityControl::KEY_KEY_LOAD:
+			key = &za09KeyLoadAesKey;
+			break;
+		default:
+			// KEY_NETWORK
+			key = this->aesKey;
+		}
 
 		// encrypt
-		int micLength = 4;
-		AesKey const &key = (securityControl & zb::SecurityControl::KEY_MASK) == zb::SecurityControl::KEY_NETWORK
-			? *this->aesKey : hashedTrustCenterLinkAesKey;
-		w.encrypt(micLength, nonce, key);
+		w.encrypt(micLength, nonce, *key);
 
 		//bool ok = decrypt(w.message, nonce, w.header, headerLength, w.message, payloadLength, micLength, key);
 
 		// clear security level according to 4.3.1.1 step 8.
-		*w.securityControlPtr &= ~zb::SecurityControl::LEVEL_MASK;
-
-		// increment security counter
-		++this->securityCounter;
+		w.clearSecurityLevel();
 	}
 	w.finish(sendFlags);
 }
@@ -610,7 +704,7 @@ Coroutine RadioInterface::broadcast() {
 			linkTime += 15s;
 			{
 				PacketWriter w(packet);
-				
+
 				// link status command
 				writeNwkBroadcastCommand(w, zb::NwkCommand::LINK_STATUS);
 				w.e8(zb::NwkCommandLinkStatusOptions(0) // link status count
@@ -630,13 +724,13 @@ Coroutine RadioInterface::broadcast() {
 				// many-to-one route request command
 				writeNwkBroadcastCommand(w, zb::NwkCommand::ROUTE_REQUEST);
 				w.e8(zb::NwkCommandRouteRequestOptions::DISCOVERY_MANY_TO_ONE_WITH_SOURCE_ROUTING);
-				
+
 				// route id
 				w.int8(this->routeCounter++);
-				
+
 				// destination
 				w.int16(0xfffc);
-				
+
 				// path cost
 				w.int8(0);
 
@@ -709,37 +803,96 @@ Coroutine RadioInterface::sendBeacon() {
 
 			// update id
 			w.u8(0);
-	
+
 			w.finish(radio::SendFlags::NONE);
 		}
 		co_await radio::send(RADIO_ZBEE, packet, sendResult);
-		
+
 		// "cool down" before a new beacon can be sent
 		co_await timer::sleep(100ms);
 	}
 }
 
+static bool handleZclClusterSpecific(MessageType dstType, void *dstMessage, EndpointInfo const &info, MessageReader r) {
+	// get command
+	uint8_t command = r.u8();
+
+	Message &dst = *reinterpret_cast<Message *>(dstMessage);
+	switch (dstType) {
+	case MessageType::ON_OFF:
+		switch (info.cluster) {
+		case zb::ZclCluster::ON_OFF:
+			if (command <= 2)
+				dst.onOff = command;
+			else
+				return false; // conversion failed
+			break;
+		default:
+			// conversion failed
+			return false;
+		}
+		break;
+	case MessageType::MOVE_TO_LEVEL:
+		switch (info.cluster) {
+		case zb::ZclCluster::LEVEL_CONTROL:
+			switch (zb::ZclLevelControlCommand(command)) {
+			case zb::ZclLevelControlCommand::MOVE_TO_LEVEL:
+			case zb::ZclLevelControlCommand::MOVE_TO_LEVEL_WITH_ON_OFF:
+				{
+					uint8_t level = r.u8();
+					uint16_t transitionTime = r.u16L();
+
+					dst.moveToLevel.level = float(level) / 254.0f;
+					dst.moveToLevel.move = float(transitionTime) / 10.0f;
+				}
+				break;
+			case zb::ZclLevelControlCommand::STEP:
+			case zb::ZclLevelControlCommand::STEP_WITH_ON_OFF:
+				{
+					bool up = r.u8() == 0;
+					int diff = r.u8();
+					uint16_t transitionTime = r.u16L();
+
+					dst.moveToLevel.level.set(float(up ? diff : -diff) / 254.0f, true);
+					dst.moveToLevel.move = float(transitionTime) / 10.0f;
+				}
+				break;
+			}
+		default:
+			// conversion failed
+			return false;
+		}
+		break;
+	default:
+		// conversion failed
+		return false;
+	}
+	return true;
+}
+
 Coroutine RadioInterface::receive() {
 	while (true) {
+		// wait until we receive a packet
 		radio::Packet packet;
 		co_await radio::receive(RADIO_ZBEE, packet);
 		PacketReader r(packet);
-		
+
 		// ieee 802.15.4 mac
 		uint8_t const *mac = r.current;
 
 		// frame control
-		auto frameControl = r.e16L<ieee::FrameControl>();
+		auto ieeeFrameControl = r.e16L<ieee::FrameControl>();
+		auto ieeeFrameType = ieeeFrameControl & ieee::FrameControl::TYPE_MASK;
 
 		// the radio filter flags ensure that a sequence number is present
 		uint8_t macCounter = r.u8();
-		
-		// the radio filter flags ensure that a destination pan id is present that is either broadcast or configuration.zbPanId
+
+		// the radio filter flags ensure that a destination pan id is present that is either broadcast or our pan
 		uint16_t destinationPanId = r.u16L();
 		bool destinationBroadcast = destinationPanId == 0xffff;
-		
+
 		// the radio filter flags ensure that a destination address is present hat is either boradcast or our address
-		if ((frameControl & ieee::FrameControl::DESTINATION_ADDRESSING_LONG_FLAG) == 0) {
+		if ((ieeeFrameControl & ieee::FrameControl::DESTINATION_ADDRESSING_LONG_FLAG) == 0) {
 			// short destination address
 			uint16_t destAddress = r.u16L();
 			destinationBroadcast |= destAddress == 0xffff;
@@ -748,100 +901,780 @@ Coroutine RadioInterface::receive() {
 			r.skip(8);
 		}
 
-		auto frameType = frameControl & ieee::FrameControl::TYPE_MASK;
-		if ((frameControl & ieee::FrameControl::SOURCE_ADDRESSING_FLAG) == 0) {
-			// no source address
-			if (frameType == ieee::FrameControl::TYPE_COMMAND) {
+		if ((ieeeFrameControl & ieee::FrameControl::SOURCE_ADDRESSING_FLAG) == 0) {
+			// handle ieee frames with no source address separately
+			if (ieeeFrameType == ieee::FrameControl::TYPE_COMMAND) {
 				auto command = r.e8<ieee::Command>();
 				if (command == ieee::Command::BEACON_REQUEST) {
 					// handle beacon request by sending a beacon
 terminal::out << ("Beacon Request\n");
 					this->beaconBarrier.resumeAll();
 				}
-			} else if (frameType == ieee::FrameControl::TYPE_DATA) {
+			} else if (ieeeFrameType == ieee::FrameControl::TYPE_DATA) {
 				// network layer: handle dependent on protocol version
 				auto version = r.peekE8<gp::NwkFrameControl>() & gp::NwkFrameControl::VERSION_MASK;
 				if (version == gp::NwkFrameControl::VERSION_3_GP)
 					handleGp(mac, r);
 			}
-		} else {
-			// short or long source address
+			continue;
+		}
 
-			// get source pan id
-			uint16_t sourcePanId = destinationPanId;
-			if ((frameControl & ieee::FrameControl::PAN_ID_COMPRESSION) == 0) {
-				sourcePanId = r.u16L();
-			}
+		// get source pan id
+		uint16_t sourcePanId = destinationPanId;
+		if ((ieeeFrameControl & ieee::FrameControl::PAN_ID_COMPRESSION) == 0) {
+			sourcePanId = r.u16L();
+		}
+
+		if (ieeeFrameType == ieee::FrameControl::TYPE_COMMAND) {
+			// ieee command frame
 
 			// check if address short or long
-			ZbDevice *pDevice = nullptr;
-			if ((frameControl & ieee::FrameControl::SOURCE_ADDRESSING_LONG_FLAG) == 0) {
-				// short source address
-				uint16_t sourceAddress = r.u16L();
-
-				// check for command frame
-				if (frameType == ieee::FrameControl::TYPE_COMMAND) {
-					auto command = r.e8<ieee::Command>();
-				} else if (frameType == ieee::FrameControl::TYPE_DATA) {
-					// try to lookup device by short address
-					pDevice = findZbDevice(sourceAddress);
-
-					// check if there is an active association coroutine
-					if (this->associationCoroutine.isAlive()) {
-						if ((*this->tempDevice)->shortAddress == sourceAddress) {
-							pDevice = this->tempDevice;
-						}
-					}
-				}
-			} else {
+			if ((ieeeFrameControl & ieee::FrameControl::SOURCE_ADDRESSING_LONG_FLAG) != 0) {
 				// long source address
 				uint64_t sourceAddress = r.u64L();
 
-				// check for command frame
-				if (frameType == ieee::FrameControl::TYPE_COMMAND) {
-					auto command = r.e8<ieee::Command>();
+				// ieee command
+				auto command = r.e8<ieee::Command>();
 
-					// check for association request with no broadcast
-					if (this->commissioning && !destinationBroadcast && command == ieee::Command::ASSOCIATION_REQUEST) {
-						// cancel current association coroutine
-						this->associationCoroutine.cancel();
-						
-						// start new association request
-						auto associationRequest = r.e8<ieee::AssociationRequest>();
-						bool receiveOnWhenIdle = (associationRequest & ieee::AssociationRequest::RECEIVE_ON_WHEN_IDLE) != 0;
-						auto sendFlags = receiveOnWhenIdle ? radio::SendFlags::NONE : radio::SendFlags::AWAIT_DATA_REQUEST;
+				// check for association request with no broadcast
+				if (this->commissioning && !destinationBroadcast && command == ieee::Command::ASSOCIATION_REQUEST) {
+					// cancel current association coroutine
+					this->associationCoroutine.cancel();
+
+					// start new association request
+					auto deviceInfo = r.e8<ieee::DeviceInfo>();
+					bool receiveOnWhenIdle = (deviceInfo & ieee::DeviceInfo::RX_ON_WHEN_IDLE) != 0;
+					auto sendFlags = receiveOnWhenIdle ? radio::SendFlags::NONE : radio::SendFlags::AWAIT_DATA_REQUEST;
 terminal::out << ("Association Request Receive On When Idle: " + dec(receiveOnWhenIdle) + '\n');
-						this->associationCoroutine = handleAssociationRequest(sourceAddress, sendFlags);
+					this->associationCoroutine = handleAssociationRequest(sourceAddress, sendFlags);
+				}
+			}
+			continue;
+		}
+		if (ieeeFrameType != ieee::FrameControl::TYPE_DATA)
+			continue;
+
+
+		// ieee data frame
+		// ---------------
+
+		// check if address short or long
+		ZbDevice *pDevice = nullptr;
+		if ((ieeeFrameControl & ieee::FrameControl::SOURCE_ADDRESSING_LONG_FLAG) == 0) {
+			// short source address
+			uint16_t sourceAddress = r.u16L();
+
+			// try to lookup device by short address
+			pDevice = findZbDevice(sourceAddress);
+
+			// check if there is an active association coroutine and address matches the temp device
+			if (this->associationCoroutine.isAlive()) {
+				if ((*this->tempDevice)->shortAddress == sourceAddress) {
+					pDevice = this->tempDevice;
+				}
+			}
+		} else {
+			// long source address
+			uint64_t sourceAddress = r.u64L();
+
+			/*else if (frameType == ieee::FrameControl::TYPE_DATA) {
+				// try to lookup device by long address
+				for (auto &device : this->devices) {
+					DeviceFlash const &flash = *device;
+					if (flash.type == DeviceFlash::ZB && flash.deviceId == sourceAddress) {
+						pDevice = &device;
+						break;
 					}
-				} /*else if (frameType == ieee::FrameControl::TYPE_DATA) {
-					// try to lookup device by long address
-					for (auto &device : this->devices) {
-						DeviceFlash const &flash = *device;
-						if (flash.type == DeviceFlash::ZB && flash.deviceId == sourceAddress) {
-							pDevice = &device;
+				}
+
+				// check if there is an active association coroutine
+				if (this->associationCoroutine.isAlive()) {
+					if ((*this->tempDevice)->deviceId == sourceAddress) {
+						pDevice = this->tempDevice;
+					}
+				}
+			}*/
+		}
+		if (pDevice == nullptr)
+			continue;
+
+		// network layer (nwk)
+		// -------------------
+
+		auto version = r.peekE8<gp::NwkFrameControl>() & gp::NwkFrameControl::VERSION_MASK;
+		if (version == gp::NwkFrameControl::VERSION_2) {
+			// set start of encryption header
+			r.setHeader();
+
+			auto nwkFrameControl = r.e16L<zb::NwkFrameControl>();
+			uint16_t destinationAddress = r.u16L();
+			uint16_t sourceAddress = r.u16L();
+			uint8_t radius = r.u8();
+			uint8_t sequenceNumber = r.u8();
+
+			// destination
+			if ((nwkFrameControl & zb::NwkFrameControl::DESTINATION) != 0) {
+				uint8_t const *destination = r.current;
+				r.skip(8);
+			}
+
+			// extended source
+			if ((nwkFrameControl & zb::NwkFrameControl::EXTENDED_SOURCE) != 0) {
+				uint8_t const *extendedSource = r.current;
+				r.skip(8);
+			}
+
+			// source route
+			if ((nwkFrameControl & zb::NwkFrameControl::SOURCE_ROUTE) != 0) {
+				uint8_t relayCount = r.u8();
+				uint8_t relayIndex = r.u8();
+				for (int i = 0; i < relayCount; ++i) {
+					uint16_t relay = r.u16L();
+				}
+			}
+
+			// security header
+			// note: does in-place decryption of the payload
+			uint8_t const *extendedSource = nullptr;
+			if ((nwkFrameControl & zb::NwkFrameControl::SECURITY) != 0) {
+				// restore security level according to 4.3.1.2 step 1.
+				r.restoreSecurityLevel(securityLevel);
+
+				// security control field (4.5.1.1)
+				auto securityControl = r.e8<zb::SecurityControl>();
+
+				// security counter
+				uint32_t securityCounter = r.u32L();
+
+				// key type
+				if ((securityControl & zb::SecurityControl::KEY_MASK) != zb::SecurityControl::KEY_NETWORK) {
+					// only network key supported
+					continue;
+				}
+
+				// extended source
+				if ((securityControl & zb::SecurityControl::EXTENDED_NONCE) == 0) {
+					// only extended nonce supported
+					continue;
+				}
+				extendedSource = r.current;
+				r.skip(8);
+
+				// key sequence number
+				uint8_t keySequenceNumber = r.u8();
+
+				// set start of message
+				r.setMessage();
+
+				// nonce (4.5.2.2)
+				Nonce nonce(extendedSource, securityCounter, securityControl);
+
+				// decrypt
+				int micLength = 4;
+				if (!r.decrypt(micLength, nonce, *this->aesKey)) {
+					// decryption failed
+					continue;
+				}
+			} else {
+				// security is required
+				continue;
+			}
+
+			// lookup actual source device at the start of the route
+			ZbDevice &router = *pDevice;
+			if (router->shortAddress != sourceAddress) {
+				// source device is not a neighbor: lookup the source device
+				pDevice = findZbDevice(sourceAddress);
+				if (pDevice == nullptr)
+					continue;
+			}
+			ZbDevice &device = *pDevice;
+
+			// set first hop of route if not known yet (probably a hack)
+			if (device.routerAddress == 0xffff) {
+				device.sendFlags = router->sendFlags;
+				device.routerAddress = router->shortAddress;
+				device.cost = 255; // set bad costs so that route replies can later overwrite the router
+			}
+
+			auto nwkFrameType = nwkFrameControl & zb::NwkFrameControl::TYPE_MASK;
+			if (nwkFrameType == zb::NwkFrameControl::TYPE_COMMAND) {
+				// nwk command
+				auto command = r.e8<zb::NwkCommand>();
+				switch (command) {
+				case zb::NwkCommand::ROUTE_REQUEST:
+					// a device asks for the route to another device
+					{
+						auto options = r.e8<zb::NwkCommandRouteRequestOptions>();
+						uint8_t routeId = r.u8();
+						uint16_t destinationAddress = r.u16L();
+						uint8_t cost = r.u8();
+
+						switch (options & zb::NwkCommandRouteRequestOptions::DISCOVERY_MASK) {
+						case zb::NwkCommandRouteRequestOptions::DISCOVERY_SINGLE:
+							//if ((options & zb::NwkCommandRouteRequestOptions::EXTENDED_DESTINATION) != 0) {
+							//}
+
+							if (destinationAddress == 0x0000) {
+								// build packet
+								{
+									PacketWriter w(packet);
+
+									// route reply command
+									writeNwkCommand(w, device, zb::NwkCommand::ROUTE_REPLY);
+
+									// options
+									w.e8(zb::NwkCommandRouteReplyOptions::EXTENDED_DESTINATION);
+
+									// route id
+									w.u8(routeId);
+
+									// originator address
+									w.u16L(device->shortAddress);
+
+									// destination address
+									w.u16L(0x0000);
+
+									// cost
+									w.u8(1);
+
+									// extended destination
+									w.u64L(radio::getLongAddress());
+
+									writeFooter(w, device.sendFlags);
+								}
+
+								// send packet
+								uint8_t sendResult;
+								co_await radio::send(RADIO_ZBEE, packet, sendResult);
+							}
+							break;
+						case zb::NwkCommandRouteRequestOptions::DISCOVERY_MANY_TO_ONE_WITH_SOURCE_ROUTING:
+							break;
+						default:
 							break;
 						}
 					}
-					
-					// check if there is an active association coroutine
-					if (this->associationCoroutine.isAlive()) {
-						if ((*this->tempDevice)->deviceId == sourceAddress) {
-							pDevice = this->tempDevice;
+					break;
+				case zb::NwkCommand::ROUTE_REPLY:
+					// a device answers to a route request
+					{
+						auto options = r.e8<zb::NwkCommandRouteReplyOptions>();
+						uint8_t routeId = r.u8();
+						uint16_t originatorAddress = r.u16L();
+						uint16_t destinationAddress = r.u16L(); // "Responder" in Wireshark
+						uint8_t cost = r.u8();
+
+						// check if a node has answered our own route request
+						if (originatorAddress == 0x0000) {
+							ZbDevice *destination = findZbDevice(destinationAddress);
+							if (destination != nullptr /*&& cost < destination->cost*/) {
+								destination->sendFlags = device->sendFlags;
+
+								// set the node as the router for the destination
+								destination->routerAddress = device->shortAddress;
+
+								// set cost of route
+								destination->cost = cost;
+
+								// resume publisher
+								destination->routeBarrier.resumeFirst();
+							}
 						}
 					}
-				}*/
+					break;
+				case zb::NwkCommand::LEAVE:
+					// device leaves the network
+					for (int i = 0; i < this->zbDevices.count(); ++i) {
+						if (&this->zbDevices[i] == &device) {
+							this->zbDevices.erase(i);
+							break;
+						}
+					}
+					break;
+				case zb::NwkCommand::ROUTE_RECORD:
+					// we need to store the route to the device
+					// https://www.digi.com/resources/documentation/Digidocs/90001942-13/concepts/c_source_routing.htm
+					/*{
+						uint8_t relayCount = r.int8();
+						device.route.resize(relayCount);
+						for (int i = relayCount - 1; i >= 0; --i) {
+							device.route[i] = r.int16();
+						}
+
+						// set send flags for first hop
+						if (relayCount > 0) {
+							// a relay is always on
+							device.sendFlags = radio::SendFlags::NONE;
+
+							//ZbDevice *firstHop = findZbDevice(device.route[0]);
+							//if (firstHop != nullptr)
+							//	device.sendFlags = (*firstHop)->sendFlags;
+						}
+					}*/
+					break;
+				case zb::NwkCommand::REJOIN_REQUEST:
+					// device wants to rejoin e.g. after a relay disappeared
+					{
+						uint8_t capability = r.u8();
+
+						// delegate to publisher coroutine
+						//device.rejoinPending = true;
+						//this->publishEvent.set();
+
+						// build packet
+						{
+							PacketWriter w(packet);
+
+							// rejoin response command
+							writeNwkCommand(w, device, zb::NwkCommand::REJOIN_RESPONSE);
+
+							// address
+							w.u16L(device->shortAddress);
+
+							// status
+							w.u8(0);
+
+							writeFooter(w, device.sendFlags);
+						}
+
+						// send packet
+						uint8_t sendResult;
+						co_await radio::send(RADIO_ZBEE, packet, sendResult);
+					}
+				default:
+					;
+				}
+				continue;
+			}
+			if (nwkFrameType != zb::NwkFrameControl::TYPE_DATA)
+				continue;
+
+			// nwk data frame
+			// --------------
+
+			// aps (application support layer)
+			// -------------------------------
+
+			// set start of header
+			r.setHeader();
+
+			// frame control
+			auto apsFrameControl = r.e8<zb::ApsFrameControl>();
+			auto apsFrameType = apsFrameControl & zb::ApsFrameControl::TYPE_MASK;
+			if (apsFrameType == zb::ApsFrameControl::TYPE_COMMAND) {
+				// aps command
+				uint8_t apsCounter = r.u8();
+
+				// security header
+				// note: does in-place decryption of the payload
+				bool apsSecurity = (apsFrameControl & zb::ApsFrameControl::SECURITY) != 0;
+				if (apsSecurity) {
+					// restore security level according to 4.4.1.2 step 5.
+					r.restoreSecurityLevel(securityLevel);
+
+					// security control field (4.5.1.1)
+					auto securityControl = r.e8<zb::SecurityControl>();
+
+					// security counter
+					uint32_t securityCounter = r.u32L();
+
+					// nonce (4.5.2.2)
+					if ((securityControl & zb::SecurityControl::EXTENDED_NONCE) == 0) {
+						if (extendedSource == nullptr) {
+							continue;
+						}
+					} else {
+						extendedSource = r.current;
+						r.skip(8);
+					}
+					Nonce nonce(extendedSource, securityCounter, securityControl);
+
+					// select key
+					auto keyType = securityControl & zb::SecurityControl::KEY_MASK;
+					AesKey const *key;
+					switch (keyType) {
+					case zb::SecurityControl::KEY_LINK:
+						key = &za09LinkAesKey;
+						break;
+					case zb::SecurityControl::KEY_KEY_TRANSPORT:
+						key = &za09KeyTransportAesKey;
+						break;
+					case zb::SecurityControl::KEY_KEY_LOAD:
+						key = &za09KeyLoadAesKey;
+						break;
+					default:
+						continue;
+					}
+
+					// decrypt in-place (mic length of 4)
+					r.setMessage();
+					if (!r.decrypt(4, nonce, *key)) {
+						continue;
+					}
+				}
+
+				// acknowledge if requested
+				if ((apsFrameControl & zb::ApsFrameControl::ACK_REQUEST) != 0) {
+					uint8_t packet2[48];
+					{
+						PacketWriter w(packet2);
+						writeNwkData(w, device);
+						writeApsAck(w, apsCounter);
+						writeFooter(w, device.sendFlags);
+					}
+					uint8_t sendResult;
+					co_await radio::send(RADIO_ZBEE, packet2, sendResult);
+
+					// break on failure and rely on sender to repeat the request
+					if (sendResult == 0)
+						continue;
+				}
+
+				auto command = r.e8<zb::ApsCommand>();
+				switch (command) {
+				case zb::ApsCommand::UPDATE_DEVICE:
+					{
+						// device address
+						uint64_t longAddress = r.u64L();
+
+						// short device address
+						uint16_t shortAddress = r.u16L();
+
+						uint8_t status = r.u8();
+
+						ZbDevice *d = findZbDevice(shortAddress);
+						if (status == 0 && d != nullptr) {
+							ZbDevice &updatedDevice = *d;
+							auto const &flash = *updatedDevice;
+
+							if (flash.longAddress == longAddress) {
+		terminal::out << ("Update Device " + hex(shortAddress));
+
+								// clear route of updated device if we don't get the message from its first hop
+								if (device->shortAddress != updatedDevice.routerAddress)
+									updatedDevice.routerAddress = 0xffff;
+							}
+						}
+					}
+					break;
+				case zb::ApsCommand::REQUEST_KEY:
+					// a node requests a link key (packet must be aps-encrypted)
+					if (apsSecurity) {
+						// get key type
+						auto keyType = r.e8<zb::RequestKeyType>();
+
+						switch (keyType) {
+						case zb::RequestKeyType::APPLICATION_LINK:
+							// Application Link Key (0x02) -> section 4.7.3.8.
+							break;
+						case zb::RequestKeyType::TRUST_CENTER_LINK:
+							// Trust Center Link Key (0x04) -> section 4.7.3.6.
+							{
+								{
+									PacketWriter w(packet);
+
+									// nwk data
+									writeNwkData(w, device);
+									auto state = w.push();
+
+									// aps command: transport key
+									writeApsCommand(w, zb::SecurityControl::KEY_KEY_LOAD, zb::ApsCommand::TRANSPORT_KEY);
+
+									// key type
+									w.e8(zb::StandardKeyType::TRUST_CENTER_LINK);
+
+									// link key
+									// todo: generate a link key per device
+									w.data(Array<uint8_t const, 16>(za09LinkKey));
+
+									// extended destination address
+									w.u64L(device->longAddress);
+
+									// extended source address
+									w.u64L(radio::getLongAddress()); // extended source address
+
+									writeFooter(w, radio::SendFlags::NONE);
+									w.pop(state);
+									writeFooter(w, device.sendFlags);
+								}
+								uint8_t sendResult;
+								co_await radio::send(RADIO_ZBEE, packet, sendResult);
+							}
+							break;
+						default:
+							// silently drop request according to section 4.4.5.2.3.
+							;
+						}
+					}
+					break;
+				case zb::ApsCommand::VERIFY_KEY:
+					// a node wants to verify its link key
+					{
+						// key type
+						auto keyType = r.e8<zb::RequestKeyType>();
+
+						// extended source
+						auto extendedSource = r.u64L();
+
+						// key hash
+						auto hash = r.data<16>();
+
+						uint8_t sendResult;
+						switch (keyType) {
+						case zb::RequestKeyType::TRUST_CENTER_LINK:
+							{
+								// check key hash (4.4.10.7.4)
+								DataBuffer<16> hashedKey;
+								keyHash(hashedKey, za09LinkKey, 3);
+								bool success = hash == hashedKey;
+
+								// build packet (note: hash gets overwritten)
+								PacketWriter w(packet);
+
+								// nwk data
+								writeNwkData(w, device);
+								auto state = w.push();
+
+								// aps command: confirm key (zigbee2mqtt requests an ack here, but seems unnecessary)
+								writeApsCommand(w, zb::SecurityControl::KEY_LINK, zb::ApsCommand::CONFIRM_KEY);
+
+								// status (success or security fail, table 2.27)
+								w.u8(success ? 0 : 0xad);
+
+								// key type
+								w.e8(zb::StandardKeyType::TRUST_CENTER_LINK);
+
+								// extended destination address
+								w.u64L(device->longAddress);
+
+								writeFooter(w, radio::SendFlags::NONE);
+								w.pop(state);
+								writeFooter(w, device.sendFlags);
+							}
+							co_await radio::send(RADIO_ZBEE, packet, sendResult);
+							break;
+						default:
+							;
+						}
+					}
+					break;
+				default:
+					;
+				}
+				continue;
+			}
+			if (apsFrameType == zb::ApsFrameControl::TYPE_ACK) {
+				 // aps ack
+				continue;
+			}
+			if (apsFrameType != zb::ApsFrameControl::TYPE_DATA)
+				continue;
+
+		    // aps data
+			// --------
+
+			// endpoint 0 is zdp, others are zcl
+			uint8_t dstEndpoint = r.u8();
+			if (dstEndpoint == 0) {
+				// zbee device profile (zdp)
+				auto command = r.e16L<zb::ZdpCommand>();
+				uint16_t profile = r.u16L();
+				uint8_t srcEndpoint = r.u8();
+				uint8_t apsCounter = r.u8();
+				uint8_t zdpCounter = r.u8();
+
+				// acknowledge if requested
+				if ((apsFrameControl & zb::ApsFrameControl::ACK_REQUEST) != 0) {
+					uint8_t packet2[48];
+					{
+						PacketWriter w(packet2);
+						writeNwkData(w, device);
+						writeApsAckZdp(w, apsCounter, command);
+						writeFooter(w, device.sendFlags);
+					}
+					uint8_t sendResult;
+					co_await radio::send(RADIO_ZBEE, packet2, sendResult);
+
+					// break on failure and rely on sender to repeat the request
+					if (sendResult == 0)
+						continue;
+				}
+
+				if ((command & zb::ZdpCommand::RESPONSE_FLAG) == 0) {
+					// zdp request
+					switch (command) {
+					case zb::ZdpCommand::NODE_DESCRIPTOR_REQUEST:
+						{
+							// build node desciptor response packet
+							{
+								PacketWriter w(packet);
+								writeNwkData(w, device);
+								writeApsDataZdp(w, zb::ZdpCommand::NODE_DESCRIPTOR_RESPONSE, zdpCounter);
+
+								// status: success
+								w.u8(0);
+
+								// nwk address of interest
+								w.u16L(0x0000);
+
+								// node descriptor
+
+								// info
+								w.e16L(zb::ZdpNodeDescriptorInfo::TYPE_COORDINATOR
+									| zb::ZdpNodeDescriptorInfo::BAND_2_4GHZ);
+								w.e8(ieee::DeviceInfo::ALTERNATE_PAN_COORDINATOR
+									| ieee::DeviceInfo::DEVICE_TYPE_FFD
+									| ieee::DeviceInfo::POWER_SOURCE_MAINS
+									| ieee::DeviceInfo::RX_ON_WHEN_IDLE
+									| ieee::DeviceInfo::ALLOCATE_SHORT_ADDRESS);
+
+								// manufacturer code
+								w.u16L(0x0000);
+
+								// max buffer size
+								w.u8(80);
+
+								// max incoming transfer size
+								w.u16L(160);
+
+								// server flags
+								w.e16L(zb::ZdpNodeDescriptorServerFlags::PRIMARY_TRUST_CENTER
+									| zb::ZdpNodeDescriptorServerFlags::REVISION_22);
+
+								// max outgoing transfer size
+								w.u16L(160);
+
+								// descriptor capability field
+								w.u8(0x00);
+
+								writeFooter(w, device.sendFlags);
+							}
+
+							// send packet
+							uint8_t sendResult;
+							co_await radio::send(RADIO_ZBEE, packet, sendResult);
+						}
+						break;
+					default:
+						;
+					}
+				} else {
+					// zdp response: forward response to the coroutine that initiated the request
+					uint8_t *response = r.current;
+					int length = min(r.getRemaining(), ZbDevice::RESPONSE_LENGTH);
+					device.zdpResponseBarrier.resumeFirst([command, zdpCounter, length, response](ZbDevice::ZdpResponse r) {
+						if (r.command == command && r.zdpCounter == zdpCounter) {
+							r.length = length;
+							array::copy(length, r.response, response);
+							return true;
+						}
+						return false;
+					});
+				}
+
+				continue;
 			}
 
-			// check if the device was found
-			if (pDevice != nullptr) {
-				auto &device = *pDevice;
-				
-				if (frameType == ieee::FrameControl::TYPE_DATA) {
-					// network layer: handle dependent on protocol version
-					auto version = r.peekE8<gp::NwkFrameControl>() & gp::NwkFrameControl::VERSION_MASK;
-					if (version == gp::NwkFrameControl::VERSION_2) {
-						handleNwk(r, device);
+			// zcl
+			// ---
+			//handleZcl(r, device, destinationEndpoint);
+
+			auto cluster = r.e16L<zb::ZclCluster>();
+			auto profile = r.e16L<zb::ZclProfile>();
+			uint8_t srcEndpoint = r.u8();
+			uint8_t apsCounter = r.u8();
+
+			// zcl frame starts here
+			auto frameControl = r.e8<zb::ZclFrameControl>();
+			uint8_t zclCounter = r.u8();
+
+			auto frameType = frameControl & zb::ZclFrameControl::TYPE_MASK;
+			if (frameType == zb::ZclFrameControl::TYPE_PROFILE_WIDE) {
+				// profile wide commands such as "read attribute response"
+				uint8_t command = r.u8();
+				uint8_t *response = r.current;
+				int length = min(r.getRemaining(), ZbDevice::RESPONSE_LENGTH);
+
+				device.zclResponseBarrier.resumeFirst([dstEndpoint, cluster, profile, srcEndpoint, zclCounter,
+					command, length, response] (ZbDevice::ZclResponse &r)
+				{
+					if (r.dstEndpoint == dstEndpoint && r.cluster == cluster && r.profile == profile
+						&& r.srcEndpoint == srcEndpoint && r.zclCounter == zclCounter && r.command == zb::ZclCommand(command))
+					{
+						r.length = length;
+						array::copy(length, r.response, response);
+						return true;
 					}
+					return false;
+				});
+			} else if (frameType == zb::ZclFrameControl::TYPE_CLUSTER_SPECIFIC) {
+				// cluster specific commands such as "on", "off"
+				bool sendDefaultResponse = (frameControl & zb::ZclFrameControl::DISABLE_DEFAULT_RESPONSE) == 0;
+
+				// debug-print command
+				uint8_t command = *r.current;
+				int length = r.getRemaining() - 1;
+				//std::cout << "Device: " << std::hex << device->shortAddress << std::dec << ", ZCL command: " << int(command) << ", length: " << length << std::endl;
+		terminal::out << ("Device: " + hex(device->shortAddress) + ", ZCL Command: " + dec(command) + ", Length: " + dec(length) + '\n');
+
+				// publish to subscribers
+				auto commandPtr = r.current;
+				for (auto &subscriber : device.subscribers) {
+					// get endpoint info for subscribed endpoint
+					uint8_t const *p = device->getEndpointIndices() + subscriber.index;
+					auto const &endpointInfo = endpointInfos[p[0]];
+					uint8_t zbEndpoint = p[1];
+
+					// check if this is the right endpoint
+					if (dstEndpoint == zbEndpoint && cluster == endpointInfo.cluster) {
+						// trigger subscriber
+						subscriber.barrier->resumeFirst([&subscriber, &r, &endpointInfo] (Subscriber::Parameters &p) {
+							p.subscriptionIndex = subscriber.subscriptionIndex;
+
+							// convert from zbee command to message (note r is passed by value for multiple subscribers)
+							return handleZclClusterSpecific(subscriber.messageType, p.message, endpointInfo, r);
+						});
+
+						// reset reader to command
+						r.current = commandPtr;
+					}
+				}
+
+				// trigger default response
+				if (sendDefaultResponse) {
+					// cluster command (e.g. 'on' or 'off' for on/off cluster)
+					uint8_t command = r.u8();
+
+					// build default response packet
+					{
+						PacketWriter w(packet);
+
+						// nwk data
+						writeNwkData(w, device);
+
+						// aps data (exchange source and destination endpoints)
+						writeApsDataZcl(w, srcEndpoint, cluster, profile, dstEndpoint);
+
+						// zcl profile wide
+						w.e8(zb::ZclFrameControl::TYPE_PROFILE_WIDE
+							| zb::ZclFrameControl::DIRECTION_SERVER_TO_CLIENT
+							| zb::ZclFrameControl::DISABLE_DEFAULT_RESPONSE);
+						w.u8(zclCounter);
+						w.e8(zb::ZclCommand::DEFAULT_RESPONSE);
+
+						// response to command
+						w.u8(command);
+
+						// success
+						w.u8(0);
+
+						writeFooter(w, device.sendFlags);
+					}
+
+					// send packet
+					uint8_t sendResult;
+					co_await radio::send(RADIO_ZBEE, packet, sendResult);
 				}
 			}
 		}
@@ -850,7 +1683,7 @@ terminal::out << ("Association Request Receive On When Idle: " + dec(receiveOnWh
 
 void RadioInterface::handleGp(uint8_t const *mac, PacketReader &r) {
 	// zgp stub nwk header
-	
+
 	// set start of header
 	r.setHeader();
 
@@ -862,7 +1695,7 @@ void RadioInterface::handleGp(uint8_t const *mac, PacketReader &r) {
 	if ((frameControl & gp::NwkFrameControl::EXTENDED) != 0)
 		extendedFrameControl = r.e8<gp::NwkExtendedFrameControl>();
 	auto securityLevel = extendedFrameControl & gp::NwkExtendedFrameControl::SECURITY_LEVEL_MASK;
-	
+
 	// device id
 	uint32_t deviceId = r.u32L();
 
@@ -878,7 +1711,7 @@ void RadioInterface::handleGp(uint8_t const *mac, PacketReader &r) {
 	for (auto &device : this->gpDevices) {
 		if (device->deviceId == deviceId) {
 			auto const &flash = *device;
-			
+
 			// security
 			// --------
 			// header: header that is not encrypted, payload is part of header for security levels 0 and 1
@@ -890,13 +1723,13 @@ void RadioInterface::handleGp(uint8_t const *mac, PacketReader &r) {
 			// todo: compare securityLevel with security level from commissioning
 			/*case gp::NwkExtendedFrameControl::SECURITY_LEVEL_CNT8_MIC16:
 				// security level 1: 1 byte counter, 2 byte mic
-			
+
 				// header starts at mac sequence number and includes also payload
 				r.setHeader(mac + 2);
-				
+
 				// use mac sequence number as security counter
 				securityCounter = mac[2];
-				
+
 				// only decrypt message integrity code of length 2
 				micLength = 2;
 				r.setMessageFromEnd(micLength);
@@ -925,12 +1758,12 @@ void RadioInterface::handleGp(uint8_t const *mac, PacketReader &r) {
 				// security is required
 				return;
 			}
-			
+
 			// check if security counter is greater than last security counter
 			if (securityCounter <= device.securityCounter)
 				return;
 			device.securityCounter = securityCounter;
-			
+
 			// check message integrity code or decrypt message, depending on security level
 			Nonce nonce(deviceId, securityCounter);
 			if (!r.decrypt(micLength, nonce, flash.aesKey)) {
@@ -994,9 +1827,9 @@ void RadioInterface::handleGp(uint8_t const *mac, PacketReader &r) {
 				if (r.getRemaining() >= 2) {
 					uint8_t bar = r.u8();
 					uint8_t buttons = r.u8();
-					
+
 					uint8_t change = (buttons ^ device.state) & 0x0f;
-					
+
 					// check AB0 and AB1 (A and B pressed simultaneously)
 					if (change == 0x5 || change == 0xa) {
 						endpointIndex = 2;
@@ -1014,11 +1847,11 @@ void RadioInterface::handleGp(uint8_t const *mac, PacketReader &r) {
 							message = (buttons >> 2) & 0x3;
 						}
 					}
-					
+
 					device.state = buttons;
 				}
 			}
-			
+
 			if (endpointIndex != -1) {
 				// publish to subscribers
 				for (auto &subscriber : device.subscribers) {
@@ -1039,12 +1872,12 @@ void RadioInterface::handleGp(uint8_t const *mac, PacketReader &r) {
 void RadioInterface::handleGpCommission(uint32_t deviceId, PacketReader& r) {
 	// remove commissioning command (0xe0)
 	r.u8();
-	
+
 	GpDeviceFlash flash;
 	flash.deviceId = deviceId;
-	
+
 	// A.4.2.1.1 Commissioning
-		
+
 	// device type
 	// 0x02: on/off switch
 	flash.deviceType = r.u8();
@@ -1069,13 +1902,13 @@ void RadioInterface::handleGpCommission(uint32_t deviceId, PacketReader& r) {
 		// unknown device type
 		return;
 	}
-	
+
 	// options
 	auto options = r.e8<gp::Options>();
 	uint32_t counter = 0;
 	if ((options & gp::Options::EXTENDED) != 0) {
 		auto extendedOptions = r.e8<gp::ExtendedOptions>();;
-		
+
 		// security level capability (used in messages)
 		auto securityLevel = extendedOptions & gp::ExtendedOptions::SECURITY_LEVEL_CAPABILITY_MASK;
 
@@ -1084,7 +1917,7 @@ void RadioInterface::handleGpCommission(uint32_t deviceId, PacketReader& r) {
 			uint8_t *key = r.current;
 			if ((extendedOptions & gp::ExtendedOptions::KEY_ENCRYPTED) != 0) {
 				// Green Power A.1.5.3.3.3
-				
+
 				// nonce
 				Nonce nonce(deviceId, deviceId);
 
@@ -1092,7 +1925,7 @@ void RadioInterface::handleGpCommission(uint32_t deviceId, PacketReader& r) {
 				DataBuffer<4> header;
 				header.setU32L(0, deviceId);
 
-				if (!decrypt(key, header.data, 4, key, 16, 4, nonce, trustCenterLinkAesKey)) {
+				if (!decrypt(key, header.data, 4, key, 16, 4, nonce, za09LinkAesKey)) {
 					//printf("error while decrypting key!\n");
 					return;
 				}
@@ -1103,7 +1936,7 @@ void RadioInterface::handleGpCommission(uint32_t deviceId, PacketReader& r) {
 				// skip key
 				r.skip(16);
 			}
-			
+
 			// set key for device
 			setKey(flash.aesKey, Array<uint8_t const, 16>(key));
 		}
@@ -1134,475 +1967,38 @@ void RadioInterface::handleGpCommission(uint32_t deviceId, PacketReader& r) {
 	this->gpDevices.write(this->gpDevices.count(), device);
 }
 
-
-void RadioInterface::handleNwk(PacketReader &r, ZbDevice &device) {
-	//auto const &configuration = *this->configuration;
-	
-	// set start of header
-	r.setHeader();
-
-	auto frameControl = r.e16L<zb::NwkFrameControl>();
-	uint16_t destinationAddress = r.u16L();
-	uint16_t sourceAddress = r.u16L();
-	uint8_t radius = r.u8();
-	uint8_t sequenceNumber = r.u8();
-
-	// destination
-	if ((frameControl & zb::NwkFrameControl::DESTINATION) != 0) {
-		uint8_t const *destination = r.current;
-		r.skip(8);
-	}
-
-	// extended source
-	if ((frameControl & zb::NwkFrameControl::EXTENDED_SOURCE) != 0) {
-		uint8_t const *extendedSource = r.current;
-		r.skip(8);
-	}
-
-	// source route
-	if ((frameControl & zb::NwkFrameControl::SOURCE_ROUTE) != 0) {
-		uint8_t relayCount = r.u8();
-		uint8_t relayIndex = r.u8();
-		for (int i = 0; i < relayCount; ++i) {
-			uint16_t relay = r.u16L();
-		}
-	}
-
-	// security header
-	// note: does in-place decryption of the payload
-	uint8_t const *extendedSource = nullptr;
-	if ((frameControl & zb::NwkFrameControl::SECURITY) != 0) {
-		// restore security level according to 4.3.1.2 step 1.
-		r.current[0] |= securityLevel;
-		
-		// security control field (4.5.1.1)
-		auto securityControl = r.e8<zb::SecurityControl>();
-				
-		// security counter
-		uint32_t securityCounter = r.u32L();
-
-		// key type
-		if ((securityControl & zb::SecurityControl::KEY_MASK) != zb::SecurityControl::KEY_NETWORK) {
-			// only network key supported
-			return;
-		}
-
-		// extended source
-		if ((securityControl & zb::SecurityControl::EXTENDED_NONCE) == 0) {
-			// only extended nonce supported
-			return;
-		}
-		extendedSource = r.current;
-		r.skip(8);
-		
-		// key sequence number
-		uint8_t keySequenceNumber = r.u8();
-
-		// set start of message
-		r.setMessage();
-
-		// nonce (4.5.2.2)
-		Nonce nonce(extendedSource, securityCounter, securityControl);
-		
-		// decrypt
-		int micLength = 4;
-		if (!r.decrypt(micLength, nonce, *this->aesKey)) {
-			// decryption failed
-			return;
-		}
-	} else {
-		// security is required
-		return;
-	}
-
-	auto frameType = frameControl & zb::NwkFrameControl::TYPE_MASK;
-	if (sourceAddress == device->shortAddress) {
-		// if the device is a direct neighbor, we know the route to it
-		device.firstHop = device->shortAddress;
-		device.sendFlags = device->sendFlags;
-
-		switch (frameType) {
-		case zb::NwkFrameControl::TYPE_COMMAND:
-			// nwk command
-			handleNwkCommand(r, device);
-			break;
-		case zb::NwkFrameControl::TYPE_DATA:
-			// nwk data
-			handleAps(r, device, extendedSource);
-			break;
-		default:
-			break;
-		}
-	} else {
-		// try to lookup "real" source device by address (device at start of a route)
-		for (auto &d : this->zbDevices) {
-			auto const &flash = *d;
-			if (flash.shortAddress == sourceAddress) {
-				switch (frameType) {
-				case zb::NwkFrameControl::TYPE_COMMAND:
-					// nwk command
-					handleNwkCommand(r, d);
-					break;
-				case zb::NwkFrameControl::TYPE_DATA:
-					// nwk data
-					handleAps(r, d, extendedSource);
-					break;
-				default:
-					break;
-				}
-				break;
-			}
-		}
-	}
-}
-
-void RadioInterface::handleNwkCommand(PacketReader &r, ZbDevice &device) {
-	auto command = r.e8<zb::NwkCommand>();
-	switch (command) {
-	case zb::NwkCommand::ROUTE_REPLY:
-		{
-			auto options = r.e8<zb::NwkCommandRouteReplyOptions>();
-			uint8_t routeId = r.u8();
-			uint16_t originatorAddress = r.u16L();
-			uint16_t destinationAddress = r.u16L(); // "Responder" in Wireshark
-			uint8_t cost = r.u8();
-
-			// check if a node has answered our own route request
-			if (originatorAddress == 0x0000) {
-				ZbDevice *destination = findZbDevice(destinationAddress);
-				if (destination != nullptr) {
-					destination->sendFlags = device->sendFlags;
-
-					// set first hop of route
-					destination->firstHop = device->shortAddress;
-										
-					// resume publisher
-					destination->routeBarrier.resumeFirst();
-				}
-			}
-		}
-		break;
-	case zb::NwkCommand::ROUTE_RECORD:
-		// we need to store the route to the device
-		// https://www.digi.com/resources/documentation/Digidocs/90001942-13/concepts/c_source_routing.htm
-		/*{
-			uint8_t relayCount = r.int8();
-			device.route.resize(relayCount);
-			for (int i = relayCount - 1; i >= 0; --i) {
-				device.route[i] = r.int16();
-			}
-			
-			// set send flags for first hop
-			if (relayCount > 0) {
-				// a relay is always on
-				device.sendFlags = radio::SendFlags::NONE;
-				
-				//ZbDevice *firstHop = findZbDevice(device.route[0]);
-				//if (firstHop != nullptr)
-				//	device.sendFlags = (*firstHop)->sendFlags;
-			}
-		}*/
-		break;
-	case zb::NwkCommand::REJOIN_REQUEST:
-		// device wants to rejoin e.g. after a relay disappeared
-		{
-			uint8_t capability = r.u8();
-			
-			// delegate to publisher coroutine
-			device.rejoinPending = true;
-			this->publishEvent.set();
-		}
-	default:
-		break;
-	}
-}
-
-void RadioInterface::handleAps(PacketReader &r, ZbDevice &device, uint8_t const *extendedSource) {
-	// application support layer
-
-	// set start of header
-	r.setHeader();
-
-	// frame control
-	auto frameControl = r.e8<zb::ApsFrameControl>();
-	auto frameType = frameControl & zb::ApsFrameControl::TYPE_MASK;
-	if (frameType == zb::ApsFrameControl::TYPE_COMMAND) {
-		// aps command
-		uint8_t apsCounter = r.u8();
-
-		// security header
-		// note: does in-place decryption of the payload
-		if ((frameControl & zb::ApsFrameControl::SECURITY) != 0) {
-			// restore security level according to 4.4.1.2 step 5.
-			r.current[0] |= securityLevel;
-			
-			// security control field (4.5.1.1)
-			auto securityControl = r.e8<zb::SecurityControl>();
-			
-			// security counter
-			uint32_t securityCounter = r.u32L();
-
-			auto keyType = securityControl & zb::SecurityControl::KEY_MASK;
-			if (keyType != zb::SecurityControl::KEY_LINK && keyType != zb::SecurityControl::KEY_KEY_TRANSPORT) {
-				return;
-			}
-			if ((securityControl & zb::SecurityControl::EXTENDED_NONCE) == 0) {
-				if (extendedSource == nullptr) {
-					return;
-				}
-			} else {
-				extendedSource = r.current;
-				r.skip(8);
-			}
-
-			// set start of message
-			r.setMessage();
-
-			// nonce (4.5.2.2)
-			Nonce nonce(extendedSource, securityCounter, securityControl);
-
-			// decrypt
-			int micLength = 4;
-			if (!r.decrypt(micLength, nonce, keyType == zb::SecurityControl::KEY_LINK ? trustCenterLinkAesKey : hashedTrustCenterLinkAesKey)) {
-				return;
-			}
-		}
-
-		auto command = r.e8<zb::ApsCommand>();
-		switch (command) {
-		case zb::ApsCommand::UPDATE_DEVICE:
-			{
-				// device address
-				uint64_t longAddress = r.u64L();
-				
-				// short device address
-				uint16_t shortAddress = r.u16L();
-				
-				uint8_t status = r.u8();
-				
-				ZbDevice *d = findZbDevice(shortAddress);
-				if (status == 0 && d != nullptr) {
-					ZbDevice &updatedDevice = *d;
-					auto const &flash = *updatedDevice;
-					
-					if (flash.deviceId == longAddress) {
-terminal::out << ("Update Device " + hex(shortAddress));
-						
-						// clear route of updated device if we don't get the message from its first hop
-						if (device->shortAddress != updatedDevice.firstHop)
-							updatedDevice.firstHop = 0xffff;
-					}
-				}
-			}
-			break;
-		default:
-			break;
-		}
-	} else if (frameType == zb::ApsFrameControl::TYPE_DATA) {
-	   // aps data: zdp or zcl follow
-	   uint8_t destinationEndpoint = r.u8();
-	   if (destinationEndpoint == 0)
-		   handleZdp(r, device);
-	   else
-		   handleZcl(r, device, destinationEndpoint);
-   } else if (frameType == zb::ApsFrameControl::TYPE_ACK) {
-		// aps ack
-   }
-}
-
-void RadioInterface::handleZdp(PacketReader &r, ZbDevice &device) {
-	auto command = r.e16L<zb::ZdpCommand>();
-	uint16_t profile = r.u16L();
-	uint8_t sourceEndpoint = r.u8();
-	uint8_t apsCounter = r.u8();
-	uint8_t zdpCounter = r.u8();
-
-	uint8_t *response = r.current;
-	int length = min(r.getRemaining(), ZbDevice::RESPONSE_LENGTH);
-	
-	device.zdpResponseBarrier.resumeFirst([command, zdpCounter, length, response](ZbDevice::ZdpResponse r) {
-		if (r.command == command && r.zdpCounter == zdpCounter) {
-			r.length = length;
-			array::copy(length, r.response, response);
-			return true;
-		}
-		return false;
-	});
-}
-
-static bool handleZclClusterSpecific(MessageType dstType, void *dstMessage, EndpointInfo const &info, MessageReader r) {
-	// get command
-	uint8_t command = r.u8();
-
-	Message &dst = *reinterpret_cast<Message *>(dstMessage);
-	switch (dstType) {
-	case MessageType::ON_OFF:
-		switch (info.cluster) {
-		case zb::ZclCluster::ON_OFF:
-			if (command <= 2)
-				dst.onOff = command;
-			else
-				return false; // conversion failed
-			break;
-		default:
-			// conversion failed
-			return false;
-		}
-		break;
-	case MessageType::MOVE_TO_LEVEL:
-		switch (info.cluster) {
-		case zb::ZclCluster::LEVEL_CONTROL:
-			switch (zb::ZclLevelControlCommand(command)) {
-			case zb::ZclLevelControlCommand::MOVE_TO_LEVEL:
-			case zb::ZclLevelControlCommand::MOVE_TO_LEVEL_WITH_ON_OFF:
-				{
-					uint8_t level = r.u8();
-					uint16_t transitionTime = r.u16L();
-					
-					dst.moveToLevel.level = float(level) / 254.0f;
-					dst.moveToLevel.move = float(transitionTime) / 10.0f;
-				}
-				break;
-			case zb::ZclLevelControlCommand::STEP:
-			case zb::ZclLevelControlCommand::STEP_WITH_ON_OFF:
-				{
-					bool up = r.u8() == 0;
-					int diff = r.u8();
-					uint16_t transitionTime = r.u16L();
-					
-					dst.moveToLevel.level.set(float(up ? diff : -diff) / 254.0f, true);
-					dst.moveToLevel.move = float(transitionTime) / 10.0f;
-				}
-				break;
-			}
-		default:
-			// conversion failed
-			return false;
-		}
-		break;
-	default:
-		// conversion failed
-		return false;
-	}
-	return true;
-}
-
-void RadioInterface::handleZcl(PacketReader &r, ZbDevice &device, uint8_t dstEndpointIndex) {
-	auto cluster = r.e16L<zb::ZclCluster>();
-	auto profile = r.e16L<zb::ZclProfile>();
-	uint8_t srcEndpointIndex = r.u8();
-	uint8_t apsCounter = r.u8();
-	
-	// zcl frame starts here
-	auto frameControl = r.e8<zb::ZclFrameControl>();
-	uint8_t zclCounter = r.u8();
-	
-	auto frameType = frameControl & zb::ZclFrameControl::TYPE_MASK;
-	if (frameType == zb::ZclFrameControl::TYPE_PROFILE_WIDE) {
-		// profile wide commands such as "read attribute response"
-		uint8_t command = r.u8();
-		uint8_t *response = r.current;
-		int length = min(r.getRemaining(), ZbDevice::RESPONSE_LENGTH);
-
-		device.zclResponseBarrier.resumeFirst([dstEndpointIndex, cluster, profile, srcEndpointIndex, zclCounter,
-			command, length, response] (ZbDevice::ZclResponse &r)
-		{
-			if (r.dstEndpoint == dstEndpointIndex && r.cluster == cluster && r.profile == profile
-				&& r.srcEndpoint == srcEndpointIndex && r.zclCounter == zclCounter && r.command == zb::ZclCommand(command))
-			{
-				r.length = length;
-				array::copy(length, r.response, response);
-				return true;
-			}
-			return false;
-		});
-	} else if (frameType == zb::ZclFrameControl::TYPE_CLUSTER_SPECIFIC) {
-		// cluster specific commands such as "on", "off"
-		bool sendDefaultResponse = (frameControl & zb::ZclFrameControl::DISABLE_DEFAULT_RESPONSE) == 0;
-
-		// debug-print command
-		uint8_t command = *r.current;
-		int length = r.getRemaining() - 1;
-		//std::cout << "Device: " << std::hex << device->shortAddress << std::dec << ", ZCL command: " << int(command) << ", length: " << length << std::endl;
-terminal::out << ("Device: " + hex(device->shortAddress) + ", ZCL Command: " + dec(command) + ", Length: " + dec(length) + '\n');
-
-		// publish to subscribers
-		auto commandPtr = r.current;
-		for (auto &subscriber : device.subscribers) {
-			// get endpoint info for subscribed endpoint
-			uint8_t const *p = device->getEndpointIndices() + subscriber.index;
-			auto const &endpointInfo = endpointInfos[p[0]];
-			uint8_t zbEndpointIndex = p[1];
-
-			// check if this is the right endpoint
-			if (dstEndpointIndex == zbEndpointIndex && cluster == endpointInfo.cluster) {
-				// trigger subscriber
-				subscriber.barrier->resumeFirst([&subscriber, &r, &endpointInfo] (Subscriber::Parameters &p) {
-					p.subscriptionIndex = subscriber.subscriptionIndex;
-
-					// convert from zbee command to message (note r is passed by value for multiple subscribers)
-					return handleZclClusterSpecific(subscriber.messageType, p.message, endpointInfo, r);
-				});
-
-				// reset reader to command
-				r.current = commandPtr;
-			}
-		}
-
-		// trigger default response
-		if (sendDefaultResponse) {
-			uint8_t command = r.u8();
-
-			for (uint8_t endpointIndex = 0; endpointIndex < device->endpointCount; ++endpointIndex) {
-				uint8_t const *p = device->getEndpointIndices() + endpointIndex;
-				auto const &endpointInfo = endpointInfos[p[0]];
-				uint8_t zbEndpointIndex = p[1];
-
-				// check if this is the right endpoint
-				if (dstEndpointIndex == zbEndpointIndex && cluster == endpointInfo.cluster) {
-					device.defaultResponseFlags[endpointIndex / 32] = 1 << (endpointIndex & 31);
-					device.defaultResponses[endpointIndex] = {zclCounter, command};
-					this->publishEvent.set();
-					break;
-				}
-			}
-		}
-	}
-}
-
-
 AwaitableCoroutine RadioInterface::handleAssociationRequest(uint64_t sourceAddress, radio::SendFlags sendFlags) {
 terminal::out << ("handleAssociationRequest\n");
 
 	ZbDeviceFlash flash;
-	flash.deviceId = sourceAddress;
+	flash.longAddress = sourceAddress;
 	flash.shortAddress = this->nextShortAddress;
 	flash.sendFlags = sendFlags;
 
 	// create device
 	Pointer<ZbDevice> device = new ZbDevice(flash);
-	
+
 	// set first hop
-	device->firstHop = flash.shortAddress;
+	device->routerAddress = flash.shortAddress;
 
 	// set pointers so that we can forward responses
 	this->tempDevice = device.ptr;
 
-	
+
 	uint8_t packet1[ZbDevice::RESPONSE_LENGTH > 80 ? ZbDevice::RESPONSE_LENGTH : 80]; // space for key transport or response
 	uint8_t packet2[ZbDevice::RESPONSE_LENGTH > 48 ? ZbDevice::RESPONSE_LENGTH : 48]; // space for zdp request or response
 	uint8_t sendResult;
 	zb::ZdpCommand zdpCommand;
 	uint16_t length;
 	uint64_t longAddress = radio::getLongAddress();
-	
+
 	// send association response
 	{
 		// get global configuration (is valid until next co_await)
 		//auto const &configuration = *this->configuration;
 
 		PacketWriter w(packet1);
-		
+
 		// ieee 802.15.4 frame control
 		w.e16L(ieee::FrameControl::TYPE_COMMAND
 			| ieee::FrameControl::ACKNOWLEDGE_REQUEST
@@ -1617,22 +2013,21 @@ terminal::out << ("handleAssociationRequest\n");
 		w.u16L(this->panId);
 
 		// destination address
-		w.u64L(flash.deviceId);
-		
+		w.u64L(flash.longAddress);
+
 		// source address
 		w.u64L(longAddress);
-		
-		
+
 		// association response
 		w.e8(ieee::Command::ASSOCIATION_RESPONSE);
-		
+
 		// short address of device
 		w.u16L(flash.shortAddress);
-		
+
 		// association status
 		w.u8(0);
-		
-		// always await data request
+
+		// always await a data request packet from the device before sending the association response
 		w.finish(radio::SendFlags::AWAIT_DATA_REQUEST);
 	}
 terminal::out << ("Send Association Response\n");
@@ -1644,30 +2039,36 @@ terminal::out << ("Send Association Response Result " + dec(sendResult) + '\n');
 	// send network key
 	for (int retry = 0; ; ++retry) {
 		{
-			// get global configuration
-			//auto const &configuration = *this->configuration;
-
 			PacketWriter w(packet1);
-			
+
 			// nwk data (no security)
 			writeNwkDataNoSecurity(w, *device);
-			
-			// aps command
-			writeApsCommandSecurity(w);
-			w.e8(zb::ApsCommand::TRANSPORT_KEY);
-			w.e8(zb::KeyIdentifier::NETWORK); // standard network key
+
+			// aps command: transport key
+			writeApsCommand(w, zb::SecurityControl::KEY_KEY_TRANSPORT, zb::ApsCommand::TRANSPORT_KEY);
+
+			// key type
+			w.e8(zb::StandardKeyType::NETWORK);
+
+			// network key
 			w.data(*this->key);
-			w.u8(0); // key sequence number
-			w.u64L(flash.deviceId); // extended destination address
-			w.u64L(longAddress); // extended source address
-		
+
+			// key sequence number
+			w.u8(0);
+
+			// extended destination address
+			w.u64L(flash.longAddress);
+
+			// extended source address
+			w.u64L(longAddress);
+
 			writeFooter(w, sendFlags);
 		}
 		co_await radio::send(RADIO_ZBEE, packet1, sendResult);
 terminal::out << ("Send Key Result " + dec(sendResult) + '\n');
 		if (sendResult != 0)
 			break;
-			
+
 		if (retry == MAX_RETRY)
 			co_return;
 	}
@@ -1683,11 +2084,11 @@ terminal::out << ("Send Key Result " + dec(sendResult) + '\n');
 			writeNwkData(w, *device);
 
 			// zdp data
-			zdpCounter = writeZdpData(w, zb::ZdpCommand::NODE_DESCRIPTOR_REQUEST);
-			
+			zdpCounter = writeApsDataZdp(w, zb::ZdpCommand::NODE_DESCRIPTOR_REQUEST);
+
 			// address of interest
 			w.u16L(flash.shortAddress);
-			
+
 			writeFooter(w, sendFlags);
 		}
 		co_await radio::send(RADIO_ZBEE, packet1, sendResult);
@@ -1696,7 +2097,7 @@ terminal::out << ("Send Node Descriptor Request Result " + dec(sendResult) + '\n
 			// wait for a response from the device
 			int r = co_await select(device->zdpResponseBarrier.wait(zb::ZdpCommand::NODE_DESCRIPTOR_RESPONSE, zdpCounter,
 				length, packet1), timer::sleep(1s));
-			
+
 			// check if response was received
 			if (r == 1)
 				break;
@@ -1704,7 +2105,7 @@ terminal::out << ("Send Node Descriptor Request Result " + dec(sendResult) + '\n
 		if (retry == MAX_RETRY)
 			co_return;
 	}
-	
+
 	// handle node descriptor
 	{
 		PacketReader nodeDescriptor(length, packet1);
@@ -1724,7 +2125,7 @@ terminal::out << ("Node Descriptor Status " + dec(status) + '\n');
 			writeNwkData(w, *device);
 
 			// zdp data
-			zdpCounter = writeZdpData(w, zb::ZdpCommand::ACTIVE_ENDPOINT_REQUEST);
+			zdpCounter = writeApsDataZdp(w, zb::ZdpCommand::ACTIVE_ENDPOINT_REQUEST);
 
 			// address of interest
 			w.u16L(flash.shortAddress);
@@ -1759,7 +2160,7 @@ terminal::out << ("active endpoints status " + dec(status) + '\n');
 	for (int i = 0; i < zbEndpointCount; ++i) {
 		// get next endpoint
 		uint8_t endpoint = endpoints.u8();
-		
+
 		// get endpoint descriptor
 		uint8_t zdpCounter;
 		for (int retry = 0; ; ++retry) {
@@ -1771,7 +2172,7 @@ terminal::out << ("active endpoints status " + dec(status) + '\n');
 				writeNwkData(w, *device);
 
 				// zdp data
-				zdpCounter = writeZdpData(w, zb::ZdpCommand::SIMPLE_DESCRIPTOR_REQUEST);
+				zdpCounter = writeApsDataZdp(w, zb::ZdpCommand::SIMPLE_DESCRIPTOR_REQUEST);
 
 				// address of interest
 				w.u16L(flash.shortAddress);
@@ -1794,7 +2195,7 @@ terminal::out << ("active endpoints status " + dec(status) + '\n');
 			if (retry == MAX_RETRY)
 				co_return;
 		}
-		
+
 		// handle endpoint descriptor
 		PacketReader endpointDescriptor(length, packet2);
 		{
@@ -1812,14 +2213,14 @@ terminal::out << ("Endpoint Descriptor " + dec(endpoint) + " Status " + dec(stat
 		uint8_t inputClusterCount = endpointDescriptor.u8();
 		for (int i = 0; i < inputClusterCount && endpointDescriptor.getRemaining() >= 3; ++i) {
 			zb::ZclCluster cluster = endpointDescriptor.e16L<zb::ZclCluster>();
-			
+
 			// add our device endpoints based on input clusters
 			for (int index = 0; index < array::count(endpointInfos); ++index) {
 				auto const &info = endpointInfos[index];
 				if (info.role == Role::SERVER /*&& info.profile == profile*/ && info.cluster == cluster) {
 					// store endpoint type
 					flash.endpoints[endpointCount] = uint8_t(info.endpointType);
-					
+
 					// also store index in enpointInfos and zb endpoint
 					flash.endpoints[ZbDeviceFlash::MAX_ENDPOINT_COUNT + endpointCount * 2] = index;
 					flash.endpoints[ZbDeviceFlash::MAX_ENDPOINT_COUNT + endpointCount * 2 + 1] = endpoint;
@@ -1828,7 +2229,7 @@ terminal::out << ("Endpoint Descriptor " + dec(endpoint) + " Status " + dec(stat
 				}
 			}
 		}
-		
+
 		// iterate over output/client clusters (client sends commmands to manipulate attributes in server)
 		uint8_t outputClusterCount = endpointDescriptor.u8();
 		for (int i = 0; i < outputClusterCount && endpointDescriptor.getRemaining() >= 2; ++i) {
@@ -1840,7 +2241,7 @@ terminal::out << ("Endpoint Descriptor " + dec(endpoint) + " Status " + dec(stat
 				if (info.role == Role::CLIENT /*&& info.profile == profile*/ && info.cluster == cluster) {
 					// store endpoint type
 					flash.endpoints[endpointCount] = uint8_t(info.endpointType);
-					
+
 					// also store index in enpointInfos and zb endpoint
 					flash.endpoints[ZbDeviceFlash::MAX_ENDPOINT_COUNT + endpointCount * 2] = index;
 					flash.endpoints[ZbDeviceFlash::MAX_ENDPOINT_COUNT + endpointCount * 2 + 1] = endpoint;
@@ -1866,9 +2267,9 @@ terminal::out << ("Endpoint Descriptor " + dec(endpoint) + " Status " + dec(stat
 
 					// nwk header
 					writeNwkData(w, *device);
-						
+
 					// aps data
-					writeApsData(w, endpoint, zb::ZclCluster::BASIC, zb::ZclProfile::HOME_AUTOMATION, endpoint);
+					writeApsDataZcl(w, endpoint, zb::ZclCluster::BASIC, zb::ZclProfile::HOME_AUTOMATION, endpoint);
 
 					// zcl profile wide
 					w.e8(zb::ZclFrameControl::TYPE_PROFILE_WIDE
@@ -1877,7 +2278,7 @@ terminal::out << ("Endpoint Descriptor " + dec(endpoint) + " Status " + dec(stat
 					w.u8(zclCounter);
 					w.e8(zb::ZclCommand::READ_ATTRIBUTES);
 					w.e16L(zb::ZclBasicAttribute::POWER_SOURCE);
-					
+
 					writeFooter(w, sendFlags);
 				}
 				co_await radio::send(RADIO_ZBEE, packet1, sendResult);
@@ -1894,7 +2295,7 @@ terminal::out << ("Endpoint Descriptor " + dec(endpoint) + " Status " + dec(stat
 				if (retry == MAX_RETRY)
 					co_return;
 			}
-			
+
 			// handle read attribute response
 			PacketReader attributeResponse(length, packet2);
 			auto attribute = attributeResponse.e16L<zb::ZclBasicAttribute>();
@@ -1916,13 +2317,13 @@ terminal::out << ("Power Source Attribute Status " + dec(status) + " Source " + 
 		}
 	}
 	flash.endpointCount = endpointCount;
-	
+
 	// bind endpoints that send a command (e.g. on/off cluster of a wall switch)
 	for (int i = 0; i < endpointCount; ++i) {
 		auto endpointType = EndpointType(flash.endpoints[i]);
 		EndpointInfo const &info = endpointInfos[flash.endpoints[ZbDeviceFlash::MAX_ENDPOINT_COUNT + i * 2]];
 		uint8_t endpoint = flash.endpoints[ZbDeviceFlash::MAX_ENDPOINT_COUNT + i * 2 + 1];
-		
+
 		// check if we have to bind this cluster
 		//if (info.bind) {
 		if (info.role == Role::CLIENT && info.mode == Mode::COMMAND) {
@@ -1937,33 +2338,33 @@ terminal::out << ("Bind Request to Endpoint " + dec(endpoint) + ", Cluster " + h
 				{
 					// get global configuration
 					//auto const &configuration = *this->configuration;
-					
+
 					PacketWriter w(packet1);
 
 					// nwk data
 					writeNwkData(w, *device);
-						
+
 					// zdp data
-					zdpCounter = writeZdpData(w, zb::ZdpCommand::BIND_REQUEST);
+					zdpCounter = writeApsDataZdp(w, zb::ZdpCommand::BIND_REQUEST);
 
 					// source
-					w.u64L(flash.deviceId);
-					
+					w.u64L(flash.longAddress);
+
 					// source endpoint
 					w.u8(endpoint);
-					
+
 					// cluster
 					w.e16L(info.cluster);
-					
+
 					// address mode: unicast
 					w.u8(3);
-					
+
 					// destination
 					w.u64L(longAddress);
-					
+
 					// destination endpoint
 					w.u8(endpoint);
-					
+
 					writeFooter(w, sendFlags);
 				}
 				co_await radio::send(RADIO_ZBEE, packet1, sendResult);
@@ -1978,15 +2379,15 @@ terminal::out << ("Bind Request to Endpoint " + dec(endpoint) + ", Cluster " + h
 				if (r == 2)
 					continue;
 			} while (false);
-			
+
 			// handle bind response
 			PacketReader bindResponse(length, packet1);
 			uint8_t status = bindResponse.u8();
 terminal::out << ("bind response status " + dec(status) + '\n');
 		}
 	}
-	
-	
+
+
 	// move pairs of info index and zbee endpoint
 	for (int i = 0; i < endpointCount * 2; ++i) {
 terminal::out << ("endpoint info " + dec(flash.endpoints[ZbDeviceFlash::MAX_ENDPOINT_COUNT + i]) + '\n');
@@ -1999,16 +2400,16 @@ terminal::out << ("endpoint info " + dec(flash.endpoints[ZbDeviceFlash::MAX_ENDP
 	// check if the device already exists
 	int index = this->zbDevices.count();
 	for (int i = 0; i < this->zbDevices.count(); ++i) {
-		if (this->zbDevices[i]->deviceId == flash.deviceId) {
+		if (this->zbDevices[i]->longAddress == flash.longAddress) {
 			// yes: overwrite
 			index = i;
 			break;
 		}
 	}
-	
+
 	// write the configured device to flash
 	this->zbDevices.write(index, std::move(device));
-	
+
 	// allocate next short address
 	allocateNextAddress();
 }
@@ -2018,7 +2419,7 @@ Coroutine RadioInterface::publish() {
 	while (true) {
 		// wait until something was published
 		co_await this->publishEvent.wait();
-		
+
 		// iterate over devices
 		bool dirty = false;
 		for (auto &device : this->zbDevices) {
@@ -2028,7 +2429,7 @@ Coroutine RadioInterface::publish() {
 				if (publisher.dirty) {
 					publisher.dirty = false;
 					dirty = true;
-					
+
 					// get endpoint info
 					uint8_t endpointIndex = publisher.index;
 					EndpointType endpointType = EndpointType(device->endpoints[endpointIndex]);
@@ -2037,12 +2438,15 @@ Coroutine RadioInterface::publish() {
 					uint8_t zbEndpointIndex = p[1];
 
 					if ((endpointType & EndpointType::OUT) == EndpointType::OUT) {
-					
+
 						// request the route if necessary
 						for (int retry = 0; retry < MAX_RETRY; ++retry) {
-							if (device.firstHop != 0xffff)
+							if (device.routerAddress != 0xffff)
 								break;
-														
+
+							// reset cost of route
+							device.cost = 255;
+
 							// build packet
 							{
 								PacketWriter w(packet);
@@ -2052,36 +2456,36 @@ Coroutine RadioInterface::publish() {
 								writeNwkBroadcastCommand(w, zb::NwkCommand::ROUTE_REQUEST);
 								w.e8(zb::NwkCommandRouteRequestOptions::DISCOVERY_SINGLE
 									| zb::NwkCommandRouteRequestOptions::EXTENDED_DESTINATION);
-								
+
 								// route id
 								w.u8(this->routeCounter++);
-								
+
 								// destination
 								w.u16L(flash.shortAddress);
-								
+
 								// path cost
 								w.u8(0);
-								
+
 								// extended destination
-								w.u64L(flash.deviceId);
+								w.u64L(flash.longAddress);
 
 								writeFooter(w, radio::SendFlags::NONE);
 							}
-							
+
 							// send packet
 							uint8_t sendResult;
 							co_await radio::send(RADIO_ZBEE, packet, sendResult);
 							if (sendResult == 0)
 								continue;
-								
-							// wait for first route reply or timeout (more route replies with lower cost may arrive during send attempts)
+
+							// wait for first route reply or timeout (more route replies with lower cost may arrive later)
 							co_await select(device.routeBarrier.wait(), timer::sleep(timeout));
 
-				terminal::out << ("Route for " + hex(device->shortAddress) + ": " + hex(device.firstHop) + '\n');
+				terminal::out << "Router for " << hex(device->shortAddress) << ": " << hex(device.routerAddress) << '\n';
 						}
 
 						// fail if route remains unknown
-						if (device.firstHop == 0xffff) {
+						if (device.routerAddress == 0xffff) {
 							// todo: set device to failed state and notify failure
 							continue;
 						}
@@ -2098,9 +2502,9 @@ Coroutine RadioInterface::publish() {
 								writeNwkData(w, device);
 
 								// aps data
-								writeApsData(w, zbEndpointIndex, endpointInfo.cluster, zb::ZclProfile::HOME_AUTOMATION,
+								writeApsDataZcl(w, zbEndpointIndex, endpointInfo.cluster, zb::ZclProfile::HOME_AUTOMATION,
 									zbEndpointIndex);
-								
+
 								if (endpointInfo.mode == Mode::COMMAND) {
 									// send command
 
@@ -2112,12 +2516,12 @@ Coroutine RadioInterface::publish() {
 									}
 								} else {
 									// send attribute request
-									
+
 								}
-								
+
 								writeFooter(w, radio::SendFlags::NONE);
 							}
-							
+
 							// send packet
 							uint8_t sendResult;
 							co_await radio::send(RADIO_ZBEE, packet, sendResult);
@@ -2133,21 +2537,21 @@ Coroutine RadioInterface::publish() {
 									MessageReader r(length, packet);
 									uint8_t responseToCommand = r.u8();
 									uint8_t status = r.u8();
-									
+
 									// todo: check status (0 = ok)
-									
+
 									break;
 								}
 							}
 						}
 					}
-					
+
 					// forward to subscribers
 					for (auto &subscriber : device.subscribers) {
 						if (subscriber.index == publisher.index) {
 							subscriber.barrier->resumeAll([&subscriber, &publisher] (Subscriber::Parameters &p) {
 								p.subscriptionIndex = subscriber.subscriptionIndex;
-								
+
 								// convert to target unit and type and resume coroutine if conversion was successful
 								return convert(subscriber.messageType, p.message,
 									publisher.messageType, publisher.message);
@@ -2156,95 +2560,11 @@ Coroutine RadioInterface::publish() {
 					}
 				}
 			}
-			
-			// check for pending default responses
-			for (int j = 0; j < (ZbDeviceFlash::MAX_ENDPOINT_COUNT + 31) / 32; ++j) {
-				uint32_t flags = device.defaultResponseFlags[j];
-				int endpointIndex = j * 32;
-				while (flags > 0) {
-					if (flags & 1) {
-						EndpointType endpointType = EndpointType(device->endpoints[endpointIndex]);
-						uint8_t const *p = device->getEndpointIndices() + endpointIndex;
-						EndpointInfo const &endpointInfo = endpointInfos[p[0]];
-						uint8_t zbEndpointIndex = p[1];
-
-						auto defaultResponse = device.defaultResponses[endpointIndex];
-						
-						for (int retry = 0; retry <= MAX_RETRY; ++retry) {
-							// build packet
-							{
-								PacketWriter w(packet);
-
-								// nwk data
-								writeNwkData(w, device);
-
-								// aps data
-								writeApsData(w, zbEndpointIndex, endpointInfo.cluster, zb::ZclProfile::HOME_AUTOMATION,
-									zbEndpointIndex);
-								
-								// zcl profile wide
-								w.e8(zb::ZclFrameControl::TYPE_PROFILE_WIDE
-									| zb::ZclFrameControl::DIRECTION_SERVER_TO_CLIENT
-									| zb::ZclFrameControl::DISABLE_DEFAULT_RESPONSE);
-								w.u8(defaultResponse.zclCounter);
-								w.e8(zb::ZclCommand::DEFAULT_RESPONSE);
-
-								// response to command
-								w.u8(defaultResponse.command);
-								
-								// success
-								w.u8(0);
-
-								writeFooter(w, device.sendFlags);
-							}
-													
-							// send packet
-							uint8_t sendResult;
-							co_await radio::send(RADIO_ZBEE, packet, sendResult);
-							if (sendResult != 0)
-								break;
-						}
-					}
-					flags >>= 1;
-					++endpointIndex;
-				}
-				device.defaultResponseFlags[j] = 0;
-			}
-			
-			// check for pending rejoin
-			if (device.rejoinPending) {
-				device.rejoinPending = false;
-				
-				for (int retry = 0; retry <= MAX_RETRY; ++retry) {
-					// build packet
-					{
-						auto const &flash = *device;
-						PacketWriter w(packet);
-
-						// rejoin response command
-						writeNwkCommand(w, device, zb::NwkCommand::REJOIN_RESPONSE);
-						
-						// address
-						w.u16L(flash.shortAddress);
-						
-						// status
-						w.u8(0);
-
-						writeFooter(w, device.sendFlags);
-					}
-						
-					// send packet
-					uint8_t sendResult;
-					co_await radio::send(RADIO_ZBEE, packet, sendResult);
-					if (sendResult != 0)
-						break;
-				}
-			}
 		}
-		
+
 		// clear event when no dirty publisher was found
 		if (!dirty)
-			this->publishEvent.clear();		
+			this->publishEvent.clear();
 	}
 }
 
