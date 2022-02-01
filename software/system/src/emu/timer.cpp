@@ -6,6 +6,8 @@
 
 namespace timer {
 
+asio::steady_timer *timer = nullptr;
+
 std::chrono::steady_clock::time_point startTime;
 
 // next timeout of a timer in the list
@@ -13,16 +15,6 @@ SystemTime next;
 
 // waiting coroutines
 Waitlist<SystemTime> waitlist;
-
-asio::steady_timer *timer = nullptr;
-
-
-constexpr int TIMER_WAITING_COUNT = 4;
-struct TimerOld {
-	asio::steady_timer *timer = nullptr;
-	std::function<void ()> onTimeout;
-};
-TimerOld timersOld[TIMER_WAITING_COUNT];
 
 
 std::chrono::steady_clock::time_point toChronoTime(SystemTime time) {
@@ -63,18 +55,18 @@ void handle() {
 }
 
 void init() {
+	// check if already initialized
+	if (timer::timer != nullptr)
+		return;
+	
+	timer::timer = new asio::steady_timer(loop::context);
 	timer::startTime = std::chrono::steady_clock::now();
 	timer::next.value = 0x80000;
-	timer::timer = new asio::steady_timer(loop::context);
 	timer::timer->expires_at(toChronoTime(timer::next));
 	timer::timer->async_wait([] (boost::system::error_code error) {
 		if (!error)
 			handle();
 	});
-
-	for (TimerOld &timer : timersOld) {
-		timer.timer = new asio::steady_timer(loop::context);
-	}
 }
 
 SystemTime now() {
@@ -83,7 +75,7 @@ SystemTime now() {
 	return {uint32_t(us.count() * 128 / 125000)};
 }
 
-Awaitable<SystemTime> wait(SystemTime time) {
+Awaitable<SystemTime> sleep(SystemTime time) {
 	// check if this time is the next to elapse
 	if (time < timer::next) {
 		timer::next = time;
@@ -95,32 +87,6 @@ Awaitable<SystemTime> wait(SystemTime time) {
 	}
 
 	return {timer::waitlist, time};
-}
-
-void setHandler(int index, std::function<void ()> const &onTimeout) {
-	assert(uint(index) < TIMER_WAITING_COUNT);
-	TimerOld &timer = timer::timersOld[index];
-
-	timer.onTimeout = onTimeout;
-}
-
-void start(int index, SystemTime time) {
-	assert(uint(index) < TIMER_WAITING_COUNT);
-	TimerOld &timer = timer::timersOld[index];
-
-	timer.timer->expires_at(toChronoTime(time));
-	timer.timer->async_wait([&timer] (boost::system::error_code error) {
-		if (!error && timer.onTimeout) {
-			timer.onTimeout();
-		}
-	});
-}
-
-void stop(int index) {
-	assert(uint(index) < TIMER_WAITING_COUNT);
-	TimerOld &t = timer::timersOld[index];
-
-	t.timer->cancel();
 }
 
 } // namespace timer

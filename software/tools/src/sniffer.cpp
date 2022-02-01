@@ -1,4 +1,4 @@
-#include <sys.hpp>
+#include <terminal.hpp>
 #include <radioDefs.hpp>
 #include <usbDefs.hpp>
 #include <crypt.hpp>
@@ -8,11 +8,13 @@
 #include <zb.hpp>
 #include <gp.hpp>
 #include <enum.hpp>
-#include <DataReader.hpp>
+#include <MessageReader.hpp>
 #include <StringBuffer.hpp>
+#include <StringOperators.hpp>
 #include <util.hpp>
 #include <boost/filesystem.hpp>
 #include <array>
+#include <map>
 #include <string>
 #include <chrono>
 #include <libusb.h>
@@ -29,7 +31,7 @@ struct PcapHeader {
 	uint32_t magic_number;   // magic number
 	uint16_t version_major;  // major version number
 	uint16_t version_minor;  // minor version number
-	int32_t thiszone;       // GMT to local correction
+	int32_t thiszone;        // GMT to local correction
 	uint32_t sigfigs;        // accuracy of timestamps
 	uint32_t snaplen;        // max length of captured packets, in octets
 	uint32_t network;        // data link type
@@ -62,40 +64,39 @@ constexpr zb::SecurityControl securityLevel = zb::SecurityControl::LEVEL_ENC_MIC
 
 // print tinycrypt aes key
 void printKey(char const *name, AesKey const &key) {
-	sys::out.write("AesKey const " + str(name) + " = {{");
+	terminal::out << ("AesKey const " + str(name) + " = {{");
 	bool first = true;
 	for (auto w : key.words) {
 		if (!first)
-			sys::out.write(", ");
+			terminal::out << ", ";
 		first = false;
-		sys::out.write("0x" + hex(w));
+		terminal::out << ("0x" + hex(w));
 	}
-	sys::out.write("}};\n");
+	terminal::out << "}};\n";
 }
 
-using PacketReader = DecryptReader;
 
-void handleGp(uint8_t const *mac, PacketReader &r);
-void handleGpCommission(uint32_t deviceId, PacketReader &r);
+void handleGp(uint8_t const *mac, DecryptReader &r);
+void handleGpCommission(uint32_t deviceId, DecryptReader &r);
 
-void handleNwk(PacketReader &r);
-void handleAps(PacketReader &r, uint8_t const *extendedSource);
-void handleZdp(PacketReader &r);
-void handleZcl(PacketReader &r, uint8_t destinationEndpoint);
+void handleNwk(DecryptReader &r);
+void handleAps(DecryptReader &r, uint8_t const *extendedSource);
+void handleZdp(DecryptReader &r);
+void handleZcl(DecryptReader &r, uint8_t destinationEndpoint);
 
 
-void handleIeee(PacketReader &r) {
+void handleIeee(DecryptReader &r) {
 	// ieee 802.15.4 mac
 	// -----------------
 	uint8_t const *mac = r.current;
 
 	// frame control
-	auto frameControl = r.enum16<ieee::FrameControl>();
+	auto frameControl = r.e16L<ieee::FrameControl>();
 
 	uint8_t sequenceNumber = 0;
 	if ((frameControl & ieee::FrameControl::SEQUENCE_NUMBER_SUPPRESSION) == 0) {
-		sequenceNumber = r.uint8();
-		sys::out.write("Seq " + dec(sequenceNumber) + "; ");
+		sequenceNumber = r.u8();
+		terminal::out << ("Seq " + dec(sequenceNumber) + "; ");
 	}
 
 	// destination pan/address
@@ -104,22 +105,22 @@ void handleIeee(PacketReader &r) {
 		// destination address present
 		
 		// destination pan
-		uint16_t destinationPan = r.uint16();
-		sys::out.write(hex(destinationPan) + ':');
+		uint16_t destinationPan = r.u16L();
+		terminal::out << (hex(destinationPan) + ':');
 	
 		// check if short or long addrssing
 		if ((frameControl & ieee::FrameControl::DESTINATION_ADDRESSING_LONG_FLAG) == 0) {
 			// short destination address
-			uint16_t destination = r.uint16();
+			uint16_t destination = r.u16L();
 			
-			sys::out.write(hex(destination));
+			terminal::out << (hex(destination));
 		} else {
 			// long destination address
-			uint64_t destination = r.int64();
+			uint64_t destination = r.u64L();
 			
-			sys::out.write(hex(destination));
+			terminal::out << (hex(destination));
 		}
-		sys::out.write(" <- ");
+		terminal::out << (" <- ");
 	}
 	
 	// source pan/address
@@ -129,80 +130,80 @@ void handleIeee(PacketReader &r) {
 		
 		// check if pan is present
 		if ((frameControl & ieee::FrameControl::PAN_ID_COMPRESSION) == 0 || !haveDestination) {
-			uint16_t sourcePan = r.uint16();
-			sys::out.write(hex(sourcePan) + ':');
+			uint16_t sourcePan = r.u16L();
+			terminal::out << (hex(sourcePan) + ':');
 		}
 	
 		// check if short or long addrssing
 		if ((frameControl & ieee::FrameControl::SOURCE_ADDRESSING_LONG_FLAG) == 0) {
 			// short source address
-			uint16_t source = r.uint16();
+			uint16_t source = r.u16L();
 			
-			sys::out.write(hex(source));
+			terminal::out << (hex(source));
 		} else {
 			// long source address
-			uint64_t source = r.int64();
+			uint64_t source = r.u64L();
 			
-			sys::out.write(hex(source));
+			terminal::out << (hex(source));
 		}
 	}
 	if (haveDestination || haveSource)
-		sys::out.write("; ");
+		terminal::out << ("; ");
 
 	auto frameType = frameControl & ieee::FrameControl::TYPE_MASK;
 	switch (frameType) {
 	case ieee::FrameControl::TYPE_BEACON:
 		{
-			uint16_t superframeSpecification = r.uint16();
+			uint16_t superframeSpecification = r.u16L();
 			
-			uint8_t gts = r.uint8();
+			uint8_t gts = r.u8();
 			
-			uint8_t pending = r.uint8();
+			uint8_t pending = r.u8();
 			
-			uint8_t protocolId = r.uint8();
+			uint8_t protocolId = r.u8();
 			
-			uint16_t stackProfile = r.uint16();
+			uint16_t stackProfile = r.u16L();
 			int type = stackProfile & 15;
 			int protocolVersion = (stackProfile >> 4) & 15;
 			bool routerFlag = stackProfile & 0x400;
 			
-			sys::out.write("Beacon: " + dec(type) + ", " + dec(protocolVersion));
+			terminal::out << ("Beacon: " + dec(type) + ", " + dec(protocolVersion));
 			if (routerFlag)
-				sys::out.write(", router");
-			sys::out.write("\n");
+				terminal::out << (", router");
+			terminal::out << ("\n");
 		}
 		break;
 	case ieee::FrameControl::TYPE_COMMAND:
 		{
-			auto command = r.enum8<ieee::Command>();
+			auto command = r.e8<ieee::Command>();
 			
 			switch (command) {
 			case ieee::Command::ASSOCIATION_REQUEST:
-				sys::out.write("Association Request\n");
+				terminal::out << ("Association Request\n");
 				break;
 			case ieee::Command::ASSOCIATION_RESPONSE:
-				sys::out.write("Association Response\n");
+				terminal::out << ("Association Response\n");
 				break;
 			case ieee::Command::DATA_REQUEST:
-				sys::out.write("Data Request\n");
+				terminal::out << ("Data Request\n");
 				break;
 			case ieee::Command::ORPHAN_NOTIFICATION:
-				sys::out.write("Orphan Notification\n");
+				terminal::out << ("Orphan Notification\n");
 				break;
 			case ieee::Command::BEACON_REQUEST:
-				sys::out.write("Beacon Request\n");
+				terminal::out << ("Beacon Request\n");
 				break;
 			default:
-				sys::out.write("Unknown Command\n");
+				terminal::out << ("Unknown Command\n");
 			}
 		}
 		break;
 	case ieee::FrameControl::TYPE_ACK:
-		sys::out.write("Ack\n");
+		terminal::out << ("Ack\n");
 		break;
 	case ieee::FrameControl::TYPE_DATA:
 		{
-			auto version = r.peekEnum8<gp::NwkFrameControl>() & gp::NwkFrameControl::VERSION_MASK;
+			auto version = r.peekE8<gp::NwkFrameControl>() & gp::NwkFrameControl::VERSION_MASK;
 			switch (version) {
 			case gp::NwkFrameControl::VERSION_2:
 				handleNwk(r);
@@ -211,12 +212,12 @@ void handleIeee(PacketReader &r) {
 				handleGp(mac, r);
 				break;
 			default:
-				sys::out.write("Unknown Nwk Frame Version!\n");
+				terminal::out << ("Unknown Nwk Frame Version!\n");
 			}
 		}
 		break;
 	default:
-		sys::out.write("Unknown IEEE Frame Type\n");
+		terminal::out << ("Unknown IEEE Frame Type\n");
 	}
 }
 
@@ -230,27 +231,25 @@ struct GpDevice {
 
 std::map<uint32_t, GpDevice> gpDevices;
 
-void handleGp(uint8_t const *mac, PacketReader &r) {
-	// zgp stub nwk header
-	
-	// set start of header
+void handleGp(uint8_t const *mac, DecryptReader &r) {
+	// zgp stub nwk header (encryption header starts here)
 	r.setHeader();
-
+	
 	// frame control
-	auto frameControl = r.enum8<gp::NwkFrameControl>();
+	auto frameControl = r.e8<gp::NwkFrameControl>();
 
 	// extended frame conrol
 	gp::NwkExtendedFrameControl extendedFrameControl = gp::NwkExtendedFrameControl::NONE;
 	if ((frameControl & gp::NwkFrameControl::EXTENDED) != 0)
-		extendedFrameControl = r.enum8<gp::NwkExtendedFrameControl>();
+		extendedFrameControl = r.e8<gp::NwkExtendedFrameControl>();
 	auto securityLevel = extendedFrameControl & gp::NwkExtendedFrameControl::SECURITY_LEVEL_MASK;
 
 	// device id
-	uint32_t deviceId = r.int32();
-	sys::out.write("Device Id: " + hex(deviceId) + "; ");
+	uint32_t deviceId = r.u32L();
+	terminal::out << ("Device Id: " + hex(deviceId) + "; ");
 
 	if (securityLevel == gp::NwkExtendedFrameControl::SECURITY_LEVEL_NONE
-		&& r.peekEnum8<gp::Command>() == gp::Command::COMMISSIONING)
+		&& r.peekE8<gp::Command>() == gp::Command::COMMISSIONING)
 	{
 		// commissioning (PTM215Z/216Z: hold A0 down for 7 seconds)
 		handleGpCommission(deviceId, r);
@@ -266,7 +265,7 @@ void handleGp(uint8_t const *mac, PacketReader &r) {
 	// payload: payload that is encrypted, has zero length for security levels 0 and 1
 	// mic: message integrity code, 2 or 4 bytes
 	uint32_t securityCounter;
-	int micLength = 4;
+	int micLength;
 	switch (securityLevel) {
 	case gp::NwkExtendedFrameControl::SECURITY_LEVEL_CNT8_MIC16:
 		// security level 1: 1 byte counter, 2 byte mic
@@ -277,28 +276,29 @@ void handleGp(uint8_t const *mac, PacketReader &r) {
 		// use mac sequence number as security counter
 		securityCounter = mac[2];
 		
+		// only decrypt message integrity code of length 2
 		micLength = 2;
-		
-		// encrypted message is empty, only message integrity code
-		r.setMessage(r.end - micLength);
+		r.setMessageFromEnd(micLength);
 		break;
 	case gp::NwkExtendedFrameControl::SECURITY_LEVEL_CNT32_MIC32:
 		// security level 2: 4 byte counter, 4 byte mic
 
 		// security counter
-		securityCounter = r.int32();
+		securityCounter = r.u32L();
 
-		// encrypted message is empty, only message integrity code
-		r.setMessage(r.end - micLength);
+		// only decrypt message integrity code of length 4
+		micLength = 4;
+		r.setMessageFromEnd(micLength);
 		break;
 	case gp::NwkExtendedFrameControl::SECURITY_LEVEL_ENC_CNT32_MIC32:
 		// security level 3: 4 byte counter, encrypted message, 4 byte mic
 
 		// security counter
-		securityCounter = r.int32();
+		securityCounter = r.u32L();
 
-		// set start of encrypted message
+		// decrypt message and message integrity code of length 4
 		r.setMessage();
+		micLength = 4;
 		break;
 	default:
 		// security is required
@@ -309,24 +309,24 @@ void handleGp(uint8_t const *mac, PacketReader &r) {
 	Nonce nonce(deviceId, securityCounter);
 	if (!r.decrypt(micLength, nonce, device.aesKey)) {
 		if (securityLevel <= gp::NwkExtendedFrameControl::SECURITY_LEVEL_CNT32_MIC32) {
-			sys::out.write("Decrypt Error; ");
+			terminal::out << ("Decrypt Error; ");
 			// we can continue as data is not encrypted
 		} else {
-			sys::out.write("Error while decrypting message!\n");
+			terminal::out << ("Error while decrypting message!\n");
 			return;
 		}
 	}
 
-	sys::out.write("Data:");
-	int l = r.getRemaining();//end - d;
+	terminal::out << ("Data:");
+	int l = r.getRemaining();
 	for (int i = 0; i < l; ++i)
-		sys::out.write(' ' + hex(r.current[i]));
-	sys::out.write("\n");
+		terminal::out << (' ' + hex(r.current[i]));
+	terminal::out << ("\n");
 }
 
-void handleGpCommission(uint32_t deviceId, PacketReader &r) {
+void handleGpCommission(uint32_t deviceId, DecryptReader &r) {
 	// remove commissioning command (0xe0)
-	r.uint8();
+	r.u8();
 
 	GpDevice device;
 
@@ -334,12 +334,12 @@ void handleGpCommission(uint32_t deviceId, PacketReader &r) {
 		
 	// device type
 	// 0x02: on/off switch
-	auto deviceType = r.enum8<gp::DeviceType>();
+	auto deviceType = r.e8<gp::DeviceType>();
 
 	// options
-	auto options = r.enum8<gp::Options>();
+	auto options = r.e8<gp::Options>();
 	if ((options & gp::Options::EXTENDED) != 0) {
-		auto extendedOptions = r.enum8<gp::ExtendedOptions>();;
+		auto extendedOptions = r.e8<gp::ExtendedOptions>();;
 		
 		// security level capability (used in messages)
 		auto securityLevel = extendedOptions & gp::ExtendedOptions::SECURITY_LEVEL_CAPABILITY_MASK;
@@ -355,10 +355,11 @@ void handleGpCommission(uint32_t deviceId, PacketReader &r) {
 
 				// construct a header containing the device id
 				DataBuffer<4> header;
-				header.setLittleEndianInt32(0, deviceId);
+				header.setU32L(0, deviceId);
 				
-				if (!decrypt(key, nonce, header.data, 4, key, 16, 4, trustCenterLinkAesKey)) {
-					sys::out.write("Error while decrypting key!\n");
+				// in-place decrypt
+				if (!decrypt(key, header.data, 4, key, 16, 4, nonce, trustCenterLinkAesKey)) {
+					terminal::out << ("Error while decrypting key!\n");
 					return;
 				}
 				
@@ -370,20 +371,20 @@ void handleGpCommission(uint32_t deviceId, PacketReader &r) {
 			}
 
 			// print key
-			sys::out.write("Key: ");
+			terminal::out << ("Key: ");
 			for (int i = 0; i < 16; ++i) {
 				if (i > 0)
-					sys::out.write(":");
-				sys::out.write(hex(key[i]));
+					terminal::out << (":");
+				terminal::out << (hex(key[i]));
 			}
-			sys::out.write("\n");
+			terminal::out << ("\n");
 
 			// set key for device
-			setKey(device.aesKey, key);
+			setKey(device.aesKey, Array<uint8_t const, 16>(key));
 		}
 		if ((extendedOptions & gp::ExtendedOptions::COUNTER_PRESENT) != 0) {
-			uint32_t counter = r.int32();
-			sys::out.write("Counter: 0x" + hex(counter) + "\n");
+			uint32_t counter = r.u32L();
+			terminal::out << ("Counter: 0x" + hex(counter) + "\n");
 		}
 	}
 
@@ -409,18 +410,16 @@ void handleGpCommission(uint32_t deviceId, PacketReader &r) {
 // zbee
 // ----
 
-void handleNwk(PacketReader &r) {
-	// nwk header
-
-	// set start of header
+void handleNwk(DecryptReader &r) {
+	// nwk header (encryption header starts here)
 	r.setHeader();
 
-	auto frameControl = r.enum16<zb::NwkFrameControl>();
-	uint16_t destination = r.uint16();
-	uint16_t source = r.uint16();
-	uint8_t radius = r.uint8();
-	uint8_t nwkCounter = r.uint8();
-	sys::out.write(hex(destination) + " <- " + hex(source) + " (r " + dec(radius) + "); ");
+	auto frameControl = r.e16L<zb::NwkFrameControl>();
+	uint16_t destination = r.u16L();
+	uint16_t source = r.u16L();
+	uint8_t radius = r.u8();
+	uint8_t nwkCounter = r.u8();
+	terminal::out << (hex(destination) + " <- " + hex(source) + " (r " + dec(radius) + "); ");
 
 	// destination
 	if ((frameControl & zb::NwkFrameControl::DESTINATION) != 0) {
@@ -436,14 +435,14 @@ void handleNwk(PacketReader &r) {
 	
 	// source route
 	if ((frameControl & zb::NwkFrameControl::SOURCE_ROUTE) != 0) {
-		uint8_t relayCount = r.uint8();
-		uint8_t relayIndex = r.uint8();
-		sys::out.write("source route");
+		uint8_t relayCount = r.u8();
+		uint8_t relayIndex = r.u8();
+		terminal::out << ("source route");
 		for (int i = 0; i < relayCount; ++i) {
-			uint16_t relay = r.uint16();
-			sys::out.write(' ' + hex(relay));
+			uint16_t relay = r.u16L();
+			terminal::out << (' ' + hex(relay));
 		}
-		sys::out.write("; ");
+		terminal::out << ("; ");
 	}
 	
 	// security header
@@ -454,39 +453,36 @@ void handleNwk(PacketReader &r) {
 		r.current[0] |= securityLevel;
 		
 		// security control field (4.5.1.1)
-		auto securityControl = r.enum8<zb::SecurityControl>();
+		auto securityControl = r.e8<zb::SecurityControl>();
 				
 		// security counter
-		uint32_t securityCounter = r.int32();
-		sys::out.write("SecCnt " + hex(securityCounter) + "; ");
+		uint32_t securityCounter = r.u32L();
+		terminal::out << ("SecCnt " + hex(securityCounter) + "; ");
 
 		// key type
 		if ((securityControl & zb::SecurityControl::KEY_MASK) != zb::SecurityControl::KEY_NETWORK) {
-			sys::out.write("Error: Only network key supported!\n");
+			terminal::out << ("Error: Only network key supported!\n");
 			return;
 		}
 		
 		// extended source
 		if ((securityControl & zb::SecurityControl::EXTENDED_NONCE) == 0) {
-			sys::out.write("Error: Only extended nonce supported!\n");
+			terminal::out << ("Error: Only extended nonce supported!\n");
 			return;
 		}
 		extendedSource = r.current;
 		r.skip(8);
 		
 		// key sequence number
-		uint8_t keySequenceNumber = r.uint8();
+		uint8_t keySequenceNumber = r.u8();
 		
-		// set start of message
-		r.setMessage();
-
 		// nonce (4.5.2.2)
 		Nonce nonce(extendedSource, securityCounter, securityControl);
 
-		// decrypt
-		int micLength = 4;
-		if (!r.decrypt(micLength, nonce, networkAesKey)) {
-			sys::out.write("Error: Decryption failed!\n");
+		// decrypt in-place (whole message, mic length of 4)
+		r.setMessage();
+		if (!r.decrypt(4, nonce, networkAesKey)) {
+			terminal::out << "Error: Decryption failed!\n";
 			return;
 		}
 	}
@@ -494,90 +490,88 @@ void handleNwk(PacketReader &r) {
 	auto frameType = frameControl & zb::NwkFrameControl::TYPE_MASK;
 	if (frameType == zb::NwkFrameControl::TYPE_COMMAND) {
 		// nwk command
-		auto command = r.enum8<zb::NwkCommand>();
+		auto command = r.e8<zb::NwkCommand>();
 		switch (command) {
 		case zb::NwkCommand::ROUTE_REQUEST:
-			sys::out.write("Route Request ");
+			terminal::out << "Route Request ";
 			{
-				auto options = r.enum8<zb::NwkCommandRouteRequestOptions>();
-				uint8_t id = r.uint8();
-				uint16_t destination = r.uint16();
-				uint8_t cost = r.uint8();
+				auto options = r.e8<zb::NwkCommandRouteRequestOptions>();
+				uint8_t routeId = r.u8();
+				uint16_t destinationAddress = r.u16L();
+				uint8_t cost = r.u8();
 				
 				switch (options & zb::NwkCommandRouteRequestOptions::DISCOVERY_MASK) {
 				case zb::NwkCommandRouteRequestOptions::DISCOVERY_SINGLE:
-					sys::out.write(hex(destination));
+					terminal::out << (hex(destinationAddress));
 					if ((options & zb::NwkCommandRouteRequestOptions::EXTENDED_DESTINATION) != 0)
-						sys::out.write(" ext");
+						terminal::out << " ext. dest.";
 					break;
 				case zb::NwkCommandRouteRequestOptions::DISCOVERY_MANY_TO_ONE_WITH_SOURCE_ROUTING:
 					// https://www.digi.com/resources/documentation/Digidocs/90002002/Concepts/c_zb_many_to_one_routing.htm
-					sys::out.write("Many-to-One");
+					terminal::out << "Many-to-One";
 					break;
 				default:
 					break;
 				}
 			}
-			sys::out.write("\n");
+			terminal::out << '\n';
 			break;
 		case zb::NwkCommand::ROUTE_REPLY:
-			sys::out.write("Route Reply ");
+			terminal::out << "Route Reply ";
 			{
-				auto options = r.enum8<zb::NwkCommandRouteReplyOptions>();
-				uint8_t id = r.uint8();
-				uint16_t originator = r.uint16();
-				uint16_t responder = r.uint16();
-				uint8_t cost = r.uint8();
+				auto options = r.e8<zb::NwkCommandRouteReplyOptions>();
+				uint8_t routeId = r.u8();
+				uint16_t originatorAddress = r.u16L();
+				uint16_t destinationAddress = r.u16L(); // "Responder" in Wireshark
+				uint8_t cost = r.u8();
 			}
-			sys::out.write("\n");
+			terminal::out << '\n';
 			break;
 		case zb::NwkCommand::LEAVE:
-			sys::out.write("Leave\n");
+			terminal::out << "Leave\n";
 			break;
 		case zb::NwkCommand::ROUTE_RECORD:
 			// https://www.digi.com/resources/documentation/Digidocs/90001942-13/concepts/c_source_routing.htm
-			sys::out.write("Route Record:");
+			terminal::out << ("Route Record:");
 			{
-				uint8_t relayCount = r.uint8();
+				uint8_t relayCount = r.u8();
 				for (int i = 0; i < relayCount; ++i) {
-					uint16_t relay = r.uint16();
-					sys::out.write(' ' + hex(relay));
+					uint16_t relay = r.u16L();
+					terminal::out << (' ' + hex(relay));
 				}
 			}
-			sys::out.write("\n");
+			terminal::out << ("\n");
 			break;
 		case zb::NwkCommand::REJOIN_REQUEST:
-			sys::out.write("Rejoin Request\n");
+			terminal::out << ("Rejoin Request\n");
 			break;
 		case zb::NwkCommand::REJOIN_RESPONSE:
-			sys::out.write("Rejoin Response\n");
+			terminal::out << ("Rejoin Response\n");
 			break;
 		case zb::NwkCommand::LINK_STATUS:
-			sys::out.write("Link Status\n");
+			terminal::out << ("Link Status\n");
 			break;
 		default:
-			sys::out.write("Unknown NWK Command\n");
+			terminal::out << ("Unknown NWK Command\n");
 		}
 	} else if (frameType == zb::NwkFrameControl::TYPE_DATA) {
 		// nwk data
 		handleAps(r, extendedSource);
 	} else {
-		sys::out.write("Unknown NWK Frame Type!\n");
+		terminal::out << ("Unknown NWK Frame Type!\n");
 	}
 }
 
-void handleAps(PacketReader &r, uint8_t const *extendedSource) {
-	// application support layer
-	
-	// set start of header
+void handleAps(DecryptReader &r, uint8_t const *extendedSource) {
+	// application support layer (encryption header starts here)
 	r.setHeader();
-
+	
 	// frame control
-	auto frameControl = r.enum8<zb::ApsFrameControl>();
+	auto frameControl = r.e8<zb::ApsFrameControl>();
 	auto frameType = frameControl & zb::ApsFrameControl::TYPE_MASK;
 	if (frameType == zb::ApsFrameControl::TYPE_COMMAND) {
 		// aps command
-		uint8_t apsCounter = r.uint8();
+		uint8_t apsCounter = r.u8();
 		
 		// security header
 		// note: does in-place decryption of the payload
@@ -586,19 +580,19 @@ void handleAps(PacketReader &r, uint8_t const *extendedSource) {
 			r.current[0] |= securityLevel;
 			
 			// security control field (4.5.1.1)
-			auto securityControl = r.enum8<zb::SecurityControl>();
+			auto securityControl = r.e8<zb::SecurityControl>();
 			
 			// security counter
-			uint32_t securityCounter = r.int32();
+			uint32_t securityCounter = r.u32L();
 
 			auto keyType = securityControl & zb::SecurityControl::KEY_MASK;
 			if (keyType != zb::SecurityControl::KEY_LINK && keyType != zb::SecurityControl::KEY_KEY_TRANSPORT) {
-				sys::out.write("Error: Only link key and key transport key supported!\n");
+				terminal::out << ("Error: Only link key and key transport key supported!\n");
 				return;
 			}
 			if ((securityControl & zb::SecurityControl::EXTENDED_NONCE) == 0) {
 				if (extendedSource == nullptr) {
-					sys::out.write("Error: Only extended nonce supported!\n");
+					terminal::out << ("Error: Only extended nonce supported!\n");
 					return;
 				}
 			} else {
@@ -606,37 +600,29 @@ void handleAps(PacketReader &r, uint8_t const *extendedSource) {
 				r.skip(8);
 			}
 
-			// set start of message
-			r.setMessage();
-
 			// nonce (4.5.2.2)
 			Nonce nonce(extendedSource, securityCounter, securityControl);
 
-			// decrypt
-			int micLength = 4;
-			if (!r.decrypt(micLength, nonce, keyType == zb::SecurityControl::KEY_LINK ? trustCenterLinkAesKey : hashedTrustCenterLinkAesKey)) {
-				sys::out.write("Error: Decryption failed!\n");
+			// decrypt in-place (whole message, mic length of 4)
+			r.setMessage();
+			if (!r.decrypt(4, nonce,
+				keyType == zb::SecurityControl::KEY_LINK ? trustCenterLinkAesKey : hashedTrustCenterLinkAesKey))
+			{
+				terminal::out << ("Error: Decryption failed!\n");
 				return;
 			}
 		}
 		
-		auto command = r.enum8<zb::ApsCommand>();
+		auto command = r.e8<zb::ApsCommand>();
 		switch (command) {
 		case zb::ApsCommand::TRANSPORT_KEY:
 			{
-				sys::out.write("Transport Key\n");
-				auto newKeyIdentifier = r.enum8<zb::KeyIdentifier>();
-
-				uint8_t const *newKey = r.current;
-				r.skip(16);
-				
-				uint8_t newKeySequenceNumber = r.uint8();
-				
-				uint8_t const *extendedDestination = r.current;
-				r.skip(8);
-				
-				uint8_t const *extendedSource = r.current;
-				r.skip(8);
+				terminal::out << ("Transport Key\n");
+				auto newKeyIdentifier = r.e8<zb::KeyIdentifier>();
+				auto newKey = r.data<16>();
+				uint8_t newKeySequenceNumber = r.u8();
+				auto extendedDestination = r.data<8>();
+				auto extendedSource = r.data<8>();
 				
 				if (newKeyIdentifier == zb::KeyIdentifier::NETWORK) {
 					setKey(networkAesKey, newKey);
@@ -645,180 +631,180 @@ void handleAps(PacketReader &r, uint8_t const *extendedSource) {
 			break;
 		case zb::ApsCommand::UPDATE_DEVICE:
 			{
-				sys::out.write("Update Device\n");
+				terminal::out << ("Update Device\n");
 			}
 			break;
 		default:
-			sys::out.write("Unknown APS Command!\n");
+			terminal::out << ("Unknown APS Command!\n");
 		}
 	} else if (frameType == zb::ApsFrameControl::TYPE_DATA) {
 		// aps data: zdp or zcl follow
-		uint8_t destinationEndpoint = r.uint8();
+		uint8_t destinationEndpoint = r.u8();
 		if (destinationEndpoint == 0)
 			handleZdp(r);
 		else
 			handleZcl(r, destinationEndpoint);
 	} else if (frameType == zb::ApsFrameControl::TYPE_ACK) {
 		// aps ack
-		sys::out.write("Ack\n");
+		terminal::out << ("Ack\n");
 	} else {
-		sys::out.write("Unknown APS Frame Type!\n");
+		terminal::out << ("Unknown APS Frame Type!\n");
 	}
 }
 
-void handleZdp(PacketReader &r) {
-	zb::ZdpCommand command = r.enum16<zb::ZdpCommand>();
-	uint16_t profile = r.uint16();
-	uint8_t sourceEndpoint = r.uint8();
-	uint8_t apsCounter = r.uint8();
+void handleZdp(DecryptReader &r) {
+	zb::ZdpCommand command = r.e16L<zb::ZdpCommand>();
+	uint16_t profile = r.u16L();
+	uint8_t sourceEndpoint = r.u8();
+	uint8_t apsCounter = r.u8();
 
 	switch (command) {
 	case zb::ZdpCommand::NETWORK_ADDRESS_REQUEST:
-		sys::out.write("Network Address Request\n");
+		terminal::out << ("Network Address Request\n");
 		break;
 	case zb::ZdpCommand::EXTENDED_ADDRESS_REQUEST:
-		sys::out.write("Extended Address Request\n");
+		terminal::out << ("Extended Address Request\n");
 		break;
 	case zb::ZdpCommand::EXTENDED_ADDRESS_RESPONSE:
-		sys::out.write("Extended Address Response\n");
+		terminal::out << ("Extended Address Response\n");
 		break;
 	case zb::ZdpCommand::NODE_DESCRIPTOR_REQUEST:
-		sys::out.write("Node Descriptor Request\n");
+		terminal::out << ("Node Descriptor Request\n");
 		break;
 	case zb::ZdpCommand::NODE_DESCRIPTOR_RESPONSE:
-		sys::out.write("Node Descriptor Response\n");
+		terminal::out << ("Node Descriptor Response\n");
 		break;
 	case zb::ZdpCommand::SIMPLE_DESCRIPTOR_REQUEST:
-		sys::out.write("Simple Descriptor Request\n");
+		terminal::out << ("Simple Descriptor Request\n");
 		break;
 	case zb::ZdpCommand::SIMPLE_DESCRIPTOR_RESPONSE:
-		sys::out.write("Simple Descriptor Response\n");
+		terminal::out << ("Simple Descriptor Response\n");
 		break;
 	case zb::ZdpCommand::ACTIVE_ENDPOINT_REQUEST:
-		sys::out.write("Active Endpoint Request\n");
+		terminal::out << ("Active Endpoint Request\n");
 		break;
 	case zb::ZdpCommand::ACTIVE_ENDPOINT_RESPONSE:
-		sys::out.write("Active Endpoint Response\n");
+		terminal::out << ("Active Endpoint Response\n");
 		break;
 	case zb::ZdpCommand::MATCH_DESCRIPTOR_REQUEST:
-		sys::out.write("Match Descriptor Request\n");
+		terminal::out << ("Match Descriptor Request\n");
 		break;
 	case zb::ZdpCommand::MATCH_DESCRIPTOR_RESPONSE:
-		sys::out.write("Match Descriptor Response\n");
+		terminal::out << ("Match Descriptor Response\n");
 		break;
 	case zb::ZdpCommand::DEVICE_ANNOUNCEMENT:
-		sys::out.write("Device Announcement\n");
+		terminal::out << ("Device Announcement\n");
 		break;
 	case zb::ZdpCommand::BIND_REQUEST:
-		sys::out.write("Bind Request\n");
+		terminal::out << ("Bind Request\n");
 		break;
 	case zb::ZdpCommand::BIND_RESPONSE:
-		sys::out.write("Bind Response\n");
+		terminal::out << ("Bind Response\n");
 		break;
 	case zb::ZdpCommand::PERMIT_JOIN_REQUEST:
-		sys::out.write("Permit Joint Request\n");
+		terminal::out << ("Permit Joint Request\n");
 		break;
 	default:
-		sys::out.write("Unknown ZDP Command 0x" + hex(command) + "\n");
+		terminal::out << ("Unknown ZDP Command 0x" + hex(command) + "\n");
 	}
 }
 
-void handleZcl(PacketReader &r, uint8_t destinationEndpoint) {
-	zb::ZclCluster cluster = r.enum16<zb::ZclCluster>();
-	zb::ZclProfile profile = r.enum16<zb::ZclProfile>();
-	uint8_t sourceEndpoint = r.uint8();
-	uint8_t apsCounter = r.uint8();
+void handleZcl(DecryptReader &r, uint8_t destinationEndpoint) {
+	zb::ZclCluster cluster = r.e16L<zb::ZclCluster>();
+	zb::ZclProfile profile = r.e16L<zb::ZclProfile>();
+	uint8_t sourceEndpoint = r.u8();
+	uint8_t apsCounter = r.u8();
 
 	// cluster library frame
-	auto frameControl = r.enum8<zb::ZclFrameControl>();
+	auto frameControl = r.e8<zb::ZclFrameControl>();
 	auto frameType = frameControl & zb::ZclFrameControl::TYPE_MASK;
 	bool manufacturerSpecificFlag = (frameControl & zb::ZclFrameControl::MANUFACTURER_SPECIFIC) != 0;
 	//bool directionFlag = frameControl & 0x80; // false: client to server, true: server to client
 
-	uint8_t zclCounter = r.uint8();
+	uint8_t zclCounter = r.u8();
 	
-	sys::out.write("ZclCnt " + dec(zclCounter) + "; ");
+	terminal::out << ("ZclCnt " + dec(zclCounter) + "; ");
 
 	if (frameType == zb::ZclFrameControl::TYPE_PROFILE_WIDE && !manufacturerSpecificFlag) {
-		auto command = r.enum8<zb::ZclCommand>();
+		auto command = r.e8<zb::ZclCommand>();
 		switch (command) {
 		case zb::ZclCommand::CONFIGURE_REPORTING:
-			sys::out.write("Configure Reporting\n");
+			terminal::out << ("Configure Reporting\n");
 			break;
 		case zb::ZclCommand::CONFIGURE_REPORTING_RESPONSE:
-			sys::out.write("Configure Reporting Response\n");
+			terminal::out << ("Configure Reporting Response\n");
 			break;
 		case zb::ZclCommand::READ_ATTRIBUTES:
-			sys::out.write("Read Attributes; ");
+			terminal::out << ("Read Attributes; ");
 			switch (cluster) {
 			case zb::ZclCluster::BASIC:
 				{
-					auto attribute = r.enum16<zb::ZclBasicAttribute>();
+					auto attribute = r.e16L<zb::ZclBasicAttribute>();
 
 					switch (attribute) {
 					case zb::ZclBasicAttribute::MODEL_IDENTIFIER:
-						sys::out.write("Model Identifier\n");
+						terminal::out << ("Model Identifier\n");
 						break;
 					default:
-						sys::out.write("Unknown Attribute\n");
+						terminal::out << ("Unknown Attribute\n");
 					}
 				}
 				break;
 			case zb::ZclCluster::POWER_CONFIGURATION:
 				{
-					auto attribute = r.enum16<zb::ZclPowerConfigurationAttribute>();
+					auto attribute = r.e16L<zb::ZclPowerConfigurationAttribute>();
 
 					switch (attribute) {
 					case zb::ZclPowerConfigurationAttribute::BATTERY_VOLTAGE:
-						sys::out.write("Battery Voltage\n");
+						terminal::out << ("Battery Voltage\n");
 						break;
 					default:
-						sys::out.write("Unknown Attribute\n");
+						terminal::out << ("Unknown Attribute\n");
 					}
 				}
 				break;
 			case zb::ZclCluster::IDENTIFY:
-				sys::out.write("Unknown Attribute\n");
+				terminal::out << ("Unknown Attribute\n");
 				break;
 			case zb::ZclCluster::ON_OFF:
-				sys::out.write("Unknown Attribute\n");
+				terminal::out << ("Unknown Attribute\n");
 				break;
 			default:
-				sys::out.write("Unknown Attribute\n");
+				terminal::out << ("Unknown Attribute\n");
 			}
 			break;
 		case zb::ZclCommand::READ_ATTRIBUTES_RESPONSE:
-			sys::out.write("Read Attributes Response; ");
+			terminal::out << ("Read Attributes Response; ");
 			switch (cluster) {
 			case zb::ZclCluster::BASIC:
 				{
-					auto attribute = r.enum16<zb::ZclBasicAttribute>();
-					uint8_t status = r.uint8();
+					auto attribute = r.e16L<zb::ZclBasicAttribute>();
+					uint8_t status = r.u8();
 					
 					if (status == 0) {
-						auto dataType = r.enum8<zb::ZclDataType>();
+						auto dataType = r.e8<zb::ZclDataType>();
 														
 						switch (attribute) {
 						case zb::ZclBasicAttribute::MODEL_IDENTIFIER:
 							{
-								sys::out.write("Model Identifier: " + String(r.getRemaining(), r.current) + '\n');
+								terminal::out << ("Model Identifier: " + r.string() + '\n');
 							}
 							break;
 						default:
-							sys::out.write("Unknown\n");
+							terminal::out << ("Unknown\n");
 						}
 					} else {
-						sys::out.write("Failed\n");
+						terminal::out << ("Failed\n");
 					}
 				}
 				break;
 			case zb::ZclCluster::POWER_CONFIGURATION:
 				{
-					auto attribute = r.enum16<zb::ZclPowerConfigurationAttribute>();
-					uint8_t status = r.uint8();
+					auto attribute = r.e16L<zb::ZclPowerConfigurationAttribute>();
+					uint8_t status = r.u8();
 					
 					if (status == 0) {
-						auto dataType = r.enum8<zb::ZclDataType>();
+						auto dataType = r.e8<zb::ZclDataType>();
 														
 						switch (attribute) {
 						case zb::ZclPowerConfigurationAttribute::BATTERY_VOLTAGE:
@@ -826,87 +812,89 @@ void handleZcl(PacketReader &r, uint8_t destinationEndpoint) {
 								int value;
 								switch (dataType) {
 								case zb::ZclDataType::UINT8:
-									value = uint8_t(r.uint8());
+									value = uint8_t(r.u8());
 									break;
 								default:
 									value = 0;
 								}
 
-								sys::out.write("Battery Voltage " + dec(value / 10) + '.' + dec(value % 10) + "V\n");
+								terminal::out << ("Battery Voltage " + dec(value / 10) + '.' + dec(value % 10) + "V\n");
 							}
 							break;
 						default:
-							sys::out.write("Unknown\n");
+							terminal::out << ("Unknown\n");
 						}
 					} else {
-						sys::out.write("Failed\n");
+						terminal::out << ("Failed\n");
 					}
 				}
 				break;
 			case zb::ZclCluster::IDENTIFY:
-				sys::out.write("Unknown Attribute\n");
+				terminal::out << ("Unknown Attribute\n");
 				break;
 			case zb::ZclCluster::ON_OFF:
-				sys::out.write("Unknown Attribute\n");
+				terminal::out << ("Unknown Attribute\n");
 				break;
 			default:
-				sys::out.write("Unknown Attribute\n");
+				terminal::out << ("Unknown Attribute\n");
 			}
 			break;
+		case zb::ZclCommand::REPORT_ATTRIBUTES:
+			terminal::out << "Report Attributes\n";
+			break;
 		case zb::ZclCommand::DEFAULT_RESPONSE:
-			sys::out.write("Default Response\n");
+			terminal::out << "Default Response\n";
 			break;
 		default:
-			sys::out.write("Unknown ZCL Command\n");
+			terminal::out << "Unknown ZCL Command\n";
 		}
 	} else if (frameType == zb::ZclFrameControl::TYPE_CLUSTER_SPECIFIC && !manufacturerSpecificFlag) {
 		switch (cluster) {
 		case zb::ZclCluster::BASIC:
-			sys::out.write("Cluster: Basic\n");
+			terminal::out << ("Cluster: Basic\n");
 			break;
 		case zb::ZclCluster::POWER_CONFIGURATION:
-			sys::out.write("Cluster: Power Configuration\n");
+			terminal::out << ("Cluster: Power Configuration\n");
 			break;
 		case zb::ZclCluster::ON_OFF:
-			sys::out.write("Cluster: On/Off; ");
+			terminal::out << ("Cluster: On/Off; ");
 			{
-				uint8_t command = r.uint8();
+				uint8_t command = r.u8();
 				switch (command) {
 				case 0:
-					sys::out.write("Off\n");
+					terminal::out << ("Off\n");
 					break;
 				case 1:
-					sys::out.write("On\n");
+					terminal::out << ("On\n");
 					break;
 				case 2:
-					sys::out.write("Toggle\n");
+					terminal::out << ("Toggle\n");
 					break;
 				default:
-					sys::out.write("Unknown Command\n");
+					terminal::out << ("Unknown Command\n");
 				}
 			}
 			break;
 		case zb::ZclCluster::GREEN_POWER:
-			sys::out.write("Cluster: Green Power; ");
+			terminal::out << ("Cluster: Green Power; ");
 			{
-				uint8_t command = r.uint8();
+				uint8_t command = r.u8();
 				switch (command) {
 				case 2:
-					sys::out.write("GP Proxy Commissioning Mode\n");
+					terminal::out << ("GP Proxy Commissioning Mode\n");
 					break;
 				default:
-					sys::out.write("Unknown Command\n");
+					terminal::out << ("Unknown Command\n");
 				}
 			}
 			break;
 		default:
-			sys::out.write("Unknown Cluster 0x" + hex(cluster) + "\n");
+			terminal::out << ("Unknown Cluster 0x" + hex(cluster) + "\n");
 		}
 	} else {
-		sys::out.write("Unknown ZCL Frame Type\n");
+		terminal::out << ("Unknown ZCL Frame Type\n");
 	}
 }
-
 
 
 int controlTransfer(libusb_device_handle *handle, radio::Request request, uint16_t wValue, uint16_t wIndex) {
@@ -931,6 +919,7 @@ int main(int argc, char const *argv[]) {
 	setKey(hashedTrustCenterLinkAesKey, hashedKey);
 	//printKey("hashedTrustCenterLinkAesKey", hashedTrustCenterLinkAesKey);
 	
+	bool haveKey = false;
 	int radioChannel = 15;
 	auto radioFlags = radio::ContextFlags::PASS_ALL;
 	for (int i = 1; i < argc; ++i) {
@@ -949,6 +938,7 @@ int main(int argc, char const *argv[]) {
 				key[i] = k[i];
 			
 			setKey(networkAesKey, key);
+			haveKey = true;
 		} else if (arg == "-i" || arg == "--input") {
 			// input pcap file
 			++i;
@@ -965,6 +955,8 @@ int main(int argc, char const *argv[]) {
 			outputFile = argv[i];
 		}
 	}
+	if (!haveKey)
+		terminal::err << "no network key given (-k x:y:z:...)\n";
 
 	// either read from input .pcap file or from usb device
 	if (inputFile.empty()) {
@@ -989,7 +981,7 @@ int main(int argc, char const *argv[]) {
 			libusb_device_descriptor desc;
 			int ret = libusb_get_device_descriptor(dev, &desc);
 			if (ret != LIBUSB_SUCCESS) {
-				sys::err.write("get device descriptor error: " + dec(ret) + '\n');
+				terminal::err << ("get device descriptor error: " + dec(ret) + '\n');
 				continue;
 			}
 			
@@ -1004,21 +996,21 @@ int main(int argc, char const *argv[]) {
 			libusb_device_handle *handle;
 			ret = libusb_open(dev, &handle);
 			if (ret != LIBUSB_SUCCESS) {
-				sys::err.write("open error: " + dec(ret) + '\n');
+				terminal::err << ("open error: " + dec(ret) + '\n');
 				continue;
 			}
 				
 			// set configuration (reset alt_setting, reset toggles)
 			ret = libusb_set_configuration(handle, 1);
 			if (ret != LIBUSB_SUCCESS) {
-				sys::err.write("set configuration error: " + dec(ret) + '\n');
+				terminal::err << ("set configuration error: " + dec(ret) + '\n');
 				continue;
 			}
 
 			// claim interface with bInterfaceNumber = 0
 			ret = libusb_claim_interface(handle, 0);
 			if (ret != LIBUSB_SUCCESS) {
-				sys::err.write("claim interface error: " + dec(ret) + '\n');
+				terminal::err << ("claim interface error: " + dec(ret) + '\n');
 				continue;
 			}
 
@@ -1042,52 +1034,55 @@ int main(int argc, char const *argv[]) {
 			FILE *pcap = fopen(outputFile.string().c_str(), "wb");
 			
 			// write pcap header
-			header.magic_number = 0xa1b2c3d4;
-			header.version_major = 2;
-			header.version_minor = 4;
-			header.thiszone = 0;
-			header.sigfigs = 0;
-			header.snaplen = 128;
-			header.network = 0xC3;
-			fwrite(&header, sizeof(header), 1, pcap);
-
+			if (pcap != nullptr) {
+				terminal::out << "capturing to " << str(outputFile.string().c_str()) << "\n";
+				header.magic_number = 0xa1b2c3d4;
+				header.version_major = 2;
+				header.version_minor = 4;
+				header.thiszone = 0;
+				header.sigfigs = 0;
+				header.snaplen = 128;
+				header.network = 0xC3;
+				fwrite(&header, sizeof(header), 1, pcap);
+			}
+			
 			// loop
-			sys::out.write("waiting for ieee802.15.4 packet from device ...\n");
+			terminal::out << "waiting for ieee802.15.4 packets from device on channel " << dec(radioChannel) << " ...\n";
 			//auto startTime = std::chrono::steady_clock::now();
 			uint32_t startTime = -1;
 			while (true) {
-				std::fill(std::begin(packet.data), std::end(packet.data), 0xAA);
-				
 				// receive from radio
 				ret = libusb_bulk_transfer(handle, 1 | usb::IN, packet.data, sizeof(packet.data), &length, 0);
 				if (ret != LIBUSB_SUCCESS) {
-					sys::err.write("transfer error: " + dec(ret) + '\n');
+					terminal::err << ("transfer error: " + dec(ret) + '\n');
 					break;
 				}
 				length -= 5;
-				sys::out.write("length: " + dec(length) + ", LQI: " + dec(packet.data[length]) + '\n');
+				terminal::out << ("length: " + dec(length) + ", LQI: " + dec(packet.data[length]) + '\n');
 				uint8_t const *ts = &packet.data[length + 1];
 				uint32_t timestamp = ts[0] | (ts[1] << 8) | (ts[2] << 16) | (ts[3] << 24);
 				if (startTime == -1)
 					startTime = timestamp;
 				timestamp -= startTime;
-				sys::out.write("timestamp: " + dec(timestamp / 1000000) + "." + dec(timestamp % 1000000) + '\n');
+				terminal::out << ("timestamp: " + dec(timestamp / 1000000) + "." + dec(timestamp % 1000000) + '\n');
 
 				if (length > 0) {
 					// write to pcap file
 					//auto now = std::chrono::steady_clock::now();
 					//auto timestamp = std::chrono::duration_cast<std::chrono::microseconds>(now - startTime).count();
-					packet.ts_sec = timestamp / 1000000;
-					packet.ts_usec = timestamp % 1000000;
-					packet.incl_len = length;
-					packet.orig_len = length + 2; // 2 byte crc not transferred
-					fwrite(&packet, 1, offsetof(PcapPacket, data) + packet.incl_len, pcap);
+					if (pcap != nullptr) {
+						packet.ts_sec = timestamp / 1000000;
+						packet.ts_usec = timestamp % 1000000;
+						packet.incl_len = length;
+						packet.orig_len = length + 2; // 2 byte crc not transferred
+						fwrite(&packet, 1, offsetof(PcapPacket, data) + packet.incl_len, pcap);
+						
+						// flush file so that we can interrupt any time
+						fflush(pcap);
+					}
 					
-					// flush file so that we can interrupt any time
-					fflush(pcap);
-				
 					// dissect
-					PacketReader r(packet.incl_len, packet.data);
+					DecryptReader r(length, packet.data);
 					handleIeee(r);
 				}
 			}
@@ -1105,7 +1100,7 @@ int main(int argc, char const *argv[]) {
 		PcapHeader header;
 		fread(&header, sizeof(header), 1, pcap);
 		if (header.network != 0xC3) {
-			sys::err.write("error: protocol not supported!\n");
+			terminal::err << ("error: protocol not supported!\n");
 		}
 
 		// read packets
@@ -1115,7 +1110,7 @@ int main(int argc, char const *argv[]) {
 			fread(packet.data, 1, packet.incl_len, pcap);
 			
 			// dissect packet
-			PacketReader r(packet.incl_len, packet.data);
+			DecryptReader r(packet.incl_len, packet.data);
 			handleIeee(r);
 		}
 	}

@@ -10,7 +10,7 @@ Coroutine handlePoti() {
 		bool activated;
 		
 		// wait until poti has changed for up to 2 seconds
-		switch (co_await select(poti::change(d, activated), timer::delay(2s))) {
+		switch (co_await select(poti::change(d, activated), timer::sleep(2s))) {
 		case 1:
 			if (!activated) {
 				debug::setRedLed(d & 1);
@@ -33,7 +33,7 @@ int main(void) {
 	loop::init();
 	timer::init();
 	poti::init();
-	out::init();	
+	gpio::init(); // for debug signals on pins
 
 	handlePoti();
 

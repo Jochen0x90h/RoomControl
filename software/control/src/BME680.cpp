@@ -118,7 +118,7 @@ AwaitableCoroutine BME680::measure() {
 	co_await spi::transfer(this->spiIndex, 2, this->buffer, 0, nullptr);
 
 	// wait until measurement is ready
-	co_await timer::delay(1s);
+	co_await timer::sleep(1s);
 
 	// read measurements
 	this->buffer[0] = READ(0x1D);

@@ -79,8 +79,8 @@ optional<float> parseFloat(String str) {
 	
 	return minus ? -value : value;
 }
-
-int toString(uint32_t value, char *str, int length, int digitCount) {
+/*
+int toString(int length, char *str, uint32_t value, int digitCount) {
 	// enforce valid parameters
 	if (digitCount > 10)
 		digitCount = 10;
@@ -103,16 +103,52 @@ int toString(uint32_t value, char *str, int length, int digitCount) {
 	}
 	return i;
 }
+*/
+String toString(Array<char, 11> buffer, int32_t value, int digitCount) {
+	// enforce valid parameters
+	if (digitCount > 10)
+		digitCount = 10;
+
+	// handle sign
+	bool hasSign = value < 0;
+	if (hasSign)
+		value = -value;
+	
+	// convert into buffer
+	char *end = buffer.data() + 10;
+	char *it = end;
+	while (value > 0 || digitCount > 0) {
+		--it;
+		*it = '0' + value % 10;
+		value /= 10;
+		--digitCount;
+	}
+	if (hasSign) {
+		--it;
+		*it = '-';
+	}
+	
+	return {int(end - it), it};
+}
+
 
 static char const *hexTable = "0123456789abcdef";
-
-int hexToString(uint64_t value, char *str, int length, int digitCount) {
+/*
+int hexToString(int length, char *str, uint64_t value, int digitCount) {
 	int l = min(length, digitCount);
 	for (int i = 0; i < l; ++i) {
 		str[i] = hexTable[(value >> (digitCount - 1 - i) * 4) & 0xf];
 	}
 	return l;
 }
+*/
+String toHexString(Array<char, 16> buffer, uint64_t value, int digitCount) {
+	for (int i = 0; i < digitCount; ++i) {
+		buffer[i] = hexTable[(value >> (digitCount - 1 - i) * 4) & 0xf];
+	}
+	return {digitCount, buffer.data()};
+}
+
 
 static float const roundTable[] = {0.5f,
 	0.05f, 0.005f, 0.0005f,
@@ -123,8 +159,8 @@ static float const powTable[] = {1.0f,
 	10.0f, 100.0f, 1000.0f,
 	10000.0f, 100000.0f, 1000000.0f,
 	10000000.0f, 100000000.0f, 1000000000.0f};
-
-int toString(float value, char *str, int length, int digitCount, int decimalCount) {
+/*
+int toString(int length, char *str, float value, int digitCount, int decimalCount) {
 	// enforce valid parameters
 	bool suppressTrailingZeros = decimalCount >= 0;
 	if (decimalCount < 0)
@@ -149,7 +185,7 @@ int toString(float value, char *str, int length, int digitCount, int decimalCoun
 	uint32_t fpart = uint32_t((value - float(ipart)) * powTable[decimalCount]);
 
 	// convert integer part
-	i += toString(ipart, str + i, length - i, (fpart == 0 && digitCount == 0) ? 1 : digitCount);
+	i += toString(length - i, str + i, ipart, (fpart == 0 && digitCount == 0) ? 1 : digitCount);
 
 	// remove trailing zeros
 	if (suppressTrailingZeros) {
@@ -181,4 +217,73 @@ int toString(float value, char *str, int length, int digitCount, int decimalCoun
 	}
 
 	return i;
+}
+*/
+
+
+String toString(Array<char, 21> buffer, float value, int digitCount, int decimalCount) {
+	// enforce valid parameters
+	if (digitCount > 10)
+		digitCount = 10;
+	bool suppressTrailingZeros = decimalCount >= 0;
+	if (decimalCount < 0)
+		decimalCount = -decimalCount;
+	if (decimalCount > 9)
+		decimalCount = 9;
+	
+	// handle sign
+	bool hasSign = value < 0;
+	if (value < 0)
+		value = -value;
+		
+	// round
+	value += roundTable[decimalCount];
+	
+	// extract integer and fractional part
+	// check with https://godbolt.org/ and parameters -mthumb -mcpu=cortex-m4 -mfloat-abi=hard -mfpu=fpv4-sp-d16 -Os
+	uint32_t ipart = uint32_t(value);
+	uint32_t fpart = uint32_t((value - float(ipart)) * powTable[decimalCount]);
+
+	// if fractional part and digit count of integer part are zero, set to one digit to get at least a '0'
+	if (fpart == 0 && digitCount == 0)
+		digitCount = 1;
+	
+	// convert integer part into buffer
+	char *end = buffer.data() + 11;
+	char *it = end;
+	while (ipart > 0 || digitCount > 0) {
+		--it;
+		*it = '0' + ipart % 10;
+		ipart /= 10;
+		--digitCount;
+	}
+	if (hasSign) {
+		--it;
+		*it = '-';
+	}
+	
+	// remove trailing zeros
+	if (suppressTrailingZeros) {
+		while (decimalCount > 0 && fpart % 10 == 0) {
+			fpart /= 10;
+			--decimalCount;
+		}
+	}
+
+	// convert decimal part into buffer
+	if (decimalCount > 0) {
+		*end = '.';
+		end += 1 + decimalCount;
+		
+		// convert decimal part
+		char *it = end;
+		while (decimalCount > 0) {
+			--decimalCount;
+			--it;
+			*it = '0' + fpart % 10;
+			fpart /= 10;
+		}
+	}
+
+	return {int(end - it), it};
 }

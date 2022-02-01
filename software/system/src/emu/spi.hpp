@@ -3,7 +3,7 @@
 #include "../spi.hpp"
 
 
-// internal interface if spi
+// internal interface of spi
 namespace spi {
 
 extern uint8_t airSensorRegisters[256];

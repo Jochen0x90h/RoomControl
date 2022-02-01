@@ -1,334 +1,248 @@
 #pragma once
 
-#include "MqttSnClient.hpp"
-#include "StringBuffer.hpp"
+#include "Message.hpp"
+#include "Publisher.hpp"
+#include "Subscriber.hpp"
+#include <network.hpp>
+#include <SystemTime.hpp>
+#include <MessageReader.hpp>
+#include <MessageWriter.hpp>
+#include <mqttsn.hpp>
+#include <BitField.hpp>
+#include <LinkedListNode.hpp>
+#include <StringBuffer.hpp>
+#include <StringHash.hpp>
+#include <convert.hpp>
 
 
 /**
- * MQTT-SN broker that serves down-links and connects to a gateway using MqttSnClient
- * Wireless implementation of should prioritize sending via DownLink over sending via UpLink to prevent congestion of broker
+ * MQTT-SN broker that clients can connect to and which connects to a gateway using MqttSnClient
  */
-class MqttSnBroker : public MqttSnClient {
+class MqttSnBroker {
 public:
-	// maximum number of remote clients that can connect
-	static constexpr int MAX_CLIENT_COUNT = 31;
-	static constexpr int LOCAL_CLIENT_INDEX = MAX_CLIENT_COUNT;
+	// Maximum length of Client ID according to the protocol spec in bytes
+	static constexpr int MAX_CLIENT_ID_LENGTH = 23;
+
+	// Maximum length of a message
+	static constexpr int MAX_MESSAGE_LENGTH = 64;
+
+	// reconnect time (after this time a new connection attempt to the gateway is made)
+	static constexpr SystemDuration RECONNECT_TIME = 60s;
+
+	// retransmission time (after this time a message is resent if no acknowledge was received)
+	static constexpr SystemDuration RETRANSMISSION_TIME = 1s;
+
+	// the MQTT broker disconnects us if we don't send anything in one and a half times the keep alive time
+	static constexpr SystemDuration KEEP_ALIVE_TIME = 60s;
+
+	// maximum number of connections (first for gateway, others for clients)
+	static constexpr int MAX_CONNECTION_COUNT = 32;
+
+	// maximum length of a topic
+	static constexpr int MAX_TOPIC_LENGTH = 40;
 
 	// maximum number of topics that can be handled
 	static constexpr int MAX_TOPIC_COUNT = 1024;
-	
-	// size of buffer for retained messages
-	static constexpr int RETAINED_BUFFER_SIZE = 8192;
-	
-	
 
-	// error types
-	
-	// error parsing the broker message, e.g. too short
-	static constexpr int ERROR_BROKER_MESSAGE = 3;
-
-	// client returned mqttsn::ReturnCode::REJECTED_CONGESTED
-	static constexpr int ERROR_BROKER_CONGESTED = 4;
-
-	// message type for broker is not supported
-	static constexpr int ERROR_BROKER_UNSUPPORTED = 5;
+	// number of coroutines for receiving and publishing
+	static constexpr int PUBLISH_COUNT = 8;
+	static constexpr int RECEIVE_COUNT = 4;
+	static constexpr int FORWARD_COUNT = 8;
 
 
-	struct TopicResult {
-		uint16_t topicId;
-		Result result;
-	};
-
-
-	MqttSnBroker();
+	MqttSnBroker(uint16_t localPort);
 
 	/**
-	 * Returns true if send queue to gateway is full
+	 * Connect to the gateway
+	 * @param gatewayEndpoint udp endpoint of gateway
+	 * @param name name of this client
+	 * @param cleanSession start with a clean session, i.e. clear all previous subscriptions and will topic/message
+	 * @param willFlag if set, the gateway will request will topic and message
 	 */
-	bool isClientBusy() {return MqttSnClient::isBusy();}
+	[[nodiscard]] AwaitableCoroutine connect(network::Endpoint const &gatewayEndpoint, String name,
+		bool cleanSession = true, bool willFlag = false);
 
-	/**
-	 * Returns true if send queue to clients of this broker is full
-	 */
-	bool isBrokerBusy() {return this->busy;}
-
-	/**
-	 * Register a topic at this broker and its gateway if connected.
-	 * @param topicId receives the topic id. Must be the same id if it was non-zero
-	 * @param topicName topic name (path without wildcards)
-	 * @return result of registering the topic at the broker
-	 */
-	Result registerTopic(uint16_t &topicId, String topicName);
-
-	/**
-	 * Unregister a topic from this broker (currently not supported)
-	 * @param topicId topic id to unregister, gets set to zero
-	 */
-	Result unregisterTopic(uint16_t &topicId) {
-		assert(topicId != 0);
-		topicId = 0;
-		return Result::OK;
+	bool isGatewayConnected() {
+		return this->connectedFlags.get(0) != 0;
 	}
 
 	/**
-	 * Publish a message on a topic
-	 * @param topicId topic id obtained using registerTopic()
-	 * @param data payload data
-	 * @param length payload data length
-	 * @param qos quality of service: 0, 1, 2 or -1
-	 * @param retain retain message and deliver to new subscribers
-	 * @return result result code
+	 * Keep connection to gateway alive
 	 */
-	Result publish(uint16_t topicId, uint8_t const *data, int length, int8_t qos, bool retain = false);
+	[[nodiscard]] AwaitableCoroutine keepAlive();
 
-	Result publish(uint16_t topicId, String data, int8_t qos, bool retain = false) {
-		return publish(topicId, reinterpret_cast<uint8_t const*>(data.data), data.length, qos, retain);
-	}
 
 	/**
-	 * Subscribe to a topic. Multiple subscriptions to the same topic are reference counted
-	 * @param topic topic filter (path that may contain wildcards)
-	 * @param qos quality of service of the subscription, qos of a published message is minimum of publishing and subscription
-	 * @return topic id and result of registering at gateway
+	 * Add a publisher to the device. Gets inserted into a linked list
+	 * @param deviceId device id
+	 * @param publisher publisher to insert
 	 */
-	//TopicResult subscribeTopic(String topicFilter, int8_t qos);
+	void addPublisher(String topicName, Publisher &publisher);
+
+	/**
+	 * Add a subscriber to the device. Gets inserted into a linked list
+	 * @param deviceId device id
+	 * @param publisher subscriber to insert
+	 */
+	void addSubscriber(String topicName, Subscriber &subscriber);
+
 	
-	/**
-	 * Subscribe to a topic at this broker and its gateway if connected. Multiple subscriptions to the same topic are
-	 * reference counted.
-	 * @param topicId receives the topic id. A new reference is counted if it was zero, otherwise it must be the same id
-	 * @param topic topic filter (path that may contain wildcards)
-	 * @param qos quality of service of the subscription, qos of a published message is minimum of publishing and subscription
-	 * @return result of subscribung to the topic at the broker
-	 */
-	Result subscribeTopic(uint16_t &topicId, String topicFilter, int8_t qos);
-
-	/**
-	 * Increment the reference counter of an existing subscription
-	 * @param topicId topic id of existing subscription. Nothing happens if topicId is zero
-	 */
-	void addSubscriptionReference(uint16_t topicId) {
-		if (topicId != 0)
-			++getTopic(topicId).subscribeCount;
-	}
-
-	/**
-	 * Unsubscribe from a topic.
-	 * @param topicId topic id, must match topicFilter, gets set to zero
-	 * @param topicFilter topic filter (path that may contain wildcards)
-	 * @return result containing success status and message id
-	 */
-	Result unsubscribeTopic(uint16_t &topicId, String topicFilter);
-
-protected:
-
-// user callbacks
-// --------------
-
-	/**
-	 * A message was published on a topic. Does not get called for messages with zero length
-	 * @param topicId id of topic
-	 * @param data message data
-	 * @param length message length, at least 1
-	 * @param qos quality of service
-	 * @param retain true if this is a retained message
-	 * @return return code
-	 */
-	virtual void onPublished(uint16_t topicId, uint8_t const *data, int length, int8_t qos, bool retain) = 0;
-
-protected:
-
-// MqttSnClient user callbacks
-// ---------------------------
-	
-	void onRegistered(uint16_t msgId, String topicName, uint16_t topicId) override;
-
-	void onSubscribed(uint16_t msgId, String topicName, uint16_t topicId, int8_t qos) override;
-
-	mqttsn::ReturnCode onPublish(uint16_t topicId, uint8_t const *data, int length, int8_t qos, bool retain) override;
-
-protected:
-
-// transport
-// ---------
-
-	void onDownReceived(uint16_t clientId, uint8_t const *data, int length) override;
-	
-	void onDownSent() override;
-
-	void onDownTimeout();
-    
-private:
-
-// internal
-// --------	
-	
-	struct ClientInfo {
-		// client id used by the down-link
-		uint16_t clientId;
-		
-		// index of this client info
-		uint16_t index;
-		
-		// client name
-		StringBuffer<32> name;
-		
-		void disconnect() {
-			this->clientId = 0;
-			this->name.clear();
+	struct PacketReader : public MessageReader {
+		/**
+		 * Construct on message and get length from first bytes of messages
+		 */
+		PacketReader(uint8_t *message) {
+			if (message[0] == 1) {
+				// length is three bytes
+				this->current = message + 3;
+				this->end = message + ((message[1] << 8) | message[2]);
+			} else {
+				// length is one byte
+				this->current = message + 1;
+				this->end = message + message[0];
+			}
 		}
 	};
 	
-	struct TopicInfo {
-		// hash of topic string or zero for unused entry
-		uint32_t hash;
+	struct PacketWriter : public MessageWriter {
+		/**
+		 * Construct on message and allocate space for the length byte
+		 */
+		template <int N>
+		PacketWriter(uint8_t (&message)[N]) : MessageWriter(message + 1), begin(message)
+#ifdef EMU
+			, end(message + N)
+#endif
+		{}
 		
-		// retained message
-		uint16_t retainedOffset;
-		uint8_t retainedAllocated;
-		uint8_t retainedLength;
+		/**
+		 * Set length of packet and return as array
+		 */
+		Array<uint8_t const> finish() {
+#ifdef EMU
+			assert(this->current < this->end);
+#endif
+			int length = this->current - this->begin;
+			this->begin[0] = length;
+			return {length, this->begin};
+		}
+		
+		uint8_t *begin;
+#ifdef EMU
+		uint8_t *end;
+#endif
+	};
 
-		// for each client two bits that indicate subscription qos (0-2: qos, 3: not subscribed)
-		uint32_t clientQosArray[(MAX_CLIENT_COUNT + 1 + 15) / 16];
+protected:
+
+	bool isConnected(int connectionIndex) {
+		return this->connectedFlags.get(connectionIndex) != 0;
+	}
+
+	/**
+	 * Get or add topic by name and return its index
+	 * @param name topic name (path without wildcards)
+	 * @param add add new topic if true
+	 * @return -1 if no new topic could be found or added
+	 */
+	int obtainTopicIndex(String name);
+
+	// get a message id for publish messages of qos 1 or 2 to detect resent messages and associate acknowledge
+	uint16_t getNextMsgId() {
+		int i = this->nextMsgId + 1;
+		return this->nextMsgId = i + (i >> 16);
+	}
+
+	// publish messages of local publishers to gateway and clients
+	Coroutine publish();
+
+	// receive and distribute messages
+	Coroutine receive();
+
+	// publish messages from one connection to other connections (gateway and clients)
+	Coroutine forward();
+
+
+	struct ConnectionInfo {
+		// endpoint (address and port) of client or gateway
+		network::Endpoint endpoint;
+
+		// name of client or this broker
+		StringBuffer<MAX_CLIENT_ID_LENGTH> name;
+
+		// check if connection is active
+		//bool isConnected() {return this->endpoint.port != 0;}
+	};
+
+	struct TopicInfo {
+		// for each connection two bits that indicate subscription qos (0-2: qos, 3: not subscribed)
+		BitField<MAX_CONNECTION_COUNT, 2> qosArray;
 
 		// topic id at gateway (broker at other side of up-link)
 		uint16_t gatewayTopicId;
-		
-		// quality of service level granted by gateway
-		int8_t gatewayQos;
-		
-		// reference counter for number of subscriptions
-		uint8_t subscribeCount;
-		
-		// return true if at least one remote client has subscribed to the topic
-		bool isRemoteSubscribed();
-		
-		// get maximum quality of service of all remote client subscriptions
-		int8_t getMaxQos();
-		
-		int8_t getQos(int clientIndex) {
-			int shift = (clientIndex << 1) & 31;
-			return (((this->clientQosArray[clientIndex >> 4] >> shift) + 1) & 3) - 1;
+
+		// true if locally subscribed to a topic (using addSubsriber)
+		bool subscribed;
+
+		// identification of last message to suppress duplicates
+		uint8_t lastConnectionIndex;
+		uint16_t lastMsgId;
+
+		// retained message
+		//uint16_t retainedOffset;
+		//uint8_t retainedAllocated;
+		//uint8_t retainedLength;
+
+		bool isRegisteredAtGateway() {return this->gatewayTopicId != 0;}
+		bool isSubscribedAtGateway() {return this->qosArray.get(0) != 3;}
+		bool isClientSubscribed() {
+			if (this->subscribed)
+				return true;
+			for (int i = 1; i < MAX_CONNECTION_COUNT; ++i) {
+				if (this->qosArray.get(i) != 3)
+					return true;
+			}
+			return false;
 		}
-		
-		void setQos(int clientIndex, int8_t qos);
-
-		// Clear qos of a client and return previous value
-		int8_t clearQos(int clientIndex);
 	};
 
-	union ClientSet {
-		// set contains only one client
-		uint16_t clientId;
-		
-		// set contains multiple clients indicated by flags referencing the clients array
-		uint32_t flags[(MAX_CLIENT_COUNT + 1 + 31) / 32];
-	};
-	
-	struct MessageInfo {
-		// a flag for each client in clients array. If bit 0 is set, a client id is in bits 1-16
-		ClientSet clientSet;
-		
-		// offset in message buffer
-		uint16_t offset;
+	// barrier to wake up keepAlive()
+	Event keepAliveEvent;
 
-		// length of message
-		uint16_t length;
-
-		// message id
-		uint16_t msgId;
-		
-		// time when the message was sent the first time
-		SystemTime sentTime;
-	};
-
-	struct Message {
-		uint8_t *data;
-		//int length;
-	};
-
-	// Find client by id. Returns nullptr if not found
-	ClientInfo *findClient(uint16_t clientId);
-
-	/**
-	 * Get or add topic by name
-	 * @param name topic name (path without wildcards)
-	 * @return 0 if no new topic could be allocated
-	 */
-	uint16_t getTopicId(String name, bool add = true);
-
-	/**
-	 * Get topic by valid id
-	 * @param topicId valid topic id, must not be 0
-	 * @return topic info
-	 */
-	TopicInfo &getTopic(uint16_t topicId) {return this->topics[topicId - 1];}
-
-	// Find topic by id. Returns nullptr if not found
-	TopicInfo *findTopic(uint16_t topicId);
-
-	// Find topic by gateway topic id. Returns nullptr if not found
-	uint16_t findTopicId(uint16_t gatewayTopicId);
-
-	
-	// Insert space into buffer for retained messages
-	uint16_t insertRetained(int offset, int length);
-
-	// Insert space into buffer for retained messages
-	uint16_t eraseRetained(int offset, int length);
-
-
-	// Get a message id. Use only for retries of the same message until it was acknowledged by the gateway
-	uint16_t getNextMsgId() {return this->nextMsgId = this->nextMsgId == 0xffff ? 1 : this->nextMsgId + 1;}
-
-	// allocate a send message with given length or 0 if no space available
-	Message addSendMessage(int length, ClientSet clientSet, uint16_t msgId = 0);
-
-	// send the current message and make next message current or try to garbage collect it if msgId is zero
-	void sendCurrentMessage();
-
-	// resend oldest message that is still in the queue
-	void resend();
-
-	// remove sent message with given id from message queue
-	void removeSentMessage(uint16_t msgId, uint16_t clientId = MAX_CLIENT_COUNT);
-	
-	// send publish message to gateway, clients and local client
-	void sendPublish(uint16_t topicId, TopicInfo *topic, uint8_t const *data, int length, int8_t qos, bool retain,
-		uint16_t excludeClientId = 0);
-		
-	// send a disconnect message to a client
-	void sendDisconnect(uint16_t clientId);
-	
-
-	// timer index
-	static int const timerIndex = TIMER_MQTTSN_BROKER;
-
-	// clients
-	ClientInfo clients[MAX_CLIENT_COUNT];
-	
-	// topics
-	int topicCount = 0;
-	std::map<std::string, uint16_t> topicNames;
-	TopicInfo topics[MAX_TOPIC_COUNT];
-	
-	// space retained messages
-	int retainedSize = 0;
-	uint8_t retained[RETAINED_BUFFER_SIZE];
-
-	// id for next message to gateway to be able to associate the reply with a request
+	// message id generator
 	uint16_t nextMsgId = 0;
 
-	// send message queue
-	int sendMessagesHead = 0;
-	int sendMessagesCurrent = 0;
-	int sendMessagesClientIndex = 0;
-	int sendMessagesTail = 0;
-	MessageInfo sendMessages[MAX_SEND_COUNT];
-	int sendBufferHead = 0;
-	int sendBufferFill = 0;
-	uint8_t sendBuffer[SEND_BUFFER_SIZE];
-	bool busy = false;
+	// connections to gateway and clients
+	ConnectionInfo connections[MAX_CONNECTION_COUNT];
+	BitField<MAX_CONNECTION_COUNT, 1> connectedFlags;
 
-	bool resendPending = false;
+	// topics
+	StringHash<MAX_TOPIC_COUNT * 4 / 3, MAX_TOPIC_COUNT, MAX_TOPIC_COUNT * 32, TopicInfo> topics;
+
+	// subscribers
+	SubscriberList subscribers;
+
+	// publishers
+	Event publishEvent;
+	PublisherList publishers;
+	Publisher *currentPublisher = nullptr;
+	BitField<MAX_CONNECTION_COUNT, 1> dirtyFlags;
+
+
+	struct AckParameters {
+		uint8_t connectionIndex;
+		mqttsn::MessageType msgType;
+		uint16_t msgId;
+		int &length;
+		uint8_t *message;
+	};
+	Waitlist<AckParameters> ackWaitlist;
+
+	struct ForwardParameters {
+		uint16_t &sourceConnectionIndex;
+		uint16_t &topicIndex;
+		int &length;
+		uint8_t *message;
+	};
+	Waitlist<ForwardParameters> forwardWaitlist;
 };

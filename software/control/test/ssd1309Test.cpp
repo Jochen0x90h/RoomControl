@@ -21,7 +21,7 @@ Coroutine draw() {
 		y = (y + 1) & (DISPLAY_HEIGHT - 1);
 		
 		co_await display.set(bitmap);
-		co_await timer::delay(200ms);
+		co_await timer::sleep(200ms);
 		
 		debug::toggleRedLed();
 	};
@@ -33,7 +33,7 @@ int main(void) {
 	timer::init();
 	display::init();
 	poti::init();
-	out::init();
+	gpio::init();
 	
 	draw();
 	

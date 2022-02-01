@@ -15,27 +15,6 @@ SystemTime next;
 Waitlist<SystemTime> waitlist;
 
 
-enum State : uint8_t {
-	STOPPED = 0,
-	RUNNING = 1
-};
-
-struct TimerOld {
-	// state
-	State state = STOPPED;
-	
-	// timeout time
-	SystemTime time;
-		
-	// timeout callback
-	std::function<void ()> onTimeout;
-};
-
-// list of timers
-TimerOld timersOld[4];
-
-
-
 // event loop handler chain
 loop::Handler nextHandler = nullptr;
 void handle() {
@@ -54,25 +33,6 @@ void handle() {
 					timer::next = time;
 				return false;
 			});
-
-			for (TimerOld &t : timersOld) {
-				// check if timer is running
-				if (t.state == RUNNING) {
-					// check if timeout time reached
-					if (t.time == timeout) {
-						// stop timer
-						t.state = STOPPED;
-						
-						// call handler
-						if (t.onTimeout)
-							t.onTimeout();
-					} else {
-						// check if this timer is the next to elapse
-						if (t.time < timer::next)
-							timer::next = t.time;
-					}
-				}
-			}
 			NRF_RTC0->CC[0] = timer::next.value << 4;
 		
 			// repeat until next timeout is in the future
@@ -88,6 +48,7 @@ void handle() {
 }
 
 void init() {
+	// check if already initialized
 	if (timer::nextHandler != nullptr)
 		return;
 
@@ -109,7 +70,7 @@ SystemTime now() {
 	return timer::systemTime;
 }
 
-Awaitable<SystemTime> wait(SystemTime time) {
+Awaitable<SystemTime> sleep(SystemTime time) {
 	// check if this time is the next to elapse
 	if (time < timer::next) {
 		timer::next = time;
@@ -122,43 +83,6 @@ Awaitable<SystemTime> wait(SystemTime time) {
 	}
 	
 	return {timer::waitlist, time};
-}
-
-void setHandler(int index, std::function<void ()> const &onTimeout) {
-	assert(uint(index) < TIMER_WAITING_COUNT);
-	TimerOld &t = timer::timersOld[index];
-
-	t.onTimeout = onTimeout;
-}
-
-void start(int index, SystemTime time) {
-	assert(uint(index) < TIMER_WAITING_COUNT);
-	TimerOld &t = timer::timersOld[index];
-
-	// set state to running
-	t.state = RUNNING;
-	
-	// set timeout time
-	t.time = time;
-		
-	// check if this timer is the next to elapse
-	if (time < timer::next) {
-		timer::next = time;
-		NRF_RTC0->CC[0] = timer::next.value << 4;
-	}
-
-	// check if timeout already elapsed
-	if (time > now()) {
-		NRF_RTC0->EVENTS_COMPARE[0] = Generated;
-	}
-}
-
-void stop(int index) {
-	assert(uint(index) < TIMER_WAITING_COUNT);
-	TimerOld &t = timer::timersOld[index];
-
-	// set state to stopped
-	t.state = STOPPED;	
 }
 
 } // namespace timer

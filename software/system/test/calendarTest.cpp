@@ -13,7 +13,7 @@ Coroutine handleSecondTick() {
 int main(void) {
 	loop::init();
 	calendar::init();
-	out::init();
+	gpio::init(); // for debug signals on pins
 	
 	handleSecondTick();
 

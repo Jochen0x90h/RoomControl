@@ -1,10 +1,10 @@
 #pragma once
 
-#include "Configuration.hpp"
-#include <Interface.hpp>
-#include "Storage2.hpp"
-#include <DataReader.hpp>
-#include <DataWriter.hpp>
+#include "Interface.hpp"
+#include "Storage.hpp"
+#include <Configuration.hpp>
+#include <MessageReader.hpp>
+#include <MessageWriter.hpp>
 #include <appConfig.hpp>
 
 
@@ -20,11 +20,15 @@ public:
 	 * @param configuration global configuration
 	 * @param stateManager persistent state manager for counters
 	 */
-	BusInterface(Configuration &configuration, PersistentStateManager &stateManager);
+	BusInterface(PersistentStateManager &stateManager);
 
 	~BusInterface() override;
-
+	
+	// start the interface
+	Coroutine start(DataBuffer<16> const &key, AesKey const &aesKey);
+	
 	void setCommissioning(bool enabled) override;
+	
 
 	int getDeviceCount() override;
 
@@ -32,9 +36,9 @@ public:
 
 	Array<EndpointType const> getEndpoints(DeviceId deviceId) override;
 
-	void addSubscriber(DeviceId deviceId, Subscriber &subscriber) override;
+	void addPublisher(DeviceId deviceId, uint8_t endpointIndex, Publisher &publisher) override;
 
-	void addPublisher(DeviceId deviceId, Publisher &publisher) override;
+	void addSubscriber(DeviceId deviceId, uint8_t endpointIndex, Subscriber &subscriber) override;
 
 	class MessageReader : public DecryptReader {
 	public:
@@ -66,11 +70,13 @@ public:
 
 private:
 
-	// reference to global configuration (array contains only one element)
-	Configuration &configuration;
+	// counters
+	PersistentState<uint32_t> securityCounter;
+	
+	// configuration
+	DataBuffer<16> const *key;
+	AesKey const *aesKey;
 
-	// initialize the interface
-	Coroutine init(PersistentStateManager &stateManager);
 
 	AwaitableCoroutine commission();
 	
@@ -109,9 +115,9 @@ private:
 		Device *allocate() const;
 	};
 
-	class Device : public Storage2::Element<DeviceFlash> {
+	class Device : public Storage::Element<DeviceFlash> {
 	public:
-		Device(DeviceFlash const &flash) : Storage2::Element<DeviceFlash>(flash) {}
+		Device(DeviceFlash const &flash) : Storage::Element<DeviceFlash>(flash) {}
 		
 		SubscriberList subscribers;
 		PublisherList publishers;
@@ -119,7 +125,7 @@ private:
 
 public:
 	// list of commissioned devices
-	Storage2::Array<Device> devices;
+	Storage::Array<Device> devices;
 	
 private:
 	bool receive(MessageReader &r);
@@ -130,6 +136,5 @@ private:
 	// publish messages to devices
 	Coroutine publish();
 
-	PersistentState<uint32_t> securityCounter;
 	Event publishEvent;
 };

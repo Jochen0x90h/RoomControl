@@ -5,7 +5,7 @@
 #include <debug.hpp>
 #include <loop.hpp>
 #include <StringBuffer.hpp>
-
+#include <StringOperators.hpp>
 
 
 // device descriptor
@@ -49,7 +49,7 @@ static const UsbConfiguration configurationDescriptor = {
 		.bDescriptorType = usb::DescriptorType::INTERFACE,
 		.bInterfaceNumber = 0,
 		.bAlternateSetting = 0,
-		.bNumEndpoints = array::size(configurationDescriptor.endpoints),
+		.bNumEndpoints = array::count(configurationDescriptor.endpoints),
 		.bInterfaceClass = 0xff, // no class
 		.bInterfaceSubClass = 0xff,
 		.bInterfaceProtocol = 0xff,
@@ -90,7 +90,7 @@ Coroutine getId() {
 			debug::toggleRedLed();
 
 		// wait for 1s
-		co_await timer::delay(1s);
+		co_await timer::sleep(1s);
 	}
 }
 
@@ -106,7 +106,7 @@ Coroutine getRegisters() {
 		debug::toggleBlueLed();
 
 		// wait for 5s
-		co_await timer::delay(5s);
+		co_await timer::sleep(5s);
 	}
 }
 
@@ -129,10 +129,10 @@ Coroutine measure() {
 			+ "Humidity: " + flt(sensor.getHumidity(), 1, 1) + "%\n"
 			+ "Gas: " + flt(sensor.getGasResistance(), 1, 1) + "Ω\n";
 
-		co_await usb::send(1, string.length(), string.data());
+		co_await usb::send(1, string.count(), string.data());
 		debug::toggleRedLed();
 
-		co_await timer::delay(10s);
+		co_await timer::sleep(10s);
 	}
 }
 
@@ -141,7 +141,7 @@ int main(void) {
 	loop::init();
 	timer::init();
 	spi::init();
-	out::init();
+	gpio::init();
 	usb::init(
 		[](usb::DescriptorType descriptorType) {
 			switch (descriptorType) {

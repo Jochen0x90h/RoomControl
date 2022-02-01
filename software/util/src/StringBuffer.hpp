@@ -1,21 +1,41 @@
 #pragma once
 
-#include "StringOperators.hpp"
-#include "convert.hpp"
-#include "util.hpp"
+#include "String.hpp"
 
 
 /**
  * String buffer with fixed maximum length
+ * @tparam N number of 8 bit chars in the buffer
  */
-template <int L>
+template <int N>
 class StringBuffer {
+	template <int M>
+	friend int toString(int length, char *str, StringBuffer<M> const &b);
+
 public:
 	StringBuffer() : index(0) {}
 
 	template <typename T>
 	StringBuffer(T const &str) : index(0) {
 		(*this) += str;
+	}
+
+	bool isEmpty() const {return this->index == 0;}
+
+	int count() const {return this->index;}
+
+	void clear() {
+		this->index = 0;
+#ifdef DEBUG
+		this->buffer[0] = 0;
+#endif
+	}
+
+	void resize(int length) {
+		this->index = length;
+#ifdef DEBUG
+		this->buffer[this->index] = 0;
+#endif
 	}
 
 	template <typename T>
@@ -25,66 +45,36 @@ public:
 	}
 
 	StringBuffer &operator +=(char ch) {
-		if (this->index < L)
+		if (this->index < N)
 			this->buffer[this->index++] = ch;
-		#ifdef DEBUG
+#ifdef DEBUG
 		this->buffer[this->index] = 0;
-		#endif
+#endif
 		return *this;
 	}
 
-	StringBuffer &operator +=(const String &str) {
-		char *dst = this->buffer + this->index;
-		int l = min(str.length, L - this->index);
-		array::copy(dst, dst + l, str.begin());
+	StringBuffer &operator +=(String const &str) {
+		int l = min(N - this->index, str.count());
+		array::copy(l, this->buffer + this->index, str.data);
 		this->index += l;
-		#ifdef DEBUG
+#ifdef DEBUG
 		this->buffer[this->index] = 0;
-		#endif
+#endif
 		return *this;
 	}
 
 	template <typename T>
-	StringBuffer &operator +=(Dec<T> dec) {
-		int32_t value = int32_t(dec.value);
-		if (std::is_signed<T>::value && value < 0) {
-			if (this->index < L)
-				this->buffer[this->index++] = '-';
-			value = -value;
-		}
-		this->index += toString(uint32_t(value), this->buffer + this->index, L - this->index, dec.digitCount);
-		#ifdef DEBUG
-		this->buffer[this->index] = 0;
-		#endif
+	StringBuffer &operator +=(T const &value) {
+		*this << value;
 		return *this;
 	}
 
-	//StringBuffer &operator +=(int dec) {
-	//	return operator +=(Dec<int>{dec, 1});
-	//}
-
-	template <typename T>
-	StringBuffer &operator +=(Hex<T> hex) {
-		this->index += hexToString(uint64_t(hex.value), this->buffer + this->index, L - this->index, hex.digitCount);
-		#ifdef DEBUG
-		this->buffer[this->index] = 0;
-		#endif
-		return *this;
+	// fulfill stream concept
+	StringBuffer &operator <<(char ch) {
+		return *this += ch;
 	}
-	
-	StringBuffer &operator +=(Flt flt) {
-		this->index += toString(flt.value, this->buffer + this->index, L - this->index, flt.digitCount,
-			flt.decimalCount);
-		#ifdef DEBUG
-		this->buffer[this->index] = 0;
-		#endif
-		return *this;
-	}
-
-	template <typename A, typename B>
-	StringBuffer &operator +=(Plus<A, B> const &plus) {
-		(*this) += plus.a;
-		return (*this) += plus.b;
+	StringBuffer &operator <<(String const &str) {
+		return *this += str;
 	}
 
 	char operator [](int index) const {return this->buffer[index];}
@@ -92,37 +82,19 @@ public:
 
 	char const *data() const {return this->buffer;}
 
-	operator String() {
+	operator String() const {
 		return {this->index, this->buffer};
 	}
 	String string() const {
 		return {this->index, this->buffer};
 	}
-
-	void clear() {
-		this->index = 0;
-		#ifdef DEBUG
-		this->buffer[0] = 0;
-		#endif
-	}
-
-	bool isEmpty() {return this->index == 0;}
-
-	int length() {return this->index;}
-
-	void resize(int length) {
-		this->index = length;
-		#ifdef DEBUG
-		this->buffer[this->index] = 0;
-		#endif
-	}
-
+	
 protected:
 
-	#ifdef DEBUG
-	char buffer[L + 1];
-	#else
-	char buffer[L];
-	#endif
-	typename UInt<L>::Type index;
+#ifdef DEBUG
+	char buffer[N + 1];
+#else
+	char buffer[N];
+#endif
+	typename UInt<N>::Type index;
 };

@@ -159,10 +159,10 @@ void UARTE0_UART0_IRQHandler(void) {
 		} else {
 			// check if request buffer full
 			int requestIndex = bus::requestIndex;
-			if (requestIndex < array::size(bus::requestData)) {
+			if (requestIndex < array::count(bus::requestData)) {
 				bus::requestData[requestIndex] = NRF_UART0->RXD;
 				bus::requestIndex = requestIndex + 1;
-				if (requestIndex == array::size(bus::requestData)) {
+				if (requestIndex == array::count(bus::requestData)) {
 					// indicate that requests are ready
 					bus::requestReady = true;
 				}

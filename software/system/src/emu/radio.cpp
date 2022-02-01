@@ -1,6 +1,6 @@
-#include <radio.hpp>
+#include "../radio.hpp"
 #include <usbDefs.hpp>
-#include <emu/global.hpp>
+//#include <emu/global.hpp>
 #include <emu/loop.hpp>
 #include <crypt.hpp>
 #include <ieee.hpp>
@@ -19,8 +19,7 @@ int channel;
 // context
 // -------
 
-uint32_t longAddressLo;
-uint32_t longAddressHi;
+uint64_t longAddress;
 
 struct Context {
 	ContextFlags volatile flags;
@@ -71,7 +70,7 @@ struct Context {
 				if ((flags & ContextFlags::PASS_DEST_LONG) != 0) {
 					uint32_t longAddressLo = mac[5] | (mac[6] << 8) | (mac[7] << 16) | (mac[8] << 24);
 					uint32_t longAddressHi = mac[9] | (mac[10] << 8) | (mac[11] << 16) | (mac[12] << 24);
-					if (longAddressLo == radio::longAddressLo && longAddressHi == radio::longAddressHi)
+					if (longAddressLo == uint32_t(radio::longAddress) && longAddressHi == uint32_t(radio::longAddress >> 32))
 						return true;
 				}
 			}
@@ -112,7 +111,7 @@ libusb_device_handle *device = nullptr;
 // ----------------------
 
 // little endian 32 bit integer
-#define LE_INT32(value) uint8_t(value), uint8_t(value >> 8), uint8_t(value >> 16), uint8_t(value >> 24)
+#define I32L(value) uint8_t(value), uint8_t(value >> 8), uint8_t(value >> 16), uint8_t(value >> 24)
 
 static AesKey const defaultAesKey = {{0x5a696742, 0x6565416c, 0x6c69616e, 0x63653039, 0x166d75b9, 0x730834d5, 0x1f6155bb, 0x7c046582, 0xe62066a9, 0x9528527c, 0x8a4907c7, 0xf64d6245, 0x018a08eb, 0x94a25a97, 0x1eeb5d50, 0xe8a63f15, 0x2dff5170, 0xb95d0be7, 0xa7b656b7, 0x4f1069a2, 0xf7066bf4, 0x4e5b6013, 0xe9ed36a4, 0xa6fd5f06, 0x83c904d0, 0xcd9264c3, 0x247f5267, 0x82820d61, 0xd01eebc3, 0x1d8c8f00, 0x39f3dd67, 0xbb71d006, 0xf36e8429, 0xeee20b29, 0xd711d64e, 0x6c600648, 0x3801d679, 0xd6e3dd50, 0x01f20b1e, 0x6d920d56, 0x41d66745, 0x9735ba15, 0x96c7b10b, 0xfb55bc5d}};
 
@@ -219,7 +218,7 @@ void SendParameters::remove() noexcept {
 
 
 // event loop handler chain
-loop::Handler nextHandler;
+loop::Handler nextHandler = nullptr;
 void handle(Gui &gui) {
 	for (int index = 0; index < RADIO_CONTEXT_COUNT; ++index) {
 		auto &context = radio::contexts[index];
@@ -232,12 +231,14 @@ void handle(Gui &gui) {
 		});
 	
 		while (true) {
+			// check if usb device is present
 			if (radio::device != nullptr) {
 				// receive buffer: length, payload, LQI
 				radio::Packet packet;
 
 				int length;
-				int ret = libusb_bulk_transfer(radio::device, 1 + index | usb::IN, packet + 1, array::size(packet) - 1, &length, 1);
+				int ret = libusb_bulk_transfer(radio::device, 1 + index | usb::IN, packet + 1,
+					array::count(packet) - 1, &length, 1);
 				if (ret != LIBUSB_SUCCESS)
 					break;
 				if (length == 1) {
@@ -281,7 +282,7 @@ void handle(Gui &gui) {
 
 	// emulated devices on user interface
 	gui.newLine();
-	int id = 0x308419a4;
+	int id = 0x308419a4; // random number to identify gui components
 	for (GreenPowerDevice &device : devices) {
 		int rocker = gui.doubleRocker(id++);
 		if (rocker != -1) {
@@ -305,13 +306,14 @@ void handle(Gui &gui) {
 				uint8_t packet[] = {0, // length of packet
 					0x01, 0x08, uint8_t(device.counter), 0xff, 0xff, 0xff, 0xff, // mac header
 					0x0c, // network header
-					LE_INT32(device.deviceId), // deviceId
+					I32L(device.deviceId), // deviceId
 					0xe0, 0x02, 0xc5, 0xf2, // command and flags
 					0xa0, 0xa1, 0xa2, 0xa3, 0xa4, 0xa5, 0xa6, 0xa7, 0xa8, 0xa9, 0xaa, 0xab, 0xac, 0xad, 0xae, 0xaf, // key
-					LE_INT32(0), // mic
-					LE_INT32(device.counter), // counter
-					50}; // LQI
-				packet[0] = array::size(packet) - 1 - 1 + 2; // + 2 for crc which is not in the packet
+					I32L(0), // mic
+					I32L(device.counter), // counter
+					50, // LQI (extra data)
+					0, 0, 0, 0}; // timestamp (extra data)
+				packet[0] = array::count(packet) - 1 - 5 + 2; // + 2 for crc which is not in the packet
 
 				// nonce
 				Nonce nonce(device.deviceId, device.deviceId);
@@ -323,7 +325,7 @@ void handle(Gui &gui) {
 				// payload is key
 				uint8_t *message = packet + 17;
 				
-				encrypt(message, nonce, header, headerLength, message, 16, 4, defaultAesKey);
+				encrypt(message, header, headerLength, message, 16, 4, nonce, defaultAesKey);
 
 				radio::receiveData(device.channel, packet);
 			} else {
@@ -341,12 +343,13 @@ void handle(Gui &gui) {
 				uint8_t packet[] = {0, // length of packet
 					0x01, 0x08, uint8_t(device.counter), 0xff, 0xff, 0xff, 0xff, // mac header
 					0x8c, 0x30, // network header
-					LE_INT32(device.deviceId), // deviceId
-					LE_INT32(device.counter), // counter
+					I32L(device.deviceId), // deviceId
+					I32L(device.counter), // counter
 					command,
 					0x00, 0x00, 0x00, 0x00, // mic
-					50}; // LQI
-				packet[0] = array::size(packet) - 1 - 1 + 2; // + 2 for crc which is not in the packet
+					50, // LQI (extra data)
+					0, 0, 0, 0}; // timestamp (extra data)
+				packet[0] = array::count(packet) - 1 - 5 + 2; // + 2 for crc which is not in the packet
 
 				// nonce
 				Nonce nonce(device.deviceId, device.counter);
@@ -358,7 +361,7 @@ void handle(Gui &gui) {
 				// message: empty payload and mic
 				uint8_t *message = packet + 19;
 
-				encrypt(message, nonce, header, headerLength, message, 0, 4, device.key);
+				encrypt(message, header, headerLength, message, 0, 4, nonce, device.key);
 
 				radio::receiveData(device.channel, packet);
 			}
@@ -390,56 +393,64 @@ int controlTransfer(libusb_device_handle *handle, Request request, uint16_t wVal
 }
 
 void init() {
+	// check if already initialized
+	if (radio::nextHandler != nullptr)
+		return;
+
+	// add to event loop handler chain
+	radio::nextHandler = loop::addHandler(handle);
+	
 	// radio connected via USB
 	int r = libusb_init(NULL);
-	if (r < 0)
-		return;
+	if (r >= 0) {
+		// get list of devices
+		libusb_device **devs;
+		ssize_t deviceCount = libusb_get_device_list(NULL, &devs);
+		if (deviceCount >= 0) {
+			for (int i = 0; i < deviceCount; ++i) {
+				libusb_device *dev = devs[i];
+				
+				// get device descriptor
+				libusb_device_descriptor desc;
+				int ret = libusb_get_device_descriptor(dev, &desc);
+				if (ret < 0)
+					continue;
+				
+				if (desc.idVendor == 0x1915 && desc.idProduct == 0x1337) {
+					// open device
+					libusb_device_handle *device;
+					ret = libusb_open(dev, &device);
+					if (ret != LIBUSB_SUCCESS)
+						continue;
+					
+					// set configuration (reset alt_setting, reset toggles)
+					ret = libusb_set_configuration(device, 1);
+					if (ret != LIBUSB_SUCCESS)
+						continue;
 
-	libusb_device **devs;
-	ssize_t cnt = libusb_get_device_list(NULL, &devs);
-	if (cnt < 0) {
-		libusb_exit(NULL);
-		return;
-	}
+					// claim interface with bInterfaceNumber = 0
+					ret = libusb_claim_interface(device, 0);
+					if (ret != LIBUSB_SUCCESS)
+						continue;
 
-	for (int i = 0; devs[i]; ++i) {
-		libusb_device *dev = devs[i];
-		
-		// get device descriptor
-		libusb_device_descriptor desc;
-		int ret = libusb_get_device_descriptor(dev, &desc);
-		if (ret < 0)
-			continue;
-		
-		if (desc.idVendor == 0x1915 && desc.idProduct == 0x1337) {
-			// open device
-			libusb_device_handle *device;
-			ret = libusb_open(dev, &device);
-			if (ret != LIBUSB_SUCCESS)
-				continue;
+					// reset the radio
+					controlTransfer(device, Request::RESET, 0, 0);
+
+					radio::device = device;
+					
+					break;
+				}
+			}
+			libusb_free_device_list(devs, true);
 			
-			// set configuration (reset alt_setting, reset toggles)
-			ret = libusb_set_configuration(device, 1);
-			if (ret != LIBUSB_SUCCESS)
-				continue;
-
-			// claim interface with bInterfaceNumber = 0
-			ret = libusb_claim_interface(device, 0);
-			if (ret != LIBUSB_SUCCESS)
-				continue;
-
-			// reset the radio
-			controlTransfer(device, Request::RESET, 0, 0);
-
-			radio::device = device;
-			
-			break;
+			// check if usb device was opened
+			if (radio::device == nullptr)
+				libusb_exit(NULL);
 		}
 	}
 	
-	
 	// initialize emulated green power devices (on user interface)
-	for (int i = 0; i < array::size(devices); ++i) {
+	for (int i = 0; i < array::count(devices); ++i) {
 		GreenPowerDeviceData const &d = deviceData[i];
 		GreenPowerDevice &device = devices[i];
 		device.channel = 11; // default channel
@@ -492,8 +503,6 @@ void init() {
 		fwrite(&header, sizeof(header), 1, radio::pcapOut);
 	}
 */
-	// add to event loop handler chain
-	radio::nextHandler = loop::addHandler(handle);
 }
 
 void start(int channel) {
@@ -535,18 +544,16 @@ void enableReceiver(bool enable) {
 }
 
 void setLongAddress(uint64_t longAddress) {
-	radio::longAddressLo = uint32_t(longAddress);
-	radio::longAddressHi = uint32_t(longAddress >> 32);
+	radio::longAddress = longAddress;
+
+	if (radio::device != nullptr) {
+		// todo: transfer to device
+
+	}
 }
 
-void setFlags(int index, ContextFlags flags) {
-	assert(uint(index) < RADIO_CONTEXT_COUNT);
-	Context &c = radio::contexts[index];
-
-	c.flags = flags;
-
-	if (radio::device != nullptr)
-		controlTransfer(radio::device, Request::SET_FLAGS, uint16_t(flags), index);
+uint64_t getLongAddress() {
+	return radio::longAddress;
 }
 
 void setPan(int index, uint16_t pan) {
@@ -567,6 +574,16 @@ void setShortAddress(int index, uint16_t shortAddress) {
 
 	if (radio::device != nullptr)
 		controlTransfer(radio::device, Request::SET_SHORT_ADDRESS, shortAddress, index);
+}
+
+void setFlags(int index, ContextFlags flags) {
+	assert(uint(index) < RADIO_CONTEXT_COUNT);
+	Context &c = radio::contexts[index];
+
+	c.flags = flags;
+
+	if (radio::device != nullptr)
+		controlTransfer(radio::device, Request::SET_FLAGS, uint16_t(flags), index);
 }
 
 Awaitable<ReceiveParameters> receive(int index, Packet &packet) {
@@ -630,45 +647,3 @@ Awaitable<SendParameters> send(int index, uint8_t *packet, uint8_t &result) {
 }
 
 } // namespace radio
-
-/*
-WaitlistElementValue<radio::ReceiveParameters>::WaitlistElementValue(WaitlistElementValue &&e) noexcept
-	: WaitlistElement(std::move(e)), value(std::move(e.value))
-{
-}
-	
-void WaitlistElementValue<radio::ReceiveParameters>::add(WaitlistHead &head) noexcept {
-	WaitlistElement::add(head);
-}
-
-void WaitlistElementValue<radio::ReceiveParameters>::remove() noexcept {
-	WaitlistElement::remove();
-}
-
-
-WaitlistElementValue<radio::SendParameters>::WaitlistElementValue(WaitlistElementValue &&e) noexcept
-	: WaitlistElement(std::move(e)), value(std::move(e.value))
-{
-}
-	
-void WaitlistElementValue<radio::SendParameters>::add(WaitlistHead &head) noexcept {
-	WaitlistElement::add(head);
-}
-
-void WaitlistElementValue<radio::SendParameters>::remove() noexcept {
-	WaitlistElement::remove();
-
-	// send mac counter to device to cancel the send operation
-	if (radio::device != nullptr) {
-		uint8_t *packet = this->value.packet;
-		uint8_t &macCounter = packet[3];
-		int length = packet[0] - 2;
-		int index = packet[1 + length]; // index is stored in send extra data
-		int transferred;
-
-		int ret = libusb_bulk_transfer(radio::device, 1 + index | usb::OUT, &macCounter, 1, &transferred, 10000);
-		if (ret == 0) {
-		}
-	}
-}
-*/

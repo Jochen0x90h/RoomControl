@@ -11,7 +11,9 @@ volatile int readIndex;
 volatile int writeIndex;
 
 void init() {
-	rng::readIndex = array::size(queue);
+	// does not matter if init() gets called multiple times
+
+	rng::readIndex = array::count(queue);
 	rng::writeIndex = 0;
 	NRF_RNG->INTENSET = N(RNG_INTENSET_VALRDY, Enabled);
 	enableInterrupt(RNG_IRQn);
@@ -31,10 +33,10 @@ void RNG_IRQHandler(void) {
 	
 		int r = rng::readIndex;
 		int w = rng::writeIndex;
-		if (r - w > array::size(queue))
-			w = r - array::size(queue);
+		if (r - w > array::count(queue))
+			w = r - array::count(queue);
 		
-		queue[w & (array::size(queue) - 1)] = NRF_RNG->VALUE;
+		queue[w & (array::count(queue) - 1)] = NRF_RNG->VALUE;
 		
 		++w;
 		
@@ -53,7 +55,7 @@ uint8_t int8() {
 	int index = rng::readIndex;
 	rng::readIndex = index + 1;
 	NRF_RNG->TASKS_START = Trigger;
-	return queue[index & (array::size(queue) - 1)];
+	return queue[index & (array::count(queue) - 1)];
 }
 
 uint64_t int64() {
@@ -63,7 +65,7 @@ uint64_t int64() {
 	int index = (rng::readIndex + 7) & ~7;
 	rng::readIndex = index + 8;
 	NRF_RNG->TASKS_START = Trigger;
-	return *(uint64_t*)&queue[index & (array::size(queue) - 1)];
+	return *(uint64_t*)&queue[index & (array::count(queue) - 1)];
 }
 
 } // namespace rng

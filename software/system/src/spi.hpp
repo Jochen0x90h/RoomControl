@@ -27,13 +27,14 @@ void init();
 #endif
 
 /**
- * Transfer data to/from SPI device. Use co_await to await end of transfer
+ * Transfer data to/from SPI device
  * @param index index of spi channel (number of channels defined by SPI_CS_PINS in sysConfig.hpp)
  * @param writeLength length of data to write
  * @param writeData data to write, must be in ram, not in flash
  * @param readLength length of data to read
  * @param readData data to read
+ * @return use co_await on return value to await end of transfer
  */
-Awaitable<Parameters> transfer(int index, int writeLength, uint8_t const *writeData, int readLength, uint8_t *readData);
+[[nodiscard]] Awaitable<Parameters> transfer(int index, int writeLength, uint8_t const *writeData, int readLength, uint8_t *readData);
 
 } // namespace spi

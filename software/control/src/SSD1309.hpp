@@ -4,7 +4,6 @@
 #include <appConfig.hpp>
 #include <Coroutine.hpp>
 #include <display.hpp>
-#include <sys.hpp>
 
 
 /**
@@ -13,24 +12,23 @@
 class SSD1309 {
 public:
 	
-	~SSD1309() {}
+	/**
+	 * Initializate the display
+	 * @return use co_await on return value to await end of initialization
+	 */
+	[[nodiscard]] AwaitableCoroutine init();
 
 	/**
-	 * Suspend execution using co_await until initialization is done
+	 * Power up Vcc (if supported) and enable the display
+	 * @return use co_await on return value to await end of operation
 	 */
-	AwaitableCoroutine init();
+	[[nodiscard]] AwaitableCoroutine enable();
 
 	/**
-	 * Suspend execution using co_await until display is enabled.
-	 * Powers down Vcc (if supported) and disables the display
+	 * Disable the display and power down Vcc (if supported)
+	 * @return use co_await on return value to await end of operation
 	 */
-	AwaitableCoroutine enable();
-
-	/**
-	 * Suspend execution using co_await until display is disabled
-	 * Disable the display and power down Vcc (if supported). Calls onReady when finished
-	 */
-	AwaitableCoroutine disable();
+	[[nodiscard]] AwaitableCoroutine disable();
 
 	/**
 	 * Returns true if the display is enabled
@@ -38,17 +36,18 @@ public:
 	bool isEnabled() {return this->enabled;}
 
 	/**
-	 * Suspend execution using co_await until contrast of display is set
-	 *
+	 * Set contrast of display
+	 * @return use co_await on return value to await end of operation
 	 */
-	AwaitableCoroutine setContrast(uint8_t contrast);
+	[[nodiscard]] AwaitableCoroutine setContrast(uint8_t contrast);
 
 	/**
-	 * Suspend execution using co_await until until whole display content is set
+	 * Set content of whole display
 	 * @param bitmap bitmap to display
+	 * @return use co_await on return value to await end of operation
 	 */
 	auto set(Bitmap<DISPLAY_WIDTH, DISPLAY_HEIGHT> const &bitmap) {
-		return display::send(0, array::size(bitmap.data), bitmap.data);
+		return display::send(0, array::count(bitmap.data), bitmap.data);
 	}
 
 protected:

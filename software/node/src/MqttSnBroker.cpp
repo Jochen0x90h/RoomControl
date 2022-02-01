@@ -1,1141 +1,1125 @@
 #include "MqttSnBroker.hpp"
+#include <timer.hpp>
+#include <StringOperators.hpp>
+#include <appConfig.hpp>
+
+#define DEBUG_PRINT
+
+#ifdef DEBUG_PRINT
+#include <terminal.hpp>
+#endif
+
+
+// default quality of service
+constexpr int8_t QOS = 1;
+
+// number of retries when a send fails
+constexpr int MAX_RETRY = 2;
 
 // min for qos (quality of service)
 constexpr int8_t min(int8_t x, int8_t y) {return x < y ? x : y;}
 
 
-MqttSnBroker::MqttSnBroker() {
-	timer::setHandler(this->timerIndex, [this]() {onDownTimeout();});
 
-	// init clients
-	for (int i = 0; i < MAX_CLIENT_COUNT; ++i) {
-		ClientInfo &client = this->clients[i];
-		client.clientId = 0;
-		client.index = i;
+MqttSnBroker::MqttSnBroker(uint16_t localPort) {
+	network::setLocalPort(NETWORK_MQTT, localPort);
+
+	// init connections
+	for (ConnectionInfo &connection : this->connections) {
+		connection.endpoint.port = 0;
 	}
+	this->connectedFlags.clear();
 
-	// init topics
-	for (int i = 0; i < MAX_TOPIC_COUNT; ++i) {
-		TopicInfo &topic = this->topics[i];
-		topic.hash = 0;
-	}
-
-	memset(this->sendBuffer, 0, SEND_BUFFER_SIZE);
+	// start coroutines
+	for (int i = 0; i < PUBLISH_COUNT; ++i)
+		publish();
+	for (int i = 0; i < RECEIVE_COUNT; ++i)
+		receive();
+	for (int i = 0; i < FORWARD_COUNT; ++i)
+		forward();
 }
 
-
-MqttSnBroker::Result MqttSnBroker::registerTopic(uint16_t &topicId, String topicName) {
-	if (!isValid(topicName)) {
-		assert(false);
-		return Result::INVALID_PARAMETER;
-	}
-	
-	// get or add topic by name
-	uint16_t newTopicId = getTopicId(topicName);
-	if (newTopicId == 0) {
-		assert(false);
-		return Result::OUT_OF_MEMORY;
-	}
-	
-	// assert that both topic ids are the same
-	assert(topicId == 0 || newTopicId == topicId);
-
-	Result result = Result::OK;
-	TopicInfo &topic = getTopic(newTopicId);
-		
-	// check if we need to register the topic at the gateway
-	if (MqttSnClient::isConnected() && topic.gatewayTopicId == 0) {
-		MessageResult r = MqttSnClient::registerTopic(topicName);
-		topic.gatewayTopicId = r.msgId; // store message id in topic id until client receives REGACK
-		topic.gatewayQos = -1; // mark as waiting for topic id from gateway
-		result = r.result;
-	}
-	topicId = newTopicId;
-std::cout << "registerTopic " << topicName << " " << topicId << std::endl;
-	return result;
-}
-
-MqttSnBroker::Result MqttSnBroker::publish(uint16_t topicId, uint8_t const *data, int length, int8_t qos, bool retain) {
-	if (isClientBusy() || isBrokerBusy())
-		return Result::BUSY;
-
-	TopicInfo *topic = findTopic(topicId);
-	if (topic == nullptr || length > MAX_MESSAGE_LENGTH - 7)
-		return Result::INVALID_PARAMETER;
-
-	// publish to all clients and local client
-	sendPublish(topicId, topic, data, length, qos, retain);
-
-	// publish to gateway
-	if (topic->gatewayTopicId != 0) {
-		MqttSnClient::publish(topic->gatewayTopicId, data, length, qos, retain, topic->gatewayQos < 0);//waitForTopicId);
-	}
-
-	return Result::OK;
-}
-/*
-MqttSnBroker::TopicResult MqttSnBroker::subscribeTopic(String topicFilter, int8_t qos) {
-	if (!isValid(topicFilter))
-		return {0, Result::INVALID_PARAMETER};
-
-	// get or add topic by name
-	uint16_t topicId = getTopicId(topicFilter);
-	if (topicId == 0)
-		return {0, Result::OUT_OF_MEMORY};
-
-	Result result = Result::OK;
-	TopicInfo &topic = getTopic(topicId);
-	
-	// check if we need to subscribe topic at the gateway
-	if (MqttSnClient::isConnected() && qos > topic.getMaxQos())
-		result = MqttSnClient::subscribeTopic(topicFilter, qos).result;
-
-	//todo
-	// check if there is a retained message for this topic
-		
-	// set quality of service of subscription (overwrites previous value)
-	topic.setQos(LOCAL_CLIENT_INDEX, qos);
-	
-	// increment subscription counter
-	++topic.subscribeCount;
-std::cout << "subscribeTopic " << topicFilter << " " << topicId << " (" << int(topic.subscribeCount) << ")" << std::endl;
-	return {topicId, result};
-}
-*/
-MqttSnBroker::Result MqttSnBroker::subscribeTopic(uint16_t &topicId, String topicFilter, int8_t qos) {
-	if (!isValid(topicFilter)) {
-		assert(false);
-		return Result::INVALID_PARAMETER;
-	}
-
-	// get or add topic by name
-	uint16_t newTopicId = getTopicId(topicFilter);
-	if (newTopicId == 0) {
-		assert(false);
-		return Result::OUT_OF_MEMORY;
-	}
-
-	Result result = Result::OK;
-	TopicInfo &topic = getTopic(newTopicId);
-	
-	// check if we need to subscribe topic at the gateway
-	if (MqttSnClient::isConnected() && qos > topic.getMaxQos())
-		result = MqttSnClient::subscribeTopic(topicFilter, qos).result;
-
-	//todo
-	// check if there is a retained message for this topic
-		
-	// set quality of service of subscription (overwrites previous value)
-	topic.setQos(LOCAL_CLIENT_INDEX, qos);
-	
-	// increment subscription counter
-	if (topicId == 0)
-		++topic.subscribeCount;
-	else
-		assert(topicId == newTopicId);
-	topicId = newTopicId;
-std::cout << "subscribeTopic " << topicFilter << " " << topicId << " (" << int(topic.subscribeCount) << ")" << std::endl;
-	return result;
-}
-
-MqttSnBroker::Result MqttSnBroker::unsubscribeTopic(uint16_t &topicId, String topicFilter) {
-	if (!isValid(topicFilter)) {
-		assert(false);
-		return Result::INVALID_PARAMETER;
-	}
-
-	// check if not subscribed
-	if (topicId == 0)
-		return Result::OK;
-
-	// get topic by name
-	uint16_t newTopicId = getTopicId(topicFilter, false);
-	if (newTopicId == 0) {
-		// error topic not found
-		assert(false);
-		return Result::INVALID_PARAMETER;
-	}
-
-	// assert that both topic ids are the same
-	assert(topicId == newTopicId);
-	
-	// get topic by id
-	TopicInfo &topic = getTopic(newTopicId);
-
-	// assert that subscribe count is not zero
-	assert(topic.subscribeCount != 0);
-
-	// check subscription counter
-	if (--topic.subscribeCount == 0) {
-		// remove subscription of local client from flags
-		int8_t qos = topic.clearQos(LOCAL_CLIENT_INDEX);
-	
-		// check if maximum qos was reduced
-		int8_t maxQos = topic.getMaxQos();
-		if (maxQos < qos) {
-			if (maxQos == -1) {
-				// all subscriptions removed: unsubscribe at the gateway
-				MqttSnClient::unsubscribeTopic(topicFilter);
-				topic.gatewayTopicId = 0;
-				topic.gatewayQos = 0;
-			} else {
-				// subscribe at the gateway with reduced qos
-				MqttSnClient::subscribeTopic(topicFilter, qos);
-			}
-		}
-	}
-std::cout << "unsubscribeTopic " << topicFilter << " " << topicId << " (" << int(topic.subscribeCount) << ")" << std::endl;
-	topicId = 0;
-	return Result::OK;
-}
-
-
-// MqttSnClient user callbacks
-// ---------------------------
-
-void MqttSnBroker::onRegistered(uint16_t msgId, String topicName, uint16_t gatewayTopicId) {
-	// topic was registered at gateway
-	uint16_t topicId = getTopicId(topicName);
-	std::cout << topicName << " -> " << topicId << " " << gatewayTopicId << std::endl;
-	if (topicId != 0) {
-		TopicInfo &topic = getTopic(topicId);
-		topic.gatewayTopicId = gatewayTopicId;
-		if (topic.gatewayQos < 0)
-			topic.gatewayQos = 0;
-		//topic.waitForTopicId = false;
-	}
-}
-
-void MqttSnBroker::onSubscribed(uint16_t msgId, String topicName, uint16_t gatewayTopicId, int8_t qos) {
-	// topic was subscribed at gateway
-	uint16_t topicId = getTopicId(topicName);
-	std::cout << topicName << " -> " << topicId << " " << gatewayTopicId << std::endl;
-	if (topicId != 0) {
-		TopicInfo &topic = getTopic(topicId);
-		topic.gatewayTopicId = gatewayTopicId;
-		topic.gatewayQos = qos;
-	}
-}
-
-mqttsn::ReturnCode MqttSnBroker::onPublish(uint16_t gatewayTopicId, uint8_t const *data, int length, int8_t qos,
-	bool retain)
+AwaitableCoroutine MqttSnBroker::connect(network::Endpoint const &gatewayEndpoint, String name,
+	bool cleanSession, bool willFlag)
 {
-	// check if we are able to forward to our clients
-	if (isBrokerBusy())
-		return mqttsn::ReturnCode::REJECTED_CONGESTED;
+	uint8_t message[6 + MAX_CLIENT_ID_LENGTH];
+	ConnectionInfo &gateway = this->connections[0];
 
-	uint16_t topicId = findTopicId(gatewayTopicId);
-	TopicInfo *topic = findTopic(topicId);
-	if (topic == nullptr)
-		return mqttsn::ReturnCode::REJECTED_INVALID_TOPIC_ID;
+	// reset granted qos and topic id for connection to gateway
+	for (auto [topicName, topic] : this->topics) {
+		topic.qosArray.set(0, 3);
+		topic.gatewayTopicId = 0;
+	}
 
-	// publish to all clients and local client
-	sendPublish(topicId, topic, data, length, qos, retain);
-	
-	return mqttsn::ReturnCode::ACCEPTED;
+	// temporarily set connection to gateway as connected so that CONNACK passes in receive()
+	gateway.endpoint = gatewayEndpoint;
+	gateway.name = name;
+	this->connectedFlags.set(0, 1);
+
+	for (int retry = 0; retry <= MAX_RETRY; ++retry) {
+		// send connect message
+		{
+			auto flags = (cleanSession ? mqttsn::Flags::CLEAN_SESSION : mqttsn::Flags::NONE)
+				| (willFlag ? mqttsn::Flags::WILL : mqttsn::Flags::NONE);
+
+			PacketWriter w(message);
+			w.e8<mqttsn::MessageType>(mqttsn::MessageType::CONNECT);
+			w.e8(flags); // flags
+			w.u8(0x01); // protocol name/version
+			w.u16B(KEEP_ALIVE_TIME.toSeconds());
+			w.string(name);
+			co_await network::send(NETWORK_MQTT, gateway.endpoint, w.finish());
+		}
+
+		// wait for a reply from the gateway
+		{
+			int length = array::count(message);
+			int s = co_await select(this->ackWaitlist.wait(uint8_t(0), mqttsn::MessageType::CONNACK,
+				uint16_t(0), length, message), timer::sleep(RECONNECT_TIME));
+
+			// check if we received a message
+			if (s == 1) {
+				// get topic id and return code
+				MessageReader r(length, message);
+				auto returnCode = r.e8<mqttsn::ReturnCode>();
+
+				// check if connect request was accepted
+				if (returnCode == mqttsn::ReturnCode::ACCEPTED) {
+					// set connected flag and reset qos for each topic
+					// todo: don't clear everything if cleanSession is false
+
+					// set connected flag
+					this->connectedFlags.set(0, 1);
+
+					co_return;
+				}
+			}
+		}
+	}
+
+	// mark connection to gateway as not connected again
+	this->connectedFlags.set(0, 0);
 }
 
-// transport
-// ---------
+AwaitableCoroutine MqttSnBroker::keepAlive() {
+	uint8_t message[MAX_MESSAGE_LENGTH];
+	ConnectionInfo &gateway = this->connections[0];
 
-void MqttSnBroker::onDownReceived(uint16_t clientId, uint8_t const *data, int length) {
-	// get message type
-	mqttsn::MessageType messageType = mqttsn::MessageType(data[0]);
+	// set event so that all existing topics get registered/subscribed immediately
+	this->keepAliveEvent.set();
 
-	switch (messageType) {
-	case mqttsn::CONNECT:
-		// a new client connects
-		if (length < 6) {
-			onError(ERROR_MESSAGE, messageType);
-		} else {
-			// create reply message
-			Message m = addSendMessage(2, {clientId});
-			if (m.data != nullptr) {
-				// serialize message
-				m.data[0] = mqttsn::CONNACK;
-				
-				// add new client
-				ClientInfo *client = findClient(0);
-				if (client != nullptr) {
-					uint8_t flags = data[1];
-					uint8_t protocolId = data[2];
-					uint16_t duration = mqttsn::getUShort(data + 3);
-					String clientName(length - 5, data + 5);
-					client->name = clientName;
+	// ping gateway as long as we are connected
+	while (isGatewayConnected()) {
+		int s = co_await select(timer::sleep(KEEP_ALIVE_TIME), this->keepAliveEvent.wait());
 
-					m.data[1] = uint8_t(mqttsn::ReturnCode::ACCEPTED);
-				} else {
-					// error: too many clients
-					m.data[1] = uint8_t(mqttsn::ReturnCode::REJECTED_CONGESTED);
-				}
-
-				// send message
-				if (!isDownSendBusy())
-					sendCurrentMessage();
-			} else {
-				// error: send message queue full
-			}
-		}
-		break;
-	case mqttsn::DISCONNECT:
-		// a client disconnects or wants to go asleep
-		{
-			// create reply message
-			Message m = addSendMessage(1, {clientId});
-			if (m.data != nullptr) {
-				// serialize message
-				m.data[0] = mqttsn::DISCONNECT;
-
-				// disconnect client
-				ClientInfo *client = findClient(clientId);
-				if (client != nullptr) {
-					// todo: handle duration
-					uint16_t duration = 0;
-					if (length >= 3)
-						duration = mqttsn::getUShort(data + 1);
-
-					client->disconnect();
-					
-					// clear subscriptions of this client from all topics
-					for (int i = 0; i < this->topicCount; ++i) {
-						this->topics[i].clearQos(client->index);
-					}
-				}
-				
-				// send reply message
-				if (!isDownSendBusy())
-					sendCurrentMessage();
-			} else {
-				// error: send message queue full
-			}
-		}
-		break;
-	case mqttsn::REGISTER:
-		// client wants to register a topic so that it can publish to it
-		if (length < 6) {
-			onError(ERROR_MESSAGE, messageType);
-		} else {
-			// get client
-			ClientInfo *client = findClient(clientId);
-			if (client != nullptr) {
-				// deserialize message
-				uint16_t msgId = mqttsn::getUShort(data + 3);
-				String topicName(length - 5, data + 5);
-
-				// create reply message
-				Message m = addSendMessage(6, {clientId});
-				if (m.data != nullptr) {
-					// serialize message
-					m.data[0] = mqttsn::REGACK;
-					mqttsn::setUShort(m.data + 3, msgId);
-
-					// get or add topic by name
-					uint16_t topicId = getTopicId(topicName);
-					if (topicId != 0) {
-						mqttsn::setUShort(m.data + 1, topicId);
-						TopicInfo &topic = getTopic(topicId);
-						
-						// check if we need to register the topic at gateway
-						Result result = Result::OK;
-						if (topic.gatewayTopicId == 0)
-							result = MqttSnClient::registerTopic(topicName).result;
-						
-						if (result == Result::OK) {
-							// serialize reply message
-							m.data[5] = uint8_t(mqttsn::ReturnCode::ACCEPTED);
-						} else {
-							// error: could not register at gateway
-							m.data[5] = uint8_t(mqttsn::ReturnCode::REJECTED_CONGESTED);
-						}
-					} else {
-						// error: could not allocate a topic id
-						mqttsn::setUShort(m.data + 1, 0);
-						m.data[5] = uint8_t(mqttsn::ReturnCode::REJECTED_CONGESTED);
+		if (s == 1) {
+			if (isGatewayConnected()) {
+				int retry;
+				for (retry = 0; retry <= MAX_RETRY; ++retry) {
+					// send idle ping
+					{
+						PacketWriter w(message);
+						w.e8<mqttsn::MessageType>(mqttsn::MessageType::PINGREQ);
+						co_await network::send(NETWORK_MQTT, gateway.endpoint, w.finish());
 					}
 
-					// send reply message
-					if (!isDownSendBusy())
-						sendCurrentMessage();
-				} else {
-					// error: send message queue full
+					// wait for ping response
+					{
+						int length = array::count(message);
+						int s = co_await select(this->ackWaitlist.wait(uint8_t(0), mqttsn::MessageType::PINGRESP,
+							uint16_t(0), length, message), timer::sleep(RETRANSMISSION_TIME));
+						if (s == 1)
+							break;
+					}
 				}
-			} else {
-				// error: client is not connected, send DISCONNECT
-				sendDisconnect(clientId);
+
+				// if maximum number of retries is exceeded, we assume to be disconnected from the gateway
+				if (retry > MAX_RETRY) {
+					this->connectedFlags.set(0, 0);
+					break;
+				}
 			}
-		}
-		break;
-	case mqttsn::PUBLISH:
-		// client wants to publish a message on a topic
-		if (length < 6) {
-			onError(ERROR_MESSAGE, messageType);
 		} else {
-			// get client
-			ClientInfo *client = findClient(clientId);
-			if (client != nullptr) {
-				// deserialize message
-				uint8_t flags = data[1];
-				bool dup = mqttsn::getDup(flags);
-				int8_t qos = mqttsn::getQos(flags);
-				bool retain = mqttsn::getRetain(flags);
-				mqttsn::TopicType topicType = mqttsn::getTopicType(flags);
-				uint16_t topicId = mqttsn::getUShort(data + 2);
-				uint16_t msgId = mqttsn::getUShort(data + 4);
-				uint8_t const *payload = data + 6;
-				int payloadLength = length - 6;
+			// register/subscribe topics at gateway
+			this->keepAliveEvent.clear();
+			for (auto [topicName, topic] : this->topics) {
+				bool clientSubscribed = topic.isClientSubscribed();
 
-				// create reply message
-				Message m = addSendMessage(6, {clientId});
-				if (m.data != nullptr) {
-					// serialize message
-					m.data[0] = mqttsn::PUBACK;
-					mqttsn::setUShort(m.data + 1, topicId);
-					mqttsn::setUShort(m.data + 3, msgId);
+				// determine action for this topic
+				bool reg = !topic.isRegisteredAtGateway();
+				bool sub = clientSubscribed && !topic.isSubscribedAtGateway();
+				bool unsub = !clientSubscribed && topic.isSubscribedAtGateway();
+				if (isGatewayConnected() && (reg || sub || unsub)) {
+					// generate message id
+					uint16_t msgId = getNextMsgId();
 
-					if (topicType == mqttsn::TopicType::NORMAL) {
-						// find topic by id
-						TopicInfo *topic = findTopic(topicId);
-						if (topic != nullptr) {
-							
-							if (!isClientBusy() && !isBrokerBusy()) {
-								// publish to clients except sender and local client
-								sendPublish(topicId, topic, data, length, qos, retain, clientId);
+					int retry;
+					if (sub) {
+						// subscribe
+						for (retry = 0; retry <= MAX_RETRY; ++retry) {
+							// send subscribe message
+							{
+								PacketWriter w(message);
+								w.e8(mqttsn::MessageType::SUBSCRIBE);
+								auto flags = mqttsn::Flags::TOPIC_TYPE_NORMAL | mqttsn::makeQos(QOS);
+								w.e8(flags);
+								w.u16B(msgId);
+								w.string(topicName);
+								co_await network::send(NETWORK_MQTT, gateway.endpoint, w.finish());
+							}
 
-								// publish to gateway
-								if (topic->gatewayTopicId != 0) {
-									MqttSnClient::publish(topic->gatewayTopicId, data, length,
-										qos, retain, topic->gatewayQos < 0);//waitForTopicId);
+							// wait for acknowledge from gateway
+							{
+								int length = array::count(message);
+								int s = co_await select(this->ackWaitlist.wait(uint8_t(0), mqttsn::MessageType::SUBACK, msgId, length,
+									message), timer::sleep(RETRANSMISSION_TIME));
+
+								// check if still connected
+								if (!isGatewayConnected())
+									break;
+
+								// check if we received a message
+								if (s == 1) {
+									MessageReader r(length, message);
+
+									// get flags, topic id and return code
+									auto flags = r.e8<mqttsn::Flags>();
+									auto qos = mqttsn::getQos(flags);
+									auto topicId = r.u16B();
+									r.skip(2); // msgId
+									auto returnCode = r.e8<mqttsn::ReturnCode>();
+
+									// check if successful
+									if (r.isValid() && returnCode == mqttsn::ReturnCode::ACCEPTED) {
+										topic.gatewayTopicId = topicId;
+
+										// set quality of service level granted by the gateway
+										topic.qosArray.set(0, qos);
+										break;
+									}
 								}
-
-								// serialize reply message
-								m.data[5] = uint8_t(mqttsn::ReturnCode::ACCEPTED);
-							} else {
-								// error: uplink or downlink congested
-								m.data[5] = uint8_t(mqttsn::ReturnCode::REJECTED_CONGESTED);
 							}
-						} else {
-							// error: topic not found
-							m.data[5] = uint8_t(mqttsn::ReturnCode::REJECTED_INVALID_TOPIC_ID);
 						}
-					} else {
-						// error: topic type not supported
-						m.data[5] = uint8_t(mqttsn::ReturnCode::NOT_SUPPORTED);
-					}
-
-					// send reply message
-					if (!isDownSendBusy())
-						sendCurrentMessage();
-				} else {
-					// error: send message queue full
-				}
-			} else {
-				// error: client is not connected, send DISCONNECT
-				sendDisconnect(clientId);
-			}
-		}
-		break;
-	case mqttsn::PUBACK:
-		// sent by the client in response to a PUBLISH message (if qos was greater zero)
-		if (length < 6) {
-			onError(ERROR_MESSAGE, messageType);
-		} else {
-			// get client
-			ClientInfo *client = findClient(clientId);
-			if (client != nullptr) {
-
-				// deserialize message
-				uint16_t topicId = mqttsn::getUShort(data + 1);
-				uint16_t msgId = mqttsn::getUShort(data + 3);
-				mqttsn::ReturnCode returnCode = mqttsn::ReturnCode(data[5]);
-				
-				// mark this client as done and remove PUBLISH message from queue if all are done
-				removeSentMessage(msgId, client->index);
-
-				switch (returnCode) {
-				case mqttsn::ReturnCode::ACCEPTED:
-					break;
-				case mqttsn::ReturnCode::REJECTED_CONGESTED:
-					onError(ERROR_CONGESTED, messageType);
-					break;
-				default:
-					;
-				}
-			} else {
-				// error: client is not connected, send DISCONNECT
-				sendDisconnect(clientId);
-			}
-		}
-		break;
-	case mqttsn::SUBSCRIBE:
-		// client wants to subscribe to a topic or topic wildcard
-		if (length < 5) {
-			onError(ERROR_MESSAGE, messageType);
-		} else {
-			// get client
-			ClientInfo *client = findClient(clientId);
-			if (client != nullptr) {
-				// deserialize message
-				uint8_t flags = data[1];
-				bool dup = mqttsn::getDup(flags);
-				int8_t qos = mqttsn::getQos(flags);
-				mqttsn::TopicType topicType = mqttsn::getTopicType(flags);
-				uint16_t msgId = mqttsn::getUShort(data + 2);
-
-				// create reply message
-				Message m = addSendMessage(7, {clientId});
-				if (m.data != nullptr) {
-					// serialize message
-					m.data[0] = mqttsn::SUBACK;
-					m.data[1] = mqttsn::makeQos(qos); // granted qos
-					mqttsn::setUShort(m.data + 4, msgId);
-
-					if (topicType == mqttsn::TopicType::NORMAL) {
-						String topicName(length - 4, data + 4);
-
-						// get or add topic by name
-						uint16_t topicId = getTopicId(topicName);
-						if (topicId != 0) {
-							TopicInfo &topic = getTopic(topicId);
-							
-							// check if we need to subscribe topic at the gateway
-							Result result = Result::OK;
-							if (qos > topic.getMaxQos())
-								result = MqttSnClient::subscribeTopic(topicName, qos).result;
-							
-							if (result == Result::OK) {
-								//todo
-								// check if there is a retained message for this topic
-								
-								// add subscription of client to flags
-								topic.setQos(client->index, qos);
-								
-								// serialize reply message
-								mqttsn::setUShort(m.data + 2, topicId);
-								m.data[6] = uint8_t(mqttsn::ReturnCode::ACCEPTED);
-							} else {
-								// error: could not subscribe at the gateway
-								mqttsn::setUShort(m.data + 2, topicId);
-								m.data[6] = uint8_t(mqttsn::ReturnCode::REJECTED_CONGESTED);
+					} else if (unsub) {
+						// unsubscribe
+						for (retry = 0; retry <= MAX_RETRY; ++retry) {
+							// send subscribe message
+							{
+								PacketWriter w(message);
+								w.e8(mqttsn::MessageType::UNSUBSCRIBE);
+								auto flags = mqttsn::Flags::TOPIC_TYPE_NORMAL;
+								w.e8(flags);
+								w.u16B(msgId);
+								w.string(topicName);
+								co_await network::send(NETWORK_MQTT, gateway.endpoint, w.finish());
 							}
-						} else {
-							// error: could not allocate a topic id
-							mqttsn::setUShort(m.data + 2, 0);
-							m.data[6] = uint8_t(mqttsn::ReturnCode::REJECTED_CONGESTED);
-						}
-					} else {
-						// error: topic type not supported
-						mqttsn::setUShort(m.data + 2, 0);
-						m.data[6] = uint8_t(mqttsn::ReturnCode::NOT_SUPPORTED);
-					}
-					
-					// send reply message
-					if (!isDownSendBusy())
-						sendCurrentMessage();
-				} else {
-					// error: send message queue full
-				}
-			} else {
-				// error: client is not connected, send DISCONNECT
-				sendDisconnect(clientId);
-			}
-		}
-		break;
-	case mqttsn::UNSUBSCRIBE:
-		// client wants to unsubscribe from a topic or topic wildcard
-		if (length < 5) {
-			onError(ERROR_MESSAGE, messageType);
-		} else {
-			// get client
-			ClientInfo *client = findClient(clientId);
-			if (client != nullptr) {
-				// deserialize message
-				uint8_t flags = data[1];
-				mqttsn::TopicType topicType = mqttsn::getTopicType(flags);
-				uint16_t msgId = mqttsn::getUShort(data + 2);
 
-				// create reply message
-				Message m = addSendMessage(3, {clientId});
-				if (m.data != nullptr) {
-					// serialize message
-					m.data[0] = mqttsn::UNSUBACK;
-					mqttsn::setUShort(m.data + 1, msgId);
+							// wait for acknowledge from gateway
+							{
+								int length = array::count(message);
+								int s = co_await select(this->ackWaitlist.wait(uint8_t(0), mqttsn::MessageType::UNSUBACK, msgId, length,
+									message), timer::sleep(RETRANSMISSION_TIME));
 
-					if (topicType == mqttsn::TopicType::NORMAL) {
-						String topicName(length - 4, data + 4);
+								// check if still connected
+								if (!isGatewayConnected())
+									break;
 
-						//todo: check if topicFilter is a topic name or wildcard
+								// check if we received a message
+								if (s == 1) {
+									MessageReader r(length, message);
+									r.skip(2); // msgId
 
-						// get topic by name
-						uint16_t topicId = getTopicId(topicName, false);
-						if (topicId != 0) {
-							TopicInfo &topic = getTopic(topicId);
-
-							// remove subscription of client from flags
-							int8_t qos = topic.clearQos(client->index);
-						
-							// check if maximum qos was reduced
-							int8_t maxQos = topic.getMaxQos();
-							if (maxQos < qos) {
-								if (maxQos == -1) {
-									// all subscriptions removed: unsubscribe at the gateway
-									MqttSnClient::unsubscribeTopic(topicName);
-									topic.gatewayTopicId = 0;
-									topic.gatewayQos = 0;
-								} else {
-									// subscribe at the gateway with reduced qos
-									MqttSnClient::subscribeTopic(topicName, qos);
+									// check if successful
+									if (r.isValid()) {
+										// reset quality of service level granted by the gateway
+										topic.qosArray.set(0, 3);
+										break;
+									}
 								}
 							}
 						}
 					} else {
-						// error: topic type not supported
+						// register
+						for (retry = 0; retry <= MAX_RETRY; ++retry) {
+							// send register message
+							{
+								PacketWriter w(message);
+								w.e8<mqttsn::MessageType>(mqttsn::MessageType::REGISTER);
+								w.u16B(0); // topic id not known yet
+								w.u16B(msgId);
+								w.string(topicName);
+								co_await network::send(NETWORK_MQTT, gateway.endpoint, w.finish());
+							}
+
+							// wait for acknowledge from gateway
+							{
+								int length = array::count(message);
+								int s = co_await select(this->ackWaitlist.wait(uint8_t(0), mqttsn::MessageType::REGACK, msgId, length,
+									message), timer::sleep(RETRANSMISSION_TIME));
+
+								// check if still connected
+								if (!isGatewayConnected())
+									break;
+
+								// check if we received a message
+								if (s == 1) {
+									// get topic id and return code
+									MessageReader r(length, message);
+									auto topicId = r.u16B();
+									r.skip(2); // msgId
+									auto returnCode = r.e8<mqttsn::ReturnCode>();
+
+									// check if successful
+									if (r.isValid() && returnCode == mqttsn::ReturnCode::ACCEPTED) {
+										topic.gatewayTopicId = topicId;
+										break;
+									}
+								}
+							}
+						}
 					}
 
-					// send reply message
-					if (!isDownSendBusy())
-						sendCurrentMessage();
-				} else {
-					// error: send message queue full
+					// if maximum number of retries is exceeded, we assume to be disconnected from the gateway
+					if (retry > MAX_RETRY) {
+						this->connectedFlags.set(0, 0);
+						break;
+					}
 				}
-			} else {
-				// error: client is not connected
-				sendDisconnect(clientId);
 			}
 		}
-		break;
-	case mqttsn::PINGREQ:
-		// client sends a ping to keep connection alive
-		{
-			// get client
-			ClientInfo *client = findClient(clientId);
-			if (client != nullptr) {
-				//todo: reset connection timeout
-			
-				// create reply message
-				Message m = addSendMessage(1, {clientId});
-				if (m.data != nullptr) {
-					// serialize message
-					m.data[0] = mqttsn::PINGRESP;
+	}
+}
 
-					// send reply message
-					if (!isDownSendBusy())
-						sendCurrentMessage();
-				} else {
-					// error: send message queue full
+void MqttSnBroker::addPublisher(String topicName, Publisher &publisher) {
+	int topicIndex = obtainTopicIndex(topicName);
+	if (topicIndex == -1) {
+		// error: topic list is full
+		return;
+	}
+
+	// remove the publisher in case this was called a 2nd time e.g. after reconnect to gateway
+	publisher.remove();
+	publisher.index = topicIndex;
+	publisher.event = &this->publishEvent;
+	this->publishers.add(publisher);
+
+	TopicInfo &topic = this->topics[topicIndex];
+
+	// wake up keepAlive() unless already registered at gateway
+	if (topic.gatewayTopicId == 0)
+		this->keepAliveEvent.set();
+}
+
+void MqttSnBroker::addSubscriber(String topicName, Subscriber &subscriber) {
+	int topicIndex = obtainTopicIndex(topicName);
+	if (topicIndex == -1) {
+		// error: topic list is full
+		return;
+	}
+
+	// remove the subscriber in case this was called a 2nd time e.g. after reconnect to gateway
+	subscriber.remove();
+	subscriber.index = topicIndex;
+	this->subscribers.add(subscriber);
+
+	TopicInfo &topic = this->topics[topicIndex];
+	topic.subscribed = true;
+
+	// wake up keepAlive() unless already subscribed at gateway
+	if (topic.qosArray.get(0) == 3)
+		this->keepAliveEvent.set();
+}
+
+int MqttSnBroker::obtainTopicIndex(String name) {
+	if (name.isEmpty())
+		return -1;
+	return this->topics.getOrPut(name, []() {return TopicInfo{BitField<MAX_CONNECTION_COUNT, 2>().set(), 0, false, 0, 0};});
+}
+
+static bool writeMessage(MessageWriter &w, MessageType srcType, void const *srcMessage) {
+	Message const &src = *reinterpret_cast<Message const *>(srcMessage);
+	static char const onOff[] = {'0', '1', '!'};
+	static char const trigger[] = {'#', '!'};
+	static char const upDown[] = {'#', '+', '-'};
+
+	switch (srcType) {
+	case MessageType::ON_OFF:
+		w << onOff[src.onOff];
+		break;
+	case MessageType::ON_OFF2:
+		// invert on/off (0, 1, 2 -> 1, 0, 2)
+		w << onOff[src.onOff ^ 1 ^ (src.onOff >> 1)];
+		break;
+	case MessageType::TRIGGER:
+	case MessageType::TRIGGER2:
+		w << trigger[src.trigger];
+		break;
+	case MessageType::UP_DOWN:
+		w << upDown[src.upDown];
+		break;
+	case MessageType::UP_DOWN2:
+		// invert up/down (0, 1, 2 -> 0, 2, 1)
+		w << upDown[(src.upDown << 1) | (src.upDown >> 1)];
+		break;
+	case MessageType::LEVEL:
+	case MessageType::MOVE_TO_LEVEL:
+		{
+			// check if relative (increment, decrement)
+			if (src.level.getFlag())
+				w << '!';
+			w << flt(src.level, 1, 3);
+
+			if (srcType == MessageType::MOVE_TO_LEVEL) {
+				w << ' ';
+				w << flt(src.moveToLevel.move, 1, 3);
+				if (src.moveToLevel.move.getFlag()) {
+					// speed
+					w << '/';
 				}
-			} else {
-				// error: client is not connected
-				sendDisconnect(clientId);
+				w << 's';
 			}
 		}
 		break;
 	default:
-		// error: unsupported message type
-		onError(ERROR_BROKER_UNSUPPORTED, messageType);
+		// conversion failed
+		return false;
 	}
+
+	// conversion successful
+	return true;
 }
 
-void MqttSnBroker::onDownSent() {
-	if (this->resendPending) {
-		// resend a message that was not acknowledged
-		this->resendPending = false;
-		resend();
-	} else {
-		// check if there are more messages to send in the queue
-		if (this->sendMessagesHead != this->sendMessagesCurrent)
-			sendCurrentMessage();
+struct MessageValue {
+	String message;
+	int value;
+};
+
+static int find(String message, Array<MessageValue const> messageValues) {
+	for (MessageValue const &mv : messageValues) {
+		if (mv.message == message)
+			return mv.value;
 	}
+	return -1;
 }
 
-void MqttSnBroker::onDownTimeout() {
-	if (this->sendMessagesTail < this->sendMessagesCurrent) {
-		// resend a message that was not acknowledged or mark as pending
-		if (!(this->resendPending = isDownSendBusy()))
-			resend();
-	}
-}
+static bool readMessage(MessageType dstType, void *dstMessage, MessageReader r) {
+	Message &dst = *reinterpret_cast<Message *>(dstMessage);
+	static MessageValue const onOff[] = {
+		{"0", 0}, {"1", 1}, {"!", 2},
+		{"off", 0}, {"on", 1}, {"toggle", 2}};
+	static MessageValue const trigger[] = {
+		{"#", 0}, {"!", 1},
+		{"inactive", 0}, {"active", 1}};
+	static MessageValue const upDown[] = {
+		{"#", 0}, {"+", 1}, {"-", 2},
+		{"inactive", 0}, {"up", 1}, {"down", 2}};
 
-bool MqttSnBroker::TopicInfo::isRemoteSubscribed() {
-	for (int i = 0; i < (MAX_CLIENT_COUNT + 15) / 16; ++i) {
-		uint32_t clientQos = this->clientQosArray[i];
-		if (i == MAX_CLIENT_COUNT / 16)
-			clientQos |= 0xffffffff << (MAX_CLIENT_COUNT & 15) * 2;
+	switch (dstType) {
+	case MessageType::UNKNOWN:
+		return false;
 
-		if (clientQos != 0xffffffff)
-			return true;
-	}
-	return false;
-}
-
-int8_t MqttSnBroker::TopicInfo::getMaxQos() {
-	uint32_t a = 0xffffffff;
-	uint32_t b = 0xffffffff;
-	for (int i = 0; i < (MAX_CLIENT_COUNT + 15) / 16; ++i) {
-		uint32_t clientQos = this->clientQosArray[i];
-		if (i == MAX_CLIENT_COUNT / 16)
-			clientQos |= 0xffffffff << (MAX_CLIENT_COUNT & 15) * 2;
-		//if ((i + 1) * 16 > MAX_CLIENT_COUNT)
-		//	clientQos |= 0xffffffff << (MAX_CLIENT_COUNT - i * 16) * 2;
-		
-		uint32_t c = clientQos;
-		uint32_t d = clientQos >> 1;
-		
-		uint32_t x = (a & c) | ((a | c) & ~b & ~d);
-		uint32_t y = (b & d) | (~a & b) | (~c & d);
-		
-		a = x;
-		b = y;
-	}
-	
-	for (int shift = 16; shift >= 2; shift >>= 1) {
-		uint32_t c = a >> shift;
-		uint32_t d = b >> shift;
-		
-		uint32_t x = (a & c) | ((a | c) & ~b & ~d);
-		uint32_t y = (b & d) | (~a & b) | (~c & d);
-		
-		a = x;
-		b = y;
-	}
-	int8_t qos = ((((a & 1) | ((b & 1) << 1)) + 1) & 3) - 1;
-	return qos;
-}
-
-void MqttSnBroker::TopicInfo::setQos(int clientIndex, int8_t qos) {
-	uint32_t &clientQos = this->clientQosArray[clientIndex >> 4];
-	int shift = (clientIndex << 1) & 31;
-	clientQos = (clientQos & ~(3 << shift)) | ((qos & 3) << shift);
-}
-
-int8_t MqttSnBroker::TopicInfo::clearQos(int clientIndex) {
-	uint32_t &clientQos = this->clientQosArray[clientIndex >> 4];
-	int shift = (clientIndex << 1) & 31;
-	int8_t qos = (((clientQos >> shift) + 1) & 3) - 1;
-	clientQos |= 3 << shift;
-	return qos;
-}
-
-MqttSnBroker::ClientInfo *MqttSnBroker::findClient(uint16_t clientId) {
-	// client at index 0 is local client
-	for (int i = 1; i < MAX_CLIENT_COUNT; ++i) {
-		ClientInfo &client = this->clients[i];
-		if (client.clientId == clientId)
-			return &client;
-	}
-	return nullptr;
-}
-
-uint16_t MqttSnBroker::getTopicId(String name, bool add) {
-	// calc djb2 hash of name
-	// http://www.cse.yorku.ca/~oz/hash.html
-	uint32_t hash = 5381;
-	for (char c : name) {
-		hash = (hash << 5) + hash + uint8_t(c); // hash * 33 + c
-    }
-	
-	// search for topic
-	int empty = -1;
-	for (int i = 0; i < this->topicCount; ++i) {
-		TopicInfo *topic = &this->topics[i];
-		if (topic->hash == hash)
-			return i + 1;
-		if (topic->hash == 0)
-			empty = i;
-	}
-	if (!add)
-		return 0;
-			
-	// add a new topic if no empty topic was found
-	if (empty == -1) {
-		if (this->topicCount >= MAX_TOPIC_COUNT)
-			return 0; // OUT_OF_MEMORY error
-		empty = this->topicCount++;
-	}
-	
-	// initialize topic
-	TopicInfo *topic = &this->topics[empty];
-	topic->hash = hash;
-	topic->retainedOffset = this->retainedSize;
-	topic->retainedAllocated = 0;
-	topic->retainedLength = 0;
-	for (uint32_t &clientQos : topic->clientQosArray)
-		clientQos = 0xffffffff;
-	topic->gatewayTopicId = 0;
-	topic->gatewayQos = 0;
-	topic->subscribeCount = 0;
-	
-	return empty + 1;
-}
-
-MqttSnBroker::TopicInfo *MqttSnBroker::findTopic(uint16_t topicId) {
-	if (topicId < 1 || topicId > this->topicCount)
-		return nullptr;
-	TopicInfo *topic = &this->topics[topicId - 1];
-	return topic->hash != 0 ? topic : nullptr;
-}
-
-uint16_t MqttSnBroker::findTopicId(uint16_t gatewayTopicId) {
-	for (int i = 0; i < this->topicCount; ++i) {
-		TopicInfo &topic = this->topics[i];
-		if (topic.hash != 0 && topic.gatewayTopicId == gatewayTopicId)
-			return i + 1;
-	}
-	return 0;
-}
-
-uint16_t MqttSnBroker::insertRetained(int offset, int length) {
-	// make space in the memory for retained messages
-	for (int i = offset; i < this->retainedSize; ++i) {
-		this->retained[i + length] = this->retained[i];
-	}
-	this->retainedSize += length;
-	
-	// adjust offsets of all retained messages starting at or behind offset
-	for (int i = 0; i < this->topicCount; ++i) {
-		TopicInfo &topic = this->topics[i];
-		if (topic.retainedOffset >= offset)
-			topic.retainedOffset += length;
-	}
-	
-	return uint16_t(offset);
-}
-
-uint16_t MqttSnBroker::eraseRetained(int offset, int length) {
-	// erase region in the memory for retained messages
-	for (int i = this->retainedSize; i >= offset; --i) {
-		this->retained[i + length] = this->retained[i];
-	}
-
-	// adjust offsets of all retained messages starting at or behind offset
-	for (int i = 0; i < this->topicCount; ++i) {
-		TopicInfo &topic = this->topics[i];
-		if (topic.retainedOffset >= offset)
-			topic.retainedOffset -= length;
-	}
-
-	return uint16_t(this->retainedSize);
-}
-
-MqttSnBroker::Message MqttSnBroker::addSendMessage(int length, ClientSet clientSet, uint16_t msgId) {
-	if (this->busy)
-		return {};
-
-	// garbage collect old messages
-	if (this->sendMessagesHead + 1 + 1 > MAX_SEND_COUNT
-		|| this->sendBufferHead + length + MAX_MESSAGE_LENGTH > SEND_BUFFER_SIZE )
-	{
-		int j = 0;
-		uint16_t offset = 0;
-		for (int i = this->sendMessagesTail; i < this->sendMessagesHead; ++i) {
-			MessageInfo &info = this->sendMessages[i];
-			if (info.msgId != 0 || i >= this->sendMessagesCurrent) {
-				uint8_t *data = this->sendBuffer + info.offset;
-				int length = info.length;
-				
-				MessageInfo &info2 = this->sendMessages[j++];
-				info2 = info;
-				info2.offset = offset;
-				memcpy(this->sendBuffer + offset, data, length);
-				offset += length;
-			}
-
+	case MessageType::ON_OFF:
+		{
+			int v = find(r.string(), onOff);
+			if (v == -1)
+				return false; // conversion failed
+			dst.onOff = v;
 		}
-		this->sendMessagesTail = 0;
-		this->sendMessagesCurrent = j - (this->sendMessagesHead - this->sendMessagesCurrent);
-		this->sendMessagesHead = j;
-		this->sendBufferHead = offset;
-		this->sendBufferFill = offset;
-	}
-
-	// allocate message info
-	MessageInfo &info = this->sendMessages[this->sendMessagesHead++];
-		
-	// allocate data
-	info.offset = this->sendBufferHead;
-	info.length = length;
-	this->sendBufferHead += length;
-	this->sendBufferFill += length;
-
-	// set busy flag if no new message will fit
-	this->busy = this->sendMessagesHead >= MAX_SEND_COUNT || this->sendBufferFill + MAX_MESSAGE_LENGTH > SEND_BUFFER_SIZE;
-
-	// set client set
-	info.clientSet = clientSet;
-
-	// set message id
-	info.msgId = msgId;
-
-
-	// return allocated message (space for "naked" mqtt-sn message without length)
-	return {this->sendBuffer + info.offset/*, length*/};
-}
-
-void MqttSnBroker::sendCurrentMessage() {
-	int current = this->sendMessagesCurrent;
-
-	// get message
-	MessageInfo &info = this->sendMessages[current];
-	uint8_t *data = this->sendBuffer + info.offset;
-	int length = info.length;
-	
-	// get flags of PUBLISH message
-	uint8_t flags = data[1];
-
-	// get client id
-	uint16_t clientId;
-	int clientIndex;
-	if (data[0] != mqttsn::PUBLISH) {
-		// send message to just one client
-		clientId = info.clientSet.clientId;
-		clientIndex = MAX_CLIENT_COUNT;
-	} else {
-		// send message to all clients whose flag is set
-		clientIndex = this->sendMessagesClientIndex;
-		
-		// skip empty flags (guaranteed that one flag is set)
-		while (((info.clientSet.flags[clientIndex >> 5] >> (clientIndex & 31)) & 1) == 0) {
-			++clientIndex;
+		break;
+	case MessageType::ON_OFF2:
+		{
+			int v = find(r.string(), onOff);
+			if (v == -1)
+				return false; // conversion failed
+			// invert on/off (0, 1, 2 -> 1, 0, 2)
+			dst.onOff = v ^ 1 ^ (v >> 1);
 		}
-		
-		// get client id
-		clientId = this->clients[clientIndex].clientId;
-		
-		// get topic
-		uint16_t topicId = mqttsn::getUShort(data + 2);
-		TopicInfo &topic = getTopic(topicId);
-		
-		// set actual qos to message
-		int8_t clientQos = topic.getQos(clientIndex);
-		int8_t qos = mqttsn::getQos(flags);
-		data[1] = (flags & ~mqttsn::makeQos(3)) | mqttsn::makeQos(min(qos, clientQos));
-		
-		// go to next set flag
-		while (clientIndex < MAX_CLIENT_COUNT) {
-			++clientIndex;
-			if (((info.clientSet.flags[clientIndex >> 5] >> (clientIndex & 31)) & 1) != 0)
-				break;
+		break;
+
+	case MessageType::TRIGGER:
+	case MessageType::TRIGGER2:
+		{
+			int v = find(r.string(), trigger);
+			if (v == -1)
+				return false; // conversion failed
+			dst.trigger = v;
 		}
-	}
-		
-	// send to client
-	downSend(clientId, data, length);
+		break;
 
-	// restore flags in PUBLISH message
-	data[1] = flags;
-
-	// set sent time
-	auto now = timer::now();
-	info.sentTime = now;
-
-	if (current == this->sendMessagesTail) {
-		if (info.msgId == 0) {
-			// remove message from tail because it's not needed any more such as PINGREQ
-			if (clientIndex == MAX_CLIENT_COUNT)
-				this->sendMessagesTail = current + 1;
-
-			// set timer for idle ping to keep the connection alive
-			timer::start(this->timerIndex, now + KEEP_ALIVE_INTERVAL);
-		} else {
-			// start retransmission timeout
-			if (this->sendMessagesClientIndex == 0)
-				timer::start(this->timerIndex, now + RETRANSMISSION_INTERVAL);
+	case MessageType::UP_DOWN:
+		{
+			int v = find(r.string(), upDown);
+			if (v == -1)
+				return false; // conversion failed
+			dst.upDown = v;
 		}
-	}
-
-	// make next message current
-	if (clientIndex == MAX_CLIENT_COUNT) {
-		this->sendMessagesCurrent = current + 1;
-		clientIndex = 0;
-	}
-	
-	this->sendMessagesClientIndex = clientIndex;
-}
-
-void MqttSnBroker::resend() {
-	// get message
-	MessageInfo &info = this->sendMessages[this->sendMessagesTail];
-	uint8_t *data = this->sendBuffer + info.offset;
-	int length = info.length;
-
-	// get flags of PUBLISH message
-	uint8_t flags = data[1];
-
-	// get client id
-	uint16_t clientId;
-	int clientIndex;
-	if (data[0] != mqttsn::PUBLISH) {
-		// send message to just one client
-		clientId = info.clientSet.clientId;
-		clientIndex = MAX_CLIENT_COUNT;
-	} else {
-		// send message to all clients whose flag is set
-		clientIndex = this->sendMessagesClientIndex;
-		
-		// skip empty flags (guaranteed that one flag is set)
-		while (((info.clientSet.flags[clientIndex >> 5] >> (clientIndex & 31)) & 1) == 0) {
-			++clientIndex;
+		break;
+	case MessageType::UP_DOWN2:
+		{
+			int v = find(r.string(), upDown);
+			if (v == -1)
+				return false; // conversion failed
+			// invert up/down (0, 1, 2 -> 0, 2, 1)
+			dst.upDown = (v << 1) | (v >> 1);
 		}
-		
-		// get client id
-		clientId = this->clients[clientIndex].clientId;
-		
-		// get topic
-		uint16_t topicId = mqttsn::getUShort(data + 2);
-		TopicInfo &topic = getTopic(topicId);
-		
-		// set actual qos to message
-		int8_t clientQos = topic.getQos(clientIndex);
-		int8_t qos = mqttsn::getQos(flags);
-		data[1] = (flags & ~mqttsn::makeQos(3)) | mqttsn::makeQos(min(qos, clientQos));
-	}
+		break;
 
-	// send to client
-	downSend(clientId, data, length);
+	case MessageType::LEVEL:
+	case MessageType::MOVE_TO_LEVEL:
+		{
+			// check if relative (increment, decrement)
+			bool relative = r.testU8('!');
+			String levelString = r.floatString();
+			if (levelString.isEmpty())
+				return false; // conversion failed
+			auto level = parseFloat(levelString);
+			if (!level)
+				return false; // conversion failed
+			dst.level.set(*level, relative);
 
-	// restore flags in PUBLISH message
-	data[1] = flags;
-
-	// start timeout, either for retransmission or idle ping
-	timer::start(this->timerIndex, timer::now() + RETRANSMISSION_INTERVAL);
-}
-
-void MqttSnBroker::removeSentMessage(uint16_t msgId, uint16_t clientIndex) {
-	int tail = this->sendMessagesTail;
-	
-	// mark message with msgId as obsolete
-	for (int i = tail; i < this->sendMessagesCurrent; ++i) {
-		MessageInfo &info = this->sendMessages[i];
-		
-		if (info.msgId == msgId) {
-			uint32_t allClients = 0;
-
-			if (clientIndex < MAX_CLIENT_COUNT) {
-				// clear client flag
-				info.clientSet.flags[clientIndex >> 5] &= ~(1 << (clientIndex & 31));
-				
-				// get all client flags
-				for (uint32_t clients : info.clientSet.flags)
-					allClients |= clients;
-			}
-			
-			// remove message if all clients have acknowledged
-			if (allClients == 0) {
-				info.msgId = 0;
-				int length = this->sendBuffer[info.offset];
-				this->sendBufferFill -= length;
-				this->busy = this->sendBufferFill + MAX_MESSAGE_LENGTH > SEND_BUFFER_SIZE;
-			}
-			break;
-		}
-	}
-	
-	// remove acknowledged messages and messages that don't need acknowledge
-	for (int i = tail; i < this->sendMessagesCurrent; ++i) {
-		MessageInfo &info = this->sendMessages[i];
-	
-		if (info.msgId == 0)
-			++tail;
-		else
-			break;
-	}
-	this->sendMessagesTail = tail;
-
-	auto now = timer::now();
-	if (tail < this->sendMessagesCurrent) {
-		// get next message
-		MessageInfo &info = this->sendMessages[tail];
-		
-		// check if we have to resend it immediately
-		if (now >= info.sentTime + RETRANSMISSION_INTERVAL) {
-			// resend a message that was not acknowledged or mark as pending
-			if (!(this->resendPending = isDownSendBusy()))
-				resend();
-		} else {
-			// wait until next message has to be resent
-			timer::start(this->timerIndex, info.sentTime + RETRANSMISSION_INTERVAL);
-		}
-	} else {
-		// set timer for idle ping to keep the connection alive
-		timer::start(this->timerIndex, now + KEEP_ALIVE_INTERVAL);
-	}
-}
-
-void MqttSnBroker::sendPublish(uint16_t topicId, TopicInfo *topic, uint8_t const *data, int length, int8_t qos,
-	bool retain, uint16_t excludeClientId)
-{
-	// handle retained message
-	if (retain) {
-		if (length > 0) {
-			// store retained message
-			if (length > topic->retainedAllocated) {
-				// enlarge space for retained message
-				topic->retainedOffset = insertRetained(topic->retainedOffset,
-					length - topic->retainedAllocated);
-				topic->retainedAllocated = length;
-			}
-			memcpy(&this->retained[topic->retainedOffset], data, length);
-			topic->retainedLength = length;
-		} else {
-			// delete retained message
-			topic->retainedOffset = eraseRetained(topic->retainedOffset,
-				topic->retainedAllocated);
-			topic->retainedAllocated = 0;
-			topic->retainedLength = 0;
-		}
-	}
-	
-	// check if at least one remote client has subscribed the topic
-	if (topic->isRemoteSubscribed()) {
-		// publish to all clients that have subscribed to the topic
-		ClientSet clientSet = {.flags = {}};
-		for (ClientInfo &client : this->clients) {
-			uint16_t clientId = client.clientId;
-			if (clientId != 0 && clientId != excludeClientId) {
-				int clientQos = topic->getQos(client.index);
-				if (clientQos >= 0) {
-					clientSet.flags[client.index >> 5] |= 1 << (client.index & 31);
+			if (dstType == MessageType::MOVE_TO_LEVEL) {
+				r.skipSpace();
+				String moveString = r.floatString();
+				if (moveString.isEmpty()) {
+					dst.moveToLevel.move = 0.0f;
+				} else {
+					auto move = parseFloat(moveString);
+					if (!move)
+						return false; // conversion failed
+					bool rate = r.testU8('/');
+					if (r.peekU8() != 's')
+						return false; // conversion failed
+					dst.moveToLevel.move.set(*move, rate);
 				}
 			}
 		}
-		
-		// generate and set message id
-		uint16_t msgId = getNextMsgId();
+		break;
 
-		// allocate message
-		Message m = addSendMessage(6 + length, clientSet, msgId);
-		if (m.data != nullptr) {
-			// serialize message
-			m.data[0] = mqttsn::PUBLISH;
-			m.data[1] = mqttsn::makeQos(qos) | mqttsn::makeRetain(retain) | mqttsn::makeTopicType(mqttsn::TopicType::NORMAL);
-			mqttsn::setUShort(m.data + 2, topicId);
-			mqttsn::setUShort(m.data + 4, msgId);
-			memcpy(m.data + 6, data, length);
-			
-			// send message
-			if (!isDownSendBusy())
-				sendCurrentMessage();
+	default:
+		// conversion failed
+		return false;
+	}
+
+	// conversion successful
+	return true;
+}
+
+Coroutine MqttSnBroker::publish() {
+	uint8_t message[MAX_MESSAGE_LENGTH];
+	while (true) {
+		auto &thisName = this->connections[0].name;
+
+		// wait until something was published
+		co_await this->publishEvent.wait();
+
+		// check if there is a current publisher
+		if (this->currentPublisher != nullptr) {
+			int connectionIndex;
+			while ((connectionIndex = (this->dirtyFlags & this->connectedFlags).findFirstNonzero()) != -1) {
+				Publisher &publisher = *this->currentPublisher;
+
+				// clear flag
+				this->dirtyFlags.set(connectionIndex, 0);
+
+				// get connection info
+				ConnectionInfo &connection = this->connections[connectionIndex];
+
+				// get topic info
+				TopicInfo &topic = this->topics[publisher.index];
+
+				// get quality of service (3: client is not subscribed)
+				int qos = connectionIndex == 0 ? QOS : topic.qosArray.get(connectionIndex);
+				if (qos != 3) {
+					// generate message id
+					uint16_t msgId = qos <= 0 ? 0 : getNextMsgId();
+
+					// message flags
+					auto flags = mqttsn::makeQos(qos);
+
+					// topic id
+					uint16_t topicId = connectionIndex == 0 ? topic.gatewayTopicId : publisher.index + 1;
+
+					// send to gateway or client
+					for (int retry = 0; retry <= MAX_RETRY; ++retry) {
+						// send publish message
+						{
+							PacketWriter w(message);
+							w.e8(mqttsn::MessageType::PUBLISH);
+							w.e8(flags);
+							w.u16B(topicId);
+							w.u16B(msgId);
+							auto c = w.current;
+
+							// message data
+							if (!writeMessage(w, publisher.messageType, publisher.message))
+								break;
+
+#ifdef DEBUG_PRINT
+							terminal::out << (thisName + " publishes " + dec(w.current - c) + " bytes to ");
+							if (connectionIndex == 0)
+								terminal::out << ("gateway");
+							else
+								terminal::out << (connection.name);
+							terminal::out << (" on topic '" + this->topics.get(publisher.index)->key + "' msgid " + dec(msgId) + '\n');
+#endif
+
+							co_await network::send(NETWORK_MQTT, connection.endpoint, w.finish());
+						}
+
+						if (qos <= 0)
+							break;
+
+						// wait for acknowledge from other end of connection (client or gateway)
+						{
+							int length = array::count(message);
+							int s = co_await select(this->ackWaitlist.wait(uint8_t(connectionIndex),
+								mqttsn::MessageType::PUBACK, msgId, length, message),
+								timer::sleep(RETRANSMISSION_TIME));
+
+							// check if still connected
+							if (!isConnected(connectionIndex))
+								break;
+
+							// check if we received a message
+							if (s == 1) {
+								MessageReader r(length, message);
+
+								// get topic id and return code
+								topicId = r.u16B();
+								r.skip(2); // msgId
+								auto returnCode = r.e8<mqttsn::ReturnCode>();
+
+								// check if successful
+								if (r.isValid() && returnCode == mqttsn::ReturnCode::ACCEPTED)
+									break;
+							}
+						}
+
+						// set duplicate flag and try again
+						flags |= mqttsn::Flags::DUP;
+					}
+				}
+			}
+			this->currentPublisher = nullptr;
+		}
+
+		// iterate over publishers
+		//bool dirty = false;
+		for (auto &publisher : this->publishers) {
+			// check if publisher wants to publish
+			if (publisher.dirty) {
+				publisher.dirty = false;
+
+				// forward to subscribers
+				for (auto &subscriber : this->subscribers) {
+					if (subscriber.index == publisher.index) {
+						subscriber.barrier->resumeAll([&subscriber, &publisher] (Subscriber::Parameters &p) {
+							p.subscriptionIndex = subscriber.subscriptionIndex;
+
+							// convert to target unit and type and resume coroutine if conversion was successful
+							return convert(subscriber.messageType, p.message,
+								publisher.messageType, publisher.message);
+						});
+					}
+				}
+
+				this->currentPublisher = &publisher;
+				this->dirtyFlags.set();
+				break;
+			}
+		}
+
+		// clear event when no dirty publisher was found
+		if (this->currentPublisher == nullptr)
+			this->publishEvent.clear();
+	}
+}
+
+Coroutine MqttSnBroker::receive() {
+	uint8_t message[MAX_MESSAGE_LENGTH];
+
+	while (true) {
+		auto &thisName = this->connections[0].name;
+
+		// receive a message from the gateway or a client
+		network::Endpoint source;
+		int length = MAX_MESSAGE_LENGTH;
+		co_await network::receive(NETWORK_MQTT, source, length, message);
+
+		// create message reader and check if complete (length of message longer than what was received)
+		PacketReader r(message);
+		if (r.end - message > length)
+			continue;
+
+		// get message type
+		auto msgType = r.e8<mqttsn::MessageType>();
+
+		// check if we read past the end of the message
+		if (!r.isValid()) {
+			continue;
+		}
+
+		// search connection
+		int connectionIndex = -1;
+		for (int i = 0; i < MAX_CONNECTION_COUNT; ++i) {
+			if (this->isConnected(i) && this->connections[i].endpoint == source) {
+				connectionIndex = i;
+				break;
+			}
+		}
+
+		if (msgType == mqttsn::MessageType::CONNECT) {
+			// a client wants to (re)connect
+			auto flags = r.e8<mqttsn::Flags>();
+			auto protocolId = r.u8();
+			auto keepAliveDuration = r.u16B();
+			auto clientId = r.string();
+#ifdef DEBUG_PRINT
+			terminal::out << (clientId + " connects to " + thisName + '\n');
+#endif
+			if (connectionIndex == -1) {
+				// try to find an unused connection
+				connectionIndex = (~this->connectedFlags).set(0, 0).findFirstNonzero();
+			}
+
+			auto returnCode = mqttsn::ReturnCode::ACCEPTED;
+			if (connectionIndex == -1) {
+				// error: list of connections is full
+				returnCode = mqttsn::ReturnCode::REJECTED_CONGESTED;
+			} else if (connectionIndex == 0) {
+				// error: the gateway can't connect
+				returnCode = mqttsn::ReturnCode::NOT_SUPPORTED;
+			} else {
+				// initialize the connection
+				this->connections[connectionIndex].endpoint = source;
+				this->connections[connectionIndex].name = clientId;
+
+				// set connected flag
+				this->connectedFlags.set(connectionIndex, 1);
+
+				// reset qos entry of this connection for all topics
+				// todo: to support persistent sessions, don't do this when a client reconnects without clean session flag
+				for (auto [topicName, topic] : this->topics) {
+					topic.qosArray.set(connectionIndex, 3);
+				}
+			}
+
+			// reply with CONNACK
+			PacketWriter w(message);
+			w.e8(mqttsn::MessageType::CONNACK);
+			w.e8(returnCode);
+			co_await network::send(NETWORK_MQTT, source, w.finish());
+		} else if (connectionIndex == -1) {
+			// unknown client: reply with DISCONNECT
+			PacketWriter w(message);
+			w.e8<mqttsn::MessageType>(mqttsn::MessageType::DISCONNECT);
+			co_await network::send(NETWORK_MQTT, source, w.finish());
+		} else if (msgType == mqttsn::MessageType::PINGREQ) {
+			// ping request: reply with PINGRESP
+			PacketWriter w(message);
+			w.e8(mqttsn::MessageType::PINGRESP);
+			co_await network::send(NETWORK_MQTT, source, w.finish());
+		} else if (msgType == mqttsn::MessageType::REGISTER) {
+			// the gateway or a client want to register a topic
+			auto topicId = r.u16B();
+			auto msgId = r.u16B();
+			auto topicName = r.string();
+#ifdef DEBUG_PRINT
+			terminal::out << (this->connections[connectionIndex].name + " registers " + topicName + " at " + thisName + '\n');
+#endif
+			// register the topic
+			auto returnCode = mqttsn::ReturnCode::ACCEPTED;
+			int topicIndex = obtainTopicIndex(topicName);
+			if (topicIndex == -1) {
+				// error: out of topic ids
+				returnCode = mqttsn::ReturnCode::REJECTED_CONGESTED;
+			} else {
+				TopicInfo &topic = this->topics[topicIndex];
+				if (connectionIndex == 0) {
+					// gateway: set gateway topic id
+					topic.gatewayTopicId = topicId;
+				} else {
+					// client: return our topic id to client
+					topicId = topicIndex + 1;
+
+					// wake up keepAlive() to register the topic at gateway unless already registered
+					if (!topic.isRegisteredAtGateway())
+						this->keepAliveEvent.set();
+				}
+			}
+
+			// reply with REGACK
+			{
+				PacketWriter w(message);
+				w.e8(mqttsn::MessageType::REGACK);
+				w.u16B(topicId);
+				w.u16B(msgId);
+				w.e8(returnCode);
+				co_await network::send(NETWORK_MQTT, source, w.finish());
+			}
+		} else if (msgType == mqttsn::MessageType::SUBSCRIBE) {
+			// a client wants to subscribe to a topic
+			auto flags = r.e8<mqttsn::Flags>();
+			auto qos = min(mqttsn::getQos(flags), QOS);
+			//auto topicType = flags & mqttsn::Flags::TOPIC_TYPE_MASK;
+			auto msgId = r.u16B();
+			auto topicName = r.string();
+#ifdef DEBUG_PRINT
+			terminal::out << (this->connections[connectionIndex].name + " subscribes " + topicName + " at " + thisName + '\n');
+#endif
+			// register the topic
+			int topicIndex = -1;
+			auto returnCode = mqttsn::ReturnCode::ACCEPTED;
+			if (connectionIndex == 0) {
+				// gateway: the gateway can't subscribe to topics
+				returnCode = mqttsn::ReturnCode::NOT_SUPPORTED;
+			} else {
+				topicIndex = obtainTopicIndex(topicName);
+				if (topicIndex == -1) {
+					// error: out of topic ids
+					returnCode = mqttsn::ReturnCode::REJECTED_CONGESTED;
+				} else {
+					// client: set qos and return our topic id to client
+					TopicInfo &topic = this->topics[topicIndex];
+					topic.qosArray.set(connectionIndex, qos);
+
+					// wake up keepAlive() to subscribe at gateway unless already subscribed
+					if (!topic.isSubscribedAtGateway())
+						this->keepAliveEvent.set();
+				}
+			}
+			uint16_t topicId = topicIndex + 1;
+
+			// reply with SUBACK
+			{
+				PacketWriter w(message);
+				w.e8(mqttsn::MessageType::SUBACK);
+				w.e8(mqttsn::makeQos(qos));
+				w.u16B(topicId);
+				w.u16B(msgId);
+				w.e8(returnCode);
+				co_await network::send(NETWORK_MQTT, source, w.finish());
+			}
+		} else if (msgType == mqttsn::MessageType::UNSUBSCRIBE) {
+			// a client wants to unsubscribe to a topic
+			auto flags = r.e8<mqttsn::Flags>();
+			auto qos = min(mqttsn::getQos(flags), QOS);
+			//auto topicType = flags & mqttsn::Flags::TOPIC_TYPE_MASK;
+			auto msgId = r.u16B();
+			auto topicName = r.string();
+#ifdef DEBUG_PRINT
+			terminal::out << (this->connections[connectionIndex].name + " subscribes " + topicName + " from " + thisName + '\n');
+#endif
+			// register the topic
+			if (connectionIndex == 0) {
+				// gateway: the gateway can't subscribe to topics
+			} else {
+				int topicIndex = topics.locate(topicName);
+				if (topicIndex == -1) {
+					// error: nopic name not found
+				} else {
+					// client: reset qos
+					TopicInfo &topic = this->topics[topicIndex];
+					topic.qosArray.set(connectionIndex, 3);
+
+					// wake up keepAlive() to unsubscribe from gateway when no client is subscribed any more
+					if (!topic.isClientSubscribed() && topic.isSubscribedAtGateway())
+						this->keepAliveEvent.set();
+				}
+			}
+
+			// reply with UNSUBACK
+			{
+				PacketWriter w(message);
+				w.e8(mqttsn::MessageType::UNSUBACK);
+				w.u16B(msgId);
+				co_await network::send(NETWORK_MQTT, source, w.finish());
+			}
+		} else if (msgType == mqttsn::MessageType::PUBLISH) {
+			// the gateway or a client published to a topic
+			uint8_t message2[MAX_MESSAGE_LENGTH];
+			ConnectionInfo &connection = this->connections[connectionIndex];
+
+			// read message
+			auto flags = r.e8<mqttsn::Flags>();
+			auto topicType = flags & mqttsn::Flags::TOPIC_TYPE_MASK;
+			auto qos = mqttsn::getQos(flags);
+			uint16_t topicId = r.u16B();
+			uint16_t msgId = r.u16B();
+			int pubLength = r.getRemaining();
+			uint8_t *pubData = r.current;
+
+			// get topic index
+			int topicIndex;
+			switch (topicType) {
+			case mqttsn::Flags::TOPIC_TYPE_NORMAL:
+				{
+					if (connectionIndex == 0) {
+						// connection to gateway
+						// todo: optimize linear search
+						for (topicIndex = 0; topicIndex < MAX_TOPIC_COUNT; ++topicIndex) {
+							if (this->topics[topicIndex].gatewayTopicId == topicId) {
+								break;
+							}
+						}
+					} else {
+						// connection to a client
+						topicIndex = topicId - 1;
+					}
+				}
+				break;
+			case mqttsn::Flags::TOPIC_TYPE_SHORT:
+				{
+					char topicName[2] = {char(topicId >> 8), char(topicId)};
+					topicIndex = this->topics.locate(topicName);
+				}
+				break;
+			default:
+				topicIndex = -1;
+			}
+
+			// check if topic is ok
+			bool topicOk = this->topics.isValid(topicIndex);
+
+			// acknowledge or report error
+			if (qos >= 1 || !topicOk) {
+				uint8_t message2[12];
+				PacketWriter w(message2);
+				w.e8(mqttsn::MessageType::PUBACK);
+				w.u16B(topicId);
+				w.u16B(msgId);
+				w.e8(topicOk ? mqttsn::ReturnCode::ACCEPTED : mqttsn::ReturnCode::REJECTED_INVALID_TOPIC_ID);
+				co_await network::send(NETWORK_MQTT, connection.endpoint, w.finish());
+			}
+
+			// check if topic index is valid
+			if (!topicOk)
+				continue;
+			TopicInfo &topic = this->topics[topicIndex];
+
+#ifdef DEBUG_PRINT
+			terminal::out << (thisName + " receives " + dec(pubLength) + " bytes from ");
+			if (connectionIndex == 0)
+				terminal::out << ("gateway");
+			else
+				terminal::out << (connection.name);
+			terminal::out << (" on topic '" + this->topics.get(topicIndex)->key + "' msgid " + dec(msgId) + '\n');
+#endif
+
+			// check if message is duplicate
+			if (qos > 0) {
+				if (topic.lastConnectionIndex == connectionIndex && topic.lastMsgId == msgId)
+					continue;
+				topic.lastConnectionIndex = connectionIndex;
+				topic.lastMsgId = msgId;
+			}
+
+			// publish to subscribers
+			for (auto &subscriber : this->subscribers) {
+				// check if this is the right topic
+				if (subscriber.index == topicIndex) {
+					subscriber.barrier->resumeFirst([&subscriber, &r] (Subscriber::Parameters &p) {
+						p.subscriptionIndex = subscriber.subscriptionIndex;
+
+						// read message (note r is passed by value for multiple subscribers)
+						return readMessage(subscriber.messageType, p.message, r);
+					});
+				}
+			}
+
+			// forward to other connections
+			this->forwardWaitlist.resumeFirst([connectionIndex, topicIndex, pubLength, pubData](ForwardParameters &p) {
+				p.sourceConnectionIndex = connectionIndex;
+				p.topicIndex = topicIndex;
+				p.length = min(p.length, pubLength);
+				array::copy(p.length, p.message, pubData);
+				return true;
+			});
+
 		} else {
-			// error: message queue full
+			// handle acknowledge and disconnect messages
+
+			// get message without length and type
+			int l = r.end - r.current;
+			uint8_t *m = r.current;
+
+			uint16_t msgId;
+			String typeString;
+			switch (msgType) {
+			case mqttsn::MessageType::CONNACK:
+				typeString = "CONNACK";
+				msgId = 0;
+				break;
+			case mqttsn::MessageType::PINGRESP:
+				typeString = "PINGRESP";
+				msgId = 0;
+				break;
+			case mqttsn::MessageType::REGACK:
+				typeString = "REGACK";
+				r.skip(2);
+				msgId = r.u16B();
+				break;
+			case mqttsn::MessageType::PUBACK:
+				typeString = "PUBACK";
+				r.skip(2);
+				msgId = r.u16B();
+				break;
+			case mqttsn::MessageType::SUBACK:
+				typeString = "SUBACK";
+				r.skip(3);
+				msgId = r.u16B();
+				break;
+			case mqttsn::MessageType::UNSUBACK:
+				typeString = "UNSUBACK";
+				msgId = r.u16B();
+				break;
+			case mqttsn::MessageType::DISCONNECT:
+				typeString = "DISCONNECT";
+
+				// clear connected flag
+				this->connectedFlags.set(connectionIndex, 0);
+
+				// reset qos entry of this connection for all topics
+				// todo: to support persistent sessions, this should be done after some timeout
+				for (auto [topicName, topic] : this->topics) {
+					topic.qosArray.set(connectionIndex, 3);
+				}
+
+				this->keepAliveEvent.set();
+				continue;
+			default:
+				// unsupported message type
+				continue;
+			}
+
+#ifdef DEBUG_PRINT
+			terminal::out << (thisName + " received " + typeString + " from ");
+			if (connectionIndex == 0)
+				terminal::out << ("gateway");
+			else
+				terminal::out << (this->connections[connectionIndex].name);
+			terminal::out << (" msgid " + dec(msgId) + '\n');
+#endif
+
+			// check if we read past the end of the message
+			if (!r.isValid()) {
+				continue;
+			}
+
+			// resume the coroutine that waits for msgId
+			this->ackWaitlist.resumeOne([connectionIndex, msgType, msgId, l, m](AckParameters &p) {
+				// check message type and id
+				if (p.connectionIndex == connectionIndex && p.msgType == msgType && p.msgId == msgId) {
+					p.length = l;
+					int length = min(p.length, l);
+					array::copy(length, p.message, m);
+					return true;
+				}
+				return false;
+			});
 		}
 	}
-
-	// publish to local client if it has subscribed to the topic
-	int8_t localQos = topic->getQos(LOCAL_CLIENT_INDEX);
-	if (localQos >= 0)
-		onPublished(topicId, data, length, min(qos, localQos), retain);
 }
 
-void MqttSnBroker::sendDisconnect(uint16_t clientId) {
-	// create reply message
-	Message m = addSendMessage(1, {clientId});
-	if (m.data != nullptr) {
-		// serialize message
-		m.data[0] = mqttsn::DISCONNECT;
-		
-		// send message
-		if (!isDownSendBusy())
-			sendCurrentMessage();
-	} else {
-		// error: send message queue full
+Coroutine MqttSnBroker::forward() {
+	uint8_t message[MAX_MESSAGE_LENGTH];
+	while (true) {
+		auto &thisName = this->connections[0].name;
+
+		// wait for data to publish (place it at the right position after the header which gets set later)
+		uint16_t sourceConnectionIndex;
+		uint16_t topicIndex;
+		int length;
+		{
+			PacketWriter w(message);
+			w.skip(6);
+			length = message + MAX_MESSAGE_LENGTH - w.current;
+			co_await this->forwardWaitlist.wait(sourceConnectionIndex, topicIndex, length, w.current);
+		}
+		TopicInfo &topic = this->topics[topicIndex];
+
+		// publish to other connections
+		for (int connectionIndex = 0; connectionIndex < MAX_CONNECTION_COUNT; ++connectionIndex) {
+			ConnectionInfo &connection = this->connections[connectionIndex];
+
+			// get quality of service and topic id
+			int qos;
+			uint16_t topicId;
+			if (connectionIndex == 0) {
+				// publish to gateway (set qos to 3 if topic is not registered at gateway)
+				qos = topic.gatewayTopicId == 0 ? 3 : QOS;
+				topicId = topic.gatewayTopicId;
+			} else {
+				// publish to client (qos is 3 if client is not subscribed on the topic)
+				qos = topic.qosArray.get(connectionIndex);
+				topicId = topicIndex + 1;
+			}
+
+			// don't publish on connection over which we received the message
+			if (connectionIndex != sourceConnectionIndex && isConnected(connectionIndex) && qos != 3) {
+				// generate message id
+				uint16_t msgId = qos <= 0 ? 0 : getNextMsgId();
+
+#ifdef DEBUG_PRINT
+				terminal::out << (thisName + " forwards " + dec(length) + " bytes to ");
+				if (connectionIndex == 0)
+					terminal::out << ("gateway");
+				else
+					terminal::out << (connection.name);
+				terminal::out << (" on topic '" + this->topics.get(topicIndex)->key + "' msgid " + dec(msgId) + '\n');
+#endif
+
+				// message flags
+				auto flags = mqttsn::makeQos(qos);
+
+				// send to gateway or client
+				for (int retry = 0; retry <= MAX_RETRY; ++retry) {
+					// send publish message
+					{
+						PacketWriter w(message);
+						w.e8(mqttsn::MessageType::PUBLISH);
+						w.e8(flags);
+						w.u16B(topicId);
+						w.u16B(msgId);
+						w.skip(length); // data is already in the message
+						co_await network::send(NETWORK_MQTT, connection.endpoint, w.finish());
+					}
+
+					if (qos <= 0)
+						break;
+
+					// wait for acknowledge from gateway or client
+					{
+						uint8_t message2[8];
+						int length2 = array::count(message);
+						int s = co_await select(this->ackWaitlist.wait(uint8_t(connectionIndex),
+							mqttsn::MessageType::PUBACK, msgId, length2, message2),
+							timer::sleep(RETRANSMISSION_TIME));
+
+						// check if still connected
+						if (!isConnected(connectionIndex))
+							break;
+
+						// check if we received a message
+						if (s == 1) {
+							MessageReader r(length2, message2);
+
+							// get topic id and return code
+							auto topicId2 = r.u16B();
+							r.skip(2); // msgId
+							auto returnCode = r.e8<mqttsn::ReturnCode>();
+
+							// check if successful
+							if (r.isValid() && topicId == topicId2 && returnCode == mqttsn::ReturnCode::ACCEPTED)
+								break;
+						}
+					}
+
+					// set duplicate flag and try again
+					flags |= mqttsn::Flags::DUP;
+				}
+			}
+		}
 	}
 }
+

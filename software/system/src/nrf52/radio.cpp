@@ -111,8 +111,7 @@ std::function<void (uint8_t)> onEdReady;
 // context
 // -------
 
-uint32_t longAddressLo;
-uint32_t longAddressHi;
+uint64_t longAddress;
 
 struct Context {
 	ContextFlags volatile flags;
@@ -163,7 +162,7 @@ struct Context {
 				if ((flags & ContextFlags::PASS_DEST_LONG) != 0) {
 					uint32_t longAddressLo = mac[5] | (mac[6] << 8) | (mac[7] << 16) | (mac[8] << 24);
 					uint32_t longAddressHi = mac[9] | (mac[10] << 8) | (mac[11] << 16) | (mac[12] << 24);
-					if (longAddressLo == radio::longAddressLo && longAddressHi == radio::longAddressHi)
+					if (longAddressLo == uint32_t(radio::longAddress) && longAddressHi == uint32_t(radio::longAddress >> 32))
 						return true;
 				}
 			}
@@ -497,6 +496,19 @@ void handle() {
 			NRF_EGU0->EVENTS_TRIGGERED[0] = 0;
 			radio::onEdReady(NRF_RADIO->EDSAMPLE);
 		}
+
+		// check if a send operation has finished
+		if (NRF_EGU0->EVENTS_TRIGGERED[2]) {
+			NRF_EGU0->EVENTS_TRIGGERED[2] = 0;
+
+			// resume coroutines for finished send operations
+			for (auto &c : radio::contexts) {
+				c.sendWaitlist.resumeAll([](SendParameters &p) {
+					// check if the send operation has finished
+					return p.result != 255;					
+				});				
+			}
+		}
 		
 		// check receive queue
 		if (NRF_EGU0->EVENTS_TRIGGERED[1]) {
@@ -535,19 +547,6 @@ void handle() {
 				}
 			} while (!radio::receiveQueue.isEmpty());
 		}
-				
-		// check if a send operation has finished
-		if (NRF_EGU0->EVENTS_TRIGGERED[2]) {
-			NRF_EGU0->EVENTS_TRIGGERED[2] = 0;
-
-			// resume coroutines for finished send operations
-			for (auto &c : radio::contexts) {
-				c.sendWaitlist.resumeAll([](SendParameters &p) {
-					// check if the send operation has finished
-					return p.result != 255;					
-				});				
-			}
-		}
 
 		// clear pending interrupt flag at NVIC
 		clearInterrupt(SWI0_EGU0_IRQn);
@@ -558,10 +557,18 @@ void handle() {
 }
 
 void init() {
+	// check if already initialized
 	if (radio::nextHandler != nullptr)
 		return;
-	initSignals();
+	
+	// add to event loop handler chain
+	radio::nextHandler = loop::addHandler(handle);
+
+	// init random number generator
 	rng::init();
+
+	// init debug signals
+	initSignals();	
 	
 	// init timer
 	NRF_TIMER0->MODE = N(TIMER_MODE_MODE, Timer);
@@ -615,9 +622,6 @@ void init() {
 		N(EGU_INTENSET_TRIGGERED0, Set)
 		| N(EGU_INTENSET_TRIGGERED1, Set)
 		| N(EGU_INTENSET_TRIGGERED2, Set);
-
-	// add to event loop handler chain
-	radio::nextHandler = loop::addHandler(handle);
 }
 
 extern "C" {
@@ -1047,15 +1051,11 @@ void enableReceiver(bool enable) {
 }
 
 void setLongAddress(uint64_t longAddress) {
-	radio::longAddressLo = uint32_t(longAddress);
-	radio::longAddressHi = uint32_t(longAddress >> 32);
+	radio::longAddress = longAddress;
 }
 
-void setFlags(int index, ContextFlags flags) {
-	assert(uint(index) < RADIO_CONTEXT_COUNT);
-	Context &c = radio::contexts[index];
-
-	c.flags = flags;
+uint64_t getLongAddress() {
+	return radio::longAddress;
 }
 
 void setPan(int index, uint16_t pan) {
@@ -1070,6 +1070,13 @@ void setShortAddress(int index, uint16_t shortAddress) {
 	Context &c = radio::contexts[index];
 
 	c.shortAddress = shortAddress;
+}
+
+void setFlags(int index, ContextFlags flags) {
+	assert(uint(index) < RADIO_CONTEXT_COUNT);
+	Context &c = radio::contexts[index];
+
+	c.flags = flags;
 }
 
 Awaitable<ReceiveParameters> receive(int index, Packet &packet) {

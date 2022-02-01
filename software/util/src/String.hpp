@@ -3,9 +3,26 @@
 #include "util.hpp"
 #include "defines.hpp"
 #include <limits>
-#ifdef EMU
-#include <iostream>
-#endif
+
+
+template <typename T>
+struct IsCString {
+	static constexpr bool value = false;
+};
+
+template <int N>
+struct IsCString<char[N]> {
+	static constexpr bool value = true;
+};
+
+template <>
+struct IsCString<char const *> {
+	static constexpr bool value = true;
+};
+
+// c-string concept, either char array or char pointer
+template <typename T>
+concept CString = IsCString<T>::value;
 
 
 constexpr int getLength(char const *str, False) {
@@ -15,7 +32,7 @@ constexpr int getLength(char const *str, False) {
 	return length;
 }
 
-template<int N>
+template <int N>
 constexpr int getLength(char const (&str)[N], True) {
 	int length = 0;
 	while (length < N && str[length] != 0)
@@ -23,7 +40,7 @@ constexpr int getLength(char const (&str)[N], True) {
 	return length;
 }
 
-template<typename T>
+template <typename T> requires CString<T>
 constexpr int length(T const &str) {
 	return getLength(str, IsArray<T>());
 }
@@ -45,9 +62,9 @@ struct String {
 	String(String const &str) = default;
 
 	/**
-	 * Construct from c-array or c-string
+	 * Construct from c-string
 	 */
-	template<typename T>
+	template <typename T> requires CString<T>
 	constexpr String(T const &str)
 		: length(getLength(str, IsArray<T>())), data(str)
 	{}
@@ -59,7 +76,9 @@ struct String {
 		: length(length), data(reinterpret_cast<char const*>(data))
 	{}
 
-	bool isEmpty() {return this->length <= 0;}
+	bool isEmpty() const {return this->length <= 0;}
+	
+	int count() const {return this->length;}
 	
 	/**
 	 * Get a substring
@@ -67,7 +86,7 @@ struct String {
 	 * @return substring that references the data of this string
 	 *
 	 */
-	String substring(int startIndex) {
+	String substring(int startIndex) const {
 		return String(max(this->length - startIndex, 0), this->data + startIndex);
 	}
 
@@ -78,7 +97,7 @@ struct String {
 	 * @return substring that references the data of this string
 	 *
 	 */
-	String substring(int startIndex, int endIndex) {
+	String substring(int startIndex, int endIndex) const {
 		return String(max(min(endIndex, this->length) - startIndex, 0), this->data + startIndex);
 	}
 
@@ -89,7 +108,7 @@ struct String {
 	 * @param defaultValue value to return when the character is not found
 	 * @return index of first occurrence of the character
 	 */
-	int indexOf(char ch, int startIndex = 0, int defaultValue = -1) {
+	int indexOf(char ch, int startIndex = 0, int defaultValue = -1) const {
 		for (int i = startIndex; i < this->length; ++i) {
 			if (this->data[i] == ch)
 				return i;
@@ -104,7 +123,7 @@ struct String {
 	 * @param defaultValue value to return when the character is not found
 	 * @return index of first occurrence of the character
 	 */
-	int lastIndexOf(char ch, int startIndex = std::numeric_limits<int>::max(), int defaultValue = -1) {
+	int lastIndexOf(char ch, int startIndex = std::numeric_limits<int>::max(), int defaultValue = -1) const {
 		int i = min(startIndex, this->length);
 		while (i > 0) {
 			--i;
@@ -114,14 +133,34 @@ struct String {
 		return defaultValue;
 	}
 
+	/**
+	 * Assignment operator
+	 */
 	String &operator =(String const &str) {
 		const_cast<char const *&>(this->data) = str.data;
 		const_cast<int&>(this->length) = str.length;
 		return *this;
 		
 	}
+	
+	/**
+	 * Index operator
+	 */
 	constexpr char const operator [](int index) const {return this->data[index];}
 
+	/**
+	 * Calculate a hash of the string
+	 * http://www.cse.yorku.ca/~oz/hash.html
+	 * @return dj2 hash of string
+	 */
+	uint32_t hash() const {
+		uint32_t h = 5381;
+		for (char c : *this) {
+			h = (h << 5) + h + uint8_t(c); // hash * 33 + c
+		}
+		return h;
+	}
+		
 	char const *begin() const {return this->data;}
 	char const *end() const {return this->data + this->length;}
 };
@@ -158,7 +197,7 @@ inline bool operator <(String a, String b) {
  * @param s source string
  */
 template <int N>
-inline void assign(char (&str)[N], String s) {
+inline void assign(char (&str)[N], String const &s) {
 	// copy string
 	int count = min(N, s.length);
 	for (int i = 0; i < count; ++i) {
@@ -170,10 +209,3 @@ inline void assign(char (&str)[N], String s) {
 		str[i] = 0;
 	}
 }
-
-#ifdef EMU
-inline std::ostream &operator <<(std::ostream &s, String str) {
-	s.write(str.data, str.length);
-	return s;
-}
-#endif

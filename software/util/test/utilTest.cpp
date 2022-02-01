@@ -7,7 +7,9 @@
 #include <Queue.hpp>
 #include <LinkedListNode.hpp>
 #include <StringBuffer.hpp>
+#include <StringHash.hpp>
 #include <StringSet.hpp>
+#include <StringOperators.hpp>
 #include <TopicBuffer.hpp>
 #include <gtest/gtest.h>
 #include <random>
@@ -17,29 +19,96 @@
 
 constexpr String strings[] = {"a", "bar", "bar2", "foo", "foo2", "foobar", "foobar2", "z"};
 
-
-TEST(utilTest, Array) {
-	int foo[] = {1, 2, 3};
-	int const bar[] = {1, 2, 3};
-
-	Array<int> fooArray(foo);
-	Array<int const> barArray(bar);
+// array with fixed size
+TEST(utilTest, ArrayN) {
+	int a1[] = {1, 2, 3};
+	int const a2[] = {11, 12, 13};
 	
-	EXPECT_FALSE(fooArray.isEmpty());
-	EXPECT_FALSE(barArray.isEmpty());
-	EXPECT_EQ(fooArray.length, 3);
-	EXPECT_EQ(barArray.length, 3);
-
-	EXPECT_EQ(foo[0], 1);
-	EXPECT_EQ(bar[2], 3);
+	// construct arrays from c-arrays
+	Array<int, 3> b1(a1);
+	Array<int const, 3> b2(a2);
+	Array<char const, 4> str("foo");
 	
-	foo[1] = 50;
-	EXPECT_EQ(foo[1], 50);
+	EXPECT_EQ(b1[1], a1[1]);
+	EXPECT_EQ(b2[1], a2[1]);
+	EXPECT_EQ(str[1], 'o');
+
+	EXPECT_FALSE(b1.isEmpty());
+	EXPECT_FALSE(b2.isEmpty());
+	EXPECT_EQ(b1.count(), 3);
+	EXPECT_EQ(b2.count(), 3);
+	
+	// construct const array from non-const array
+	Array<int const, 3> b3(b1);
+
+	// assign a value
+	b1[1] = 10;
+	EXPECT_EQ(b1[1], 10);
+	//b2[1] = 10; // should not compile
+	
+	// assign from other buffer
+	b3 = b1;
+	EXPECT_EQ(b3[1], b1[1]);
+	b3 = b2;
+	EXPECT_EQ(b3[1], b2[1]);
+
+	// fill with value and check count
+	b1.fill(50);
+	int count = 0;
+	for (int i : b1) {
+		++count;
+		EXPECT_EQ(i, 50);
+	}
+	EXPECT_EQ(count, 3);
 }
+
+// array with variable size
+TEST(utilTest, Array) {
+	int a1[] = {1, 2, 3};
+	int const a2[] = {11, 12, 13};
+	
+	// construct arrays from c-arrays
+	Array<int> b1(a1);
+	Array<int const> b2(a2);
+	Array<char const> str("foo");
+	
+	EXPECT_EQ(b1[1], a1[1]);
+	EXPECT_EQ(b2[1], a2[1]);
+	EXPECT_EQ(str[1], 'o');
+
+	EXPECT_FALSE(b1.isEmpty());
+	EXPECT_FALSE(b2.isEmpty());
+	EXPECT_EQ(b1.count(), 3);
+	EXPECT_EQ(b2.count(), 3);
+
+	// construct const array from non-const array
+	Array<int const> b3(b1);
+
+	// assign a value
+	b1[1] = 10;
+	EXPECT_EQ(b1[1], 10);
+	//b2[1] = 10; // should not compile
+
+	// assign from other buffer
+	b3 = b1;
+	EXPECT_EQ(b3[1], b1[1]);
+	b3 = b2;
+	EXPECT_EQ(b3[1], b2[1]);
+
+	// fill with value and check count
+	b1.fill(50);
+	int count = 0;
+	for (int i : b1) {
+		++count;
+		EXPECT_EQ(i, 50);
+	}
+	EXPECT_EQ(count, 3);
+}
+
 
 TEST(utilTest, ArrayList) {
 	std::mt19937 gen(1337); // standard mersenne_twister_engine seeded with 1337
-	std::uniform_int_distribution<> distrib(0, array::size(strings) - 1);
+	std::uniform_int_distribution<> distrib(0, array::count(strings) - 1);
 	for (int count = 1; count < 7; ++count) {
 		for (int round = 0; round < count * count; ++round) {
 			ArrayList<String, 20> list;
@@ -73,6 +142,7 @@ TEST(utilTest, ArrayList) {
 		}
 	}
 }
+
 
 TEST(utilTest, DataQueue) {
 	using Q = DataQueue<int, 32, 256>;
@@ -167,7 +237,7 @@ struct MyListElement : public LinkedListNode<MyListElement> {
 
 using MyList = LinkedListNode<MyListElement>;
 
-TEST(utilTest, MyList) {
+TEST(utilTest, LinkedListNode) {
 	MyList list;
 	
 	MyListElement element;
@@ -250,6 +320,7 @@ TEST(utilTest, String) {
 	// constructor from c-array
 	{
 		char ar[] = {'f', 'o', 'o'};
+		char dummy = 'x';
 		EXPECT_EQ(length(ar), 3);
 		String foo(ar);
 		EXPECT_EQ(foo, "foo");
@@ -285,19 +356,12 @@ TEST(utilTest, StringBuffer) {
 	b += " ";
 	b += flt(0.001234567f, 9);
 	b += " ";
-	b += flt(0.5f);
-	b += " ";
-	b += flt(0.5f, 0, 2);
-	b += " ";
+	b += flt(0.5f) + ' ';
+	b += flt(0.5f, 0, 2) + " ";
 	b += flt(1.0f, 1);
-	b += " ";
-	b += flt(1.0f, -1);
-	b += " ";
-	b += flt(-5.9f);
-	b += " ";
-	b += flt(100.9999f);
-	b += " ";
-	b += flt(2000000000);
+	b += ' ' + flt(1.0f, -1);
+	b += " " + flt(-5.9f);
+	b += " " + flt(100.9999f) + " " + flt(2000000000);
 	EXPECT_EQ(b.string(), "123456 -099 5 abcdef12 0 0 0.001234567 0.5 .5 1 1.0 -5.9 101 2000000000");
 
 	StringBuffer<5> c = flt(0.000000001f, 9);
@@ -308,17 +372,22 @@ TEST(utilTest, StringBuffer) {
 }
 
 TEST(utilTest, StringSet) {
-	// test StringSet
 	std::mt19937 gen(1337); // standard mersenne_twister_engine seeded with 1337
-	std::uniform_int_distribution<> distrib(0, array::size(strings) - 1);
+	std::uniform_int_distribution<> distrib(0, array::count(strings) - 1);
+
+	// number of elements to add to set
 	for (int count = 1; count < 7; ++count) {
+		// do several testing rounds
 		for (int round = 0; round < count * count; ++round) {
 			StringSet<20, 1024> set;
-			
-			// add elements to list
+            std::set<String> stdSet;
+			EXPECT_TRUE(set.isEmpty());
+
+			// add elements to set
 			for (int i = 0; i < count; ++i) {
 				String s = strings[distrib(gen)];
 				set.add(s);
+                stdSet.insert(s);
 			}
 			
 			// print list
@@ -329,12 +398,77 @@ TEST(utilTest, StringSet) {
 			}
 			*/
 			
+            // check if both sets have the same number of values
+            EXPECT_EQ(set.count(), stdSet.size());
+            
+            // check if both sets contain the same number of elements
+            auto it1 = set.begin();
+            auto it2 = stdSet.begin();
+            for (; it1 != set.end(); ++it1, ++it2) {
+                EXPECT_EQ(*it1, *it2);
+            }
+            
 			// check if the set contains unique sorted elements
 			for (int i = 0; i < set.count() - 1; ++i) {
 				EXPECT_TRUE(set[i] < set[i + 1]);
 			}
 		}
 	}
+}
+
+TEST(utilTest, StringHash) {
+	std::mt19937 gen(1337); // standard mersenne_twister_engine seeded with 1337
+	std::uniform_int_distribution<> distrib(0, array::count(strings) - 1);
+
+	// number of elements to add to set
+	for (int count = 1; count < 7; ++count) {
+		// do several testing rounds
+		for (int round = 0; round < count * count; ++round) {
+			StringHash<128, 100, 1024, int> hash;
+			std::map<String, std::pair<int, int>> stdMap;
+			EXPECT_TRUE(hash.isEmpty());
+
+			// add elements to set
+			for (int i = 0; i < count; ++i) {
+				int index = distrib(gen);
+				String s = strings[index];
+				int location = hash.getOrPut(s, [index]() {return index;});
+				stdMap[s] = std::make_pair(location, index);
+			}
+	
+			// compare contents to std::map
+			for (int i = 0; i < array::count(strings); ++i) {
+				String s = strings[i];
+				auto it = hash.find(s);
+				auto it2 = stdMap.find(s);
+				if (it2 == stdMap.end()) {
+					EXPECT_EQ(-1, hash.locate(s));
+					EXPECT_EQ(hash.end(), it);
+				} else {
+					EXPECT_EQ(it2->second.first, hash.locate(s));
+					EXPECT_EQ(it2->second.second, it->value);
+				}
+			}
+			EXPECT_EQ(stdMap.size(), hash.count());
+
+			// iterate over all entries in the hash
+			int count = 0;
+			for (auto const [key, value] : hash) {
+				// key is a const value
+				static_assert(!std::is_reference<decltype(key)>::value);
+				static_assert(std::is_const<decltype(key)>::value);
+
+				// value is a non-const reference
+				static_assert(std::is_reference<decltype(value)>::value);
+				static_assert(!std::is_const<decltype(value)>::value);
+				
+				EXPECT_EQ(stdMap[key].second, value);
+				++count;
+			}
+			EXPECT_EQ(hash.count(), count);
+		}
+	}
+	
 }
 
 

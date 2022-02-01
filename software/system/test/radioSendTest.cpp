@@ -31,8 +31,8 @@ int channel = 15;
 
 Coroutine send() {
 	// subtract one length bute, one flags byte and add 2 byte for crc (not in packet)
-	packet[0] = array::size(packet) - 1 - 1 + 2;
-	dataRequest[0] = array::size(dataRequest) - 1 - 1 + 2;
+	packet[0] = array::count(packet) - 1 - 1 + 2;
+	dataRequest[0] = array::count(dataRequest) - 1 - 1 + 2;
 	while (true) {
 
 		// send over the air
@@ -51,11 +51,11 @@ Coroutine send() {
 		radio::enableReceiver(true);*/
 
 
-		co_await timer::delay(500ms);
+		co_await timer::sleep(500ms);
 		co_await radio::send(0, dataRequest, result);
 		packet[3]++;
 
-		co_await timer::delay(1s);
+		co_await timer::sleep(1s);
 	}
 }
 
@@ -63,9 +63,8 @@ Coroutine send() {
 int main(void) {
 	loop::init();
 	timer::init();
-	rng::init(); // needed by radio
 	radio::init();
-	out::init();
+	gpio::init();
 	
 	radio::setPan(0, 0x1a62);
 	radio::setLongAddress(UINT64_C(0x00124b002268b96b));

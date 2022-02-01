@@ -1,6 +1,6 @@
 #include "LocalInterface.hpp"
 #include <timer.hpp>
-#include <out.hpp>
+#include <gpio.hpp>
 #include <util.hpp>
 
 
@@ -80,28 +80,32 @@ Array<EndpointType const> LocalInterface::getEndpoints(DeviceId deviceId) {
 	case MOTION_DETECTOR_ID:
 		return motionDetectorEndpoints;
 	case IN_ID:
-		return Array(IN_COUNT, inEndpoints);
+		return Array<EndpointType const>(IN_COUNT, inEndpoints);
 	case OUT_ID:
-		return Array(OUT_COUNT, outEndpoints);
+		return Array<EndpointType const>(OUT_COUNT, outEndpoints);
 	}
 	return {};
 }
 
-void LocalInterface::addSubscriber(DeviceId deviceId, Subscriber &subscriber) {
+void LocalInterface::addPublisher(DeviceId deviceId, uint8_t endpointIndex, Publisher &publisher) {
 	for (int i = 0; i < this->deviceCount; ++i) {
 		auto &device = this->devices[i];
-		if (device.id == deviceId && subscriber.endpointIndex < getEndpoints(deviceId).length) {
-			device.subscribers.add(subscriber);
+		if (device.id == deviceId && endpointIndex < getEndpoints(deviceId).count()) {
+			publisher.remove();
+			publisher.index = endpointIndex;
+			publisher.event = &this->publishEvent;
+			device.publishers.add(publisher);
 		}
 	}
 }
 
-void LocalInterface::addPublisher(DeviceId deviceId, Publisher &publisher) {
+void LocalInterface::addSubscriber(DeviceId deviceId, uint8_t endpointIndex, Subscriber &subscriber) {
 	for (int i = 0; i < this->deviceCount; ++i) {
 		auto &device = this->devices[i];
-		if (device.id == deviceId && publisher.endpointIndex < getEndpoints(deviceId).length) {
-			device.publishers.add(publisher);
-			publisher.event = &this->publishEvent;
+		if (device.id == deviceId && endpointIndex < getEndpoints(deviceId).count()) {
+			subscriber.remove();
+			subscriber.index = endpointIndex;
+			device.subscribers.add(subscriber);
 		}
 	}
 }
@@ -127,7 +131,7 @@ Coroutine LocalInterface::readAirSensor() {
 		for (auto &subscriber : device.subscribers) {
 			// get value
 			FloatWithFlag value;
-			switch (subscriber.endpointIndex) {
+			switch (subscriber.index) {
 			case BME680_TEMPERATURE_ENDPOINT:
 				// get temperature in celsius
 				value = airSensor.getTemperature();
@@ -146,20 +150,20 @@ Coroutine LocalInterface::readAirSensor() {
 			}
 			
 			// publish to subscriber
-			subscriber.barrier->resumeFirst([&subscriber, value] (Interface::Parameters &p) {
+			subscriber.barrier->resumeFirst([&subscriber, value] (Subscriber::Parameters &p) {
 				p.subscriptionIndex = subscriber.subscriptionIndex;
 				
 				// convert to target unit and type and resume coroutine if conversion was successful
-				MessageType type = bme680MessageTypes[subscriber.endpointIndex];
+				MessageType type = bme680MessageTypes[subscriber.index];
 				return convert(subscriber.messageType, p.message, type, &value);
 			});
 		}
 		
 		// wait
 		#ifdef DEBUG
-			co_await timer::delay(10s);
+			co_await timer::sleep(10s);
 		#else
-			co_await timer::delay(60s);
+			co_await timer::sleep(60s);
 		#endif
 	}
 }
@@ -168,6 +172,9 @@ Coroutine LocalInterface::publish() {
 	while (true) {
 		// wait until something was published
 		co_await this->publishEvent.wait();
+
+		// clear immediately as we have only one instance of this coroutine
+		this->publishEvent.clear();
 		
 		// iterate over devices
 		for (int i = 0; i < this->deviceCount; ++i) {
@@ -178,6 +185,7 @@ Coroutine LocalInterface::publish() {
 				// check if publisher wants to publish
 				if (publisher.dirty) {
 					publisher.dirty = false;
+					uint8_t endpointIndex = publisher.index;
 
 					// set to device
 					switch (device.id) {
@@ -188,17 +196,17 @@ Coroutine LocalInterface::publish() {
 							if (convert(MessageType::ON_OFF, &message, publisher.messageType, publisher.message)) {
 								// set output
 								if (message <= 1)
-									out::set(publisher.endpointIndex, message);
+									gpio::set(endpointIndex, message);
 								else
-									out::toggle(publisher.endpointIndex);
+									gpio::toggle(endpointIndex);
 							}
 						}
 					}
 
 					// forward to subscribers
 					for (auto &subscriber : device.subscribers) {
-						if (subscriber.endpointIndex == publisher.endpointIndex) {
-							subscriber.barrier->resumeAll([&subscriber, &publisher] (Interface::Parameters &p) {
+						if (subscriber.index == endpointIndex) {
+							subscriber.barrier->resumeAll([&subscriber, &publisher] (Subscriber::Parameters &p) {
 								p.subscriptionIndex = subscriber.subscriptionIndex;
 								
 								// convert to target unit and type and resume coroutine if conversion was successful

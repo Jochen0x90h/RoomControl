@@ -136,7 +136,7 @@ static const UsbConfiguration configurationDescriptor = {
 };
 
 // check if number of radio context does not exceed the number of usb endpoints
-static_assert(RADIO_CONTEXT_COUNT * 2 <= array::size(configurationDescriptor.endpoints));
+static_assert(RADIO_CONTEXT_COUNT * 2 <= array::count(configurationDescriptor.endpoints));
 
 // for each context and mac counter a barrier to be able to cancel send requests
 Barrier<> barriers[RADIO_CONTEXT_COUNT][256];
@@ -166,8 +166,8 @@ Coroutine send(int index) {
 	radio::Packet packet;
 	while (true) {
 		// receive from usb host
-		int length;
-		co_await usb::receive(1 + index, RADIO_MAX_PAYLOAD_LENGTH + radio::SEND_EXTRA_LENGTH, length, packet + 1);
+		int length = RADIO_MAX_PAYLOAD_LENGTH + radio::SEND_EXTRA_LENGTH;
+		co_await usb::receive(1 + index, length, packet + 1);
 
 		if (length == 1) {
 			// cancel by mac counter
@@ -245,9 +245,8 @@ int main(void) {
 			case radio::Request::ENABLE_RECEIVER:
 				radio::enableReceiver(wValue != 0);
 				break;
-			case radio::Request::SET_FLAGS:
-				if (wIndex < RADIO_CONTEXT_COUNT)
-					radio::setFlags(wIndex, radio::ContextFlags(wValue));
+			case radio::Request::SET_LONG_ADDRESS:
+				// todo
 				break;
 			case radio::Request::SET_PAN:
 				if (wIndex < RADIO_CONTEXT_COUNT)
@@ -257,12 +256,16 @@ int main(void) {
 				if (wIndex < RADIO_CONTEXT_COUNT)
 					radio::setShortAddress(wIndex, wValue);
 				break;
+			case radio::Request::SET_FLAGS:
+				if (wIndex < RADIO_CONTEXT_COUNT)
+					radio::setFlags(wIndex, radio::ContextFlags(wValue));
+				break;
 			default:
 				return false;
 			}
 			return true;
 		});
-	out::init();
+	gpio::init();
 
 	// start radio, enable baseband decoder and pass all packets for sniffer or terminal
 	radio::start(15);

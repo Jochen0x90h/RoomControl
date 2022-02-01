@@ -3,10 +3,12 @@
 #include "SwapChain.hpp"
 #include "tahoma_8pt.hpp" // font
 #include <StringBuffer.hpp>
+#include <StringOperators.hpp>
 
 
 class Menu {
 public:
+	
 	Menu(SwapChain &swapChain) : swapChain(swapChain), bitmap(swapChain.get()) {}
 
 	/**
@@ -19,6 +21,43 @@ public:
 	 */
 	void line();
 
+	struct Stream {
+		int x;
+		int y;
+		Bitmap<DISPLAY_WIDTH, DISPLAY_HEIGHT> &bitmap;
+		int16_t underlineCount = 0;
+		int16_t underlineStart;
+		
+		Stream &operator <<(char ch) {
+			this->x = this->bitmap.drawText(this->x, this->y, tahoma_8pt, String(1, &ch));
+			return *this;
+		}
+		
+		Stream &operator <<(String const &str) {
+			this->x = this->bitmap.drawText(this->x, this->y, tahoma_8pt, str);
+			return *this;
+		}
+		
+		Stream &operator <<(StreamCommand command) {
+			switch (command) {
+			case StreamCommand::SET_UNDERLINE:
+				if (this->underlineCount == 0)
+					this->underlineStart = this->x;
+				++this->underlineCount;
+				break;
+			case StreamCommand::CLEAR_UNDERLINE:
+				if (this->underlineCount > 0) {
+					if (--this->underlineCount == 0) {
+						int s = this->underlineStart;
+						this->bitmap.hLine(s, this->y + tahoma_8pt.height, this->x - s - 1);
+					}
+				}
+				break;
+			}
+			return *this;
+		}
+	};
+	
 	/**
 	 * Add a menu entry
 	 * @param markup graph of text with markup (e.g. underline)
@@ -27,8 +66,11 @@ public:
 	bool entry(T markup) {
 		int x = 10;
 		int y = this->entryY + 2 - this->offsetY;
-		if (this->bitmap != nullptr)
-			drawText(x, y, markup);
+		if (this->bitmap != nullptr) {
+			Stream s{10, this->entryY + 2 - this->offsetY, *this->bitmap};
+			s << markup;
+			//drawText(x, y, markup);
+		}
 		return entry();
 	}
 
@@ -64,7 +106,7 @@ protected:
 			menu.bitmap = menu.swapChain.get();
 		}
 	};
-
+/*
 	int drawText(int x, int y, char ch) {
 		return this->bitmap->drawText(x, y, tahoma_8pt, String(1, &ch));
 	}
@@ -104,7 +146,7 @@ protected:
 		x = drawText(x, y, plus.b);
 		return x;
 	}
-
+*/
 	bool entry();
 
 	SwapChain &swapChain;

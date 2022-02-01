@@ -21,20 +21,36 @@ struct False {};
 struct True {};
 
 template <typename T>
-struct IsArray : False {};
+struct IsArray : False {
+	static constexpr bool value = false;
+};
   
 template <typename T, int N>
-struct IsArray<T[N]> : True {};
+struct IsArray<T[N]> : True {
+	static constexpr bool value = true;
+};
 
 
 namespace array {
 
+template <typename T, int N>
+constexpr int count(const T (&array)[N]) {return N;}
+
+template <typename T, int N>
+constexpr int count(T (&array)[N]) {return N;}
+/*
 template <typename T, int N>
 constexpr int size(const T (&array)[N]) {return N;}
 
 template <typename T, int N>
 constexpr int size(T (&array)[N]) {return N;}
 
+template <typename T, int N>
+constexpr int length(const T (&array)[N]) {return N;}
+
+template <typename T, int N>
+constexpr int length(T (&array)[N]) {return N;}
+*/
 template <typename T, int N>
 constexpr T *end(T (&array)[N]) {return array + N;}
 
@@ -102,8 +118,8 @@ void copy(int length, OutputIt dst, InputIt src) {
 
 template <typename OutputElement, typename InputIt>
 void copy(Array<OutputElement> dst, InputIt src) {
-	auto it = dst.data;
-	auto end = it + dst.length;
+	auto it = dst.begin();
+	auto end = dst.end();
 	for (; it < end; ++it, ++src) {
 		*it = OutputElement(*src);
 	}
@@ -147,3 +163,13 @@ struct UIntBase<2> {
 template <int N>
 struct UInt : public UIntBase<(N > 256 ? (N > 65536 ? 4 : 2) : 1)> {
 };
+
+
+
+// concepts
+/*
+template<typename T>
+concept Stringable = requires(T str) {
+	{ toString(0, (char *)nullptr, str) };
+};
+*/

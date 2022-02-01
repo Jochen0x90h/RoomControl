@@ -54,7 +54,7 @@ static const UsbConfiguration configurationDescriptor = {
 		.bDescriptorType = usb::DescriptorType::INTERFACE,
 		.bInterfaceNumber = 0,
 		.bAlternateSetting = 0,
-		.bNumEndpoints = array::size(configurationDescriptor.endpoints),
+		.bNumEndpoints = array::count(configurationDescriptor.endpoints),
 		.bInterfaceClass = 0xff, // no class
 		.bInterfaceSubClass = 0xff,
 		.bInterfaceProtocol = 0xff,
@@ -85,8 +85,8 @@ uint8_t buffer[128] __attribute__((aligned(4)));
 Coroutine echo() {
 	while (true) {
 		// receive data from host
-		int length;
-		co_await usb::receive(1, array::size(buffer), length, buffer);
+		int length = array::count(buffer);
+		co_await usb::receive(1, length, buffer);
 
 		// check received data
 		bool error = false;
@@ -140,7 +140,7 @@ int main(void) {
 			}
 			return true;
 		});
-	out::init();
+	gpio::init(); // for debug signals on pins
 		
 	loop::run();
 }

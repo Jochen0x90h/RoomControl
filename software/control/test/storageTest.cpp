@@ -1,5 +1,5 @@
 #include <State.hpp>
-#include <Storage2.hpp>
+#include <Storage.hpp>
 #include <loop.hpp>
 #include <timer.hpp>
 #include <spi.hpp>
@@ -22,9 +22,9 @@ struct DeviceFlash {
 	Device *allocate() const;
 };
 
-class Device : public Storage2::Element<DeviceFlash> {
+class Device : public Storage::Element<DeviceFlash> {
 public:
-	Device(DeviceFlash const &flash) : Storage2::Element<DeviceFlash>(flash) {
+	Device(DeviceFlash const &flash) : Storage::Element<DeviceFlash>(flash) {
 		++counter;
 	}
 	~Device() {
@@ -41,12 +41,12 @@ Device *DeviceFlash::allocate() const {
 	return new Device(*this);
 }
 
-void printDevices(Storage2::Array<Device> const &devices, std::string s) {
+void printDevices(Storage::Array<Device> const &devices, std::string s) {
 	std::cout << s << std::endl;
 	for (auto &d : devices) {
 		std::cout << "\tflash: " << d->foo << " ram: " << d.bar << std::endl;
 	}
-	std::cout << "\tState instance count: " << Device::counter << std::endl;
+	std::cout << "\tDevice instance count: " << Device::counter << std::endl;
 }
 
 void testStorage() {
@@ -57,8 +57,8 @@ void testStorage() {
 	//	flash::erase(i);
 	
 	// array
-	Storage2::Array<Device> devices;
-	Storage2 storage(0, FLASH_PAGE_COUNT / 2, devices);
+	Storage::Array<Device> devices;
+	Storage storage(0, FLASH_PAGE_COUNT, devices);
 	
 
 	// print loaded devices
@@ -87,14 +87,12 @@ Coroutine testStateCoroutine() {
 	PersistentStateManager stateManager;
 	
 	// state 1
-	int o1 = stateManager.allocate<int>();
-	PersistentState<int> s1(o1);
-	co_await s1.restore(&stateManager);
+	PersistentState<int> s1(stateManager);
+	co_await s1.restore();
 
 	// state 2
-	int o2 = stateManager.allocate<uint8_t>();
-	PersistentState<uint8_t> s2(o2);
-	co_await s2.restore(&stateManager);
+	PersistentState<uint8_t> s2(stateManager);
+	co_await s2.restore();
 
 	while (true) {
 		std::cout << "s1: " << int(s1) << std::endl;
@@ -103,7 +101,7 @@ Coroutine testStateCoroutine() {
 		++s1;
 		--s2;
 
-		co_await timer::delay(1s);
+		co_await timer::sleep(1s);
 	}
 }
 

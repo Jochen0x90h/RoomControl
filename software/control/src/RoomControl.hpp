@@ -1,14 +1,12 @@
 #pragma once
 
-#include <MqttSnBroker.hpp> // include at first because of strange compiler error
 #include "LocalInterface.hpp"
 #include "BusInterface.hpp"
 #include "RadioInterface.hpp"
-#include "SSD1309.hpp"
-#include "Storage.hpp"
-#include "Storage2.hpp"
-#include "State.hpp"
 #include "SwapChain.hpp"
+#include <MqttSnBroker.hpp> // include at first because of strange compiler error
+#include <State.hpp>
+#include <Storage.hpp>
 #include <ClockTime.hpp>
 #include <Coroutine.hpp>
 #include <StringBuffer.hpp>
@@ -19,7 +17,7 @@
 /**
  * Main room control class that inherits platform dependent (hardware or emulator) components
  */
-class RoomControl : public MqttSnBroker {
+class RoomControl {
 public:
 	// maximum number of mqtt routes
 	static constexpr int MAX_ROUTE_COUNT = 32;
@@ -30,7 +28,7 @@ public:
 
 	RoomControl();
 
-	~RoomControl() override;
+	~RoomControl();
 
 	void applyConfiguration();
 	
@@ -38,12 +36,12 @@ public:
 // UpLink
 // ------
 	
-	void onUpConnected() override;
+	//void onUpConnected() override;
 
 
 // MqttSnClient
 // ------------
-
+/*
 	void onConnected() override;
 	
 	void onDisconnected() override;
@@ -142,10 +140,10 @@ public:
 		return this->selected == this->entryIndex;
 	}
 
-	/**
+	/ **
 	 * Get edit state. Returns 0 if not in edit mode or not the entry being edited, otherwise returns the 1-based index
 	 * of the field being edited
-	 */
+	 * /
 	int getEdit(int editCount = 1);
 
 	//bool isAnyEditFinished() {return this->editFinished;}
@@ -336,33 +334,33 @@ public:
 
 		Device &operator =(const Device &) = delete;
 
-		/**
+		/ **
 		 * Returns the size in bytes needed to store the device configuration in flash
 		 * @return size in bytes
-		 */
+		 * /
 		int getFlashSize() const;
 
-		/**
+		/ **
 		 * Returns the size in bytes needed to store the device state in ram
 		 * @return size in bytes
-		 */
+		 * /
 		int getRamSize() const;
 		
-		/**
+		/ **
 		 * Returns the name of the device
 		 * @return device name
-		 */
+		 * /
 		String getName() const {return this->name;}
 
-		/**
+		/ **
 		 * Set the name of the device
 		 * @param name device name
-		 */
+		 * /
 		void setName(String name);
 
-		/**
+		/ **
 		 * get a unique name index for the given type
-		 */
+		 * /
 		uint8_t getNameIndex(Component::Type type, int skipComponentIndex) const;
 		
 
@@ -489,7 +487,7 @@ public:
 	SystemTime updateDevices(SystemTime time,
 		uint8_t localEndpointId, uint8_t busEndpointId, uint8_t radioEndpointId, uint8_t const *data,
 		uint16_t topicId, String message);
-
+*/
 	// update devices for one interface
 	//SystemTime updateDevices(SystemTime time, SystemDuration duration, bool reportChanging,
 	//	Interface &interface, Storage::Array<Device, DeviceState> &devices, uint8_t endpointId, uint8_t const *data,
@@ -520,20 +518,20 @@ public:
 	void destroy(Interface &interface, Device const &device, DeviceState &deviceState);
 */
 
-	Storage::Array<Device, DeviceState> localDevices;
-	Storage::Array<Device, DeviceState> busDevices;
-	Storage::Array<Device, DeviceState> radioDevices;
+	//Storage::Array<Device, DeviceState> localDevices;
+	//Storage::Array<Device, DeviceState> busDevices;
+	//Storage::Array<Device, DeviceState> radioDevices;
 
 	// next time for reporting changing values
-	SystemTime nextReportTime;
+	//SystemTime nextReportTime;
 	
 	// time of last update of changing values
-	SystemTime lastUpdateTime;
+	//SystemTime lastUpdateTime;
 
 
 // ComponentIterator
 // -----------------
-
+/*
 	// iterator for device elements
 	struct ComponentIterator {
 		ComponentIterator(Device const &device, DeviceState &state)
@@ -588,7 +586,7 @@ public:
 		uint32_t *state;
 		uint32_t *statesEnd;
 	};
-
+*/
 
 // Interface
 // ---------
@@ -621,7 +619,7 @@ public:
 	// called when a device connected to the bus has sent data
 	//void onBusReceived(uint8_t endpointId, uint8_t const *data, int length);
 
-
+/*
 	// interface to devices connected via bus
 	//BusInterface busInterface;
 	
@@ -646,16 +644,16 @@ public:
 	struct Route {
 		Route &operator =(const Route &) = delete;
 
-		/**
+		/ **
 		 * Returns the size in bytes needed to store the device configuration in flash
 		 * @return size in bytes
-		 */
+		 * /
 		int getFlashSize() const;
 
-		/**
+		/ **
 		 * Returns the size in bytes needed to store the device state in ram
 		 * @return size in bytes
-		 */
+		 * /
 		int getRamSize() const;
 	
 		String getSrcTopic() const {return {this->srcTopicLength, buffer};}
@@ -691,10 +689,10 @@ public:
 // Command
 // -------
 
-	/**
+	/ **
 	 * Command to be executed e.g. on timer event.
 	 * Contains an mqtt topic where to publish a value and the value itself, both are stored in an external data buffer
-	 */
+	 * /
 	struct Command {
 		enum class ValueType : uint8_t {
 			// button: pressed or release
@@ -725,14 +723,14 @@ public:
 		// rotate value type to the next type
 		void rotateValueType(int delta);
 
-		/**
+		/ **
 		 * Get the size of the value in bytes
-		 */
+		 * /
 		//int getValueSize() const;
 		
-		/**
+		/ **
 		 * Get the number of values (e.g. 3 for rgb color)
-		 */
+		 * /
 		//int getValueCount() const;
 		
 		//int getFlashSize() const {return this->topicLength + getValueSize();}
@@ -777,27 +775,27 @@ public:
 
 		Timer &operator =(const Timer &) = delete;
 
-		/**
+		/ **
 		 * Returns the size in bytes needed to store the device configuration in flash
 		 * @return size in bytes
-		 */
+		 * /
 		int getFlashSize() const;
 
-		/**
+		/ **
 		 * Returns the size in bytes needed to store the device state in ram
 		 * @return size in bytes
-		 */
+		 * /
 		int getRamSize() const;
 
-		/**
+		/ **
 		 * Begin of buffer behind the list of commands containing the value and topic
-		 */
+		 * /
 		//uint8_t *begin() {return this->u.buffer + this->commandCount * sizeof(Command);}
 		//uint8_t const *begin() const {return this->u.buffer + this->commandCount * sizeof(Command);}
 		
-		/**
+		/ **
 		 * End of buffer
-		 */
+		 * /
 		//uint8_t *end() {return this->u.buffer + BUFFER_SIZE;}
 
 		// timer time and weekday flags
@@ -805,14 +803,14 @@ public:
 	
 	
 		uint8_t commandCount;
-		/*union {
+		/ *union {
 			// list of commands, overlaps with buffer
 			Command commands[MAX_COMMAND_COUNT];
 			
 			// buffer for commands, topics and values
 			uint8_t buffer[BUFFER_SIZE];
 		} u;
-		*/
+		* /
 		uint8_t commands[BUFFER_SIZE];
 	};
 	
@@ -961,7 +959,7 @@ public:
 	uint16_t topicDepth;
 	StringSet<64, 64 * 16> topicSet;
 	bool onlyCommands;
-
+*/
 
 
 
@@ -974,7 +972,7 @@ public:
 // Storage
 // -------
 
-	Storage2 storage2;
+	Storage storage;
 	PersistentStateManager stateManager;
 	
 
@@ -984,7 +982,7 @@ public:
 	String getRoomName() {return this->configurations[0]->name;}
 
 	// global configuration for this room control, see Configuration.hpp (array contains only one entry)
-	Storage2::Array<Configuration> configurations;
+	Storage::Array<Configuration> configurations;
 
 	// network key
 	AesKey networkKey;
@@ -1168,7 +1166,7 @@ public:
 // ----
 
 	// display
-Bitmap<DISPLAY_WIDTH, DISPLAY_HEIGHT> bitmap;
+	//Bitmap<DISPLAY_WIDTH, DISPLAY_HEIGHT> bitmap;
 	//SSD1309 display;
 	SwapChain swapChain;
 
