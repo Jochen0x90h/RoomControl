@@ -6,7 +6,7 @@
 /**
  * Cryptographic Hash Function
  * Reference: Sections B.1.3 and B.6. of https://zigbeealliance.org/wp-content/uploads/2019/12/docs-05-3474-21-0csg-zigbee-specification.pdf
- * Ported from wireshark/epan/dissectors/packet-zbee-security.c
+ * Ported from https://gitlab.com/wireshark/wireshark/-/blob/master/epan/dissectors/packet-zbee-security.c
  *
  * @param output output hash
  * @param input input data that should be hashed

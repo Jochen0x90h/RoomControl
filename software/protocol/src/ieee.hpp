@@ -19,7 +19,7 @@ enum class FrameControl : uint16_t {
 	FRAME_PENDING = 1 << 4,
 
 	ACKNOWLEDGE_REQUEST = 1 << 5,
-	
+
 	PAN_ID_COMPRESSION = 1 << 6,
 
 	SEQUENCE_NUMBER_SUPPRESSION = 1 << 8,
@@ -50,21 +50,23 @@ enum class Command : uint8_t {
 };
 
 // ieee 802.15.4 association request
-enum class AssociationRequest : uint8_t {
+enum class DeviceInfo : uint8_t {
 	ALTERNATE_PAN_COORDINATOR = 1,
 
 	DEVICE_TYPE_MASK = 1 << 1,
-	DEVICE_TYPE_RFD = 0,
+	DEVICE_TYPE_RFD = 0, // reduced function device
+	DEVICE_TYPE_FFD = 1 << 1, // full function device
 
 	POWER_SOURCE_MASK = 1 << 2,
 	POWER_SOURCE_BATTERY = 0,
+	POWER_SOURCE_MAINS = 1 << 2,
 
-	RECEIVE_ON_WHEN_IDLE = 1 << 3,
+	RX_ON_WHEN_IDLE = 1 << 3,
 
 	SECURITY_CAPABILITY = 1 << 6,
 
 	ALLOCATE_SHORT_ADDRESS = 1 << 7
 };
-FLAGS_ENUM(AssociationRequest)
+FLAGS_ENUM(DeviceInfo)
 
 } // namespace ieee

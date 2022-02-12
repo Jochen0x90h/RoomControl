@@ -28,7 +28,7 @@ TEST(utilTest, ArrayN) {
 	Array<int, 3> b1(a1);
 	Array<int const, 3> b2(a2);
 	Array<char const, 4> str("foo");
-	
+		
 	EXPECT_EQ(b1[1], a1[1]);
 	EXPECT_EQ(b2[1], a2[1]);
 	EXPECT_EQ(str[1], 'o');
@@ -40,6 +40,10 @@ TEST(utilTest, ArrayN) {
 	
 	// construct const array from non-const array
 	Array<int const, 3> b3(b1);
+
+	// comparison
+	EXPECT_TRUE(b1 != b2);
+	EXPECT_TRUE(b1 == b3);
 
 	// assign a value
 	b1[1] = 10;
@@ -222,9 +226,8 @@ TEST(utilTest, flagsEnum) {
 	a |= Flags::BAR;
 	EXPECT_EQ(a, Flags::FOO | Flags::BAR);
 
-	uint8_t b = 0;
-	b |= Flags::FOO;
-	EXPECT_EQ(Flags::FOO, b);
+	a &= ~Flags::FOO;
+	EXPECT_EQ(a, Flags::BAR);
 }
 
 

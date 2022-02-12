@@ -50,6 +50,10 @@ public:
 	static constexpr int FORWARD_COUNT = 8;
 
 
+	/**
+	 * Constructor
+	 * @param localPort local udp port
+	 */
 	MqttSnBroker(uint16_t localPort);
 
 	/**

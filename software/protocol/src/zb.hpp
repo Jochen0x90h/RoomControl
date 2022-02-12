@@ -20,11 +20,11 @@ enum class NwkFrameControl : uint16_t {
 	VERSION_2 = 2 << 2,
 	// https://zigbeealliance.org/wp-content/uploads/2019/11/docs-09-5499-26-batt-zigbee-green-power-specification.pdf
 	VERSION_3_GP = 3 << 2,
-	
+
 	DISCOVER_ROUTE_MASK = 3 << 6,
 	DISCOVER_ROUTE_SUPPRESS = 0 << 6,
 	DISCOVER_ROUTE_ENABLE = 1 << 6,
-	
+
 	MULTICAST = 1 << 8,
 
 	SECURITY = 1 << 9,
@@ -57,9 +57,9 @@ enum class NwkCommandRouteRequestOptions : uint8_t {
 	DISCOVERY_MASK = 3 << 3,
 	DISCOVERY_SINGLE = 0, // "Not Many-to-One" in Wireshark
 	DISCOVERY_MANY_TO_ONE_WITH_SOURCE_ROUTING = 1 << 3,
-	
+
 	EXTENDED_DESTINATION = 1 << 5,
-	
+
 	MULTICAST = 1 << 6
 };
 FLAGS_ENUM(NwkCommandRouteRequestOptions)
@@ -67,8 +67,8 @@ FLAGS_ENUM(NwkCommandRouteRequestOptions)
 enum class NwkCommandRouteReplyOptions : uint8_t {
 	EXTENDED_ORIGINATOR = 1 << 4,
 
-	EXTENDED_RESPONDER = 1 << 5,
-	
+	EXTENDED_DESTINATION = 1 << 5, // "Responder" in Wireshark
+
 	MULTICAST = 1 << 6
 };
 FLAGS_ENUM(NwkCommandRouteReplyOptions)
@@ -101,25 +101,32 @@ FLAGS_ENUM(NwkCommandLinkStatusOptions)
 
 // application support layer frame control field
 enum class ApsFrameControl : uint8_t {
+	NONE = 0,
+
 	TYPE_MASK = 3,
 	TYPE_DATA = 0,
 	TYPE_COMMAND = 1,
 	TYPE_ACK = 2,
-	
+
 	DELIVERY_MASK = 3 << 2,
 	DELIVERY_UNICAST = 0 << 2,
 
+	ACK_FORMAT = 1 << 4,
+
 	SECURITY = 1 << 5,
-	
-	ACKNOWLEDGEMENT_REQUEST = 1 << 6,
-	
+
+	ACK_REQUEST = 1 << 6,
+
 	EXTENDED = 1 << 7
 };
 FLAGS_ENUM(ApsFrameControl)
 
 enum class ApsCommand : uint8_t  {
-	TRANSPORT_KEY = 5,
-	UPDATE_DEVICE = 6,
+	TRANSPORT_KEY = 0x5,
+	UPDATE_DEVICE = 0x6,
+	REQUEST_KEY = 0x8,
+	VERIFY_KEY = 0x0f,
+	CONFIRM_KEY = 0x10
 };
 
 
@@ -128,7 +135,7 @@ enum class ApsCommand : uint8_t  {
 
 enum class ZdpCommand : uint16_t {
 	NETWORK_ADDRESS_REQUEST = 0x0000,
-	
+
 	EXTENDED_ADDRESS_REQUEST = 0x0001,
 	EXTENDED_ADDRESS_RESPONSE = 0x8001,
 
@@ -150,14 +157,36 @@ enum class ZdpCommand : uint16_t {
 	BIND_RESPONSE = 0x8021,
 
 	PERMIT_JOIN_REQUEST = 0x0036,
+
+	RESPONSE_FLAG = 0x8000
 };
+FLAGS_ENUM(ZdpCommand)
+
+enum class ZdpNodeDescriptorInfo : uint16_t {
+	TYPE_MASK = 0x0007,
+	TYPE_COORDINATOR = 0,
+
+	BAND_868MHZ = 1 << 11,
+	BAND_902MHZ = 1 << 13,
+	BAND_2_4GHZ = 1 << 14,
+	BAND_EU_SUB_GHZ = 1 << 15
+};
+FLAGS_ENUM(ZdpNodeDescriptorInfo)
+
+// for capabilities use ieee::DeviceInfo
+
+enum class ZdpNodeDescriptorServerFlags : uint16_t {
+	PRIMARY_TRUST_CENTER = 1,
+	REVISION_22 = 22 << 9
+};
+FLAGS_ENUM(ZdpNodeDescriptorServerFlags)
 
 
 // cluster library (zcl)
 // ---------------------
 
 enum class ZclProfile : uint16_t {
-	HOME_AUTOMATION = 0x104,
+	HOME_AUTOMATION = 0x0104,
 	GREEN_POWER = 0xa1e0,
 	ZB_LIGHT_LINK = 0xc05e,
 };
@@ -179,13 +208,13 @@ enum class ZclFrameControl : uint8_t {
 	TYPE_MASK = 3,
 	TYPE_PROFILE_WIDE = 0,
 	TYPE_CLUSTER_SPECIFIC = 1,
-	
+
 	MANUFACTURER_SPECIFIC = 1 << 2,
-	
+
 	DIRECTION_MASK = 1 << 3,
 	DIRECTION_SERVER_TO_CLIENT = 1 << 3,
 	DIRECTION_CLIENT_TO_SERVER = 0,
-	
+
 	DISABLE_DEFAULT_RESPONSE = 1 << 4
 };
 FLAGS_ENUM(ZclFrameControl)
@@ -230,7 +259,7 @@ enum class ZclBasicAttribute : uint16_t {
 enum class ZclPowerSourceType : uint8_t {
 	// mains (single phase)
 	MAINS = 1,
-	
+
 	// battery
 	BATTERY = 3
 };
@@ -291,17 +320,32 @@ enum ZclLevelControlCommand : uint8_t {
 // security
 // --------
 
-// key type (table 4.31)
-enum class KeyIdentifier : uint8_t  {
-	DATA = 0,
+/*
+	network key: used in standard communication in nwk layer
+
+*/
+
+// standard key type (table 4.9)
+enum class StandardKeyType : uint8_t  {
+	// network key used in nwk, is defined by the coordinator and distributed with TRANSPORT_KEY aps messages
 	NETWORK = 1,
-	KEY_TRANSPORT = 2,
-	KEY_LOAD = 3
+
+	// application link key used in aps for communicatin between two devices
+	APPLICATION_LINK = 3,
+
+	// trust-center link key used in aps, default is 5A:69:67:42:65:65:41:6C:6C:69:61:6E:63:65:30:39
+	TRUST_CENTER_LINK = 4
 };
 
-// security control field (4.5.1.1)
+// request key type (table 4.19)
+enum class RequestKeyType : uint8_t {
+	APPLICATION_LINK = 2,
+	TRUST_CENTER_LINK = 4
+};
+
+// security control field for nwk and aps (4.5.1.1)
 enum class SecurityControl : uint8_t {
-	// security level
+	// security level (table 4.30)
 	LEVEL_MASK = 7,
 	LEVEL_NONE = 0,
 	LEVEL_MIC32 = 1,
@@ -314,10 +358,10 @@ enum class SecurityControl : uint8_t {
 
 	// key type (table 4.31)
 	KEY_MASK = 3 << 3,
-	KEY_LINK = 0,
-	KEY_NETWORK = 1 << 3,
-	KEY_KEY_TRANSPORT = 2 << 3,
-	KEY_KEY_LOAD = 3 << 3,
+	KEY_LINK = 0, // trust-center or application link key used in aps
+	KEY_NETWORK = 1 << 3, // network key used in nwk
+	KEY_KEY_TRANSPORT = 2 << 3, // used to aps-encrypt TRANSPORT_KEY messages containing a network key
+	KEY_KEY_LOAD = 3 << 3, // used to aps-encrypt TRANSPORT_KEY messages containing a link key
 
 	EXTENDED_NONCE = 1 << 5,
 };

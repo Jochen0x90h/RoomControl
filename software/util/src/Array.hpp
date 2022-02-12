@@ -11,7 +11,7 @@
 template <typename T, int N = -1>
 class Array {
 public:
-	
+
 	/**
 	 * Construct from pointer
 	 */
@@ -59,7 +59,7 @@ public:
 	 * @return number of elements
 	 */
 	static int count() {return N;}
-	
+
 	/**
 	 * Fill whole buffer with a value
 	 * @param value fill value
@@ -69,7 +69,19 @@ public:
 			element = value;
 		}
 	}
-	
+
+	/**
+	 * Comparison operator
+	 */
+	bool operator ==(Array<T const, N> array) const {
+		auto b = array.data();
+		for (int i = 0; i < N; ++i) {
+			if (this->buffer[i] != b[i])
+				return false;
+		}
+		return true;
+	}
+
 	/**
 	 * Element-wise xor assignment operator
 	 */
@@ -93,12 +105,12 @@ public:
 		assert(uint32_t(index) <= N - M);
 		return Array<T, M>(this->buffer + index);
 	}
-	
+
 	/**
 	 * Get pointer to data
 	 */
 	T *data() {return this->buffer;}
-	
+
 	/**
 	 * Iterators
 	 */
@@ -106,7 +118,7 @@ public:
 	T *end() const {return this->buffer + N;}
 
 protected:
-	
+
 	T *buffer;
 };
 
@@ -136,18 +148,18 @@ public:
 	 * Default copy constructor
 	 */
 	Array(Array const &array) = default;
-	
+
 	/**
 	 * Copy construct from buffer with different data type (e.g. non-const to const)
 	 */
 	template <typename T2>
 	Array(Array<T2> array) : buffer(array.data()) {}
-	
+
 	/**
 	 * Default assignment operator
 	 */
 	Array &operator =(Array const &array) = default;
-	
+
 	/**
 	 * Check if the array is empty
 	 * @return true when empty
@@ -159,7 +171,7 @@ public:
 	 * @return number of elements
 	 */
 	int count() {return this->length;}
-	
+
 	/**
 	 * Fill whole buffer with a value
 	 * @param value fill value
@@ -176,12 +188,12 @@ public:
 		assert(uint32_t(index) < this->length);
 		return this->buffer[index];
 	}
-	
+
 	/**
 	 * Get pointer to data
 	 */
 	T *data() {return this->buffer;}
-	
+
 	/**
 	 * Iterators
 	 */
@@ -189,7 +201,7 @@ public:
 	T *end() const {return this->buffer + this->length;}
 
 protected:
-	
+
 	int length;
 	T *buffer;
 };

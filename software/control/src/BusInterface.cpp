@@ -52,10 +52,10 @@ BusInterface::~BusInterface() {
 Coroutine BusInterface::start(DataBuffer<16> const &key, AesKey const &aesKey) {
 	this->key = &key;
 	this->aesKey = &aesKey;
-	
+
 	// restore security counter
 	co_await this->securityCounter.restore();
-		
+
 	// start coroutines
 	publish();
 	awaitRequest();
@@ -130,18 +130,18 @@ AwaitableCoroutine BusInterface::commission() {
 
 		// write zero as command prefix to bus and check if a device gets enumerated
 		outMessage[0] = 0;
-		int readLength = maxEnumerateLength;
+		int readLength = array::count(inMessage);
 		co_await bus::transfer(1, outMessage, readLength, inMessage);
 		if (readLength < minEnumerateLength)
 			continue;
-		
+
 		// get device id from enumerate response
 		{
 			MessageReader r(readLength, inMessage);
-			
+
 			// set start of header
 			r.setHeader();
-			
+
 			// check if zero was looped back
 			if (r.u8() != 0)
 				continue;
@@ -159,12 +159,12 @@ AwaitableCoroutine BusInterface::commission() {
 				deviceId |= (r.arbiter() - 1) << i * 3;
 			}
 			flash.deviceId = deviceId;
-			
+
 			// get endpoints
 			flash.endpointCount = r.getRemaining();
 			array::copy(flash.endpointCount, flash.endpoints, r.current);
 		}
-		
+
 		// check if device already exists and set used address flags
 		array::fill(9, outMessage, 0);
 		int index = this->devices.count();
@@ -174,7 +174,7 @@ AwaitableCoroutine BusInterface::commission() {
 			else
 				outMessage[i >> 3] |= 1 << (i & 7);
 		}
-		
+
 		// find free address
 		int j;
 		for (j = 0; j < 9; ++j) {
@@ -189,7 +189,7 @@ AwaitableCoroutine BusInterface::commission() {
 				break;
 			}
 		}
-		
+
 		// continue if no free address found
 		if (j == 9)
 			continue;
@@ -197,14 +197,10 @@ terminal::out << ("bus device " + hex(flash.deviceId) + ": assigned address " + 
 
 		// commission device
 		{
-			// get global configuration
-			//auto const &configuration = *this->configuration;
-
 			MessageWriter w(outMessage);
 
 			// set start of header
-			//w.setHeader();
-			EncryptWriter c(w);
+			w.setHeader();
 
 			// command prefix
 			w.u8(0);
@@ -214,22 +210,23 @@ terminal::out << ("bus device " + hex(flash.deviceId) + ": assigned address " + 
 
 			// device id
 			w.u32L(flash.deviceId);
-			
+
 			// address that gets assigned to the device
 			w.u8(flash.address);
-			
+
 			// key
 			w.data(*this->key);
 
 			// set start of message (only mic, payload is in the header and therefore not encrypted)
-			c.setMessage();
+			w.setMessage();
 
 			// encrypt
 			Nonce nonce(0, 0);
-			c.encrypt(micLength, nonce, busDefaultAesKey);
-			
+			w.encrypt(micLength, nonce, busDefaultAesKey);
+
 			int writeLength = w.getLength();
-			co_await bus::transfer(readLength, outMessage, writeLength, inMessage);
+			int readLength = writeLength;
+			co_await bus::transfer(writeLength, outMessage, readLength, inMessage);
 		}
 
 		Device* device = new Device(flash);
@@ -304,7 +301,7 @@ bool readMessage(MessageType dstType, void *dstMessage, MessageReader r, Endpoin
 			return false;
 		}
 		break;
-		
+
 	case MessageType::TRIGGER:
 		switch (srcType) {
 		case EndpointType::TRIGGER_IN:
@@ -409,8 +406,7 @@ bool readMessage(MessageType dstType, void *dstMessage, MessageReader r, Endpoin
 
 bool BusInterface::receive(MessageReader &r) {
 	// set start of header
-	//r.setHeader();
-	DecryptReader c(r);
+	r.setHeader();
 
 	// get address
 	uint8_t a1 = r.arbiter() - 1;
@@ -420,18 +416,18 @@ bool BusInterface::receive(MessageReader &r) {
 	uint32_t securityCounter = r.u32L();
 
 	// set start of encrypted message
-	c.setMessage();
+	r.setMessage();
 
 	// decrypt
 	Nonce nonce(address, securityCounter);
-	if (!c.decrypt(micLength, nonce, *this->aesKey))
+	if (!r.decrypt(micLength, nonce, *this->aesKey))
 		return false;
 
 	for (auto &device : this->devices) {
 		auto const &flash = *device;
 		if (flash.address == address) {
 			uint8_t endpointIndex = r.u8();
-			
+
 			// publish to subscribers
 			for (auto &subscriber : device.subscribers) {
 				// check if this is the right endpoint
@@ -456,7 +452,7 @@ Coroutine BusInterface::awaitRequest() {
 	while (true) {
 		// wait for a request by a device
 		co_await bus::request();
-	
+
 		int readLength = maxMessageLength;
 		co_await bus::transfer(0, nullptr, readLength, inMessage);
 
@@ -539,7 +535,7 @@ bool writeMessage(MessageWriter &w, EndpointType endpointType, MessageType srcTy
 				bus::LevelControlCommand command = !src.level.getFlag() ? bus::LevelControlCommand::SET
 					: (level >= 0 ? bus::LevelControlCommand::INCREASE : bus::LevelControlCommand::DECREASE);
 				uint8_t value = clamp(abs(int(src.level * 256.0f)), 0, 255);
-				
+
 				if (srcType == MessageType::LEVEL) {
 					w.e8<bus::LevelControlCommand>(command);
 					w.u8(clamp(level, 0, 255));
@@ -567,7 +563,7 @@ bool writeMessage(MessageWriter &w, EndpointType endpointType, MessageType srcTy
 		// conversion failed
 		return false;
 	}
-	
+
 	// conversion successful
 	return true;
 }
@@ -578,10 +574,10 @@ Coroutine BusInterface::publish() {
 	while (true) {
 		// wait until something was published
 		co_await this->publishEvent.wait();
-		
+
 		// clear immediately as we have only one instance of this coroutine
 		this->publishEvent.clear();
-		
+
 		// iterate over devices
 		for (auto &device : this->devices) {
 			// iterate over publishers
@@ -603,10 +599,9 @@ Coroutine BusInterface::publish() {
 								DeviceFlash const &flash = *device;
 
 								MessageWriter w(outMessage);
-								
+
 								// set start of header
-								//w.setHeader();
-								EncryptWriter c(w);
+								w.setHeader();
 
 								// encoded address
 								w.arbiter((flash.address & 7) + 1);
@@ -614,10 +609,10 @@ Coroutine BusInterface::publish() {
 
 								// security counter
 								w.u32L(this->securityCounter);
-								
+
 								// set start of message
-								c.setMessage();
-								
+								w.setMessage();
+
 								// endpoint index
 								w.u8(endpointIndex);
 
@@ -627,7 +622,7 @@ Coroutine BusInterface::publish() {
 
 								// encrypt
 								Nonce nonce(flash.address, this->securityCounter);
-								c.encrypt(micLength, nonce, *this->aesKey);
+								w.encrypt(micLength, nonce, *this->aesKey);
 
 								//bool ok = decrypt(message, nonce, header, headerLength, message, payloadLength, micLength, this->configuration->networkAesKey);
 
@@ -638,11 +633,11 @@ Coroutine BusInterface::publish() {
 							}
 							int readLength = maxMessageLength;
 							co_await bus::transfer(writeLength, outMessage, readLength, inMessage);
-							
+
 							// check if inMessage is same as outMessage which means send was successful
 							if (readLength == writeLength && array::equals(readLength, inMessage, outMessage))
 								break;
-							
+
 							// maybe a device has sent a message and has overridden our message (don't count as retry)
 							if (readLength >= minMessageLength) {
 								MessageReader r(readLength, inMessage);
@@ -653,13 +648,13 @@ Coroutine BusInterface::publish() {
 							}
 						} while (retry < MAX_RETRY);
 					}
-	
+
 					// forward to subscribers
 					for (auto &subscriber : device.subscribers) {
 						if (subscriber.index == publisher.index) {
 							subscriber.barrier->resumeAll([&subscriber, &publisher] (Subscriber::Parameters &p) {
 								p.subscriptionIndex = subscriber.subscriptionIndex;
-								
+
 								// convert to target unit and type and resume coroutine if conversion was successful
 								return convert(subscriber.messageType, p.message,
 									publisher.messageType, publisher.message);

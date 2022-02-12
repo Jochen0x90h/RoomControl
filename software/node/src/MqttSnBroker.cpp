@@ -927,7 +927,7 @@ Coroutine MqttSnBroker::receive() {
 				}
 			}
 
-			// forward to other connections
+			// forward to other connections (done in separate coroutine)
 			this->forwardWaitlist.resumeFirst([connectionIndex, topicIndex, pubLength, pubData](ForwardParameters &p) {
 				p.sourceConnectionIndex = connectionIndex;
 				p.topicIndex = topicIndex;

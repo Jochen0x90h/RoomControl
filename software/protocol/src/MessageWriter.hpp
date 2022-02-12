@@ -10,9 +10,9 @@
 
 struct MessageWriter {
 	uint8_t *current;
-	
-	MessageWriter(uint8_t *current) : current(current) {}
-	
+
+	explicit MessageWriter(uint8_t *message) : current(message) {}
+
 	void u8(uint8_t value) {
 		this->current[0] = value;
 		++this->current;
@@ -31,14 +31,14 @@ struct MessageWriter {
 		current[1] = value >> 8;
 		this->current += 2;
 	}
-	
+
 	void u16B(uint16_t value) {
 		auto current = this->current;
 		current[0] = value >> 8;
 		current[1] = value;
 		this->current += 2;
 	}
-	
+
 	template <typename T>
 	void e16L(T value) {
 		static_assert(std::is_same<typename std::underlying_type<T>::type, uint16_t>::value);
@@ -73,12 +73,12 @@ struct MessageWriter {
 		u32L(value);
 		u32L(value >> 32);
 	}
-	
+
 	void u64B(uint64_t value) {
 		u32B(value >> 32);
 		u32B(value);
 	}
-	
+
 	/**
 	 * Add the contents of a data buffer
 	 */
@@ -124,21 +124,21 @@ struct MessageWriter {
 	void skip(int n) {
 		this->current += n;
 	}
-		
+
 	// fulfill stream concept
 	MessageWriter &operator <<(char ch) {u8(ch); return *this;}
 	MessageWriter &operator <<(String const &str) {string(str); return *this;}
-	
+
 };
 
 
 class EncryptWriter : public MessageWriter {
 public:
-	
+
 	/**
 	 * Constructor. Sets start of header at current position ("string a" for encryption)
 	 */
-	EncryptWriter(uint8_t *current) : MessageWriter(current) {}
+	explicit EncryptWriter(uint8_t *message) : MessageWriter(message) {}
 
 	/**
 	 * Set start of header at current position ("string a" for encryption)
@@ -170,8 +170,8 @@ public:
 		// encrypt in-place
 		::encrypt(message, header, headerLength, message, payloadLength, micLength, nonce, aesKey);
 	}
-	
-	
+
+
 	uint8_t const *header = nullptr;
 	uint8_t *message = nullptr;
 };
