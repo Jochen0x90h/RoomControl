@@ -140,7 +140,7 @@ int main(void) {
 			}
 			return true;
 		});
-	gpio::init(); // for debug signals on pins
+	output::init(); // for debug led's
 		
 	loop::run();
 }

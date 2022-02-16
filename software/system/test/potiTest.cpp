@@ -1,31 +1,67 @@
 #include <poti.hpp>
+#include <input.hpp>
 #include <timer.hpp>
 #include <debug.hpp>
 #include <loop.hpp>
+#ifdef EMU
+#include "terminal.hpp"
+#include <StringOperators.hpp>
+#endif
 
 
 Coroutine handlePoti() {
 	while (true) {
-		int8_t d;
-		bool activated;
-		
-		// wait until poti has changed for up to 2 seconds
-		switch (co_await select(poti::change(d, activated), timer::sleep(2s))) {
+		int8_t delta;
+		int index;
+		bool value;
+
+		// wait until poti has changed or rising edge on button input for up to 2 seconds
+		switch (co_await select(poti::change(0, delta), input::trigger(1 << INPUT_POTI_BUTTON, 1 << INPUT_PCB_BUTTON, index, value), timer::sleep(2s))) {
 		case 1:
-			if (!activated) {
-				debug::setRedLed(d & 1);
-				debug::setGreenLed(d & 2);
-				debug::setBlueLed(d & 4);
+#ifdef EMU
+			terminal::out << "delta " << dec(delta) << '\n';
+#endif
+			debug::setRedLed(delta & 1);
+			debug::setGreenLed(delta & 2);
+			debug::setBlueLed(delta & 4);
+			break;
+		case 2:
+#ifdef EMU
+			terminal::out << "activated " << dec(index) << '\n';
+#endif
+			if (index == 0) {
+				debug::toggleRedLed();
+				debug::setGreenLed(false);
 			} else {
 				debug::setRedLed(false);
 				debug::toggleGreenLed();
-				debug::setBlueLed(false);
+			}
+			debug::setBlueLed(false);
+			break;
+		case 3:
+			{
+				// also test if time overflow works
+				auto time = timer::now();
+				int i = time.value >> 20;
+				switch (i) {
+				case 0:
+					debug::toggleRedLed();
+					debug::setGreenLed(false);
+					debug::setBlueLed(false);
+					break;
+				case 1:
+					debug::setRedLed(false);
+					debug::toggleGreenLed();
+					debug::setBlueLed(false);
+					break;
+				default:
+					debug::setRedLed(false);
+					debug::setGreenLed(false);
+					debug::toggleBlueLed();
+				}
 			}
 			break;
-		case 2:
-			debug::toggleBlueLed();
-			break;
-		}		
+		}
 	}
 }
 
@@ -33,9 +69,10 @@ int main(void) {
 	loop::init();
 	timer::init();
 	poti::init();
-	gpio::init(); // for debug signals on pins
+	output::init(); // for debug signals on pins
+	input::init();
 
 	handlePoti();
 
-	loop::run();	
+	loop::run();
 }

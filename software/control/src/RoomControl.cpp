@@ -4,10 +4,11 @@
 #include "Message.hpp"
 #include <calendar.hpp>
 #include <poti.hpp>
+#include <input.hpp>
 #include <spi.hpp>
 #include <rng.hpp>
 #include <radio.hpp>
-#include <gpio.hpp>
+#include <output.hpp>
 #include <terminal.hpp>
 #include <timer.hpp>
 #include <crypt.hpp>
@@ -294,6 +295,7 @@ RoomControl::RoomControl()
 	this->nextReportTime = now;
 	onTimeout();
 */
+	
 	// start coroutines
 	idleDisplay();
 	//doMenu();
@@ -2940,9 +2942,9 @@ Coroutine RoomControl::testSwitch() {
 		publisher.publish();
 
 		if (message <= 1)
-			gpio::set(0, message);
+			output::set(0, message);
 		else if (message == 2)
-			gpio::toggle(0);
+			output::toggle(0);
 	}
 }
 
@@ -3309,14 +3311,12 @@ Coroutine RoomControl::idleDisplay() {
 		this->swapChain.show(bitmap);
 
 		// wait for event
-		int8_t delta;
-		bool activated;
-		switch (co_await select(poti::change(delta, activated), calendar::secondTick())) {
+		int index;
+		bool value;
+		switch (co_await select(input::trigger(1 << INPUT_POTI_BUTTON, 0, index, value), calendar::secondTick())) {
 		case 1:
-			// poti turned or activated
-			if (activated) {
-				co_await mainMenu();
-			}
+			// poti button pressed
+			co_await mainMenu();
 			break;
 		case 2:
 			// second elapsed

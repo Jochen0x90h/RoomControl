@@ -93,7 +93,7 @@ int main(void) {
 	loop::init();
 	timer::init();
 	network::init();
-	gpio::init();
+	output::init();
 
 	Test test(localPort);
 	test.connect(gatewayPort, name);

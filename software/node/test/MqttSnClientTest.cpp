@@ -76,7 +76,7 @@ int main(void) {
 	loop::init();
 	timer::init();
 	network::init();
-	gpio::init();
+	output::init();
 		
 	publish();
 

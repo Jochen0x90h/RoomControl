@@ -1,5 +1,8 @@
 #pragma once
 
+#include <boardConfig.hpp>
+
+
 // timer
 // -----
 
@@ -15,11 +18,23 @@ constexpr int TIMER_ROOM_CONTROL = 3;
 constexpr int CALENDAR_ROOM_CONTROL = 0;
 
 
-// in/out
+// inputs
 // ------
 
-constexpr int IN_COUNT = 0;
-constexpr int OUT_COUNT = 4;
+constexpr int INPUT_POTI_BUTTON = 0;
+constexpr int INPUT_EXT_INDEX = 1;
+constexpr int INPUT_EXT_COUNT = 1;
+
+
+// outputs
+// -------
+
+constexpr int OUTPUT_DEBUG_RED = 0;
+constexpr int OUTPUT_DEBUG_GREEN = 1;
+constexpr int OUTPUT_DEBUG_BLUE = 2;
+constexpr int OUTPUT_HEATING = 3;
+constexpr int OUTPUT_EXT_INDEX = 0;
+constexpr int OUTPUT_EXT_COUNT = 3;
 
 
 // spi

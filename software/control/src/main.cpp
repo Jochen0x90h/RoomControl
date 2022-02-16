@@ -5,6 +5,7 @@
 #include <bus.hpp>
 #include <radio.hpp>
 #include <poti.hpp>
+#include <input.hpp>
 #include <timer.hpp>
 #include <debug.hpp>
 #include <emu/spi.hpp>
@@ -125,12 +126,6 @@ constexpr TimerData timerData[] = {
  * Emulator main, start without parameters
  */
 int main(int argc, const char **argv) {
-	// set global variables
-	/*boost::system::error_code ec;
-	asio::ip::address localhost = asio::ip::address::from_string("::1", ec);
-	global::local = asio::ip::udp::endpoint(asio::ip::udp::v6(), 1337);
-	global::upLink = asio::ip::udp::endpoint(localhost, 47193);*/
-
 	// init drivers
 	loop::init();
 	flash::init();
@@ -141,7 +136,8 @@ int main(int argc, const char **argv) {
 	spi::init();
 	bus::init();
 	radio::init();
-	gpio::init();
+	output::init();
+	input::init();
 
 	radio::start(15); // start on channel 15
 	radio::enableReceiver(true); // enable baseband decoder

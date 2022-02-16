@@ -130,17 +130,18 @@ set(SYSTEM
 	system/src/display.hpp
 	system/src/emu/flash.cpp
 	system/src/flash.hpp
-	#system/src/emu/global.cpp
-	#system/src/emu/global.hpp
-	system/src/emu/gpio.cpp
-	system/src/gpio.hpp
 	system/src/emu/Gui.cpp
 	system/src/emu/Gui.hpp
+	system/src/emu/input.cpp
+	system/src/emu/input.hpp
+	system/src/input.hpp
 	system/src/emu/loop.cpp
 	system/src/emu/loop.hpp
 	system/src/loop.hpp
 	system/src/emu/network.cpp
 	system/src/network.hpp
+	system/src/emu/output.cpp
+	system/src/output.hpp
 	system/src/emu/poti.cpp
 	system/src/poti.hpp
 	system/src/emu/radio.cpp
@@ -158,8 +159,8 @@ set(SYSTEM
 	system/src/emu/usb.cpp
 	system/src/usb.hpp
 	system/src/usbDefs.hpp
-	control/src/tahoma_8pt.cpp # used by Gui
-	control/src/tahoma_8pt.hpp
+	font/tahoma_8pt.cpp # used by Gui
+	font/tahoma_8pt.hpp
 )
 source_group(system FILES ${SYSTEM})
 
@@ -193,7 +194,6 @@ source_group(node FILES ${NODE})
 
 # room control software running on the nRF52840
 set(CONTROL
-	control/src/appConfig.hpp
 	control/src/BME680.cpp
 	control/src/BME680.hpp
 	control/src/BusInterface.cpp
@@ -213,19 +213,17 @@ set(CONTROL
 	control/src/RoomControl.hpp
 	control/src/SSD1309.cpp
 	control/src/SSD1309.hpp
-	#control/src/Storage.cpp
-	#control/src/Storage.hpp
 	control/src/SwapChain.cpp
 	control/src/SwapChain.hpp
-	control/src/emu/sysConfig.hpp
-	#control/src/tahoma_8pt.cpp
-	#control/src/tahoma_8pt.hpp
 )
 source_group(control FILES ${CONTROL})
+
 
 # emulator executable
 add_executable(emulator
 	control/src/main.cpp
+	control/src/appConfig.hpp
+	board/emu/boardConfig.hpp
 	${UTIL}
 	${PROTOCOL}
 	${SYSTEM}
@@ -234,11 +232,11 @@ add_executable(emulator
 )
 target_include_directories(emulator
 	PRIVATE
-	control/src/emu
+	board/emu # boardConfig.hpp
+	font
 	control/src
 	node/src
 	system/src
-	system/src/emu
 	protocol/src
 	util/src
 	glad
@@ -253,142 +251,8 @@ install(TARGETS emulator
 )
 
 
-# system/timer test (command line tool)
-add_executable(timerTest
-	system/test/timerTest.cpp
-	${UTIL}
-	${PROTOCOL}
-	${SYSTEM}
-)
-target_include_directories(timerTest
-	PRIVATE
-	control/src
-	system/test/emu
-	system/src
-	protocol/src
-	util/src
-	glad
-)
-conan_target_link_libraries(timerTest)
-
-
-# system/radio test that sends radio packets (command line tool)
-add_executable(radioSendTest
-	system/test/radioSendTest.cpp
-	${UTIL}
-	${PROTOCOL}
-	${SYSTEM}
-)
-target_include_directories(radioSendTest
-	PRIVATE
-	control/src
-	system/test/emu
-	system/src
-	protocol/src
-	util/src
-	glad
-
-)
-conan_target_link_libraries(radioSendTest)
-
-
-# system/network test that sends udp packets (command line tool)
-add_executable(networkTest
-	system/test/networkTest.cpp
-	${UTIL}
-	${PROTOCOL}
-	${SYSTEM}
-)
-target_include_directories(networkTest
-	PRIVATE
-	control/src # font
-	system/test/emu
-	system/src
-	protocol/src
-	util/src
-	glad
-)
-conan_target_link_libraries(networkTest)
-
-
-# system/usb test host, host for usbTest on device (command line tool)
-add_executable(usbTestHost
-	system/test/usbTestHost.cpp
-)
-target_include_directories(usbTestHost
-	PRIVATE
-	system/src
-	util/src
-)
-conan_target_link_libraries(usbTestHost)
-
-
-# node/MqttSnClient test
-add_executable(MqttSnClientTest
-	node/test/MqttSnClientTest.cpp
-	node/test/appConfig.hpp
-	system/test/emu/sysConfig.hpp
-	${UTIL}
-	${PROTOCOL}
-	${SYSTEM}
-	${NODE}
-)
-target_include_directories(MqttSnClientTest
-	PRIVATE
-	control/src # font
-	node/test
-	node/src
-	system/src
-	system/test/emu # sysConfig.hpp
-	protocol/src
-	util/src
-	glad
-)
-conan_target_link_libraries(MqttSnClientTest)
-
-
-# node/MqttSnBroker test
-add_executable(MqttSnBrokerTest
-	node/test/MqttSnBrokerTest.cpp
-	node/test/appConfig.hpp
-	system/test/emu/sysConfig.hpp
-	${UTIL}
-	${PROTOCOL}
-	${SYSTEM}
-	${NODE}
-)
-target_include_directories(MqttSnBrokerTest
-	PRIVATE
-	control/src # font
-	node/test
-	node/src
-	system/src
-	system/test/emu # sysConfig.hpp
-	protocol/src
-	util/src
-	glad
-)
-conan_target_link_libraries(MqttSnBrokerTest)
-
-
-# broker test (command line tool)
-#add_executable(brokerTest
-#	node/test/brokerTest.cpp
-#	${NODE}
-#	control/src/emu/Network.cpp
-#	control/src/emu/Network.hpp
-#)
-#target_include_directories(brokerTest
-#	PRIVATE
-#	control/src/emu
-#	control/src
-#	node/src
-#	util/src
-#	glad
-#)
-#conan_target_link_libraries(brokerTest)
-
-
+# tools
+# -----
 
 # terminal for tests that output text or binary data via usb
 add_executable(terminal
@@ -420,22 +284,194 @@ target_include_directories(sniffer
 conan_target_link_libraries(sniffer)
 
 
+# test executables
+# ----------------
 
+# system/timer test (command line tool)
+add_executable(timerTest
+	system/test/timerTest.cpp
+	system/test/appConfig.hpp
+	board/emu/boardConfig.hpp
+	${UTIL}
+	${PROTOCOL}
+	${SYSTEM}
+)
+target_include_directories(timerTest
+	PRIVATE
+	font
+	board/emu # boardConfig.hpp
+	system/test # appConfig.hpp
+	system/src
+	protocol/src
+	util/src
+	glad
+)
+conan_target_link_libraries(timerTest)
+
+
+# system/poti test (command line tool)
+add_executable(potiTest
+	system/test/potiTest.cpp
+	system/test/appConfig.hpp
+	board/emu/boardConfig.hpp
+	${UTIL}
+	${PROTOCOL}
+	${SYSTEM}
+)
+target_include_directories(potiTest
+	PRIVATE
+	font
+	board/emu # boardConfig.hpp
+	system/test # appConfig.hpp
+	system/src
+	protocol/src
+	util/src
+	glad
+)
+conan_target_link_libraries(potiTest)
+
+
+# system/calendar test (command line tool)
+add_executable(calendarTest
+	system/test/calendarTest.cpp
+	system/test/appConfig.hpp
+	board/emu/boardConfig.hpp
+	${UTIL}
+	${PROTOCOL}
+	${SYSTEM}
+)
+target_include_directories(calendarTest
+	PRIVATE
+	font
+	board/emu # boardConfig.hpp
+	system/test # appConfig.hpp
+	system/src
+	protocol/src
+	util/src
+	glad
+)
+conan_target_link_libraries(calendarTest)
+
+
+# system/radio test that sends radio packets (command line tool)
+add_executable(radioSendTest
+	system/test/radioSendTest.cpp
+	${UTIL}
+	${PROTOCOL}
+	${SYSTEM}
+)
+target_include_directories(radioSendTest
+	PRIVATE
+	font
+	board/emu # boardConfig.hpp
+	system/test # appConfig.hpp
+	system/src
+	protocol/src
+	util/src
+	glad
+
+)
+conan_target_link_libraries(radioSendTest)
+
+
+# system/network test that sends udp packets (command line tool)
+add_executable(networkTest
+	system/test/networkTest.cpp
+	${UTIL}
+	${PROTOCOL}
+	${SYSTEM}
+)
+target_include_directories(networkTest
+	PRIVATE
+	font
+	board/emu # boardConfig.hpp
+	system/test # appConfig.hpp
+	system/src
+	protocol/src
+	util/src
+	glad
+)
+conan_target_link_libraries(networkTest)
+
+
+# system/usb test host, host for usbTest on device (command line tool)
+add_executable(usbTestHost
+	system/test/usbTestHost.cpp
+)
+target_include_directories(usbTestHost
+	PRIVATE
+	system/src
+	util/src
+)
+conan_target_link_libraries(usbTestHost)
+
+
+# node/MqttSnClient test
+add_executable(MqttSnClientTest
+	node/test/MqttSnClientTest.cpp
+	control/src/appConfig.hpp
+	board/emu/boardConfig.hpp
+	${UTIL}
+	${PROTOCOL}
+	${SYSTEM}
+	${NODE}
+)
+target_include_directories(MqttSnClientTest
+	PRIVATE
+	board/emu # boardConfig.hpp
+	control/src # appConfig.hpp
+	font
+	node/test
+	node/src
+	system/src
+	protocol/src
+	util/src
+	glad
+)
+conan_target_link_libraries(MqttSnClientTest)
+
+
+# node/MqttSnBroker test
+add_executable(MqttSnBrokerTest
+	node/test/MqttSnBrokerTest.cpp
+	control/src/appConfig.hpp
+	board/emu/boardConfig.hpp
+	${UTIL}
+	${PROTOCOL}
+	${SYSTEM}
+	${NODE}
+)
+target_include_directories(MqttSnBrokerTest
+	PRIVATE
+	board/emu # boardConfig.hpp
+	control/src # appConfig.hpp
+	font
+	node/test
+	node/src
+	system/src
+	protocol/src
+	util/src
+	glad
+)
+conan_target_link_libraries(MqttSnBrokerTest)
 
 
 # test for BME680 air sensor
 add_executable(bme680Test
 	control/test/bme680Test.cpp
-	control/test/emu/sysConfig.hpp
+	board/emu/boardConfig.hpp
+	control/src/appConfig.hpp
 	${UTIL}
 	${PROTOCOL}
 	${SYSTEM}
 	control/src/BME680.cpp
 	control/src/BME680.hpp
+	font
 )
 target_include_directories(bme680Test
 	PRIVATE
-	control/test/emu
+	board/emu # boardConfig.hpp
+	font
 	control/src
 	system/src
 	protocol/src
@@ -448,7 +484,8 @@ conan_target_link_libraries(bme680Test)
 # test for SSD1309 display
 add_executable(ssd1309Test
 	control/test/ssd1309Test.cpp
-	control/test/emu/sysConfig.hpp
+	board/emu/boardConfig.hpp
+	control/src/appConfig.hpp
 	${UTIL}
 	${PROTOCOL}
 	${SYSTEM}
@@ -458,7 +495,8 @@ add_executable(ssd1309Test
 )
 target_include_directories(ssd1309Test
 	PRIVATE
-	control/test/emu
+	board/emu # boardConfig.hpp
+	font
 	control/src
 	system/src
 	protocol/src
@@ -471,7 +509,7 @@ conan_target_link_libraries(ssd1309Test)
 # test for Storage class
 add_executable(storageTest
 	control/test/storageTest.cpp
-	control/test/emu/sysConfig.hpp
+	board/emu/boardConfig.hpp
 	${UTIL}
 	${PROTOCOL}
 	${SYSTEM}
@@ -483,7 +521,8 @@ add_executable(storageTest
 )
 target_include_directories(storageTest
 	PRIVATE
-	control/test/emu
+	board/emu # boardConfig.hpp
+	font
 	control/src
 	node/src
 	system/src
@@ -495,6 +534,7 @@ conan_target_link_libraries(storageTest)
 
 
 # unit tests (GTest)
+# ------------------
 
 # enable testing, adds a target to run all unit tests
 enable_testing()
@@ -531,7 +571,7 @@ add_test(NAME protocolTest
 	#WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/../testdata
 )
 
-# system test
+# system test (only helper classes such as SystemTime)
 add_executable(systemTest
 	system/test/systemTest.cpp
 	${UTIL}

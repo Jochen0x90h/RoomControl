@@ -10,10 +10,10 @@ enum class StreamCommand {
 /**
  * Output stream concept
  */
-template <typename T>
+/*template <typename T>
 concept Stream = requires(T s) {
 	{ s << ' ' << String() };
-};
+};*/
 
 /**
  * This is a conceptual stream to check if an object is streamable
@@ -26,7 +26,7 @@ struct ConceptStream {
 /**
  * Streamable concept, a streamable object can be streamed into a stream using the shift left operator
  */
-template<typename T>
+/*template<typename T>
 concept Streamable = requires(ConceptStream s, T a) {
 	{ s << a };
-};
+};*/

@@ -1,10 +1,14 @@
 #include "Menu.hpp"
+#include <timer.hpp>
 #include <poti.hpp>
+#include <input.hpp>
 #include "tahoma_8pt.hpp" // font
 
 
 constexpr String weekdaysShort[7] = {"M", "T", "W", "T", "F", "S", "S"};
 
+
+Menu::Menu(SwapChain &swapChain) : swapChain(swapChain), bitmap(swapChain.get()) {}
 
 void Menu::label(String s) {
 	int x = 10;
@@ -124,6 +128,8 @@ AwaitableCoroutine Menu::show() {
 	// clear for next menu drawing
 	this->entryIndex = 0;
 	this->entryY = 0;
+	this->delta = 0;
+	this->activated = false;
 
 	if (!redraw) {
 		// show menu
@@ -133,7 +139,8 @@ AwaitableCoroutine Menu::show() {
 		BitmapGetter getter{*this};
 
 		// wait for event, may be interrupted e.g. by a timeout
-		co_await poti::change(this->delta, this->activated);
+		int index;
+		int s = co_await select(poti::change(0, this->delta), input::trigger(1 << INPUT_POTI_BUTTON, 0, index, this->activated));
 
 		// update selected according to delta motion of poti when not in edit mode
 		if (this->edit == 0) {
@@ -154,8 +161,6 @@ AwaitableCoroutine Menu::show() {
 			this->bitmap = this->swapChain.get();
 		else
 			this->bitmap->clear();
-		this->delta = 0;
-		this->activated = false;
 	}
 }
 
@@ -175,10 +180,11 @@ bool Menu::entry() {
 
 	// check if this menu entry was activated
 	bool activated = selected && this->activated;
-
-	// invalidate bitmap when the entry was selected
 	if (activated) {
+		// return the bitmap to the swap chain without drawing it
 		this->swapChain.put(this->bitmap);
+		
+		// clear pointer to trigger redraw
 		this->bitmap = nullptr;
 	}
 

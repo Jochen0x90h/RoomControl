@@ -30,7 +30,7 @@ Coroutine timer3() {
 int main(void) {
 	loop::init();
 	timer::init();
-	gpio::init(); // for debug signals on pins
+	output::init(); // for debug signals on pins
 
 	timer1();
 	timer2();
