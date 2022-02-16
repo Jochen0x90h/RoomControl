@@ -25,8 +25,7 @@ GLuint createTexture() {//int width, int height) {
 	return texture;
 }
 
-GLuint createShader(GLenum type, char const *code)
-{
+GLuint createShader(GLenum type, char const *code) {
 	GLuint shader = glCreateShader(type);
 	glShaderSource(shader, 1, &code, NULL);
 	glCompileShader(shader);
@@ -147,7 +146,7 @@ void Gui::PotiWidget::touch(bool first, float x, float y) {
 	bool inner = std::sqrt(ax * ax + ay * ay) < 0.1;
 	if (first) {
 		// check if button (inner circle) was hit
-		this->state = inner;
+		this->button = inner;
 	} else if (!inner) {
 		float bx = this->x - 0.5f;
 		float by = this->y - 0.5f;
@@ -160,7 +159,7 @@ void Gui::PotiWidget::touch(bool first, float x, float y) {
 }
 
 void Gui::PotiWidget::release() {
-	this->state = false;
+	this->button = false;
 }
 
 
@@ -424,7 +423,7 @@ void Gui::display(int width, int height, uint8_t const *displayBuffer) {
 	next(w, h);
 }
 
-std::optional<Gui::Poti> Gui::poti(int id) {
+Gui::Poti Gui::poti(int id) {
 	float const w = 0.2f;
 	float const h = 0.2f;
 
@@ -433,26 +432,30 @@ std::optional<Gui::Poti> Gui::poti(int id) {
 	// set state
 	this->potiRender->setState(this->x, this->y, w, h);
 	glUniform1f(this->potiValue, float(widget->value & 0xffff) / (65536.0f * 24.0f) * 2.0f * M_PI);
-	glUniform1f(this->potiState, widget->state ? 1.0f : 0.0f);
+	glUniform1f(this->potiState, widget->button ? 1.0f : 0.0f);
 	
 	// draw and reset state
 	this->potiRender->drawAndResetState();
 	
 	next(w, h);
 
-
+	
+	Poti poti;
+	
 	// delta
 	int16_t value = widget->value >> 16;
 	int delta = value - widget->lastValue;
 	widget->lastValue = value;
+	if (delta != 0)
+		poti.delta = delta;
 
-	// activated
-	bool activated = !widget->state && widget->lastState;
-	widget->lastState = widget->state;
-	
-	if (delta != 0 || activated)
-		return {{delta, activated}};
-	return {};
+	// button
+	bool toggle = widget->button != widget->lastButton;
+	widget->lastButton = widget->button;
+	if (toggle)
+		poti.button = widget->button;
+
+	return poti;
 }
 
 int Gui::button(int id) {

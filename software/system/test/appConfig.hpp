@@ -1,5 +1,21 @@
 #pragma once
 
+
+// inputs
+// ------
+
+constexpr int INPUT_POTI_BUTTON = 0;
+constexpr int INPUT_PCB_BUTTON = 1;
+
+
+// outputs
+// -------
+
+constexpr int OUTPUT_DEBUG_RED = 0;
+constexpr int OUTPUT_DEBUG_GREEN = 1;
+constexpr int OUTPUT_DEBUG_BLUE = 2;
+
+
 // spi
 // ---
 
@@ -26,15 +42,3 @@ constexpr int FRAM_RDID = 0x9f; // read device id
 
 constexpr int DISPLAY_WIDTH = 128;
 constexpr int DISPLAY_HEIGHT = 64;
-
-
-// radio
-// -----
-
-constexpr int RADIO_ZB = 0;
-
-
-// network
-// -------
-
-constexpr int NETWORK_MQTTSN = 0;

@@ -141,7 +141,7 @@ int main(void) {
 	loop::init();
 	timer::init();
 	spi::init();
-	gpio::init();
+	output::init();
 	usb::init(
 		[](usb::DescriptorType descriptorType) {
 			switch (descriptorType) {

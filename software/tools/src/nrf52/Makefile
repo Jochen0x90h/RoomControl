@@ -8,13 +8,13 @@ TEMPLATE_PATH    := $(SYSTEM_PATH)/nrf52/system
 
 
 # Include folders
-INC_FOLDERS += . $(SYSTEM_PATH) ../../../protocol/src $(UTIL_PATH)
+INC_FOLDERS += .. ../../../board/nrf52Dongle $(SYSTEM_PATH) ../../../protocol/src $(UTIL_PATH)
 
 # Source files common to all targets
 SRC_FILES += $(TEMPLATE_PATH)/gcc_startup_nrf52840.S
 SRC_FILES += $(TEMPLATE_PATH)/system_nrf52840.c
 SRC_FILES += $(SYSTEM_PATH)/nrf52/loop.cpp
-SRC_FILES += $(SYSTEM_PATH)/nrf52/gpio.cpp
+SRC_FILES += $(SYSTEM_PATH)/nrf52/output.cpp
 
 # Target specific source files
 SRC_FILES_radioDevice += ../radioDevice.cpp

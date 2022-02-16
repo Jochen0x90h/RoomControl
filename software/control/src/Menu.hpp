@@ -2,6 +2,7 @@
 
 #include "SwapChain.hpp"
 #include "tahoma_8pt.hpp" // font
+#include <SystemTime.hpp>
 #include <StringBuffer.hpp>
 #include <StringOperators.hpp>
 
@@ -9,8 +10,8 @@
 class Menu {
 public:
 	
-	Menu(SwapChain &swapChain) : swapChain(swapChain), bitmap(swapChain.get()) {}
-
+	Menu(SwapChain &swapChain);
+	
 	/**
 	 * Add a label to the menu that can not be selected
 	 */

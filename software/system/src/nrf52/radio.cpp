@@ -1,6 +1,6 @@
 #include "../radio.hpp"
 #include "loop.hpp"
-#include "global.hpp"
+#include "defs.hpp"
 #include "rng.hpp"
 #include <debug.hpp>
 #include <ieee.hpp>
@@ -25,38 +25,38 @@
 
 /*
 	Dependencies:
-	rng
-	
+		rng
+
 	Config:
-	RADIO_CONTEXT_COUNT: Number of contexts (virtual radios)
-	RADIO_RECEIVE_QUEUE_LENGTH: length of queue for received messages
-	RADIO_MAX_PAYLOAD_LENGTH: maximum length of payload
-	
+		RADIO_CONTEXT_COUNT: Number of contexts (virtual radios)
+		RADIO_RECEIVE_QUEUE_LENGTH: length of queue for received messages
+		RADIO_MAX_PAYLOAD_LENGTH: maximum length of payload
+
 	Resources:
-	NRF_RADIO
-	NRF_TIMER0
-		CC[0]: ack turnaround timeout, minimum time between received packet and ack
-		CC[1]: ack wait timeout, maximum time to wait for ack
-		CC[2]: time of last packet received or sent
-		CC[3]: backoff timeout
-	NRF_PPI
-		CH[27]: RADIO->EVENTS_END -> TIMER0->TASKS_CAPTURE[2]
-	EGU0
-		TRIGGER[0]: energy detection
-		TRIGGER[1]: receive queue
-		TRIGGER[2]: send queue
+		NRF_RADIO
+		NRF_TIMER0
+			CC[0]: ack turnaround timeout, minimum time between received packet and ack
+			CC[1]: ack wait timeout, maximum time to wait for ack
+			CC[2]: time of last packet received or sent
+			CC[3]: backoff timeout
+		NRF_PPI
+			CH[27]: RADIO->EVENTS_END -> TIMER0->TASKS_CAPTURE[2]
+		EGU0
+			TRIGGER[0]: energy detection
+			TRIGGER[1]: receive queue
+			TRIGGER[2]: send queue
 
 	Glossary:
-	CCA: Clear Channel Assessment (-> ED and/or carrier detection)
-	ED: Energy Detection on a radio channel
-	RFD: Reduced-function defice (can only talk to -> FFDs)
-	FFD: Full-function device
-	MLME: MAC Layer Management Entity, management service of the MAC layer
-	MCPS: MAC Common Part Layer, data transport service of the MAC layer
-	PIB:  PAN Information Base
-	
+		CCA: Clear Channel Assessment (-> ED and/or carrier detection)
+		ED: Energy Detection on a radio channel
+		RFD: Reduced-function defice (can only talk to -> FFDs)
+		FFD: Full-function device
+		MLME: MAC Layer Management Entity, management service of the MAC layer
+		MCPS: MAC Common Part Layer, data transport service of the MAC layer
+		PIB:  PAN Information Base
+
 	References:
-	https://www.prismmodelchecker.org/casestudies/zigbee.php
+		https://www.prismmodelchecker.org/casestudies/zigbee.php
 */
 namespace radio {
 
@@ -118,17 +118,17 @@ struct Context {
 	uint16_t volatile pan;
 	uint16_t volatile shortAddress;
 
-	Waitlist<ReceiveParameters> receiveWaitlist;	
+	Waitlist<ReceiveParameters> receiveWaitlist;
 	Waitlist<SendParameters> sendWaitlist;
 
-	
+
 	bool filter(uint8_t const *data) const {
 		uint8_t const *mac = data + 1;
 		ContextFlags flags = this->flags;
-		
+
 		// ALL: all packets pass
 		if ((flags & ContextFlags::PASS_ALL) != 0)
-			return true;		
+			return true;
 
 		// get frame control field
 		auto frameControl = ieee::FrameControl(mac[0] | (mac[1] << 8));
@@ -141,13 +141,13 @@ struct Context {
 		// beacon packets
 		if ((flags & ContextFlags::PASS_TYPE_BEACON) != 0 && frameType == ieee::FrameControl::TYPE_BEACON)
 			return true;
-			
+
 		if ((frameControl & ieee::FrameControl::DESTINATION_ADDRESSING_FLAG) != 0) {
 			// has destination address: check pan
 			uint16_t pan = mac[3] | (mac[4] << 8);
 			if (pan != 0xffff && pan != this->pan)
 				return false;
-				
+
 			if ((frameControl & ieee::FrameControl::DESTINATION_ADDRESSING_LONG_FLAG) == 0) {
 				// short destination addressing mode
 				if ((flags & ContextFlags::PASS_DEST_SHORT) != 0
@@ -167,21 +167,21 @@ struct Context {
 				}
 			}
 		}
-		
+
 		return false;
 	}
-	
+
 	// check if a packet for given pan id and destination address is pending (called on receive of data request)
-	bool isPending(uint16_t panId, int addressLength, uint8_t const *destinationAddress) {									
+	bool isPending(uint16_t panId, int addressLength, uint8_t const *destinationAddress) {
 		return this->sendWaitlist.find([panId, addressLength, destinationAddress](SendParameters &p) {
 			// check pan id
 			if (panId != (p.packet[4] | (p.packet[5] << 8)))
 				return false;
-			
+
 			// frame control
 			auto frameControl = ieee::FrameControl(p.packet[1] | (p.packet[2] << 8))
 				& (ieee::FrameControl::SEQUENCE_NUMBER_SUPPRESSION | ieee::FrameControl::DESTINATION_ADDRESSING_MASK);
-			
+
 			// check destination addressing
 			if (addressLength == 2) {
 				if (frameControl != ieee::FrameControl::DESTINATION_ADDRESSING_SHORT)
@@ -190,12 +190,12 @@ struct Context {
 				if (frameControl != ieee::FrameControl::DESTINATION_ADDRESSING_LONG)
 					return false;
 			}
-			
+
 			// check destination address
 			if (array::equals(addressLength, destinationAddress, p.packet + 6)) {
 				// clear AWAIT_DATA_REQUEST flag in byte behind packet
 				int length = p.packet[0] - 2;
-				p.packet[1 + length] &= ~SendFlags::AWAIT_DATA_REQUEST;
+				p.packet[1 + length] &= uint8_t(~SendFlags::AWAIT_DATA_REQUEST);
 				return true;
 			}
 			return false;
@@ -217,8 +217,8 @@ bool volatile receiverEnabled = false;
 struct Receive {
 	// receive packet
 	Packet packet;
-	
-	// for each context a flag that indicates if the packet gets passed to the context 
+
+	// for each context a flag that indicates if the packet gets passed to the context
 	uint8_t passFlags;
 };
 volatile Queue<Receive, RADIO_RECEIVE_QUEUE_LENGTH> receiveQueue;
@@ -232,7 +232,7 @@ inline void startReceive() {
 
 	Receive &receive = radio::receiveQueue.getNextBack();
 	NRF_RADIO->PACKETPTR = intptr_t(receive.packet);
-	NRF_RADIO->TASKS_START = Trigger; // -> END
+	NRF_RADIO->TASKS_START = TRIGGER; // -> END
 }
 
 
@@ -242,10 +242,10 @@ inline void startReceive() {
 // state
 enum SendState : uint8_t {
 	IDLE,
-	
+
 	// send and don't wait for ack
 	AWAIT_SENT,
-	
+
 	// wait for an ack from the destination
 	AWAIT_ACK,
 };
@@ -289,7 +289,7 @@ static void selectForSend() {
 		index = index < RADIO_CONTEXT_COUNT - 1 ? index + 1 : 0;
 		auto &context = radio::contexts[index];
 		auto flags = context.flags;
-		
+
 		// check if a send operation can be started for this context
 		if (context.sendWaitlist.find([index, flags](SendParameters &p) {
 			int length = p.packet[0] - 2;
@@ -302,7 +302,7 @@ static void selectForSend() {
 		}))
 		{
 			break;
-		}				 
+		}
 	} while (index != radio::sendIndex);
 }
 
@@ -318,17 +318,17 @@ static void prepareForSend(int index, ContextFlags flags, uint8_t const *packet,
 
 	// either wait until packet is sent or until ack was received
 	radio::sendState = (requestAck && handleAck) ? SendState::AWAIT_ACK : SendState::AWAIT_SENT;
-	
+
 	// copy send packet
 	int length = packet[0] - 2;
 	array::copy(1 + length, radio::sendPacket, packet);
-	
+
 	// set pointer to send result
 	radio::sendResult = &result;
 
 	// reset ack retry count
 	radio::ackRetryCount = 1;
-	
+
 	// start backoff for csma-ca
 	startBackoff();
 }
@@ -338,7 +338,7 @@ static void startBackoff() {
 	// initialize backoff parameters
 	radio::backoffExponent = radio::minBackoffExponent;
 	radio::backoffCount = 0;
-	
+
 	// first backoff for csma-ca
 	backoff();
 }
@@ -351,7 +351,7 @@ static void backoff() {
 
 		// check if more to send
 		selectForSend();
-	
+
 		return;
 	}
 
@@ -364,7 +364,7 @@ static void backoff() {
 	++radio::backoffCount;
 
 	// set timer for backoff duration
-	NRF_TIMER0->TASKS_CAPTURE[3] = Trigger;
+	NRF_TIMER0->TASKS_CAPTURE[3] = TRIGGER;
 	NRF_TIMER0->CC[3] += backoffDuration;
 	NRF_TIMER0->EVENTS_COMPARE[3] = 0;
 	NRF_TIMER0->INTENSET = N(TIMER_INTENSET_COMPARE3, Set); // -> COMPARE[3]
@@ -373,33 +373,33 @@ static void backoff() {
 // start clear channel assessment
 static void startClearChannelAssessment() {
 	// start clear channel assessment
-	NRF_RADIO->TASKS_CCASTART = Trigger; // -> CCABUSY or CCAIDLE -> TXEN -> TXREADY
+	NRF_RADIO->TASKS_CCASTART = TRIGGER; // -> CCABUSY or CCAIDLE -> TXEN -> TXREADY
 }
 
 
 // start to send a packet
 static void startSend() {
 	setSendSignal(true);
-	
+
 	// handle sent packet on END event
 	radio::endAction = EndAction::ON_SENT;
 
-	// start send operation using a copy of the packet 
+	// start send operation using a copy of the packet
 	NRF_RADIO->PACKETPTR = intptr_t(radio::sendPacket);
-	NRF_RADIO->TASKS_START = Trigger; // -> END	
+	NRF_RADIO->TASKS_START = TRIGGER; // -> END
 }
 
 // set result of send operation
 static void setSendResult(uint8_t result) {
 	// sender is idle again
 	radio::sendState = SendState::IDLE;
-	
+
 	// set result unless send operation was cancelled
 	if (radio::sendResult != nullptr) {
 		*radio::sendResult = result;
-		
+
 		// signal to handle() that a send operation has finished
-		NRF_EGU0->TASKS_TRIGGER[2] = Trigger;
+		NRF_EGU0->TASKS_TRIGGER[2] = TRIGGER;
 	}
 }
 
@@ -414,7 +414,7 @@ static void startSendAck() {
 	radio::endAction = EndAction::NOP;
 
 	NRF_RADIO->PACKETPTR = intptr_t(radio::ackPacket);
-	NRF_RADIO->TASKS_START = Trigger; // -> END	
+	NRF_RADIO->TASKS_START = TRIGGER; // -> END
 }
 
 
@@ -432,7 +432,7 @@ ReceiveParameters::ReceiveParameters(ReceiveParameters &&p) noexcept
 {
 	unlock();
 }
-	
+
 void ReceiveParameters::add(WaitlistHead &head) noexcept {
 	lock();
 	WaitlistElement::add(head);
@@ -451,7 +451,7 @@ SendParameters::SendParameters(SendParameters &&p) noexcept
 {
 	unlock();
 }
-	
+
 void SendParameters::add(WaitlistHead &head) noexcept {
 	lock();
 	WaitlistElement::add(head);
@@ -461,31 +461,31 @@ void SendParameters::add(WaitlistHead &head) noexcept {
 void SendParameters::remove() noexcept {
 	lock();
 	WaitlistElement::remove();
-	
+
 	// check if this is the current send operation
 	if (radio::sendResult == &this->result) {
 		// disable timer interrupt 3 to stop backoff
 		NRF_TIMER0->INTENCLR = N(TIMER_INTENCLR_COMPARE3, Clear);
-		
+
 		// stop clear channel assessment
-		NRF_RADIO->TASKS_CCASTOP = Trigger; // -> CCASTOPPED
+		NRF_RADIO->TASKS_CCASTOP = TRIGGER; // -> CCASTOPPED
 
 		// clear result pointer
 		radio::sendResult = nullptr;
-		
+
 		// check if no transmit operation is ongoing
 		if (isReceiveState()) {
 			// return to idle state
 			radio::sendState = SendState::IDLE;
-			
+
 			// check if more to send
 			selectForSend();
-		}	
+		}
 	}
-	
+
 	unlock();
 }
-	
+
 
 // event loop handler chain
 loop::Handler nextHandler = nullptr;
@@ -505,17 +505,17 @@ void handle() {
 			for (auto &c : radio::contexts) {
 				c.sendWaitlist.resumeAll([](SendParameters &p) {
 					// check if the send operation has finished
-					return p.result != 255;					
-				});				
+					return p.result != 255;
+				});
 			}
 		}
-		
+
 		// check receive queue
 		if (NRF_EGU0->EVENTS_TRIGGERED[1]) {
 			NRF_EGU0->EVENTS_TRIGGERED[1] = 0;
 			do {
 				Receive &receive = radio::receiveQueue.getFront();
-		
+
 				// resume coroutines
 				uint8_t passFlag = 1;
 				for (auto &c : radio::contexts) {
@@ -530,15 +530,15 @@ void handle() {
 					}
 					passFlag <<= 1;
 				}
-				
+
 				// remove element from queue and restart receive if the buffer was full
 				{
 					lock();
 					bool full = radio::receiveQueue.isFull();
-										
+
 					// remove entry from receive queue
 					radio::receiveQueue.removeFront();
-					
+
 					// continue receiving if the queue has now space again
 					if (full) {
 						startReceive(); // -> END
@@ -560,7 +560,7 @@ void init() {
 	// check if already initialized
 	if (radio::nextHandler != nullptr)
 		return;
-	
+
 	// add to event loop handler chain
 	radio::nextHandler = loop::addHandler(handle);
 
@@ -568,19 +568,19 @@ void init() {
 	rng::init();
 
 	// init debug signals
-	initSignals();	
-	
+	initSignals();
+
 	// init timer
 	NRF_TIMER0->MODE = N(TIMER_MODE_MODE, Timer);
 	NRF_TIMER0->BITMODE = N(TIMER_BITMODE_BITMODE, 32Bit);
 	NRF_TIMER0->PRESCALER = 4; // 1MHz
 	enableInterrupt(TIMER0_IRQn);
-	
+
 	// init radio
-	
+
 	// set modulation mode
 	NRF_RADIO->MODE = N(RADIO_MODE_MODE, Ieee802154_250Kbit);
-	
+
 	// configure crc
 	NRF_RADIO->CRCCNF =
 		N(RADIO_CRCCNF_SKIPADDR, Ieee802154) // CRC starts after first byte of length field
@@ -633,15 +633,15 @@ void RADIO_IRQHandler(void) {
 	// check if ready to receive (RxIdle state)
 	if (NRF_RADIO->EVENTS_RXREADY) {
 		NRF_RADIO->EVENTS_RXREADY = 0;
-	
+
 		// shortcut: stop receiving and enable sender if channel is clear
 		NRF_RADIO->SHORTS = N(RADIO_SHORTS_CCAIDLE_STOP, Enabled)
 			| N(RADIO_SHORTS_CCAIDLE_TXEN, Enabled);
-		
+
 		// start receive
 		if (radio::receiverEnabled && !radio::receiveQueue.isFull())
 			startReceive(); // -> END
-			
+
 		// check if more to send (this is executed after a send operation completes)
 		if (radio::sendState == SendState::IDLE) {
 			selectForSend();
@@ -653,24 +653,24 @@ void RADIO_IRQHandler(void) {
 		NRF_RADIO->EVENTS_EDEND = 0;
 
 		// signal end of energy detection to handle()
-		NRF_EGU0->TASKS_TRIGGER[0] = Trigger;
+		NRF_EGU0->TASKS_TRIGGER[0] = TRIGGER;
 	}
 
 	// check if clear channel assessment failed
 	if (NRF_RADIO->EVENTS_CCABUSY) {
 		NRF_RADIO->EVENTS_CCABUSY = 0;
-		
+
 		// backoff and try again
 		backoff();
 	}
-	
+
 	// check if sender ready (TxIdle state)
 	if (NRF_RADIO->EVENTS_TXREADY) {
-		NRF_RADIO->EVENTS_TXREADY = 0;		
+		NRF_RADIO->EVENTS_TXREADY = 0;
 
 		// shortcut: disable sender on END event
 		NRF_RADIO->SHORTS = N(RADIO_SHORTS_END_DISABLE, Enabled);
-				
+
 		// check if clear channel assessment was running
 		if (NRF_RADIO->EVENTS_CCAIDLE) {
 			NRF_RADIO->EVENTS_CCAIDLE = 0;
@@ -681,7 +681,7 @@ void RADIO_IRQHandler(void) {
 			// no: send ack after ackTurnaroundDuration in the timer interrupt handler
 		}
 	}
-	
+
 	// check if packet was received with no crc error
 	if (NRF_RADIO->EVENTS_CRCOK) {
 		NRF_RADIO->EVENTS_CRCOK = 0;
@@ -704,21 +704,21 @@ void RADIO_IRQHandler(void) {
 
 				// set state of sent packet to success, send state becomes idle
 				setSendResult(radio::backoffCount);
-				
+
 				// check if more to send
 				selectForSend();
-			}			
+			}
 		}
 
 		// check if a context is interested in this packet and wants to handle ack
 		receive.passFlags = 0;
 		uint8_t passFlag = 1;
 		bool ack = false;
-		radio::ackPacket[1] = 0x02; 
+		radio::ackPacket[1] = 0x02;
 		for (auto &c : radio::contexts) {
 			if (c.flags != ContextFlags::NONE && c.filter(receive.packet)) {
 				receive.passFlags |= passFlag;
-			
+
 				// check if this context handles ack and the packet requests an ack
 				if ((c.flags & radio::ContextFlags::HANDLE_ACK) != 0
 					&& (frameControl & ieee::FrameControl::ACKNOWLEDGE_REQUEST) != 0)
@@ -740,27 +740,27 @@ void RADIO_IRQHandler(void) {
 					{
 						// skip length, frameControl and macCounter
 						int i = 1 + 2 + 1;
-						
+
 						// pan id
 						uint16_t panId = receive.packet[i] | (receive.packet[i + 1] << 8);
 						i += 2;
-						
+
 						// skip destination address
 						if ((frameControl & ieee::FrameControl::DESTINATION_ADDRESSING_LONG_FLAG) != 0)
 							i += 8;
 						else
 							i += 2;
-						
+
 						// source address
 						uint8_t const *sourceAddress = receive.packet + i;
 						int len = (frameControl & ieee::FrameControl::SOURCE_ADDRESSING_LONG_FLAG) == 0 ? 2 : 8;
-						
+
 						// check if it is a data request command
 						if (receive.packet[i + len] == uint8_t(ieee::Command::DATA_REQUEST)) {
 							// check if there is a packet pending for this source
 							if (c.isPending(panId, len, sourceAddress))
-								radio::ackPacket[1] = 0x12; 
-							
+								radio::ackPacket[1] = 0x12;
+
 							// don't pass data request packet to context
 							receive.passFlags &= ~passFlag;
 						}
@@ -771,8 +771,8 @@ void RADIO_IRQHandler(void) {
 							if (receive.packet[i + 2] == uint8_t(ieee::Command::DATA_REQUEST)) {
 								// check if there is a packet pending for this source
 								if (c.isPending(panId, 2, sourceAddress))
-									radio::ackPacket[1] = 0x12; 
-								
+									radio::ackPacket[1] = 0x12;
+
 								// don't pass data request packet to context
 								receive.passFlags &= ~passFlag;
 							}
@@ -781,17 +781,17 @@ void RADIO_IRQHandler(void) {
 							if (receive.packet[i + 8] == uint8_t(ieee::Command::DATA_REQUEST)) {
 								// check if there is a packet pending for this source
 								if (c.isPending(panId, 8, sourceAddress))
-									radio::ackPacket[1] = 0x12; 								
+									radio::ackPacket[1] = 0x12;
 
 								// don't pass data request packet to context
 								receive.passFlags &= ~passFlag;
 							}
 						}*/
-					}				
-				}			
+					}
+				}
 			}
 			passFlag <<= 1;
-		}			
+		}
 
 		// check if we need to send ack
 		if (ack) {
@@ -801,12 +801,12 @@ void RADIO_IRQHandler(void) {
 			// send ack on END event
 			radio::endAction = EndAction::SEND_ACK;
 		}
-		
+
 		// check if a context is interested in the packet
 		if (receive.passFlags != 0) {
 			// capture timestamp of received packet (CC[1] is currently unused)
 			if (radio::RECEIVE_EXTRA_LENGTH >= 5) {
-				NRF_TIMER0->TASKS_CAPTURE[1] = Trigger;
+				NRF_TIMER0->TASKS_CAPTURE[1] = TRIGGER;
 				uint32_t timestamp = NRF_TIMER0->CC[1];
 				uint8_t *ts = &receive.packet[1 + length - 2 + 1];
 				ts[0] = timestamp;
@@ -814,19 +814,19 @@ void RADIO_IRQHandler(void) {
 				ts[2] = timestamp >> 16;
 				ts[3] = timestamp >> 24;
 			}
-			
+
 			// make the received element valid at the back of the queue
 			radio::receiveQueue.addBack();
 
 			// signal to handle() that a received packet is ready
-			NRF_EGU0->TASKS_TRIGGER[1] = Trigger;			
+			NRF_EGU0->TASKS_TRIGGER[1] = TRIGGER;
 		}
 	}
 
 	// check if packet was received with crc error
 	if (NRF_RADIO->EVENTS_CRCERROR) {
 		NRF_RADIO->EVENTS_CRCERROR = 0;
-	
+
 		// worst case assumption
 		radio::ifsDuration = minLifsDuration;
 	}
@@ -837,13 +837,13 @@ void RADIO_IRQHandler(void) {
 		NRF_RADIO->EVENTS_END = 0;
 		setReceiveSignal(false);
 		setSendSignal(false);
-		
+
 		// capture time when last packet was sent or received (done automatically by PPI channel 27)
-		//NRF_TIMER0->TASKS_CAPTURE[2] = Trigger;
+		//NRF_TIMER0->TASKS_CAPTURE[2] = TRIGGER;
 
 		// disable after send (done automatically by SHORTS)
 		//if (radio::sendState != SendState::IDLE)
-		//	NRF_RADIO->TASKS_DISABLE = Trigger; -> DISABLED
+		//	NRF_RADIO->TASKS_DISABLE = TRIGGER; -> DISABLED
 
 		// decide what to do next
 		switch (radio::endAction) {
@@ -858,13 +858,13 @@ void RADIO_IRQHandler(void) {
 		case EndAction::SEND_ACK:
 			{
 				// enable sender for sending ack
-				NRF_RADIO->TASKS_TXEN = Trigger; // -> TXREADY				
-			
+				NRF_RADIO->TASKS_TXEN = TRIGGER; // -> TXREADY
+
 				// set timer for ack turnaround duration
 				NRF_TIMER0->CC[0] = NRF_TIMER0->CC[2] + ackTurnaroundDuration;
 				NRF_TIMER0->EVENTS_COMPARE[0] = 0;
 				NRF_TIMER0->INTENSET = N(TIMER_INTENSET_COMPARE0, Set); // -> COMPARE[0]
-				
+
 				// now wait for timeout
 			}
 			break;
@@ -873,31 +873,31 @@ void RADIO_IRQHandler(void) {
 				// determine interframe spacing duration
 				uint8_t length = radio::sendPacket[0];
 				radio::ifsDuration = length <= maxSifsLength ? minSifsDuration : minLifsDuration;
-	
+
 				// check if we have to wait for an ack
 				if (radio::sendState == SendState::AWAIT_ACK) {
 					// yes: set timer for ack wait duration
 					NRF_TIMER0->CC[1] = NRF_TIMER0->CC[2] + ackWaitDuration;
 					NRF_TIMER0->EVENTS_COMPARE[1] = 0;
 					NRF_TIMER0->INTENSET = N(TIMER_INTENSET_COMPARE1, Set); // -> COMPARE[1]
-				
-					// now we either receive an ack packet or timeout 
+
+					// now we either receive an ack packet or timeout
 				} else {
 					// no: set state of sent packet to success, send state becomes idle
 					setSendResult(radio::backoffCount);
 				}
 			}
 			break;
-		}		
+		}
 	}
 
 	// check if sender has been disabled
 	if (NRF_RADIO->EVENTS_DISABLED) {
 		NRF_RADIO->EVENTS_DISABLED = 0;
-	
+
 		// enable receiver again if radio is active
 		if (radio::active) {
-			NRF_RADIO->TASKS_RXEN = Trigger; // -> RXREADY
+			NRF_RADIO->TASKS_RXEN = TRIGGER; // -> RXREADY
 		}
 	}
 }
@@ -912,11 +912,11 @@ void TIMER0_IRQHandler(void) {
 
 		// disable timer interrupt 0
 		NRF_TIMER0->INTENCLR = N(TIMER_INTENCLR_COMPARE0, Clear);
-					
+
 		// send ack
 		startSendAck();
 	}
-	
+
 	// check if ack wait duration has elapsed
 	if (TEST(INTEN, TIMER_INTENSET_COMPARE1, Enabled) && NRF_TIMER0->EVENTS_COMPARE[1]) {
 		NRF_TIMER0->EVENTS_COMPARE[1] = 0;
@@ -948,7 +948,7 @@ void TIMER0_IRQHandler(void) {
 		bool s = isReceiveState();
 
 		// get time since last packet was received or sent
-		NRF_TIMER0->TASKS_CAPTURE[3] = Trigger;
+		NRF_TIMER0->TASKS_CAPTURE[3] = TRIGGER;
 		uint32_t t = NRF_TIMER0->CC[3] - NRF_TIMER0->CC[2];
 
 		// check if the radio is in the right state and inter frame spacing is respected
@@ -964,24 +964,24 @@ void TIMER0_IRQHandler(void) {
 
 void start(int channel) {
 	assert(channel >= 10 && channel <= 26);
-	
+
 	// set channel
 	NRF_RADIO->FREQUENCY = V(RADIO_FREQUENCY_FREQUENCY, (channel - 10) * 5);
 
 	// start timer
-	NRF_TIMER0->TASKS_CLEAR = Trigger;
-	NRF_TIMER0->TASKS_START = Trigger;
+	NRF_TIMER0->TASKS_CLEAR = TRIGGER;
+	NRF_TIMER0->TASKS_START = TRIGGER;
 
 	lock();
-	
+
 	// check if the radio is disabled
 	if (isDisabled()) {
 		// enable receiving mode (not the baseband decoder, packets will not be received yet)
-		NRF_RADIO->TASKS_RXEN = Trigger; // -> RXREADY
+		NRF_RADIO->TASKS_RXEN = TRIGGER; // -> RXREADY
 	}
 
 	radio::active = true;
-	
+
 	unlock();
 }
 
@@ -990,7 +990,7 @@ void stop() {
 	NRF_TIMER0->INTENCLR = N(TIMER_INTENCLR_COMPARE0, Clear)
 		| N(TIMER_INTENCLR_COMPARE1, Clear)
 		| N(TIMER_INTENCLR_COMPARE3, Clear);
-	NRF_TIMER0->TASKS_STOP = Trigger;
+	NRF_TIMER0->TASKS_STOP = TRIGGER;
 
 	lock();
 
@@ -1001,10 +1001,10 @@ void stop() {
 
 	// disable radio
 	NRF_RADIO->SHORTS = 0;
-	NRF_RADIO->TASKS_STOP = Trigger;	
-	NRF_RADIO->TASKS_EDSTOP = Trigger;
-	NRF_RADIO->TASKS_CCASTOP = Trigger;
-	NRF_RADIO->TASKS_DISABLE = Trigger; // -> DISABLED
+	NRF_RADIO->TASKS_STOP = TRIGGER;
+	NRF_RADIO->TASKS_EDSTOP = TRIGGER;
+	NRF_RADIO->TASKS_CCASTOP = TRIGGER;
+	NRF_RADIO->TASKS_DISABLE = TRIGGER; // -> DISABLED
 
 	// clear queues
 	radio::receiveQueue.clear();
@@ -1020,21 +1020,21 @@ void stop() {
 			p.result = 0;
 			return true;
 		});
-	}	
+	}
 
 	unlock();
 }
 
 void detectEnergy(std::function<void (uint8_t)> const &onReady) {
 	radio::onEdReady = onReady;
-	
+
 	// shortcut: start energy detection on READY event
 	NRF_RADIO->SHORTS = N(RADIO_SHORTS_READY_EDSTART, Enabled);
 
 	// start energy detection if radio is in receive sate (RxIdle or Rx)
 	if (isReceiveState()) {
 		NRF_RADIO->SHORTS = 0;
-		NRF_RADIO->TASKS_EDSTART = Trigger; // -> EDEND
+		NRF_RADIO->TASKS_EDSTART = TRIGGER; // -> EDEND
 	}
 }
 
@@ -1042,7 +1042,7 @@ void enableReceiver(bool enable) {
 	lock();
 	{
 		radio::receiverEnabled = enable;
-		
+
 		// start receiver (base band decoder) if radio is in RxIdle state, otherwise do it on RXREADY
 		if (isRxIdle() && enable && !radio::receiveQueue.isFull())
 			startReceive(); // -> END
@@ -1089,14 +1089,14 @@ Awaitable<ReceiveParameters> receive(int index, Packet &packet) {
 Awaitable<SendParameters> send(int index, uint8_t *packet, uint8_t &result) {
 	assert(uint(index) < RADIO_CONTEXT_COUNT);
 	auto &context = radio::contexts[index];
-	
+
 	// initialize result, is used to check if the send operation has finished
 	result = 255;
-	
+
 	// get send flags
 	int length = packet[0] - 2;
 	SendFlags sendFlags = SendFlags(packet[1 + length]);
-	
+
 	// check if we can immediately start to send (idle and don't need to wait for data request)
 	if (radio::sendState == SendState::IDLE && sendFlags == SendFlags::NONE)
 		prepareForSend(index, context.flags, packet, result);

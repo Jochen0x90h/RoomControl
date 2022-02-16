@@ -1,10 +1,10 @@
 #pragma once
 
-// note: pins defined in this file are for nRF52840 MDK USB Dongle, https://wiki.makerdiary.com/nrf52840-mdk-usb-dongle/
+#include <nrf52/gpio.hpp>
+#include <util.hpp>
 
-constexpr int PORT0 = 0;
-constexpr int PORT1 = 32;
-constexpr int DISCONNECTED = 0x80000000;
+
+// note: pins defined in this file are for nRF52840 MDK USB Dongle, https://wiki.makerdiary.com/nrf52840-mdk-usb-dongle/
 
 
 // flash
@@ -16,27 +16,26 @@ constexpr int FLASH_PAGE_COUNT = 16;
 constexpr int FLASH_WRITE_ALIGN = 4;
 
 
-// timer
-// -----
+// inputs
+// ------
 
-constexpr int TIMER_WAITING_COUNT = 4;
-
-
-// calendar
-// --------
-
-constexpr int CALENDAR_SECOND_WAITING_COUNT = 1;
-constexpr int CALENDAR_SECOND_HANDLER_COUNT = 1;
-
-
-// out
-// ---
-
-constexpr struct {int pin; bool on;} OUT_CONFIGS[3] = {
-	{PORT0 | 23, false}, // red led
-	{PORT0 | 22, false}, // green led
-	{PORT0 | 24, false} // blue led
+constexpr InputConfig INPUTS[] = {
+	{PORT0 | 6, Pull::UP, true}, // poti button
+	{PORT0 | 18, Pull::UP, true}, // reset/user button
 };
+constexpr int INPUT_COUNT = array::count(INPUTS);
+constexpr int TRIGGER_COUNT = INPUT_COUNT;
+
+
+// outputs
+// -------
+
+constexpr OutputConfig OUTPUTS[] = {
+	{PORT0 | 23, Drive::S0S1, Pull::DISABLED, true, true, false}, // red led
+	{PORT0 | 22, Drive::S0S1, Pull::DISABLED, true, true, false}, // green led
+	{PORT0 | 24, Drive::S0S1, Pull::DISABLED, true, true, false}, // blue led
+};
+constexpr int OUTPUT_COUNT = array::count(OUTPUTS);
 
 
 // poti
@@ -44,7 +43,6 @@ constexpr struct {int pin; bool on;} OUT_CONFIGS[3] = {
 
 constexpr int POTI_A_PIN = PORT0 | 4;
 constexpr int POTI_B_PIN = PORT0 | 5;
-constexpr int BUTTON_PIN = PORT0 | 6;
 
 
 // spi

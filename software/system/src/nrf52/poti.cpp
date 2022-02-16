@@ -1,17 +1,15 @@
 #include "../poti.hpp"
 #include "loop.hpp"
 #include "timer.hpp"
-#include "global.hpp"
+#include "defs.hpp"
 #include <assert.hpp>
+#include <boardConfig.hpp>
 
 /*
 	Dependencies:
-	timer
 	
 	Resources:
 		NRF_QDEC
-		NRF_GPIOTE
-			IN[0]	
 */
 namespace poti {
 
@@ -19,8 +17,6 @@ namespace poti {
 Waitlist<Parameters> waitlist;
 
 int acc = 0;
-bool buttonState = false;
-uint32_t counter;
 
 // event loop handler chain
 loop::Handler nextHandler = nullptr;
@@ -39,32 +35,9 @@ void handle() {
 			// resume all waiting coroutines
 			poti::waitlist.resumeAll([delta](Parameters parameters) {
 				parameters.delta = delta;
-				parameters.activated = false;
 				return true;
 			});
 		}
-	}
-	if (NRF_GPIOTE->EVENTS_IN[0]) {
-		// clear pending interrupt flags at peripheral and NVIC
-		NRF_GPIOTE->EVENTS_IN[0] = 0;
-		clearInterrupt(GPIOTE_IRQn);
-		
-		// debounce filter
-		bool b = !getInput(BUTTON_PIN);
-		uint32_t c = timer::now().value;		
-		bool activated = !poti::buttonState;
-		if (activated) {
-			if (c - poti::counter > 100) {				
-				// resume all waiting coroutines
-				poti::waitlist.resumeAll([](Parameters parameters) {
-					parameters.delta = 0;
-					parameters.activated = true;
-					return true;
-				});
-			}
-		}
-		poti::buttonState = b;
-		poti::counter = c;
 	}
 
 	// call next handler in chain
@@ -72,12 +45,15 @@ void handle() {
 }
 
 void init() {
+	// check if already initialized
 	if (poti::nextHandler != nullptr)
 		return;
 	
-	configureInputWithPullUp(POTI_A_PIN);
-	configureInputWithPullUp(POTI_B_PIN);
-	configureInputWithPullUp(BUTTON_PIN);
+	// add to event loop handler chain
+	poti::nextHandler = loop::addHandler(handle);
+
+	configureInput(POTI_A_PIN, Pull::UP);
+	configureInput(POTI_B_PIN, Pull::UP);
 
 	// quadrature decoder https://infocenter.nordicsemi.com/topic/ps_nrf52840/qdec.html?cp=4_0_0_5_17
 	NRF_QDEC->SHORTS = N(QDEC_SHORTS_REPORTRDY_RDCLRACC, Enabled); // clear accumulator register on report
@@ -88,19 +64,12 @@ void init() {
 	NRF_QDEC->PSEL.B = POTI_B_PIN;
 	NRF_QDEC->DBFEN = N(QDEC_DBFEN_DBFEN, Enabled); // enable debounce filter
 	NRF_QDEC->ENABLE = N(QDEC_ENABLE_ENABLE, Enabled);
-	NRF_QDEC->TASKS_START = Trigger;
-
-	// gpio event for button
-	NRF_GPIOTE->INTENSET = N(GPIOTE_INTENSET_IN0, Enabled);// | N(GPIOTE_INTENSET_IN1, Enabled);
-	NRF_GPIOTE->CONFIG[0] = N(GPIOTE_CONFIG_MODE, Event) | N(GPIOTE_CONFIG_POLARITY, Toggle)
-		| (BUTTON_PIN << GPIOTE_CONFIG_PSEL_Pos);
-
-	// add to event loop handler chain
-	poti::nextHandler = loop::addHandler(handle);
+	NRF_QDEC->TASKS_START = TRIGGER;
 }
 
-Awaitable<Parameters> change(int8_t& delta, bool& activated) {
-	return {poti::waitlist, delta, activated};
+Awaitable<Parameters> change(int index, int8_t& delta) {
+	// only one poti supported
+	return {poti::waitlist, delta};
 }
 
 } // namespace poti

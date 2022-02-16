@@ -41,11 +41,11 @@ class Project(ConanFile):
         "control/*",\
         "glad/*",\
         "tools/*"
-    requires = \
-        "boost/1.77.0", \
-        "glfw/3.3.5", \
-        "libusb/1.0.24", \
-        "gtest/1.11.0"
+    requires = [
+        "boost/1.77.0",
+        "glfw/3.3.6",
+        "libusb/1.0.24",
+        "gtest/1.11.0"]
 
 
     keep_imports = True

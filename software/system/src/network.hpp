@@ -1,8 +1,8 @@
 #pragma once
 
-#include "sysConfig.hpp"
 #include <String.hpp>
 #include <Coroutine.hpp>
+#include <boardConfig.hpp>
 
 
 namespace network {

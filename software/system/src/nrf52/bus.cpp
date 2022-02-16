@@ -1,7 +1,8 @@
 #include "../bus.hpp"
 #include "loop.hpp"
-#include "global.hpp"
+#include "defs.hpp"
 #include <util.hpp>
+#include <boardConfig.hpp>
 #include <functional>
 
 
@@ -17,9 +18,9 @@
 
 /*
 	Resources:
-	NRF_UART0,
-	NRF_TIMER1
-*/ 
+		NRF_UART0
+		NRF_TIMER1
+*/
 namespace bus {
 
 Waitlist<Parameters> transferWaitlist;
@@ -65,18 +66,18 @@ void handle() {
 			bus::onRequest(bus::requestData[0]);//, bus::requestIndex);
 		bus::requestIndex = 0;
 	}
-	
+
 	// call next handler in chain
-	bus::nextHandler();	
+	bus::nextHandler();
 }
 
 void init() {
 	initSignal();
-	
+
 	// init uart
 	setOutput(BUS_TX_PIN, true);
 	configureOutput(BUS_TX_PIN);
-	configureInputWithPullUp(BUS_RX_PIN);
+	configureInput(BUS_RX_PIN, Pull::UP);
 	//NRF_UART0->PSEL.TXD = BUS_TX_PIN;
 	NRF_UART0->PSEL.RXD = BUS_RX_PIN;
 	NRF_UART0->CONFIG = N(UART_CONFIG_STOP, One) | N(UART_CONFIG_PARITY, Excluded);
@@ -112,8 +113,8 @@ void UARTE0_UART0_IRQHandler(void) {
 			bus::txIndex = txIndex + 1;
 		} else {
 			// stop transmit
-			NRF_UART0->TASKS_STOPTX = Trigger;
-		}			
+			NRF_UART0->TASKS_STOPTX = TRIGGER;
+		}
 	}
 	if (NRF_UART0->EVENTS_RXDRDY) {
 		NRF_UART0->EVENTS_RXDRDY = 0;
@@ -130,7 +131,7 @@ void UARTE0_UART0_IRQHandler(void) {
 				bus::rxReady = true;
 
 				// stop timer
-				NRF_TIMER1->TASKS_STOP = Trigger;
+				NRF_TIMER1->TASKS_STOP = TRIGGER;
 
 				// now in request mode
 				bus::state = REQUEST;
@@ -148,14 +149,14 @@ void UARTE0_UART0_IRQHandler(void) {
 				bus::rxReady = true;
 
 				// stop timer
-				NRF_TIMER1->TASKS_STOP = Trigger;
+				NRF_TIMER1->TASKS_STOP = TRIGGER;
 
 				// now in request mode
 				bus::state = REQUEST;
 			}
-			
+
 			// restart rx timeout (unless stopped)
-			NRF_TIMER1->TASKS_CLEAR = Trigger;
+			NRF_TIMER1->TASKS_CLEAR = TRIGGER;
 		} else {
 			// check if request buffer full
 			int requestIndex = bus::requestIndex;
@@ -166,7 +167,7 @@ void UARTE0_UART0_IRQHandler(void) {
 					// indicate that requests are ready
 					bus::requestReady = true;
 				}
-			}				
+			}
 		}
 
 		//toggleSignal();
@@ -179,7 +180,7 @@ void TIMER1_IRQHandler(void) {
 
 		if (state == BREAK) {
 			setOutput(BUS_TX_PIN, true);
-			
+
 			// reconfigure uart for transmission
 			NRF_UART0->ENABLE = 0;
 			NRF_UART0->EVENTS_RXDRDY = 0;
@@ -188,31 +189,31 @@ void TIMER1_IRQHandler(void) {
 			NRF_UART0->PSEL.TXD = BUS_TX_PIN;
 			NRF_UART0->INTENSET = N(UART_INTENSET_RXDRDY, Set) | N(UART_INTENSET_TXDRDY, Set);
 			NRF_UART0->ENABLE = N(UART_ENABLE_ENABLE, Enabled);
-			
+
 			// start transfer with sync byte
-			NRF_UART0->TASKS_STARTRX = Trigger; // -> EVENTS_RXRDY		
-			NRF_UART0->TASKS_STARTTX = Trigger; // -> EVENTS_TXRDY
+			NRF_UART0->TASKS_STARTRX = TRIGGER; // -> EVENTS_RXRDY
+			NRF_UART0->TASKS_STARTTX = TRIGGER; // -> EVENTS_TXRDY
 			NRF_UART0->TXD = 0x55;
 
 			// restart timer for rx timeout
-			NRF_TIMER1->TASKS_CLEAR = Trigger;
+			NRF_TIMER1->TASKS_CLEAR = TRIGGER;
 			NRF_TIMER1->CC[0] = 1250;
-	
+
 			// expect receive of sync byte
 			bus::state = SYNC;
 			setSignal(false);
 		} else {
 			//toggleSignal();
-					
+
 			// stop timer
-			NRF_TIMER1->TASKS_STOP = Trigger;
-	
+			NRF_TIMER1->TASKS_STOP = TRIGGER;
+
 			// indicate that rx buffer is ready
 			bus::rxReady = true;
-	
+
 			// now in request mode
 			bus::state = REQUEST;
-	
+
 	//		toggleSignal();
 			setSignal(true);
 		}
@@ -225,12 +226,12 @@ void transfer(uint8_t const *txData, int txLength, uint8_t *rxData, int rxLength
 	bus::onTransferred = onTransferred;
 
 	// reset timer
-	NRF_TIMER1->TASKS_STOP = Trigger;
-	NRF_TIMER1->TASKS_CLEAR = Trigger;
+	NRF_TIMER1->TASKS_STOP = TRIGGER;
+	NRF_TIMER1->TASKS_CLEAR = TRIGGER;
 
 	// disconnect uart from tx and set high baud rate to force stop of rx/tx during break
-	NRF_UART0->TASKS_STOPRX = Trigger;
-	NRF_UART0->TASKS_STOPTX = Trigger;
+	NRF_UART0->TASKS_STOPRX = TRIGGER;
+	NRF_UART0->TASKS_STOPTX = TRIGGER;
 	NRF_UART0->ENABLE = 0;
 	NRF_UART0->INTENCLR = 0xffffffff;
 	NRF_UART0->PSEL.TXD = Disconnected;
@@ -251,8 +252,8 @@ void transfer(uint8_t const *txData, int txLength, uint8_t *rxData, int rxLength
 	// generate break: 13 bit times, 677us
 	setOutput(BUS_TX_PIN, false);
 	NRF_TIMER1->CC[0] = 677;
-	NRF_TIMER1->TASKS_START = Trigger;
-	
+	NRF_TIMER1->TASKS_START = TRIGGER;
+
 	bus::state = BREAK;
 }
 
@@ -262,10 +263,10 @@ void setRequestHandler(std::function<void (uint8_t)> const &onRequest) {
 */
 
 Awaitable<Parameters> transfer(int writeLength, uint8_t const *writeData, int &readLength, uint8_t *readData) {
-	
+
 	// start transfer immediately if bus is idle
 	// todo
-	
+
 	return {bus::transferWaitlist, writeLength, writeData, readLength, readData};
 }
 

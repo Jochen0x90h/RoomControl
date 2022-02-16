@@ -1,5 +1,8 @@
 #include "../poti.hpp"
 #include "loop.hpp"
+#include "input.hpp"
+#include <appConfig.hpp>
+
 
 namespace poti {
 
@@ -16,14 +19,19 @@ void handle(Gui &gui) {
 	// draw poti on gui using random id
 	auto poti = gui.poti(0xadead869);
 
-	if (poti) {
+	// check if the user changed something
+	if (poti.delta) {
+		int delta = *poti.delta;
+		
 		// resume all waiting coroutines
-		poti::waitlist.resumeAll([&poti](Parameters p) {
-			p.delta = poti->delta;
-			p.activated = poti->activated;
+		poti::waitlist.resumeAll([delta](Parameters p) {
+			p.delta = delta;
 			return true;
 		});
 	}
+
+	if (poti.button)
+		input::set(INPUT_POTI_BUTTON, *poti.button);
 }
 
 void init() {
@@ -31,8 +39,10 @@ void init() {
 	poti::nextHandler = loop::addHandler(handle);
 }
 
-Awaitable<Parameters> change(int8_t& delta, bool& activated) {
-	return {poti::waitlist, delta, activated};
+Awaitable<Parameters> change(int index, int8_t& delta) {
+	// currently only one poti supported
+	assert(poti::nextHandler != nullptr && index == 0);
+	return {poti::waitlist, delta};
 }
 
 } // namespace poti

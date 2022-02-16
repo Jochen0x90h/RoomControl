@@ -1,6 +1,6 @@
 #pragma once
 
-#include <sysConfig.hpp>
+#include <boardConfig.hpp>
 #include <cstdint>
 
 

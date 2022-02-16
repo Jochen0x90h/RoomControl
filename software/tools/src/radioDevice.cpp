@@ -4,7 +4,7 @@
 #include <loop.hpp>
 #include <debug.hpp>
 #include <util.hpp>
-#include <sysConfig.hpp>
+#include <boardConfig.hpp>
 #include <Queue.hpp>
 
 
@@ -265,7 +265,7 @@ int main(void) {
 			}
 			return true;
 		});
-	gpio::init();
+	output::init();
 
 	// start radio, enable baseband decoder and pass all packets for sniffer or terminal
 	radio::start(15);

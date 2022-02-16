@@ -64,7 +64,7 @@ int main(void) {
 	loop::init();
 	timer::init();
 	radio::init();
-	gpio::init();
+	output::init();
 	
 	radio::setPan(0, 0x1a62);
 	radio::setLongAddress(UINT64_C(0x00124b002268b96b));

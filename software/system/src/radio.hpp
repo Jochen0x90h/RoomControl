@@ -1,9 +1,9 @@
 #pragma once
 
 #include "radioDefs.hpp"
-#include "sysConfig.hpp"
 #include <Coroutine.hpp>
 #include <functional>
+#include <boardConfig.hpp>
 
 
 namespace radio {

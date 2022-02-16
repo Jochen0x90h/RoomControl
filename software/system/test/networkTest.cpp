@@ -45,7 +45,7 @@ int main(void) {
 	loop::init();
 	timer::init();
 	network::init();
-	gpio::init(); // for debug signals on pins
+	output::init(); // for debug signals on pins
 
 	network::setLocalPort(0, localPort);
 	

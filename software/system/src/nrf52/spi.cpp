@@ -1,8 +1,9 @@
 #include "../spi.hpp"
 #include "../display.hpp"
 #include "loop.hpp"
-#include "global.hpp"
-#include "util.hpp"
+#include "defs.hpp"
+#include <util.hpp>
+#include <boardConfig.hpp>
 
 
 /*
@@ -31,7 +32,7 @@ static void startTransfer(int index, Parameters const &p) {
 	NRF_SPIM3->PSEL.CSN = SPI_CS_PINS[index];
 
 	// configure MISO pin
-	NRF_SPIM3->PSELDCX = Disconnected;
+	NRF_SPIM3->PSELDCX = DISCONNECTED;
 	NRF_SPIM3->PSEL.MISO = SPI_MISO_PIN;
 
 	// set write data
@@ -44,7 +45,7 @@ static void startTransfer(int index, Parameters const &p) {
 
 	// enable and start
 	NRF_SPIM3->ENABLE = N(SPIM_ENABLE_ENABLE, Enabled);
-	NRF_SPIM3->TASKS_START = Trigger;
+	NRF_SPIM3->TASKS_START = TRIGGER;
 	spi::transferContext = index;
 }
 
@@ -59,7 +60,7 @@ void startTransfer(int index, Parameters const &p) {
 	NRF_SPIM3->PSEL.CSN = DISPLAY_CS_PIN;
 
 	// configure MISO pin as D/C# pin and set D/C# count
-	NRF_SPIM3->PSEL.MISO = Disconnected;
+	NRF_SPIM3->PSEL.MISO = DISCONNECTED;
 	NRF_SPIM3->PSELDCX = SPI_MISO_PIN;
 	//configureOutput(SPI_MISO_PIN); // done automatically by hardware
 	NRF_SPIM3->DCXCNT = p.commandLength;
@@ -73,7 +74,7 @@ void startTransfer(int index, Parameters const &p) {
 
 	// enable and start
 	NRF_SPIM3->ENABLE = N(SPIM_ENABLE_ENABLE, Enabled);
-	NRF_SPIM3->TASKS_START = Trigger;
+	NRF_SPIM3->TASKS_START = TRIGGER;
 	
 	spi::transferContext = index;
 }
@@ -152,7 +153,7 @@ void init() {
 	setOutput(SPI_MOSI_PIN, true);
 	configureOutput(SPI_MOSI_PIN);
 	setOutput(SPI_MISO_PIN, true);
-	configureInputWithPullUp(SPI_MISO_PIN);
+	configureInput(SPI_MISO_PIN, Pull::UP);
 	
 	// set cs pins to outputs and high to disable devices
 	for (int csPin : SPI_CS_PINS) {

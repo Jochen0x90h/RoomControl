@@ -34,15 +34,15 @@ public:
 	void display(int width, int height, uint8_t const *displayBuffer);
 
 	struct Poti {
-		int delta;
-		bool activated;
+		std::optional<int> delta;
+		std::optional<bool> button;
 	};
 
 	/**
 	 * Add a digital potentiometer with button
 	 * @param id id of poti, must stay the same during its lifetime
 	 */
-	std::optional<Poti> poti(int id);
+	Poti poti(int id);
 
 	/**
 	 * Add a button with pressed/release states
@@ -194,9 +194,9 @@ protected:
 		uint32_t value;
 		int16_t lastValue;
 		
-		// current press state
-		bool state = false;
-		bool lastState = false;
+		// current button state
+		bool button = false;
+		bool lastButton = false;
 		
 		// last mouse position
 		float x;

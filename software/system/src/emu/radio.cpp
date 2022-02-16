@@ -6,7 +6,7 @@
 #include <ieee.hpp>
 #include <Nonce.hpp>
 #include <Queue.hpp>
-#include <sysConfig.hpp>
+#include <boardConfig.hpp>
 #include <libusb.h>
 
 

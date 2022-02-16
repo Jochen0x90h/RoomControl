@@ -1,4 +1,4 @@
-#include "global.hpp"
+#include "defs.hpp"
 #include <assert.hpp>
 #include <util.hpp>
 #include <cstdint>
@@ -19,7 +19,7 @@ void init() {
 	enableInterrupt(RNG_IRQn);
 
 	// immediately start to generate the first random numbers
-	NRF_RNG->TASKS_START = Trigger;
+	NRF_RNG->TASKS_START = TRIGGER;
 }
 
 extern "C" {
@@ -42,7 +42,7 @@ void RNG_IRQHandler(void) {
 		
 		// check if we catched up with the read index
 		if (r - w <= 0)
-			NRF_RNG->TASKS_STOP = Trigger;
+			NRF_RNG->TASKS_STOP = TRIGGER;
 			
 		rng::writeIndex = w;
 	}	
@@ -54,7 +54,7 @@ uint8_t int8() {
 
 	int index = rng::readIndex;
 	rng::readIndex = index + 1;
-	NRF_RNG->TASKS_START = Trigger;
+	NRF_RNG->TASKS_START = TRIGGER;
 	return queue[index & (array::count(queue) - 1)];
 }
 
@@ -64,7 +64,7 @@ uint64_t int64() {
 
 	int index = (rng::readIndex + 7) & ~7;
 	rng::readIndex = index + 8;
-	NRF_RNG->TASKS_START = Trigger;
+	NRF_RNG->TASKS_START = TRIGGER;
 	return *(uint64_t*)&queue[index & (array::count(queue) - 1)];
 }
 

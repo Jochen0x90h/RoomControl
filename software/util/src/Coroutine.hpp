@@ -690,7 +690,7 @@ template <typename A1, typename A2, typename A3>
 struct Awaitable3 {
 	A1 const &a1;
 	A2 const &a2;
-	A2 const &a3;
+	A3 const &a3;
 
 
 	bool await_ready() noexcept {

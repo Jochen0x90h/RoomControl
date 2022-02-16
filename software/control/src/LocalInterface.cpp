@@ -1,6 +1,6 @@
 #include "LocalInterface.hpp"
 #include <timer.hpp>
-#include <gpio.hpp>
+#include <output.hpp>
 #include <util.hpp>
 
 
@@ -22,6 +22,10 @@ constexpr MessageType bme680MessageTypes[] = {
 	MessageType::CELSIUS, MessageType::HECTOPASCAL, MessageType::HECTOPASCAL, MessageType::OHM
 };
 
+constexpr EndpointType heatingEndpoints[] = {
+	EndpointType::ON_OFF_OUT
+};
+
 constexpr EndpointType brightnessSensorEndpoints[] = {
 	EndpointType::ILLUMINANCE_IN,
 };
@@ -41,13 +45,14 @@ constexpr EndpointType outEndpoints[] = {
 
 
 LocalInterface::LocalInterface() {
-	uint8_t i = 0;
+	int i = 0;
 	this->devices[i++].id = BME680_ID;
+	this->devices[i++].id = HEATING_ID;
 	this->devices[i++].id = BRIGHTNESS_SENSOR_ID;
 	this->devices[i++].id = MOTION_DETECTOR_ID;
-	if (IN_COUNT > 0)
+	if (INPUT_EXT_COUNT > 0)
 		this->devices[i++].id = IN_ID;
-	if (OUT_COUNT > 0)
+	if (OUTPUT_EXT_COUNT > 0)
 		this->devices[i++].id = OUT_ID;
 	this->deviceCount = i;
 
@@ -75,14 +80,16 @@ Array<EndpointType const> LocalInterface::getEndpoints(DeviceId deviceId) {
 	switch (deviceId) {
 	case BME680_ID:
 		return bme680Endpoints;
+	case HEATING_ID:
+		return heatingEndpoints;
 	case BRIGHTNESS_SENSOR_ID:
 		return brightnessSensorEndpoints;
 	case MOTION_DETECTOR_ID:
 		return motionDetectorEndpoints;
 	case IN_ID:
-		return Array<EndpointType const>(IN_COUNT, inEndpoints);
+		return Array<EndpointType const>(INPUT_EXT_COUNT, inEndpoints);
 	case OUT_ID:
-		return Array<EndpointType const>(OUT_COUNT, outEndpoints);
+		return Array<EndpointType const>(OUTPUT_EXT_COUNT, outEndpoints);
 	}
 	return {};
 }
@@ -189,6 +196,19 @@ Coroutine LocalInterface::publish() {
 
 					// set to device
 					switch (device.id) {
+					case HEATING_ID:
+						{
+							// convert to on/off
+							uint8_t message;
+							if (convert(MessageType::ON_OFF, &message, publisher.messageType, publisher.message)) {
+								// set output
+								if (message <= 1)
+									output::set(OUTPUT_HEATING, message);
+								else
+									output::toggle(OUTPUT_HEATING);
+							}
+						}
+						break;
 					case OUT_ID:
 						{
 							// convert to on/off
@@ -196,11 +216,12 @@ Coroutine LocalInterface::publish() {
 							if (convert(MessageType::ON_OFF, &message, publisher.messageType, publisher.message)) {
 								// set output
 								if (message <= 1)
-									gpio::set(endpointIndex, message);
+									output::set(OUTPUT_EXT_INDEX + endpointIndex, message);
 								else
-									gpio::toggle(endpointIndex);
+									output::toggle(OUTPUT_EXT_INDEX + endpointIndex);
 							}
 						}
+						break;
 					}
 
 					// forward to subscribers
