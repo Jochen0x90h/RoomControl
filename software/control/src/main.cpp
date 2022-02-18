@@ -1,6 +1,5 @@
 #include "RoomControl.hpp"
 #include <calendar.hpp>
-#include <display.hpp>
 #include <flash.hpp>
 #include <bus.hpp>
 #include <radio.hpp>
@@ -131,9 +130,8 @@ int main(int argc, const char **argv) {
 	flash::init();
 	timer::init();
 	calendar::init();
-	display::init();
-	poti::init();
 	spi::init();
+	poti::init();
 	bus::init();
 	radio::init();
 	output::init();

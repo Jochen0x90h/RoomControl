@@ -36,6 +36,6 @@ bool read(int index);
  * @param value value of the input after the trigger occurred
  * @return use co_await on return value to wait for the trigger
  */
-Awaitable<Parameters> trigger(uint32_t risingFlags, uint32_t fallingFlags, int &index, bool &value);
+[[nodiscard]] Awaitable<Parameters> trigger(uint32_t risingFlags, uint32_t fallingFlags, int &index, bool &value);
 
 } // namespace input

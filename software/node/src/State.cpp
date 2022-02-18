@@ -1,4 +1,5 @@
 #include "State.hpp"
+#include <appConfig.hpp>
 
 
 Coroutine PersistentStateManager::updater() {

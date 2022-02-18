@@ -3,7 +3,7 @@
 #include <Bitmap.hpp>
 #include <appConfig.hpp>
 #include <Coroutine.hpp>
-#include <display.hpp>
+#include <spi.hpp>
 
 
 /**
@@ -47,7 +47,7 @@ public:
 	 * @return use co_await on return value to await end of operation
 	 */
 	auto set(Bitmap<DISPLAY_WIDTH, DISPLAY_HEIGHT> const &bitmap) {
-		return display::send(0, array::count(bitmap.data), bitmap.data);
+		return spi::write(SPI_DISPLAY, array::count(bitmap.data), bitmap.data, false);
 	}
 
 protected:
