@@ -5,12 +5,12 @@
 #include <appConfig.hpp>
 #include <boardConfig.hpp>
 #include <fstream>
-//#include <iostream>
 
 
 namespace spi {
 
 // air sensor
+// ----------
 constexpr int CHIP_ID = 0x61;
 
 uint8_t airSensorRegisters[256] = {};
@@ -46,10 +46,46 @@ void setTemperature(float celsius) {
 	spi::airSensorRegisters[0x22] = value >> 12;
 }
 
-// fe-ram
 
+// fe-ram
+// ------
 static uint8_t framData[FRAM_SIZE + 1];
 static std::fstream framFile;
+
+
+// display
+// -------
+
+// display layout: rows of 8 pixels where each byte describes a column in each row.
+// this would be the layout of a 16x16 display where each '|' is one byte:
+// ||||||||||||||||
+// ||||||||||||||||
+int column; // column 0 to 127
+int page; // page of 8 vertical pixels, 0 to 7
+int displayContrast = 255;
+bool displayOn = false; // all pixels on
+bool displayInverse = false;
+bool displayEnabled = false;
+uint8_t display[DISPLAY_WIDTH * DISPLAY_HEIGHT / 8];
+
+// get dipslay contents into an 8 bit grayscale image
+void getDisplay(uint8_t *buffer) {
+	uint8_t foreground = !spi::displayEnabled ? 0 : spi::displayContrast;
+	uint8_t background = (!spi::displayEnabled || spi::displayOn) ? foreground : (48 * spi::displayContrast) / 255;
+	if (spi::displayInverse)
+		std::swap(foreground, background);
+	
+	int width = DISPLAY_WIDTH;
+	int height = DISPLAY_HEIGHT;
+	for (int j = 0; j < height; ++j) {
+		uint8_t *b = &buffer[width * j];
+		for (int i = 0; i < width; ++i) {
+			bool bit = (display[i + width * (j >> 3)] & (1 << (j & 7))) != 0;
+			b[i] = bit ? foreground : background;
+		}
+	}
+}
+
 
 
 struct Context {
@@ -66,7 +102,7 @@ void handle(Gui &gui) {
 		auto &context = spi::contexts[index];
 		context.waitlist.resumeFirst([index](Parameters p) {
 
-			if (index == SPI_AIR_SENSOR) {
+			if (index == SPI_EMU_AIR_SENSOR) {
 				if (p.writeData[0] & 0x80) {
 					// read
 					int addr = p.writeData[0] & 0x7f;
@@ -87,7 +123,7 @@ void handle(Gui &gui) {
 						airSensor[addr] = data;
 					}
 				}
-			} else if (index == SPI_FRAM) {
+			} else if (index == SPI_EMU_FRAM) {
 				// emulate e.g. MR45V064B (16 bit address)
 				
 				uint8_t op = p.writeData[0];
@@ -113,6 +149,53 @@ void handle(Gui &gui) {
 					}
 					break;
 				}
+			} else if (index == SPI_EMU_DISPLAY) {
+				if (p.command) {
+					// execute commands
+					for (int i = 0; i < p.writeLength; ++i) {
+						switch (p.writeData[i]) {
+						// set contrast control
+						case 0x81:
+							spi::displayContrast = p.writeData[++i];
+							break;
+						
+						// entire display on
+						case 0xA4:
+							spi::displayOn = false;
+							break;
+						case 0xA5:
+							spi::displayOn = true;
+							break;
+						
+						// set normal/inverse display
+						case 0xA6:
+							spi::displayInverse = false;
+							break;
+						case 0xA7:
+							spi::displayInverse = true;
+							break;
+
+						// set display on/off
+						case 0xAE:
+							spi::displayEnabled = false;
+							break;
+						case 0xAF:
+							spi::displayEnabled = true;
+							break;
+						}
+					}
+				} else {
+					// set data
+					for (int i = 0; i < p.writeLength; ++i) {
+						// copy byte (8 pixels in a column)
+						spi::display[page * DISPLAY_WIDTH + spi::column] = p.writeData[i];
+
+						// increment column index
+						spi::column = (spi::column == DISPLAY_WIDTH - 1) ? 0 : spi::column + 1;
+						if (spi::column == 0)
+							spi::page = spi::page == (DISPLAY_HEIGHT / 8 - 1) ? 0 : spi::page + 1;
+					}
+				}
 			}
 			return true;
 		});
@@ -121,12 +204,20 @@ void handle(Gui &gui) {
 	// call next handler in chain
 	spi::nextHandler(gui);
 	
-	gui.newLine();
+	//gui.newLine();
 
-	// draw temperature sensor on gui using random id
-	auto temperature = gui.temperatureSensor(0xbc5032ad);
-	if (temperature)
-		setTemperature(*temperature);
+	if (SPI_EMU_AIR_SENSOR >= 0) {
+		// draw temperature sensor on gui using random id
+		auto temperature = gui.temperatureSensor(0xbc5032ad);
+		if (temperature)
+			setTemperature(*temperature);
+	}
+	if (SPI_EMU_DISPLAY >= 0) {
+		// draw display on gui
+		uint8_t displayBuffer[DISPLAY_WIDTH * DISPLAY_HEIGHT];
+		getDisplay(displayBuffer);
+		gui.display(DISPLAY_WIDTH, DISPLAY_HEIGHT, displayBuffer);
+	}
 }
 
 void init(char const *fileName) {
@@ -176,13 +267,25 @@ void init(char const *fileName) {
 
 		}
 	}
+	
+	// display
+	{
+	}
 }
 
-Awaitable<Parameters> transfer(int index, int writeLength, uint8_t const *writeData, int readLength, uint8_t *readData) {
-	assert(uint(index) < SPI_CONTEXT_COUNT);
+Awaitable<Parameters> transfer(int index, int writeLength, uint8_t const *writeData, int readLength, uint8_t *readData, bool command)
+{
+	assert(spi::nextHandler != nullptr && uint(index) < SPI_CONTEXT_COUNT); // init() not called or index out of range
 	auto &context = spi::contexts[index];
 
-	return {context.waitlist, writeLength, writeData, readLength, readData};
+	return {context.waitlist, writeLength, writeData, readLength, readData, command};
 }
+/*
+Awaitable<Parameters> write(int index, int writeLength, uint8_t const *writeData, bool command) {
+	assert(spi::nextHandler != nullptr && uint(index) < SPI_CONTEXT_COUNT); // init() not called or index out of range
+	auto &context = spi::contexts[index];
 
+	return {context.waitlist, writeLength, writeData, int(command), nullptr};
+}
+*/
 } // namespace spi

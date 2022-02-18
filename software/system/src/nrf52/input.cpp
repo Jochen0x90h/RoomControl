@@ -39,6 +39,7 @@ Waitlist<Parameters> waitlist;
 loop::Handler nextHandler = nullptr;
 void handle() {	
 	if (isInterruptPending(GPIOTE_IRQn)) {
+		// debounce timeout
 		auto timeout = timer::now() + 50ms;
 		for (int index = 0; index < TRIGGER_COUNT; ++index) {
 			if (NRF_GPIOTE->EVENTS_IN[index]) {

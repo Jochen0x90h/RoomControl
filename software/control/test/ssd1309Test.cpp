@@ -1,6 +1,5 @@
 #include <SSD1309.hpp>
 #include <timer.hpp>
-#include <display.hpp>
 #include <poti.hpp>
 #include <debug.hpp>
 #include <loop.hpp>
@@ -31,7 +30,7 @@ Coroutine draw() {
 int main(void) {
 	loop::init();
 	timer::init();
-	display::init();
+	spi::init();
 	poti::init();
 	output::init();
 	

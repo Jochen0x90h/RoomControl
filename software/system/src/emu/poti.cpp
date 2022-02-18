@@ -39,7 +39,7 @@ void init() {
 	poti::nextHandler = loop::addHandler(handle);
 }
 
-Awaitable<Parameters> change(int index, int8_t& delta) {
+[[nodiscard]] Awaitable<Parameters> change(int index, int8_t& delta) {
 	// currently only one poti supported
 	assert(poti::nextHandler != nullptr && index == 0);
 	return {poti::waitlist, delta};

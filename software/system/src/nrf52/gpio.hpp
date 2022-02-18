@@ -3,48 +3,6 @@
 #include "defs.hpp"
 
 
-// io
-/*
-// configure a gpio as input with pull up
-inline void configureInputWithPullUp(int pin) {
-	auto p = pin >= PORT1 ? NRF_P1 : NRF_P0;
-	p->PIN_CNF[pin & 31] = N(GPIO_PIN_CNF_DIR, Input)
-		| N(GPIO_PIN_CNF_INPUT, Connect)
-		| N(GPIO_PIN_CNF_PULL, Pullup);
-}
-
-// configure a gpio as input with pull down
-inline void configureInputWithPullDown(int pin) {
-	auto p = pin >= PORT1 ? NRF_P1 : NRF_P0;
-	p->PIN_CNF[pin & 31] = N(GPIO_PIN_CNF_DIR, Input)
-		| N(GPIO_PIN_CNF_INPUT, Connect)
-		| N(GPIO_PIN_CNF_PULL, Pulldown);
-}
-
-
-
-// configure a gpio as output
-inline void configureOutput(int pin) {
-	auto p = pin >= PORT1 ? NRF_P1 : NRF_P0;
-	p->PIN_CNF[pin & 31] = N(GPIO_PIN_CNF_DIR, Output)
-		| N(GPIO_PIN_CNF_INPUT, Connect)
-		| N(GPIO_PIN_CNF_PULL, Disabled)
-		| N(GPIO_PIN_CNF_DRIVE, S0S1);
-}
-*/
-/*
-// configure gpio drive for use by a peripheral an connected to an analog signal, therefore disconnect input
-inline void configureDrive(int pin, Drive drive = Drive::S0S1) {
-	auto p = pin >= PORT1 ? NRF_P1 : NRF_P0;
-	p->PIN_CNF[pin & 31] = N(GPIO_PIN_CNF_DIR, Input)
-		| N(GPIO_PIN_CNF_INPUT, Disconnect)
-		| N(GPIO_PIN_CNF_PULL, Disabled)
-		| V(GPIO_PIN_CNF_DRIVE, int(drive));
-}
-*/
-
-
-
 // ports
 constexpr int PORT0 = 0;
 constexpr int PORT1 = 32;
@@ -106,9 +64,9 @@ inline void addInputConfig(int pin, Pull pull) {
 	auto port = pin >= PORT1 ? NRF_P1 : NRF_P0;
 	auto &config = port->PIN_CNF[pin & 31];
 	uint32_t c = config;
-	c = (c & ~GPIO_PIN_CNF_INPUT_Msk) | N(GPIO_PIN_CNF_INPUT, Connect);
-	if (pull != Pull::DISABLED)
-		c = (c & ~GPIO_PIN_CNF_PULL_Msk) | V(GPIO_PIN_CNF_PULL, int(pull));
+	c = (c & ~(GPIO_PIN_CNF_INPUT_Msk | GPIO_PIN_CNF_PULL_Msk))
+		| N(GPIO_PIN_CNF_INPUT, Connect)
+		| V(GPIO_PIN_CNF_PULL, int(pull));
 	config = c;
 }
 
@@ -126,9 +84,10 @@ inline bool readInput(int pin) {
 inline void configureOutput(int pin, Drive drive = Drive::S0S1, Pull pull = Pull::DISABLED) {
 	auto port = pin >= PORT1 ? NRF_P1 : NRF_P0;
 	port->PIN_CNF[pin & 31] =
-		V(GPIO_PIN_CNF_DRIVE, int(drive))
+		N(GPIO_PIN_CNF_DIR, Output)
+		| V(GPIO_PIN_CNF_DRIVE, int(drive))
 		| V(GPIO_PIN_CNF_PULL, int(pull))
-		| N(GPIO_PIN_CNF_DIR, Output);
+		| N(GPIO_PIN_CNF_INPUT, Disconnect);
 }
 
 // for sysConfig.hpp
@@ -146,9 +105,9 @@ inline void addOutputConfig(int pin, Drive drive, Pull pull, bool enabled) {
 	auto port = pin >= PORT1 ? NRF_P1 : NRF_P0;
 	auto &config = port->PIN_CNF[pin & 31];
 	uint32_t c = config;
-	c |= V(GPIO_PIN_CNF_DRIVE, int(drive));
-	if (pull != Pull::DISABLED)
-		c = (c & ~GPIO_PIN_CNF_PULL_Msk) | V(GPIO_PIN_CNF_PULL, int(pull));
+	c = (c & ~(GPIO_PIN_CNF_DRIVE_Msk | GPIO_PIN_CNF_PULL_Msk | GPIO_PIN_CNF_DIR_Msk))
+		| V(GPIO_PIN_CNF_DRIVE, int(drive))
+		| V(GPIO_PIN_CNF_PULL, int(pull));
 	if (enabled)
 		c |= N(GPIO_PIN_CNF_DIR, Output);
 	config = c;

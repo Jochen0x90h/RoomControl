@@ -48,16 +48,22 @@ constexpr int POTI_B_PIN = PORT0 | 5;
 // spi
 // ---
 
-constexpr int SPI_CS_PINS[2] = {PORT0 | 2, PORT0 | 3};
+struct SpiConfig {
+	enum Type {MASTER, WRITE_ONLY_MASTER};
+	Type type;
+	int csPin;
+};
+
+constexpr SpiConfig SPIS[] = {
+	{SpiConfig::MASTER, PORT0 | 2}, // air sensor
+	{SpiConfig::MASTER, PORT0 | 3}, // fe-ram
+	{SpiConfig::WRITE_ONLY_MASTER, PORT0 | 3} // display
+};
+
 constexpr int SPI_SCK_PIN = PORT0 | 19;
 constexpr int SPI_MOSI_PIN = PORT0 | 20;
-constexpr int SPI_MISO_PIN = PORT0 | 21; // also connected to display D/C#
-
-
-// display
-// -------
-
-constexpr int DISPLAY_CS_PIN = PORT0 | 3;
+constexpr int SPI_MISO_PIN = PORT0 | 21;
+constexpr int SPI_DC_PIN = PORT0 | 21; // data/command for write-only display, can be same as MISO
 
 
 // audio

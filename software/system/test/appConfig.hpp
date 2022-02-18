@@ -21,6 +21,7 @@ constexpr int OUTPUT_DEBUG_BLUE = 2;
 
 constexpr int SPI_AIR_SENSOR = 0;
 constexpr int SPI_FRAM = 1;
+constexpr int SPI_DISPLAY = 2;
 
 
 // fram

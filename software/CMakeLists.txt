@@ -65,7 +65,6 @@ set(UTIL
 	util/src/BitField.hpp
 	util/src/Bitmap.cpp
 	util/src/Bitmap.hpp
-	#util/src/Buffer.hpp
 	util/src/convert.cpp
 	util/src/convert.hpp
 	util/src/Coroutine.hpp
@@ -97,8 +96,6 @@ set(PROTOCOL
 	protocol/src/crypt.cpp
 	protocol/src/crypt.hpp
 	protocol/src/DataBuffer.hpp
-	#protocol/src/DataReader.hpp
-	#protocol/src/DataWriter.hpp
 	protocol/src/MessageReader.hpp
 	protocol/src/MessageWriter.hpp
 	protocol/src/gp.hpp
@@ -127,7 +124,6 @@ set(SYSTEM
 	system/src/calendar.hpp
 	system/src/ClockTime.hpp
 	system/src/debug.hpp
-	system/src/display.hpp
 	system/src/emu/flash.cpp
 	system/src/flash.hpp
 	system/src/emu/Gui.cpp
@@ -200,7 +196,6 @@ set(CONTROL
 	control/src/BusInterface.hpp
 	control/src/emu/bus.cpp
 	control/src/Device.hpp
-	control/src/emu/display.cpp
 	control/src/Interface.cpp
 	control/src/Interface.hpp
 	control/src/LocalInterface.cpp
@@ -491,7 +486,7 @@ add_executable(ssd1309Test
 	${SYSTEM}
 	control/src/SSD1309.cpp
 	control/src/SSD1309.hpp
-	control/src/emu/display.cpp
+	#control/src/emu/display.cpp
 )
 target_include_directories(ssd1309Test
 	PRIVATE

@@ -32,7 +32,10 @@ constexpr int OUTPUT_COUNT = array::count(OUTPUTS);
 // spi
 // ---
 
-constexpr int SPI_CONTEXT_COUNT = 2;
+constexpr int SPI_CONTEXT_COUNT = 3;
+constexpr int SPI_EMU_AIR_SENSOR = 0;
+constexpr int SPI_EMU_FRAM = 1;
+constexpr int SPI_EMU_DISPLAY = 2;
 
 
 // radio
