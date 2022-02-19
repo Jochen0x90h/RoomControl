@@ -3,7 +3,7 @@
 #include <assert.hpp>
 #include <Coroutine.hpp>
 #include <appConfig.hpp>
-#include <spi.hpp>
+#include <Spi.hpp>
 #include <defines.hpp>
 #include <util.hpp>
 #include <LinkedListNode.hpp>

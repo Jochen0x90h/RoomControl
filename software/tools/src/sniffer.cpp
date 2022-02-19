@@ -1,6 +1,6 @@
-#include <terminal.hpp>
-#include <radioDefs.hpp>
-#include <usbDefs.hpp>
+#include <Terminal.hpp>
+#include <RadioDefs.hpp>
+#include <UsbDefs.hpp>
 #include <crypt.hpp>
 #include <hash.hpp>
 #include <Nonce.hpp>
@@ -79,15 +79,15 @@ AesKey linkAesKey;
 
 // print tinycrypt aes key
 void printKey(char const *name, AesKey const &key) {
-	terminal::out << ("AesKey const " + str(name) + " = {{");
+	Terminal::out << ("AesKey const " + str(name) + " = {{");
 	bool first = true;
 	for (auto w : key.words) {
 		if (!first)
-			terminal::out << ", ";
+			Terminal::out << ", ";
 		first = false;
-		terminal::out << ("0x" + hex(w));
+		Terminal::out << ("0x" + hex(w));
 	}
-	terminal::out << "}};\n";
+	Terminal::out << "}};\n";
 }
 
 
@@ -126,7 +126,7 @@ void handleIeee(PacketReader &r) {
 	uint8_t sequenceNumber = 0;
 	if ((frameControl & ieee::FrameControl::SEQUENCE_NUMBER_SUPPRESSION) == 0) {
 		sequenceNumber = r.u8();
-		terminal::out << ("Seq " + dec(sequenceNumber) + "; ");
+		Terminal::out << ("Seq " + dec(sequenceNumber) + "; ");
 	}
 
 	// destination pan/address
@@ -136,21 +136,21 @@ void handleIeee(PacketReader &r) {
 
 		// destination pan
 		uint16_t destinationPan = r.u16L();
-		terminal::out << (hex(destinationPan) + ':');
+		Terminal::out << (hex(destinationPan) + ':');
 
 		// check if short or long addrssing
 		if ((frameControl & ieee::FrameControl::DESTINATION_ADDRESSING_LONG_FLAG) == 0) {
 			// short destination address
 			uint16_t destination = r.u16L();
 
-			terminal::out << (hex(destination));
+			Terminal::out << (hex(destination));
 		} else {
 			// long destination address
 			uint64_t destination = r.u64L();
 
-			terminal::out << (hex(destination));
+			Terminal::out << (hex(destination));
 		}
-		terminal::out << (" <- ");
+		Terminal::out << (" <- ");
 	}
 
 	// source pan/address
@@ -161,7 +161,7 @@ void handleIeee(PacketReader &r) {
 		// check if pan is present
 		if ((frameControl & ieee::FrameControl::PAN_ID_COMPRESSION) == 0 || !haveDestination) {
 			uint16_t sourcePan = r.u16L();
-			terminal::out << (hex(sourcePan) + ':');
+			Terminal::out << (hex(sourcePan) + ':');
 		}
 
 		// check if short or long addrssing
@@ -169,16 +169,16 @@ void handleIeee(PacketReader &r) {
 			// short source address
 			uint16_t source = r.u16L();
 
-			terminal::out << (hex(source));
+			Terminal::out << (hex(source));
 		} else {
 			// long source address
 			uint64_t source = r.u64L();
 
-			terminal::out << (hex(source));
+			Terminal::out << (hex(source));
 		}
 	}
 	if (haveDestination || haveSource)
-		terminal::out << ("; ");
+		Terminal::out << ("; ");
 
 	auto frameType = frameControl & ieee::FrameControl::TYPE_MASK;
 	switch (frameType) {
@@ -197,10 +197,10 @@ void handleIeee(PacketReader &r) {
 			int protocolVersion = (stackProfile >> 4) & 15;
 			bool routerFlag = stackProfile & 0x400;
 
-			terminal::out << ("Beacon: " + dec(type) + ", " + dec(protocolVersion));
+			Terminal::out << ("Beacon: " + dec(type) + ", " + dec(protocolVersion));
 			if (routerFlag)
-				terminal::out << (", router");
-			terminal::out << ("\n");
+				Terminal::out << (", router");
+			Terminal::out << ("\n");
 		}
 		break;
 	case ieee::FrameControl::TYPE_COMMAND:
@@ -209,27 +209,27 @@ void handleIeee(PacketReader &r) {
 
 			switch (command) {
 			case ieee::Command::ASSOCIATION_REQUEST:
-				terminal::out << ("Association Request\n");
+				Terminal::out << ("Association Request\n");
 				break;
 			case ieee::Command::ASSOCIATION_RESPONSE:
-				terminal::out << ("Association Response\n");
+				Terminal::out << ("Association Response\n");
 				break;
 			case ieee::Command::DATA_REQUEST:
-				terminal::out << ("Data Request\n");
+				Terminal::out << ("Data Request\n");
 				break;
 			case ieee::Command::ORPHAN_NOTIFICATION:
-				terminal::out << ("Orphan Notification\n");
+				Terminal::out << ("Orphan Notification\n");
 				break;
 			case ieee::Command::BEACON_REQUEST:
-				terminal::out << ("Beacon Request\n");
+				Terminal::out << ("Beacon Request\n");
 				break;
 			default:
-				terminal::out << ("Unknown Command\n");
+				Terminal::out << ("Unknown Command\n");
 			}
 		}
 		break;
 	case ieee::FrameControl::TYPE_ACK:
-		terminal::out << ("Ack\n");
+		Terminal::out << ("Ack\n");
 		break;
 	case ieee::FrameControl::TYPE_DATA:
 		{
@@ -242,12 +242,12 @@ void handleIeee(PacketReader &r) {
 				handleGp(mac, r);
 				break;
 			default:
-				terminal::out << ("Unknown Nwk Frame Version!\n");
+				Terminal::out << ("Unknown Nwk Frame Version!\n");
 			}
 		}
 		break;
 	default:
-		terminal::out << ("Unknown IEEE Frame Type\n");
+		Terminal::out << ("Unknown IEEE Frame Type\n");
 	}
 }
 
@@ -276,7 +276,7 @@ void handleGp(uint8_t const *mac, PacketReader &r) {
 
 	// device id
 	uint32_t deviceId = r.u32L();
-	terminal::out << ("Device Id: " + hex(deviceId) + "; ");
+	Terminal::out << ("Device Id: " + hex(deviceId) + "; ");
 
 	if (securityLevel == gp::NwkExtendedFrameControl::SECURITY_LEVEL_NONE
 		&& r.peekE8<gp::Command>() == gp::Command::COMMISSIONING)
@@ -339,19 +339,19 @@ void handleGp(uint8_t const *mac, PacketReader &r) {
 	Nonce nonce(deviceId, securityCounter);
 	if (!r.decrypt(micLength, nonce, device.aesKey)) {
 		if (securityLevel <= gp::NwkExtendedFrameControl::SECURITY_LEVEL_CNT32_MIC32) {
-			terminal::out << ("Decrypt Error; ");
+			Terminal::out << ("Decrypt Error; ");
 			// we can continue as data is not encrypted
 		} else {
-			terminal::out << ("Error while decrypting message!\n");
+			Terminal::out << ("Error while decrypting message!\n");
 			return;
 		}
 	}
 
-	terminal::out << ("Data:");
+	Terminal::out << ("Data:");
 	int l = r.getRemaining();
 	for (int i = 0; i < l; ++i)
-		terminal::out << (' ' + hex(r.current[i]));
-	terminal::out << ("\n");
+		Terminal::out << (' ' + hex(r.current[i]));
+	Terminal::out << ("\n");
 }
 
 void handleGpCommission(uint32_t deviceId, PacketReader &r) {
@@ -389,7 +389,7 @@ void handleGpCommission(uint32_t deviceId, PacketReader &r) {
 
 				// in-place decrypt
 				if (!decrypt(key, header.data, 4, key, 16, 4, nonce, za09LinkAesKey)) {
-					terminal::out << ("Error while decrypting key!\n");
+					Terminal::out << ("Error while decrypting key!\n");
 					return;
 				}
 
@@ -401,20 +401,20 @@ void handleGpCommission(uint32_t deviceId, PacketReader &r) {
 			}
 
 			// print key
-			terminal::out << ("Key: ");
+			Terminal::out << ("Key: ");
 			for (int i = 0; i < 16; ++i) {
 				if (i > 0)
-					terminal::out << (":");
-				terminal::out << (hex(key[i]));
+					Terminal::out << (":");
+				Terminal::out << (hex(key[i]));
 			}
-			terminal::out << ("\n");
+			Terminal::out << ("\n");
 
 			// set key for device
 			setKey(device.aesKey, Array<uint8_t const, 16>(key));
 		}
 		if ((extendedOptions & gp::ExtendedOptions::COUNTER_PRESENT) != 0) {
 			uint32_t counter = r.u32L();
-			terminal::out << ("Counter: 0x" + hex(counter) + "\n");
+			Terminal::out << ("Counter: 0x" + hex(counter) + "\n");
 		}
 	}
 
@@ -449,7 +449,7 @@ void handleNwk(PacketReader &r) {
 	uint16_t source = r.u16L();
 	uint8_t radius = r.u8();
 	uint8_t nwkCounter = r.u8();
-	terminal::out << (hex(destination) + " <- " + hex(source) + " (r " + dec(radius) + "); ");
+	Terminal::out << (hex(destination) + " <- " + hex(source) + " (r " + dec(radius) + "); ");
 
 	// destination
 	if ((frameControl & zb::NwkFrameControl::DESTINATION) != 0) {
@@ -467,12 +467,12 @@ void handleNwk(PacketReader &r) {
 	if ((frameControl & zb::NwkFrameControl::SOURCE_ROUTE) != 0) {
 		uint8_t relayCount = r.u8();
 		uint8_t relayIndex = r.u8();
-		terminal::out << ("source route");
+		Terminal::out << ("source route");
 		for (int i = 0; i < relayCount; ++i) {
 			uint16_t relay = r.u16L();
-			terminal::out << (' ' + hex(relay));
+			Terminal::out << (' ' + hex(relay));
 		}
-		terminal::out << ("; ");
+		Terminal::out << ("; ");
 	}
 
 	// security header
@@ -487,17 +487,17 @@ void handleNwk(PacketReader &r) {
 
 		// security counter
 		uint32_t securityCounter = r.u32L();
-		terminal::out << ("SecCnt " + hex(securityCounter) + "; ");
+		Terminal::out << ("SecCnt " + hex(securityCounter) + "; ");
 
 		// key type
 		if ((securityControl & zb::SecurityControl::KEY_MASK) != zb::SecurityControl::KEY_NETWORK) {
-			terminal::out << ("Error: Only network key supported!\n");
+			Terminal::out << ("Error: Only network key supported!\n");
 			return;
 		}
 
 		// extended source
 		if ((securityControl & zb::SecurityControl::EXTENDED_NONCE) == 0) {
-			terminal::out << ("Error: Only extended nonce supported!\n");
+			Terminal::out << ("Error: Only extended nonce supported!\n");
 			return;
 		}
 		extendedSource = r.current;
@@ -512,7 +512,7 @@ void handleNwk(PacketReader &r) {
 		// decrypt in-place (whole message, mic length of 4)
 		r.setMessage();
 		if (!r.decrypt(4, nonce, networkAesKey)) {
-			terminal::out << "Error: NWK Decryption failed!\n";
+			Terminal::out << "Error: NWK Decryption failed!\n";
 			return;
 		}
 	}
@@ -523,7 +523,7 @@ void handleNwk(PacketReader &r) {
 		auto command = r.e8<zb::NwkCommand>();
 		switch (command) {
 		case zb::NwkCommand::ROUTE_REQUEST:
-			terminal::out << "Route Request ";
+			Terminal::out << "Route Request ";
 			{
 				auto options = r.e8<zb::NwkCommandRouteRequestOptions>();
 				uint8_t routeId = r.u8();
@@ -532,22 +532,22 @@ void handleNwk(PacketReader &r) {
 
 				switch (options & zb::NwkCommandRouteRequestOptions::DISCOVERY_MASK) {
 				case zb::NwkCommandRouteRequestOptions::DISCOVERY_SINGLE:
-					terminal::out << (hex(destinationAddress));
+					Terminal::out << (hex(destinationAddress));
 					if ((options & zb::NwkCommandRouteRequestOptions::EXTENDED_DESTINATION) != 0)
-						terminal::out << " ext. dest.";
+						Terminal::out << " ext. dest.";
 					break;
 				case zb::NwkCommandRouteRequestOptions::DISCOVERY_MANY_TO_ONE_WITH_SOURCE_ROUTING:
 					// https://www.digi.com/resources/documentation/Digidocs/90002002/Concepts/c_zb_many_to_one_routing.htm
-					terminal::out << "Many-to-One";
+					Terminal::out << "Many-to-One";
 					break;
 				default:
 					break;
 				}
 			}
-			terminal::out << '\n';
+			Terminal::out << '\n';
 			break;
 		case zb::NwkCommand::ROUTE_REPLY:
-			terminal::out << "Route Reply ";
+			Terminal::out << "Route Reply ";
 			{
 				auto options = r.e8<zb::NwkCommandRouteReplyOptions>();
 				uint8_t routeId = r.u8();
@@ -555,40 +555,40 @@ void handleNwk(PacketReader &r) {
 				uint16_t destinationAddress = r.u16L(); // "Responder" in Wireshark
 				uint8_t cost = r.u8();
 			}
-			terminal::out << '\n';
+			Terminal::out << '\n';
 			break;
 		case zb::NwkCommand::LEAVE:
-			terminal::out << "Leave\n";
+			Terminal::out << "Leave\n";
 			break;
 		case zb::NwkCommand::ROUTE_RECORD:
 			// https://www.digi.com/resources/documentation/Digidocs/90001942-13/concepts/c_source_routing.htm
-			terminal::out << ("Route Record:");
+			Terminal::out << ("Route Record:");
 			{
 				uint8_t relayCount = r.u8();
 				for (int i = 0; i < relayCount; ++i) {
 					uint16_t relay = r.u16L();
-					terminal::out << (' ' + hex(relay));
+					Terminal::out << (' ' + hex(relay));
 				}
 			}
-			terminal::out << ("\n");
+			Terminal::out << ("\n");
 			break;
 		case zb::NwkCommand::REJOIN_REQUEST:
-			terminal::out << ("Rejoin Request\n");
+			Terminal::out << ("Rejoin Request\n");
 			break;
 		case zb::NwkCommand::REJOIN_RESPONSE:
-			terminal::out << ("Rejoin Response\n");
+			Terminal::out << ("Rejoin Response\n");
 			break;
 		case zb::NwkCommand::LINK_STATUS:
-			terminal::out << ("Link Status\n");
+			Terminal::out << ("Link Status\n");
 			break;
 		default:
-			terminal::out << ("Unknown NWK Command\n");
+			Terminal::out << ("Unknown NWK Command\n");
 		}
 	} else if (frameType == zb::NwkFrameControl::TYPE_DATA) {
 		// nwk data
 		handleAps(r, extendedSource);
 	} else {
-		terminal::out << ("Unknown NWK Frame Type!\n");
+		Terminal::out << ("Unknown NWK Frame Type!\n");
 	}
 }
 
@@ -618,7 +618,7 @@ void handleAps(PacketReader &r, uint8_t const *extendedSource) {
 			// nonce (4.5.2.2)
 			if ((securityControl & zb::SecurityControl::EXTENDED_NONCE) == 0) {
 				if (extendedSource == nullptr) {
-					terminal::out << ("Error: Only extended nonce supported!\n");
+					Terminal::out << ("Error: Only extended nonce supported!\n");
 					return;
 				}
 			} else {
@@ -641,14 +641,14 @@ void handleAps(PacketReader &r, uint8_t const *extendedSource) {
 				key = &za09KeyLoadAesKey;
 				break;
 			default:
-				terminal::out << "Error: Unsupported key type in APS security header!\n";
+				Terminal::out << "Error: Unsupported key type in APS security header!\n";
 				return;
 			}
 
 			// decrypt in-place (mic length of 4)
 			r.setMessage();
 			if (!r.decrypt(4, nonce, *key)) {
-				terminal::out << ("Error: APS Decryption failed!\n");
+				Terminal::out << ("Error: APS Decryption failed!\n");
 				return;
 			}
 		}
@@ -657,7 +657,7 @@ void handleAps(PacketReader &r, uint8_t const *extendedSource) {
 		switch (command) {
 		case zb::ApsCommand::TRANSPORT_KEY:
 			{
-				terminal::out << "Transport Key\n";
+				Terminal::out << "Transport Key\n";
 				auto keyType = r.e8<zb::StandardKeyType>();
 				auto key = r.data<16>();
 				if (keyType == zb::StandardKeyType::NETWORK)
@@ -679,19 +679,19 @@ void handleAps(PacketReader &r, uint8_t const *extendedSource) {
 			}
 			break;
 		case zb::ApsCommand::UPDATE_DEVICE:
-			terminal::out << "Update Device\n";
+			Terminal::out << "Update Device\n";
 			break;
 		case zb::ApsCommand::REQUEST_KEY:
-			terminal::out << "Request Key\n";
+			Terminal::out << "Request Key\n";
 			break;
 		case zb::ApsCommand::VERIFY_KEY:
-			terminal::out << "Verify Key\n";
+			Terminal::out << "Verify Key\n";
 			break;
 		case zb::ApsCommand::CONFIRM_KEY:
-			terminal::out << "Confirm Key\n";
+			Terminal::out << "Confirm Key\n";
 			break;
 		default:
-			terminal::out << "Unknown APS Command!\n";
+			Terminal::out << "Unknown APS Command!\n";
 		}
 	} else if (frameType == zb::ApsFrameControl::TYPE_DATA) {
 		// aps data: zdp or zcl follow
@@ -702,9 +702,9 @@ void handleAps(PacketReader &r, uint8_t const *extendedSource) {
 			handleZcl(r, destinationEndpoint);
 	} else if (frameType == zb::ApsFrameControl::TYPE_ACK) {
 		// aps ack
-		terminal::out << ("Ack\n");
+		Terminal::out << ("Ack\n");
 	} else {
-		terminal::out << ("Unknown APS Frame Type!\n");
+		Terminal::out << ("Unknown APS Frame Type!\n");
 	}
 }
 
@@ -716,52 +716,52 @@ void handleZdp(PacketReader &r) {
 
 	switch (command) {
 	case zb::ZdpCommand::NETWORK_ADDRESS_REQUEST:
-		terminal::out << ("Network Address Request\n");
+		Terminal::out << ("Network Address Request\n");
 		break;
 	case zb::ZdpCommand::EXTENDED_ADDRESS_REQUEST:
-		terminal::out << ("Extended Address Request\n");
+		Terminal::out << ("Extended Address Request\n");
 		break;
 	case zb::ZdpCommand::EXTENDED_ADDRESS_RESPONSE:
-		terminal::out << ("Extended Address Response\n");
+		Terminal::out << ("Extended Address Response\n");
 		break;
 	case zb::ZdpCommand::NODE_DESCRIPTOR_REQUEST:
-		terminal::out << ("Node Descriptor Request\n");
+		Terminal::out << ("Node Descriptor Request\n");
 		break;
 	case zb::ZdpCommand::NODE_DESCRIPTOR_RESPONSE:
-		terminal::out << ("Node Descriptor Response\n");
+		Terminal::out << ("Node Descriptor Response\n");
 		break;
 	case zb::ZdpCommand::SIMPLE_DESCRIPTOR_REQUEST:
-		terminal::out << ("Simple Descriptor Request\n");
+		Terminal::out << ("Simple Descriptor Request\n");
 		break;
 	case zb::ZdpCommand::SIMPLE_DESCRIPTOR_RESPONSE:
-		terminal::out << ("Simple Descriptor Response\n");
+		Terminal::out << ("Simple Descriptor Response\n");
 		break;
 	case zb::ZdpCommand::ACTIVE_ENDPOINT_REQUEST:
-		terminal::out << ("Active Endpoint Request\n");
+		Terminal::out << ("Active Endpoint Request\n");
 		break;
 	case zb::ZdpCommand::ACTIVE_ENDPOINT_RESPONSE:
-		terminal::out << ("Active Endpoint Response\n");
+		Terminal::out << ("Active Endpoint Response\n");
 		break;
 	case zb::ZdpCommand::MATCH_DESCRIPTOR_REQUEST:
-		terminal::out << ("Match Descriptor Request\n");
+		Terminal::out << ("Match Descriptor Request\n");
 		break;
 	case zb::ZdpCommand::MATCH_DESCRIPTOR_RESPONSE:
-		terminal::out << ("Match Descriptor Response\n");
+		Terminal::out << ("Match Descriptor Response\n");
 		break;
 	case zb::ZdpCommand::DEVICE_ANNOUNCEMENT:
-		terminal::out << ("Device Announcement\n");
+		Terminal::out << ("Device Announcement\n");
 		break;
 	case zb::ZdpCommand::BIND_REQUEST:
-		terminal::out << ("Bind Request\n");
+		Terminal::out << ("Bind Request\n");
 		break;
 	case zb::ZdpCommand::BIND_RESPONSE:
-		terminal::out << ("Bind Response\n");
+		Terminal::out << ("Bind Response\n");
 		break;
 	case zb::ZdpCommand::PERMIT_JOIN_REQUEST:
-		terminal::out << ("Permit Joint Request\n");
+		Terminal::out << ("Permit Joint Request\n");
 		break;
 	default:
-		terminal::out << ("Unknown ZDP Command 0x" + hex(command) + "\n");
+		Terminal::out << ("Unknown ZDP Command 0x" + hex(command) + "\n");
 	}
 }
 
@@ -779,19 +779,19 @@ void handleZcl(PacketReader &r, uint8_t destinationEndpoint) {
 
 	uint8_t zclCounter = r.u8();
 
-	terminal::out << ("ZclCnt " + dec(zclCounter) + "; ");
+	Terminal::out << ("ZclCnt " + dec(zclCounter) + "; ");
 
 	if (frameType == zb::ZclFrameControl::TYPE_PROFILE_WIDE && !manufacturerSpecificFlag) {
 		auto command = r.e8<zb::ZclCommand>();
 		switch (command) {
 		case zb::ZclCommand::CONFIGURE_REPORTING:
-			terminal::out << ("Configure Reporting\n");
+			Terminal::out << ("Configure Reporting\n");
 			break;
 		case zb::ZclCommand::CONFIGURE_REPORTING_RESPONSE:
-			terminal::out << ("Configure Reporting Response\n");
+			Terminal::out << ("Configure Reporting Response\n");
 			break;
 		case zb::ZclCommand::READ_ATTRIBUTES:
-			terminal::out << ("Read Attributes; ");
+			Terminal::out << ("Read Attributes; ");
 			switch (cluster) {
 			case zb::ZclCluster::BASIC:
 				{
@@ -799,10 +799,10 @@ void handleZcl(PacketReader &r, uint8_t destinationEndpoint) {
 
 					switch (attribute) {
 					case zb::ZclBasicAttribute::MODEL_IDENTIFIER:
-						terminal::out << ("Model Identifier\n");
+						Terminal::out << ("Model Identifier\n");
 						break;
 					default:
-						terminal::out << ("Unknown Attribute\n");
+						Terminal::out << ("Unknown Attribute\n");
 					}
 				}
 				break;
@@ -812,25 +812,25 @@ void handleZcl(PacketReader &r, uint8_t destinationEndpoint) {
 
 					switch (attribute) {
 					case zb::ZclPowerConfigurationAttribute::BATTERY_VOLTAGE:
-						terminal::out << ("Battery Voltage\n");
+						Terminal::out << ("Battery Voltage\n");
 						break;
 					default:
-						terminal::out << ("Unknown Attribute\n");
+						Terminal::out << ("Unknown Attribute\n");
 					}
 				}
 				break;
 			case zb::ZclCluster::IDENTIFY:
-				terminal::out << ("Unknown Attribute\n");
+				Terminal::out << ("Unknown Attribute\n");
 				break;
 			case zb::ZclCluster::ON_OFF:
-				terminal::out << ("Unknown Attribute\n");
+				Terminal::out << ("Unknown Attribute\n");
 				break;
 			default:
-				terminal::out << ("Unknown Attribute\n");
+				Terminal::out << ("Unknown Attribute\n");
 			}
 			break;
 		case zb::ZclCommand::READ_ATTRIBUTES_RESPONSE:
-			terminal::out << ("Read Attributes Response; ");
+			Terminal::out << ("Read Attributes Response; ");
 			switch (cluster) {
 			case zb::ZclCluster::BASIC:
 				{
@@ -843,14 +843,14 @@ void handleZcl(PacketReader &r, uint8_t destinationEndpoint) {
 						switch (attribute) {
 						case zb::ZclBasicAttribute::MODEL_IDENTIFIER:
 							{
-								terminal::out << ("Model Identifier: " + r.string() + '\n');
+								Terminal::out << ("Model Identifier: " + r.string() + '\n');
 							}
 							break;
 						default:
-							terminal::out << ("Unknown\n");
+							Terminal::out << ("Unknown\n");
 						}
 					} else {
-						terminal::out << ("Failed\n");
+						Terminal::out << ("Failed\n");
 					}
 				}
 				break;
@@ -874,88 +874,88 @@ void handleZcl(PacketReader &r, uint8_t destinationEndpoint) {
 									value = 0;
 								}
 
-								terminal::out << ("Battery Voltage " + dec(value / 10) + '.' + dec(value % 10) + "V\n");
+								Terminal::out << ("Battery Voltage " + dec(value / 10) + '.' + dec(value % 10) + "V\n");
 							}
 							break;
 						default:
-							terminal::out << ("Unknown\n");
+							Terminal::out << ("Unknown\n");
 						}
 					} else {
-						terminal::out << ("Failed\n");
+						Terminal::out << ("Failed\n");
 					}
 				}
 				break;
 			case zb::ZclCluster::IDENTIFY:
-				terminal::out << ("Unknown Attribute\n");
+				Terminal::out << ("Unknown Attribute\n");
 				break;
 			case zb::ZclCluster::ON_OFF:
-				terminal::out << ("Unknown Attribute\n");
+				Terminal::out << ("Unknown Attribute\n");
 				break;
 			default:
-				terminal::out << ("Unknown Attribute\n");
+				Terminal::out << ("Unknown Attribute\n");
 			}
 			break;
 		case zb::ZclCommand::REPORT_ATTRIBUTES:
-			terminal::out << "Report Attributes\n";
+			Terminal::out << "Report Attributes\n";
 			break;
 		case zb::ZclCommand::DEFAULT_RESPONSE:
-			terminal::out << "Default Response\n";
+			Terminal::out << "Default Response\n";
 			break;
 		default:
-			terminal::out << "Unknown ZCL Command\n";
+			Terminal::out << "Unknown ZCL Command\n";
 		}
 	} else if (frameType == zb::ZclFrameControl::TYPE_CLUSTER_SPECIFIC && !manufacturerSpecificFlag) {
 		switch (cluster) {
 		case zb::ZclCluster::BASIC:
-			terminal::out << ("Cluster: Basic\n");
+			Terminal::out << ("Cluster: Basic\n");
 			break;
 		case zb::ZclCluster::POWER_CONFIGURATION:
-			terminal::out << ("Cluster: Power Configuration\n");
+			Terminal::out << ("Cluster: Power Configuration\n");
 			break;
 		case zb::ZclCluster::ON_OFF:
-			terminal::out << ("Cluster: On/Off; ");
+			Terminal::out << ("Cluster: On/Off; ");
 			{
 				uint8_t command = r.u8();
 				switch (command) {
 				case 0:
-					terminal::out << ("Off\n");
+					Terminal::out << ("Off\n");
 					break;
 				case 1:
-					terminal::out << ("On\n");
+					Terminal::out << ("On\n");
 					break;
 				case 2:
-					terminal::out << ("Toggle\n");
+					Terminal::out << ("Toggle\n");
 					break;
 				default:
-					terminal::out << ("Unknown Command\n");
+					Terminal::out << ("Unknown Command\n");
 				}
 			}
 			break;
 		case zb::ZclCluster::GREEN_POWER:
-			terminal::out << ("Cluster: Green Power; ");
+			Terminal::out << ("Cluster: Green Power; ");
 			{
 				uint8_t command = r.u8();
 				switch (command) {
 				case 2:
-					terminal::out << ("GP Proxy Commissioning Mode\n");
+					Terminal::out << ("GP Proxy Commissioning Mode\n");
 					break;
 				default:
-					terminal::out << ("Unknown Command\n");
+					Terminal::out << ("Unknown Command\n");
 				}
 			}
 			break;
 		default:
-			terminal::out << ("Unknown Cluster 0x" + hex(cluster) + "\n");
+			Terminal::out << ("Unknown Cluster 0x" + hex(cluster) + "\n");
 		}
 	} else {
-		terminal::out << ("Unknown ZCL Frame Type\n");
+		Terminal::out << ("Unknown ZCL Frame Type\n");
 	}
 }
 
 
-int controlTransfer(libusb_device_handle *handle, radio::Request request, uint16_t wValue, uint16_t wIndex) {
+int controlTransfer(libusb_device_handle *handle, Radio::Request request, uint16_t wValue, uint16_t wIndex) {
 	return libusb_control_transfer(handle,
-		usb::OUT | usb::REQUEST_TYPE_VENDOR | usb::RECIPIENT_INTERFACE,
+		Usb::OUT | Usb::REQUEST_TYPE_VENDOR | Usb::RECIPIENT_INTERFACE,
 		uint8_t(request), wValue, wIndex,
 		nullptr, 0, 1000);
 }
@@ -982,7 +982,7 @@ int main(int argc, char const *argv[]) {
 
 	bool haveKey = false;
 	int radioChannel = 15;
-	auto radioFlags = radio::ContextFlags::PASS_ALL;
+	auto radioFlags = Radio::ContextFlags::PASS_ALL;
 	for (int i = 1; i < argc; ++i) {
 		std::string arg = argv[i];
 
@@ -1010,14 +1010,14 @@ int main(int argc, char const *argv[]) {
 			radioChannel = atoi(argv[i]);
 		} else if (arg == "-a" || arg == "--ack") {
 			// ack all received packets
-			radioFlags |= radio::ContextFlags::HANDLE_ACK;
+			radioFlags |= Radio::ContextFlags::HANDLE_ACK;
 		} else {
 			// output pcap file
 			outputFile = argv[i];
 		}
 	}
 	if (!haveKey)
-		terminal::err << "no network key given (-k x:y:z:...)\n";
+		Terminal::err << "no network key given (-k x:y:z:...)\n";
 
 	// either read from input .pcap file or from usb device
 	if (inputFile.empty()) {
@@ -1042,7 +1042,7 @@ int main(int argc, char const *argv[]) {
 			libusb_device_descriptor desc;
 			int ret = libusb_get_device_descriptor(dev, &desc);
 			if (ret != LIBUSB_SUCCESS) {
-				terminal::err << ("get device descriptor error: " + dec(ret) + '\n');
+				Terminal::err << ("get device descriptor error: " + dec(ret) + '\n');
 				continue;
 			}
 
@@ -1057,21 +1057,21 @@ int main(int argc, char const *argv[]) {
 			libusb_device_handle *handle;
 			ret = libusb_open(dev, &handle);
 			if (ret != LIBUSB_SUCCESS) {
-				terminal::err << ("open error: " + dec(ret) + '\n');
+				Terminal::err << ("open error: " + dec(ret) + '\n');
 				continue;
 			}
 
 			// set configuration (reset alt_setting, reset toggles)
 			ret = libusb_set_configuration(handle, 1);
 			if (ret != LIBUSB_SUCCESS) {
-				terminal::err << ("set configuration error: " + dec(ret) + '\n');
+				Terminal::err << ("set configuration error: " + dec(ret) + '\n');
 				continue;
 			}
 
 			// claim interface with bInterfaceNumber = 0
 			ret = libusb_claim_interface(handle, 0);
 			if (ret != LIBUSB_SUCCESS) {
-				terminal::err << ("claim interface error: " + dec(ret) + '\n');
+				Terminal::err << ("claim interface error: " + dec(ret) + '\n');
 				continue;
 			}
 
@@ -1082,21 +1082,21 @@ int main(int argc, char const *argv[]) {
 			int length;
 
 			// reset the radio
-			controlTransfer(handle, radio::Request::RESET, 0, 0);
-			while (libusb_bulk_transfer(handle, 1 | usb::IN, packet.data, sizeof(packet.data), &length, 10) == LIBUSB_SUCCESS)
+			controlTransfer(handle, Radio::Request::RESET, 0, 0);
+			while (libusb_bulk_transfer(handle, 1 | Usb::IN, packet.data, sizeof(packet.data), &length, 10) == LIBUSB_SUCCESS)
 				;
 
 			// configure the radio
-			controlTransfer(handle, radio::Request::START, radioChannel, 0);
-			controlTransfer(handle, radio::Request::ENABLE_RECEIVER, 1, 0);
-			controlTransfer(handle, radio::Request::SET_FLAGS, uint16_t(radioFlags), 0);
+			controlTransfer(handle, Radio::Request::START, radioChannel, 0);
+			controlTransfer(handle, Radio::Request::ENABLE_RECEIVER, 1, 0);
+			controlTransfer(handle, Radio::Request::SET_FLAGS, uint16_t(radioFlags), 0);
 
 			// open output pcap file
 			FILE *pcap = fopen(outputFile.string().c_str(), "wb");
 
 			// write pcap header
 			if (pcap != nullptr) {
-				terminal::out << "capturing to " << str(outputFile.string().c_str()) << "\n";
+				Terminal::out << "capturing to " << str(outputFile.string().c_str()) << "\n";
 				header.magic_number = 0xa1b2c3d4;
 				header.version_major = 2;
 				header.version_minor = 4;
@@ -1108,24 +1108,24 @@ int main(int argc, char const *argv[]) {
 			}
 
 			// loop
-			terminal::out << "waiting for ieee802.15.4 packets from device on channel " << dec(radioChannel) << " ...\n";
+			Terminal::out << "waiting for ieee802.15.4 packets from device on channel " << dec(radioChannel) << " ...\n";
 			//auto startTime = std::chrono::steady_clock::now();
 			uint32_t startTime = -1;
 			while (true) {
 				// receive from radio
-				ret = libusb_bulk_transfer(handle, 1 | usb::IN, packet.data, sizeof(packet.data), &length, 0);
+				ret = libusb_bulk_transfer(handle, 1 | Usb::IN, packet.data, sizeof(packet.data), &length, 0);
 				if (ret != LIBUSB_SUCCESS) {
-					terminal::err << ("transfer error: " + dec(ret) + '\n');
+					Terminal::err << ("transfer error: " + dec(ret) + '\n');
 					break;
 				}
 				length -= 5;
-				terminal::out << ("length: " + dec(length) + ", LQI: " + dec(packet.data[length]) + '\n');
+				Terminal::out << ("length: " + dec(length) + ", LQI: " + dec(packet.data[length]) + '\n');
 				uint8_t const *ts = &packet.data[length + 1];
 				uint32_t timestamp = ts[0] | (ts[1] << 8) | (ts[2] << 16) | (ts[3] << 24);
 				if (startTime == -1)
 					startTime = timestamp;
 				timestamp -= startTime;
-				terminal::out << ("timestamp: " + dec(timestamp / 1000000) + "." + dec(timestamp % 1000000) + '\n');
+				Terminal::out << ("timestamp: " + dec(timestamp / 1000000) + "." + dec(timestamp % 1000000) + '\n');
 
 				if (length > 0) {
 					// write to pcap file
@@ -1161,7 +1161,7 @@ int main(int argc, char const *argv[]) {
 		PcapHeader header;
 		fread(&header, sizeof(header), 1, pcap);
 		if (header.network != 0xC3) {
-			terminal::err << ("error: protocol not supported!\n");
+			Terminal::err << ("error: protocol not supported!\n");
 		}
 
 		// read packets

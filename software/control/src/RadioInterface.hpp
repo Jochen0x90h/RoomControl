@@ -4,7 +4,7 @@
 #include <Configuration.hpp>
 #include <State.hpp>
 #include <Storage.hpp>
-#include <radio.hpp>
+#include <Radio.hpp>
 #include <crypt.hpp>
 #include <MessageReader.hpp>
 #include <MessageWriter.hpp>
@@ -131,7 +131,7 @@ private:
 		uint16_t shortAddress;
 
 		// send flags for this device (wait for data request or not)
-		radio::SendFlags sendFlags;
+		Radio::SendFlags sendFlags;
 
 		// number of endpoints of the device
 		uint8_t endpointCount;
@@ -166,7 +166,7 @@ private:
 		{}
 
 		// send flags for next hop in route (wait for data request or not)
-		radio::SendFlags sendFlags;
+		Radio::SendFlags sendFlags;
 
 
 		// last security counter value of device
@@ -307,7 +307,7 @@ public:
 		/**
 		 * Set send flags and length of packet
 		 */
-		void finish(radio::SendFlags sendFlags) {
+		void finish(Radio::SendFlags sendFlags) {
 #ifdef EMU
 			assert(this->current < this->end - 1);
 #endif
@@ -367,7 +367,7 @@ private:
 		uint8_t sourceEndpoint);
 	void writeApsAckZcl(PacketWriter &w, uint8_t destinationEndpoint, zb::ZclCluster clusterId,
 		zb::ZclProfile profile, uint8_t sourceEndpoint);
-	void writeFooter(PacketWriter &w, radio::SendFlags sendFlags);
+	void writeFooter(PacketWriter &w, Radio::SendFlags sendFlags);
 
 
 	// coroutine that sends link status and many-to-one route request in a regular interval
@@ -391,7 +391,7 @@ private:
 	void handleZcl(PacketReader &r, ZbDevice &device, uint8_t destinationEndpoint);
 
 	// coroutine for handling association requests from new devices
-	AwaitableCoroutine handleAssociationRequest(uint64_t sourceAddress, radio::SendFlags sendFlags);
+	AwaitableCoroutine handleAssociationRequest(uint64_t sourceAddress, Radio::SendFlags sendFlags);
 
 
 	Coroutine publish();

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Message.hpp"
 #include <Coroutine.hpp>
 #include <LinkedListNode.hpp>
 

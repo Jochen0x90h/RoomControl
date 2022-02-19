@@ -1,9 +1,9 @@
 #include <MqttSnBroker.hpp>
-#include <network.hpp>
-#include <timer.hpp>
-#include <terminal.hpp>
-#include <loop.hpp>
-#include <debug.hpp>
+#include <Network.hpp>
+#include <Timer.hpp>
+#include <Terminal.hpp>
+#include <Loop.hpp>
+#include <Debug.hpp>
 #include <StringOperators.hpp>
 #ifdef EMU
 #include <string>
@@ -23,18 +23,18 @@ struct Test {
 
 	// connect to gateway and keep the connection alive
 	Coroutine connect(uint16_t gatewayPort, String name) {
-		network::Endpoint gatewayEndpoint = network::Endpoint::fromString("::1", gatewayPort);
+		Network::Endpoint gatewayEndpoint = Network::Endpoint::fromString("::1", gatewayPort);
 
 		while (true) {
 			// connect to gateway
 			while (!this->broker.isGatewayConnected()) {
 				// connect to gateway
-				terminal::out << name << " connect to gateway\n";
+				Terminal::out << name << " connect to gateway\n";
 				co_await this->broker.connect(gatewayEndpoint, name);
 			}
 			
 			// now we are connected and need to keep the connection alive
-			terminal::out << name << " keep connection alive\n";
+			Terminal::out << name << " keep connection alive\n";
 			co_await this->broker.keepAlive();
 			
 			// connection lost, try to connect again
@@ -55,8 +55,8 @@ struct Test {
 		publisher.messageType = MessageType::ON_OFF;
 		publisher.message = &message;
 
-		terminal::out << name << " subscribe to '" << inTopic << "'\n";
-		terminal::out << name << " publish on '" << outTopic << "'\n";
+		Terminal::out << name << " subscribe to '" << inTopic << "'\n";
+		Terminal::out << name << " publish on '" << outTopic << "'\n";
 		this->broker.addSubscriber(inTopic, subscriber);
 		this->broker.addPublisher(outTopic, publisher);
 
@@ -90,14 +90,14 @@ int main(void) {
 	inTopic += "in";
 	outTopic += "out";
 
-	loop::init();
-	timer::init();
-	network::init();
-	output::init();
+	Loop::init();
+	Timer::init();
+	Network::init();
+	Output::init();
 
 	Test test(localPort);
 	test.connect(gatewayPort, name);
 	test.function();
 
-	loop::run();
+	Loop::run();
 }

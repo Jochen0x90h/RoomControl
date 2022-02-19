@@ -118,7 +118,7 @@ void *Storage::ArrayData::write(int index, ElementInternal *element) {
 	if (storage->it + alignedFlashHeaderSize + alignedFlashElementSize <= storage->end) {
 		// yes: write header to flash
 		FlashHeader flashHeader = {this->index, uint8_t(index), uint8_t(1), Op::OVERWRITE};
-		flash::write(storage->it, sizeof(FlashHeader), &flashHeader);
+		Flash::write(storage->it, sizeof(FlashHeader), &flashHeader);
 		storage->it += alignedFlashHeaderSize;
 
 		// set element in flash
@@ -126,7 +126,7 @@ void *Storage::ArrayData::write(int index, ElementInternal *element) {
 		//this->elements[index]->flash = storage->it;
 
 		// write element to flash
-		flash::write(storage->it, flashElementSize, flashElement);
+		Flash::write(storage->it, flashElementSize, flashElement);
 		storage->it += alignedFlashElementSize;
 	} else {
 		// no: set flash element, gets copied to flash in switchFlashRegions()
@@ -153,7 +153,7 @@ void *Storage::ArrayData::erase(int index) {
 	if (storage->it + alignedFlashHeaderSize <= storage->end) {
 		// write header to flash
 		FlashHeader header = {this->index, uint8_t(index), uint8_t(1), Op::ERASE};
-		flash::write(storage->it, sizeof(FlashHeader), &header);
+		Flash::write(storage->it, sizeof(FlashHeader), &header);
 		storage->it += alignedFlashHeaderSize;
 	} else {
 		// defragment flash
@@ -194,7 +194,7 @@ void Storage::ArrayData::move(int index, int newIndex) {
 	if (storage->it + alignedFlashHeaderSize <= storage->end) {
 		// yes: write header to flash
 		FlashHeader header = {this->index, uint8_t(index), uint8_t(newIndex), Op::MOVE};
-		flash::write(storage->it, sizeof(FlashHeader), &header);
+		Flash::write(storage->it, sizeof(FlashHeader), &header);
 		storage->it += alignedFlashHeaderSize;
 	} else {
 		// no: defragment flash
@@ -208,7 +208,7 @@ void Storage::ArrayData::move(int index, int newIndex) {
 void Storage::init() {
 	// detect current flash region by checking if op of first header is valid
 	int pageCount = this->pageCount;
-	const uint8_t *p = flash::getAddress(this->pageStart + pageCount);
+	const uint8_t *p = Flash::getAddress(this->pageStart + pageCount);
 	int clearStart;
 	uint8_t op = p[3];
 	if (((op ^ (op >> 1)) & 0x55) != 0x55) {
@@ -225,8 +225,8 @@ void Storage::init() {
 
 	// ensure that the other flash region is empty
 	for (int i = 0; i < pageCount; ++i) {
-		if (!flash::isEmpty(clearStart + i))
-			flash::erase(clearStart + i);
+		if (!Flash::isEmpty(clearStart + i))
+			Flash::erase(clearStart + i);
 	}
 
 	// initialize arrays by collecting the elements
@@ -327,7 +327,7 @@ void Storage::init() {
 void Storage::switchFlashRegions() {
 	// switch flash regions
 	int pageCount = this->pageCount;
-	const uint8_t *p = flash::getAddress(this->pageStart + pageCount);
+	const uint8_t *p = Flash::getAddress(this->pageStart + pageCount);
 	int clearStart;
 	int clearStart2;
 	if (this->end > p) {
@@ -346,8 +346,8 @@ void Storage::switchFlashRegions() {
 
 	// ensure that the new flash region is empty
 	for (int i = 0; i < pageCount; ++i) {
-		if (!flash::isEmpty(clearStart + i))
-			flash::erase(clearStart + i);
+		if (!Flash::isEmpty(clearStart + i))
+			Flash::erase(clearStart + i);
 	}
 
 	// write arrays to new flash region
@@ -359,7 +359,7 @@ void Storage::switchFlashRegions() {
 		// write header for whole array (except first header)
 		if (arrayData != this->first) {
 			FlashHeader header = {arrayData->index, 0, arrayData->count, Op::OVERWRITE};
-			flash::write(it, sizeof(FlashHeader), &header);
+			Flash::write(it, sizeof(FlashHeader), &header);
 		}
 		it += flashAlign(sizeof(FlashHeader));
 
@@ -368,7 +368,7 @@ void Storage::switchFlashRegions() {
 			void const *flashElement = arrayData->elements[i]->flash;
 			int elementSize = arrayData->sizeElement(flashElement);
 			arrayData->elements[i]->flash = it;
-			flash::write(it, elementSize, flashElement);
+			Flash::write(it, elementSize, flashElement);
 			it += flashAlign(elementSize);
 
 			// update element count and accumulated size
@@ -382,12 +382,12 @@ void Storage::switchFlashRegions() {
 
 	// write first header last to make new flash region valid
 	FlashHeader header = {this->first->index, 0, this->first->count, Op::OVERWRITE};
-	flash::write(this->it, sizeof(FlashHeader), &header);
+	Flash::write(this->it, sizeof(FlashHeader), &header);
 
 	// erase old flash region
 	for (int i = 0; i < pageCount; ++i) {
-		if (!flash::isEmpty(clearStart2 + i))
-			flash::erase(clearStart2 + i);
+		if (!Flash::isEmpty(clearStart2 + i))
+			Flash::erase(clearStart2 + i);
 	}
 
 	this->it = it;

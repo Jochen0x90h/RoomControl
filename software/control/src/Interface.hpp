@@ -1,7 +1,6 @@
 #pragma once
 
 #include "Device.hpp"
-#include <Message.hpp>
 #include <Publisher.hpp>
 #include <State.hpp>
 #include <Subscriber.hpp>
@@ -15,6 +14,8 @@
 class Interface {
 public:
 
+	using EndpointType = bus::EndpointType;
+	
 	/**
 	 * Destructor
 	 */

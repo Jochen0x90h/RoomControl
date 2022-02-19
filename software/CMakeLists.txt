@@ -93,6 +93,7 @@ source_group(util FILES ${UTIL})
 
 # protocol utilities
 set(PROTOCOL
+	protocol/src/bus.hpp
 	protocol/src/crypt.cpp
 	protocol/src/crypt.hpp
 	protocol/src/DataBuffer.hpp
@@ -119,42 +120,43 @@ list(APPEND PROTOCOL ${TINYCRYPT})
 
 # system
 set(SYSTEM
-	system/src/bus.hpp
-	system/src/emu/calendar.cpp
-	system/src/calendar.hpp
+	system/src/emu/BusMaster.cpp
+	system/src/BusMaster.hpp
+	system/src/emu/Calendar.cpp
+	system/src/Calendar.hpp
 	system/src/ClockTime.hpp
-	system/src/debug.hpp
-	system/src/emu/flash.cpp
-	system/src/flash.hpp
+	system/src/Debug.hpp
+	system/src/emu/Flash.cpp
+	system/src/Flash.hpp
 	system/src/emu/Gui.cpp
 	system/src/emu/Gui.hpp
-	system/src/emu/input.cpp
-	system/src/emu/input.hpp
-	system/src/input.hpp
-	system/src/emu/loop.cpp
-	system/src/emu/loop.hpp
-	system/src/loop.hpp
-	system/src/emu/network.cpp
-	system/src/network.hpp
-	system/src/emu/output.cpp
-	system/src/output.hpp
-	system/src/emu/poti.cpp
-	system/src/poti.hpp
-	system/src/emu/radio.cpp
-	system/src/radio.hpp
-	system/src/radioDefs.hpp
-	system/src/emu/rng.cpp
-	system/src/rng.hpp
-	system/src/emu/spi.cpp
-	system/src/spi.hpp
+	system/src/emu/Input.cpp
+	system/src/emu/Input.hpp
+	system/src/Input.hpp
+	system/src/emu/Loop.cpp
+	system/src/emu/Loop.hpp
+	system/src/Loop.hpp
+	system/src/emu/Network.cpp
+	system/src/Network.hpp
+	system/src/emu/Output.cpp
+	system/src/Output.hpp
+	system/src/emu/Poti.cpp
+	system/src/Poti.hpp
+	system/src/emu/Radio.cpp
+	system/src/Radio.hpp
+	system/src/RadioDefs.hpp
+	system/src/emu/Random.cpp
+	system/src/Random.hpp
+	system/src/emu/Spi.cpp
+	system/src/Spi.hpp
 	system/src/SystemTime.hpp
-	system/src/emu/terminal.cpp
-	system/src/terminal.hpp
-	system/src/emu/timer.cpp
-	system/src/timer.hpp
-	system/src/emu/usb.cpp
-	system/src/usb.hpp
-	system/src/usbDefs.hpp
+	system/src/emu/Terminal.cpp
+	system/src/Terminal.hpp
+	system/src/emu/Timer.cpp
+	system/src/Timer.hpp
+	system/src/emu/Usb.cpp
+	system/src/Usb.hpp
+	system/src/UsbDefs.hpp
 	font/tahoma_8pt.cpp # used by Gui
 	font/tahoma_8pt.hpp
 )
@@ -188,13 +190,12 @@ set(NODE
 )
 source_group(node FILES ${NODE})
 
-# room control software running on the nRF52840
+# room control
 set(CONTROL
 	control/src/BME680.cpp
 	control/src/BME680.hpp
 	control/src/BusInterface.cpp
 	control/src/BusInterface.hpp
-	control/src/emu/bus.cpp
 	control/src/Device.hpp
 	control/src/Interface.cpp
 	control/src/Interface.hpp
@@ -214,8 +215,8 @@ set(CONTROL
 source_group(control FILES ${CONTROL})
 
 
-# emulator executable
-add_executable(emulator
+# room control executable
+add_executable(control
 	control/src/main.cpp
 	control/src/appConfig.hpp
 	board/emu/boardConfig.hpp
@@ -225,7 +226,7 @@ add_executable(emulator
 	${NODE}
 	${CONTROL}
 )
-target_include_directories(emulator
+target_include_directories(control
 	PRIVATE
 	board/emu # boardConfig.hpp
 	font
@@ -236,10 +237,10 @@ target_include_directories(emulator
 	util/src
 	glad
 )
-conan_target_link_libraries(emulator)
+conan_target_link_libraries(control)
 
-# install the emulator
-install(TARGETS emulator
+# install the room control
+install(TARGETS control
 	LIBRARY DESTINATION lib
 	ARCHIVE DESTINATION lib
 	RUNTIME DESTINATION bin
@@ -267,8 +268,8 @@ add_executable(sniffer
 	tools/src/sniffer.cpp
 	${UTIL}
 	${PROTOCOL}
-	system/src/terminal.hpp
-	system/src/emu/terminal.cpp
+	system/src/Terminal.hpp
+	system/src/emu/Terminal.cpp
 )
 target_include_directories(sniffer
 	PRIVATE
@@ -282,16 +283,16 @@ conan_target_link_libraries(sniffer)
 # test executables
 # ----------------
 
-# system/timer test (command line tool)
-add_executable(timerTest
-	system/test/timerTest.cpp
+# system/Timer test (command line tool)
+add_executable(TimerTest
+	system/test/TimerTest.cpp
 	system/test/appConfig.hpp
 	board/emu/boardConfig.hpp
 	${UTIL}
 	${PROTOCOL}
 	${SYSTEM}
 )
-target_include_directories(timerTest
+target_include_directories(TimerTest
 	PRIVATE
 	font
 	board/emu # boardConfig.hpp
@@ -301,19 +302,19 @@ target_include_directories(timerTest
 	util/src
 	glad
 )
-conan_target_link_libraries(timerTest)
+conan_target_link_libraries(TimerTest)
 
 
-# system/poti test (command line tool)
-add_executable(potiTest
-	system/test/potiTest.cpp
+# system/Poti test (command line tool)
+add_executable(PotiTest
+	system/test/PotiTest.cpp
 	system/test/appConfig.hpp
 	board/emu/boardConfig.hpp
 	${UTIL}
 	${PROTOCOL}
 	${SYSTEM}
 )
-target_include_directories(potiTest
+target_include_directories(PotiTest
 	PRIVATE
 	font
 	board/emu # boardConfig.hpp
@@ -323,19 +324,19 @@ target_include_directories(potiTest
 	util/src
 	glad
 )
-conan_target_link_libraries(potiTest)
+conan_target_link_libraries(PotiTest)
 
 
-# system/calendar test (command line tool)
-add_executable(calendarTest
-	system/test/calendarTest.cpp
+# system/Calendar test (command line tool)
+add_executable(CalendarTest
+	system/test/CalendarTest.cpp
 	system/test/appConfig.hpp
 	board/emu/boardConfig.hpp
 	${UTIL}
 	${PROTOCOL}
 	${SYSTEM}
 )
-target_include_directories(calendarTest
+target_include_directories(CalendarTest
 	PRIVATE
 	font
 	board/emu # boardConfig.hpp
@@ -345,17 +346,17 @@ target_include_directories(calendarTest
 	util/src
 	glad
 )
-conan_target_link_libraries(calendarTest)
+conan_target_link_libraries(CalendarTest)
 
 
-# system/radio test that sends radio packets (command line tool)
-add_executable(radioSendTest
-	system/test/radioSendTest.cpp
+# system/Radio test that sends radio packets (command line tool)
+add_executable(RadioSendTest
+	system/test/RadioSendTest.cpp
 	${UTIL}
 	${PROTOCOL}
 	${SYSTEM}
 )
-target_include_directories(radioSendTest
+target_include_directories(RadioSendTest
 	PRIVATE
 	font
 	board/emu # boardConfig.hpp
@@ -366,17 +367,17 @@ target_include_directories(radioSendTest
 	glad
 
 )
-conan_target_link_libraries(radioSendTest)
+conan_target_link_libraries(RadioSendTest)
 
 
 # system/network test that sends udp packets (command line tool)
-add_executable(networkTest
-	system/test/networkTest.cpp
+add_executable(NetworkTest
+	system/test/NetworkTest.cpp
 	${UTIL}
 	${PROTOCOL}
 	${SYSTEM}
 )
-target_include_directories(networkTest
+target_include_directories(NetworkTest
 	PRIVATE
 	font
 	board/emu # boardConfig.hpp
@@ -386,19 +387,19 @@ target_include_directories(networkTest
 	util/src
 	glad
 )
-conan_target_link_libraries(networkTest)
+conan_target_link_libraries(NetworkTest)
 
 
 # system/usb test host, host for usbTest on device (command line tool)
-add_executable(usbTestHost
-	system/test/usbTestHost.cpp
+add_executable(UsbTestHost
+	system/test/UsbTestHost.cpp
 )
-target_include_directories(usbTestHost
+target_include_directories(UsbTestHost
 	PRIVATE
 	system/src
 	util/src
 )
-conan_target_link_libraries(usbTestHost)
+conan_target_link_libraries(UsbTestHost)
 
 
 # node/MqttSnClient test
@@ -452,8 +453,8 @@ conan_target_link_libraries(MqttSnBrokerTest)
 
 
 # test for BME680 air sensor
-add_executable(bme680Test
-	control/test/bme680Test.cpp
+add_executable(BME680Test
+	control/test/BME680Test.cpp
 	board/emu/boardConfig.hpp
 	control/src/appConfig.hpp
 	${UTIL}
@@ -463,7 +464,7 @@ add_executable(bme680Test
 	control/src/BME680.hpp
 	font
 )
-target_include_directories(bme680Test
+target_include_directories(BME680Test
 	PRIVATE
 	board/emu # boardConfig.hpp
 	font
@@ -473,12 +474,12 @@ target_include_directories(bme680Test
 	util/src
 	glad
 )
-conan_target_link_libraries(bme680Test)
+conan_target_link_libraries(BME680Test)
 
 
 # test for SSD1309 display
-add_executable(ssd1309Test
-	control/test/ssd1309Test.cpp
+add_executable(SSD1309Test
+	control/test/SSD1309Test.cpp
 	board/emu/boardConfig.hpp
 	control/src/appConfig.hpp
 	${UTIL}
@@ -486,9 +487,8 @@ add_executable(ssd1309Test
 	${SYSTEM}
 	control/src/SSD1309.cpp
 	control/src/SSD1309.hpp
-	#control/src/emu/display.cpp
 )
-target_include_directories(ssd1309Test
+target_include_directories(SSD1309Test
 	PRIVATE
 	board/emu # boardConfig.hpp
 	font
@@ -498,12 +498,12 @@ target_include_directories(ssd1309Test
 	util/src
 	glad
 )
-conan_target_link_libraries(ssd1309Test)
+conan_target_link_libraries(SSD1309Test)
 
 
 # test for Storage class
-add_executable(storageTest
-	control/test/storageTest.cpp
+add_executable(StorageTest
+	control/test/StorageTest.cpp
 	board/emu/boardConfig.hpp
 	${UTIL}
 	${PROTOCOL}
@@ -512,9 +512,9 @@ add_executable(storageTest
 	node/src/State.hpp
 	node/src/Storage.cpp
 	node/src/Storage.hpp
-	system/src/emu/flash.cpp
+	system/src/emu/Flash.cpp
 )
-target_include_directories(storageTest
+target_include_directories(StorageTest
 	PRIVATE
 	board/emu # boardConfig.hpp
 	font
@@ -525,7 +525,7 @@ target_include_directories(storageTest
 	util/src
 	glad
 )
-conan_target_link_libraries(storageTest)
+conan_target_link_libraries(StorageTest)
 
 
 # unit tests (GTest)

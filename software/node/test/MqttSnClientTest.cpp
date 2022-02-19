@@ -1,9 +1,9 @@
 #include <MqttSnClient.hpp>
-#include <network.hpp>
-#include <timer.hpp>
-#include <terminal.hpp>
-#include <loop.hpp>
-#include <debug.hpp>
+#include <Network.hpp>
+#include <Timer.hpp>
+#include <Terminal.hpp>
+#include <Loop.hpp>
+#include <Debug.hpp>
 #include <StringOperators.hpp>
 
 
@@ -17,7 +17,7 @@ AwaitableCoroutine subscribe(MqttSnClient &client) {
 	uint16_t foo;
 	int8_t qos = defaultQos;
 	co_await client.subscribeTopic(result, foo, qos, "foo");
-	terminal::out << "subscribed to topic 'foo' " << dec(foo) << " qos " << dec(qos) << "\n";
+	Terminal::out << "subscribed to topic 'foo' " << dec(foo) << " qos " << dec(qos) << "\n";
 	while (client.isConnected()) {
 		uint16_t msgId;
 		uint16_t topicId;
@@ -33,14 +33,14 @@ AwaitableCoroutine subscribe(MqttSnClient &client) {
 				co_await client.ackReceive(msgId, topicId, topicId == foo);
 			
 			String str(length, data);
-			terminal::out << (str);
+			Terminal::out << (str);
 		}
 	}
 }
 
 Coroutine publish() {
 	uint16_t localPort = 1337;
-	network::Endpoint gatewayEndpoint = network::Endpoint::fromString("::1", 10000);
+	Network::Endpoint gatewayEndpoint = Network::Endpoint::fromString("::1", 10000);
 	
 	MqttSnClient client(localPort);
 	MqttSnClient::Result result;
@@ -53,13 +53,13 @@ Coroutine publish() {
 	// register topics
 	uint16_t foo;
 	co_await client.registerTopic(result, foo, "foo");
-	terminal::out << "registered topic 'foo' " << dec(foo) << "\n";
+	Terminal::out << "registered topic 'foo' " << dec(foo) << "\n";
 	uint16_t bar;
 	co_await client.registerTopic(result, bar, "bar");
-	terminal::out << "registered topic 'bar' " << dec(bar) << "\n";
+	Terminal::out << "registered topic 'bar' " << dec(bar) << "\n";
 
 	while (client.isConnected()) {
-		co_await timer::sleep(1s);
+		co_await Timer::sleep(1s);
 
 		// publish on topics
 		co_await client.publish(result, foo, mqttsn::makeQos(defaultQos), "a");
@@ -69,16 +69,16 @@ Coroutine publish() {
 	// wait for subsrcibe coroutine
 	co_await s;
 
-	terminal::out << "exit\n";
+	Terminal::out << "exit\n";
 }
 
 int main(void) {
-	loop::init();
-	timer::init();
-	network::init();
-	output::init();
+	Loop::init();
+	Timer::init();
+	Network::init();
+	Output::init();
 		
 	publish();
 
-	loop::run();	
+	Loop::run();	
 }

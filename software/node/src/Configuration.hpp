@@ -1,7 +1,7 @@
 #pragma once
 
 #include "Storage.hpp"
-#include <network.hpp>
+#include <Network.hpp>
 #include <crypt.hpp>
 #include <String.hpp>
 
@@ -47,7 +47,7 @@ struct ConfigurationFlash {
 
 	// local port and endpoint for connection to mqtt-sn gateway
 	uint16_t mqttLocalPort;
-	network::Endpoint mqttGateway;
+	Network::Endpoint mqttGateway;
 
 
 

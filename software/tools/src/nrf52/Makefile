@@ -13,14 +13,14 @@ INC_FOLDERS += .. ../../../board/nrf52Dongle $(SYSTEM_PATH) ../../../protocol/sr
 # Source files common to all targets
 SRC_FILES += $(TEMPLATE_PATH)/gcc_startup_nrf52840.S
 SRC_FILES += $(TEMPLATE_PATH)/system_nrf52840.c
-SRC_FILES += $(SYSTEM_PATH)/nrf52/loop.cpp
-SRC_FILES += $(SYSTEM_PATH)/nrf52/output.cpp
+SRC_FILES += $(SYSTEM_PATH)/nrf52/Loop.cpp
+SRC_FILES += $(SYSTEM_PATH)/nrf52/Output.cpp
 
 # Target specific source files
 SRC_FILES_radioDevice += ../radioDevice.cpp
-SRC_FILES_radioDevice += $(SYSTEM_PATH)/nrf52/usb.cpp
-SRC_FILES_radioDevice += $(SYSTEM_PATH)/nrf52/rng.cpp
-SRC_FILES_radioDevice += $(SYSTEM_PATH)/nrf52/radio.cpp
+SRC_FILES_radioDevice += $(SYSTEM_PATH)/nrf52/Usb.cpp
+SRC_FILES_radioDevice += $(SYSTEM_PATH)/nrf52/Random.cpp
+SRC_FILES_radioDevice += $(SYSTEM_PATH)/nrf52/Radio.cpp
 
 # Libraries
 LIB_FILES +=

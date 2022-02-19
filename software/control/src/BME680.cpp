@@ -1,6 +1,6 @@
 #include "BME680.hpp"
-#include <spi.hpp>
-#include <timer.hpp>
+#include <Spi.hpp>
+#include <Timer.hpp>
 #include <appConfig.hpp>
 #include <assert.hpp>
 
@@ -17,17 +17,17 @@ constexpr int CHIP_ID = 0x61;
 AwaitableCoroutine BME680::init(){
 	// read chip id and check if it is ok
 	this->buffer[0] = READ(0xD0);
-	co_await spi::transfer(this->spiIndex, 1, this->buffer, 2, this->buffer);
+	co_await Spi::transfer(SPI_AIR_SENSOR, 1, this->buffer, 2, this->buffer);
 	if (this->buffer[1] != CHIP_ID)
 		co_return;
 		
 	// read calibration parameters 1
 	this->buffer[0] = READ(0x8A);
-	co_await spi::transfer(this->spiIndex, 1, this->buffer, 1 + 0xA1 - 0x8A, &this->par.cmd1);
+	co_await Spi::transfer(SPI_AIR_SENSOR, 1, this->buffer, 1 + 0xA1 - 0x8A, &this->par.cmd1);
 
 	// read calibration parameters 2
 	this->buffer[0] = READ(0xE1);
-	co_await spi::transfer(this->spiIndex, 1, this->buffer, 1 + 0xEF - 0xE1, &this->par.cmd2);
+	co_await Spi::transfer(SPI_AIR_SENSOR, 1, this->buffer, 1 + 0xEF - 0xE1, &this->par.cmd2);
 
 	// fix calibration parameters h1 and h2
 	{
@@ -39,11 +39,11 @@ AwaitableCoroutine BME680::init(){
 	// switch register bank
 	this->buffer[0] = WRITE(0x73);
 	this->buffer[1] = 1 << 4;
-	co_await spi::transfer(this->spiIndex, 2, this->buffer, 0, nullptr);
+	co_await Spi::transfer(SPI_AIR_SENSOR, 2, this->buffer, 0, nullptr);
 
 	// read res_heat_val, res_reat_range and range_switching_error
 	this->buffer[0] = READ(0x00);
-	co_await spi::transfer(this->spiIndex, 1, this->buffer, 6, this->buffer);
+	co_await Spi::transfer(SPI_AIR_SENSOR, 1, this->buffer, 6, this->buffer);
 	{
 		uint8_t const *buff = this->buffer + 1;
 		this->res_heat_val = int8_t(buff[0x00]);
@@ -104,7 +104,7 @@ AwaitableCoroutine BME680::setParameters(int temperatureOversampling, int pressu
 	this->buffer[i++] = (1 << 4) | 0;
 
 	// transfer
-	co_await spi::transfer(this->spiIndex, i, this->buffer, 0, nullptr);
+	co_await Spi::transfer(SPI_AIR_SENSOR, i, this->buffer, 0, nullptr);
 	
 	this->state = PARAMETERIZED;
 }
@@ -115,14 +115,14 @@ AwaitableCoroutine BME680::measure() {
 	// start measurement
 	this->buffer[0] = WRITE(0x74);
 	this->buffer[1] = this->_74 | 1; // forced mode
-	co_await spi::transfer(this->spiIndex, 2, this->buffer, 0, nullptr);
+	co_await Spi::transfer(SPI_AIR_SENSOR, 2, this->buffer, 0, nullptr);
 
 	// wait until measurement is ready
-	co_await timer::sleep(1s);
+	co_await Timer::sleep(1s);
 
 	// read measurements
 	this->buffer[0] = READ(0x1D);
-	co_await spi::transfer(this->spiIndex, 1, this->buffer, 16, this->buffer);
+	co_await Spi::transfer(SPI_AIR_SENSOR, 1, this->buffer, 16, this->buffer);
 	{
 		uint8_t const *buff = this->buffer + 1 - 0x1D;
 		

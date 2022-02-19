@@ -1,5 +1,5 @@
 #include "MqttSnClient.hpp"
-#include <timer.hpp>
+#include <Timer.hpp>
 #include <appConfig.hpp>
 
 
@@ -8,7 +8,7 @@ constexpr int MAX_RETRY = 2;
 
 
 MqttSnClient::MqttSnClient(uint16_t localPort) {
-	network::setLocalPort(NETWORK_MQTT, localPort);
+	Network::setLocalPort(NETWORK_MQTT, localPort);
 }
 
 MqttSnClient::~MqttSnClient() {
@@ -35,7 +35,7 @@ MqttSnClient::Result MqttSnClient::searchGateway() {
 }
 */
 
-AwaitableCoroutine MqttSnClient::connect(Result &result, network::Endpoint const &gatewayEndpoint, String name,
+AwaitableCoroutine MqttSnClient::connect(Result &result, Network::Endpoint const &gatewayEndpoint, String name,
 	bool cleanSession, bool willFlag)
 {
 	if (!canConnect()) {
@@ -56,15 +56,15 @@ AwaitableCoroutine MqttSnClient::connect(Result &result, network::Endpoint const
 			w.u8(0x01); // protocol name/version
 			w.u16B(KEEP_ALIVE_TIME.toSeconds());
 			w.string(name);
-			co_await network::send(NETWORK_MQTT, gatewayEndpoint, w.finish());
+			co_await Network::send(NETWORK_MQTT, gatewayEndpoint, w.finish());
 		}
 
 		// wait for a reply from the gateway
 		{
-			network::Endpoint source;
+			Network::Endpoint source;
 			int length = MAX_MESSAGE_LENGTH;
-			int s = co_await select(network::receive(NETWORK_MQTT, source, length, this->tempMessage),
-				timer::sleep(RETRANSMISSION_TIME));
+			int s = co_await select(Network::receive(NETWORK_MQTT, source, length, this->tempMessage),
+				Timer::sleep(RETRANSMISSION_TIME));
 			if (s == 1) {
 				// check if the message is from the gateway
 				// todo
@@ -118,14 +118,14 @@ AwaitableCoroutine MqttSnClient::disconnect() {
 		{
 			PacketWriter w(message);
 			w.e8<mqttsn::MessageType>(mqttsn::MessageType::DISCONNECT);
-			co_await network::send(NETWORK_MQTT, this->gatewayEndpoint, w.finish());
+			co_await Network::send(NETWORK_MQTT, this->gatewayEndpoint, w.finish());
 		}
 
 		// wait for disconnect reply from gateway
 		{
 			int length = array::count(message);
 			int s = co_await select(this->ackWaitlist.wait(mqttsn::MessageType::DISCONNECT, uint16_t(0), length, message),
-				timer::sleep(RETRANSMISSION_TIME));
+				Timer::sleep(RETRANSMISSION_TIME));
 			if (s == 1)
 				break;
 		}
@@ -156,19 +156,19 @@ AwaitableCoroutine MqttSnClient::registerTopic(Result &result, uint16_t &topicId
 			w.u16B(0); // topic id not known yet
 			w.u16B(msgId);
 			w.string(topicName);
-			co_await network::send(NETWORK_MQTT, this->gatewayEndpoint, w.finish());
+			co_await Network::send(NETWORK_MQTT, this->gatewayEndpoint, w.finish());
 		}
 
 		// wait for acknowledge from gateway
 		{
 			int length = array::count(message);
 			int s = co_await select(this->ackWaitlist.wait(mqttsn::MessageType::REGACK, msgId, length, message),
-				timer::sleep(RETRANSMISSION_TIME));
+				Timer::sleep(RETRANSMISSION_TIME));
 			
 			// check if still connected
 			if (!isConnected()) {
 				// make sure we are resumed from the event loop, not from ping()
-				co_await timer::sleep(100ms);
+				co_await Timer::sleep(100ms);
 				result = Result::INVALID_STATE;
 				co_return;
 			}
@@ -217,7 +217,7 @@ AwaitableCoroutine MqttSnClient::publish(Result &result, uint16_t topicId, mqtts
 			w.u16B(topicId);
 			w.u16B(msgId);
 			w.data(length, data);
-			co_await network::send(NETWORK_MQTT, this->gatewayEndpoint, w.finish());
+			co_await Network::send(NETWORK_MQTT, this->gatewayEndpoint, w.finish());
 		}
 		
 		if (qos <= 0) {
@@ -229,12 +229,12 @@ AwaitableCoroutine MqttSnClient::publish(Result &result, uint16_t topicId, mqtts
 		{
 			int length = array::count(message);
 			int s = co_await select(this->ackWaitlist.wait(mqttsn::MessageType::PUBACK, msgId, length, message),
-				timer::sleep(RETRANSMISSION_TIME));
+				Timer::sleep(RETRANSMISSION_TIME));
 
 			// check if still connected
 			if (!isConnected()) {
 				// make sure we are resumed from the event loop, not from ping()
-				co_await timer::sleep(100ms);
+				co_await Timer::sleep(100ms);
 				result = Result::INVALID_STATE;
 				break;
 			}
@@ -287,19 +287,19 @@ AwaitableCoroutine MqttSnClient::subscribeTopic(Result &result, uint16_t &topicI
 			w.e8(flags);
 			w.u16B(msgId);
 			w.string(topicFilter);
-			co_await network::send(NETWORK_MQTT, this->gatewayEndpoint, w.finish());
+			co_await Network::send(NETWORK_MQTT, this->gatewayEndpoint, w.finish());
 		}
 
 		// wait for acknowledge from gateway
 		{
 			int length = array::count(message);
 			int s = co_await select(this->ackWaitlist.wait(mqttsn::MessageType::SUBACK, msgId, length, message),
-				timer::sleep(RETRANSMISSION_TIME));
+				Timer::sleep(RETRANSMISSION_TIME));
 
 			// check if still connected
 			if (!isConnected()) {
 				// make sure we are resumed from the event loop, not from ping()
-				co_await timer::sleep(100ms);
+				co_await Timer::sleep(100ms);
 				result = Result::INVALID_STATE;
 				co_return;
 			}
@@ -346,19 +346,19 @@ AwaitableCoroutine MqttSnClient::unsubscribeTopic(Result &result, String topicFi
 			w.e8(mqttsn::Flags::TOPIC_TYPE_NORMAL);
 			w.u16B(msgId);
 			w.string(topicFilter);
-			co_await network::send(NETWORK_MQTT, this->gatewayEndpoint, w.finish());
+			co_await Network::send(NETWORK_MQTT, this->gatewayEndpoint, w.finish());
 		}
 
 		// wait for acknowledge from gateway
 		{
 			int length = array::count(message);
 			int s = co_await select(this->ackWaitlist.wait(mqttsn::MessageType::UNSUBACK, msgId, length, message),
-				timer::sleep(RETRANSMISSION_TIME));
+				Timer::sleep(RETRANSMISSION_TIME));
 
 			// check if still connected
 			if (!isConnected()) {
 				// make sure we are resumed from the event loop, not from ping()
-				co_await timer::sleep(100ms);
+				co_await Timer::sleep(100ms);
 				result = Result::INVALID_STATE;
 				co_return;
 			}
@@ -389,7 +389,7 @@ AwaitableCoroutine MqttSnClient::receive(Result &result, uint16_t &msgId, uint16
 	// check if still connected
 	if (!isConnected()) {
 		// make sure we are resumed from the event loop, not from ping()
-		co_await timer::sleep(100ms);
+		co_await Timer::sleep(100ms);
 		result = Result::INVALID_STATE;
 		co_return;
 	}
@@ -419,7 +419,7 @@ AwaitableCoroutine MqttSnClient::receive(Result &result, uint16_t &msgId, uint16
 	// user has to call ackReceive to acknowledge the message
 }
 
-Awaitable<network::SendParameters> MqttSnClient::ackReceive(uint16_t msgId, uint16_t topicId, bool ok) {
+Awaitable<Network::SendParameters> MqttSnClient::ackReceive(uint16_t msgId, uint16_t topicId, bool ok) {
 	// message id is only set when qos was 1 or 2
 	if (msgId == 0)
 		return {};
@@ -431,28 +431,28 @@ Awaitable<network::SendParameters> MqttSnClient::ackReceive(uint16_t msgId, uint
 	w.u16B(topicId);
 	w.u16B(msgId);
 	w.e8(ok ? mqttsn::ReturnCode::ACCEPTED : mqttsn::ReturnCode::REJECTED_INVALID_TOPIC_ID);
-	return network::send(NETWORK_MQTT, this->gatewayEndpoint, w.finish());
+	return Network::send(NETWORK_MQTT, this->gatewayEndpoint, w.finish());
 }
 
 AwaitableCoroutine MqttSnClient::ping() {
 	uint8_t message[4];
 
 	while (true) {
-		co_await timer::sleep(KEEP_ALIVE_TIME);
+		co_await Timer::sleep(KEEP_ALIVE_TIME);
 
 		for (int retry = 0; ; ++retry) {
 			// send idle ping
 			{
 				PacketWriter w(message);
 				w.e8<mqttsn::MessageType>(mqttsn::MessageType::PINGREQ);
-				co_await network::send(NETWORK_MQTT, this->gatewayEndpoint, w.finish());
+				co_await Network::send(NETWORK_MQTT, this->gatewayEndpoint, w.finish());
 			}
 			
 			// wait for ping response
 			{
 				int length = array::count(message);
 				int s = co_await select(this->ackWaitlist.wait(mqttsn::MessageType::PINGRESP, uint16_t(0), length, message),
-					timer::sleep(RETRANSMISSION_TIME));
+					Timer::sleep(RETRANSMISSION_TIME));
 				if (s == 1)
 					break;
 			}
@@ -473,9 +473,9 @@ AwaitableCoroutine MqttSnClient::receive() {
 
 	while (true) {
 		// receive a message from the gateway
-		network::Endpoint source;
+		Network::Endpoint source;
 		int length = MAX_MESSAGE_LENGTH;
-		co_await network::receive(NETWORK_MQTT, source, length, message);
+		co_await Network::receive(NETWORK_MQTT, source, length, message);
 
 		// check if the message is from the gateway
 		// todo

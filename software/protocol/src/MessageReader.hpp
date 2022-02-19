@@ -1,8 +1,9 @@
 #pragma once
 
-#include <cstdint>
 #include "crypt.hpp"
 #include "Nonce.hpp"
+#include <String.hpp>
+#include <cstdint>
 
 
 struct MessageReader {

@@ -34,7 +34,7 @@ Coroutine PersistentStateManager::updater() {
 			#ifdef STATE_DEBUG_PRINT
 				std::cout << "state: write " << int(size) << " bytes at " << std::dec << int(state.command[2]) << ", count " << std::hex << int(counter) << std::endl;
 			#endif
-			co_await spi::transfer(SPI_FRAM, 3 + size + 1, state.command, 0, nullptr);
+			co_await Spi::transfer(SPI_FRAM, 3 + size + 1, state.command, 0, nullptr);
 			
 			// restore offset
 			state.command[2] = offset;
@@ -100,12 +100,12 @@ AwaitableCoroutine PersistentStateManager::restore(PersistentStateBase &state) {
 	
 	// read sequence counter 1
 	command[2] = offset + size;
-	co_await spi::transfer(SPI_FRAM, 3, command, 3 + 1, read);
+	co_await Spi::transfer(SPI_FRAM, 3, command, 3 + 1, read);
 	uint8_t c1 = read[3];
 
 	// read sequence counter 2
 	command[2] = offset + size * 2 + 1;
-	co_await spi::transfer(SPI_FRAM, 3, command, 3 + 1, read);
+	co_await Spi::transfer(SPI_FRAM, 3, command, 3 + 1, read);
 	uint8_t c2 = read[3];
 	
 	#ifdef STATE_DEBUG_PRINT
@@ -121,7 +121,7 @@ AwaitableCoroutine PersistentStateManager::restore(PersistentStateBase &state) {
 		command[2] = offset;
 		if (int8_t(c1 - c2) < 0)
 			command[2] = offset + size + 1;
-		co_await spi::transfer(SPI_FRAM, 3, command, 3 + size + 1, state.command);
+		co_await Spi::transfer(SPI_FRAM, 3, command, 3 + size + 1, state.command);
 	}
 	
 	// set command for writing the state value

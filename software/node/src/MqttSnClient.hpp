@@ -1,7 +1,7 @@
 #pragma once
 
-#include <network.hpp>
-#include <timer.hpp>
+#include <Network.hpp>
+#include <Timer.hpp>
 #include <MessageReader.hpp>
 #include <MessageWriter.hpp>
 #include <mqttsn.hpp>
@@ -98,7 +98,7 @@ public:
 	 * @param cleanSession start with a clean session, i.e. clear all previous subscriptions and will topic/message
 	 * @param willFlag if set, the gateway will request will topic and message
 	 */
-	AwaitableCoroutine connect(Result &result, network::Endpoint const &gatewayEndpoint, String name,
+	AwaitableCoroutine connect(Result &result, Network::Endpoint const &gatewayEndpoint, String name,
 		bool cleanSession = true, bool willFlag = false);
 	
 	/**
@@ -169,7 +169,7 @@ public:
 	 * @param ok pass true to indicate that msgId matches a known topic, false otherwise
 	 * @return use co_await on return value
 	 */
-	Awaitable<network::SendParameters> ackReceive(uint16_t msgId, uint16_t topicId, bool ok);
+	Awaitable<Network::SendParameters> ackReceive(uint16_t msgId, uint16_t topicId, bool ok);
 
 	/**
 	 * Check if a topic is valid
@@ -233,7 +233,7 @@ protected:
 	}
 
 	//Configuration &configuration;
-	network::Endpoint gatewayEndpoint;
+	Network::Endpoint gatewayEndpoint;
 
 private:
 
