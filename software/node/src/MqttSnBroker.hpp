@@ -3,7 +3,7 @@
 #include "Message.hpp"
 #include "Publisher.hpp"
 #include "Subscriber.hpp"
-#include <network.hpp>
+#include <Network.hpp>
 #include <SystemTime.hpp>
 #include <MessageReader.hpp>
 #include <MessageWriter.hpp>
@@ -63,7 +63,7 @@ public:
 	 * @param cleanSession start with a clean session, i.e. clear all previous subscriptions and will topic/message
 	 * @param willFlag if set, the gateway will request will topic and message
 	 */
-	[[nodiscard]] AwaitableCoroutine connect(network::Endpoint const &gatewayEndpoint, String name,
+	[[nodiscard]] AwaitableCoroutine connect(Network::Endpoint const &gatewayEndpoint, String name,
 		bool cleanSession = true, bool willFlag = false);
 
 	bool isGatewayConnected() {
@@ -169,7 +169,7 @@ protected:
 
 	struct ConnectionInfo {
 		// endpoint (address and port) of client or gateway
-		network::Endpoint endpoint;
+		Network::Endpoint endpoint;
 
 		// name of client or this broker
 		StringBuffer<MAX_CLIENT_ID_LENGTH> name;

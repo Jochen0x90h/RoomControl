@@ -1,7 +1,7 @@
 #include "Menu.hpp"
-#include <timer.hpp>
-#include <poti.hpp>
-#include <input.hpp>
+#include <Timer.hpp>
+#include <Poti.hpp>
+#include <Input.hpp>
 #include "tahoma_8pt.hpp" // font
 
 
@@ -140,7 +140,7 @@ AwaitableCoroutine Menu::show() {
 
 		// wait for event, may be interrupted e.g. by a timeout
 		int index;
-		int s = co_await select(poti::change(0, this->delta), input::trigger(1 << INPUT_POTI_BUTTON, 0, index, this->activated));
+		int s = co_await select(Poti::change(0, this->delta), Input::trigger(1 << INPUT_POTI_BUTTON, 0, index, this->activated));
 
 		// update selected according to delta motion of poti when not in edit mode
 		if (this->edit == 0) {

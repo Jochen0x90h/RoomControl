@@ -116,9 +116,6 @@ protected:
 		uint16_t h1; // 0xE2<3:0> / 0xE3
 	};
 
-	// spi index
-	static int const spiIndex = SPI_AIR_SENSOR;
-
 	State state = CREATED;
 	
 	// read/write buffer

@@ -1,9 +1,10 @@
 #include "LocalInterface.hpp"
-#include <timer.hpp>
-#include <output.hpp>
+#include <Timer.hpp>
+#include <Output.hpp>
 #include <util.hpp>
 
 
+using EndpointType = Interface::EndpointType;
 
 // air sensor endpoints
 constexpr int BME680_TEMPERATURE_ENDPOINT = 0;
@@ -168,7 +169,7 @@ Coroutine LocalInterface::readAirSensor() {
 		
 		// wait
 		#ifdef DEBUG
-			co_await timer::sleep(10s);
+			co_await Timer::sleep(10s);
 		#else
 			co_await timer::sleep(60s);
 		#endif
@@ -203,9 +204,9 @@ Coroutine LocalInterface::publish() {
 							if (convert(MessageType::ON_OFF, &message, publisher.messageType, publisher.message)) {
 								// set output
 								if (message <= 1)
-									output::set(OUTPUT_HEATING, message);
+									Output::set(OUTPUT_HEATING, message);
 								else
-									output::toggle(OUTPUT_HEATING);
+									Output::toggle(OUTPUT_HEATING);
 							}
 						}
 						break;
@@ -216,9 +217,9 @@ Coroutine LocalInterface::publish() {
 							if (convert(MessageType::ON_OFF, &message, publisher.messageType, publisher.message)) {
 								// set output
 								if (message <= 1)
-									output::set(OUTPUT_EXT_INDEX + endpointIndex, message);
+									Output::set(OUTPUT_EXT_INDEX + endpointIndex, message);
 								else
-									output::toggle(OUTPUT_EXT_INDEX + endpointIndex);
+									Output::toggle(OUTPUT_EXT_INDEX + endpointIndex);
 							}
 						}
 						break;

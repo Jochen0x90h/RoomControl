@@ -1,12 +1,12 @@
 #include "MqttSnBroker.hpp"
-#include <timer.hpp>
+#include <Timer.hpp>
 #include <StringOperators.hpp>
 #include <appConfig.hpp>
 
 #define DEBUG_PRINT
 
 #ifdef DEBUG_PRINT
-#include <terminal.hpp>
+#include <Terminal.hpp>
 #endif
 
 
@@ -22,7 +22,7 @@ constexpr int8_t min(int8_t x, int8_t y) {return x < y ? x : y;}
 
 
 MqttSnBroker::MqttSnBroker(uint16_t localPort) {
-	network::setLocalPort(NETWORK_MQTT, localPort);
+	Network::setLocalPort(NETWORK_MQTT, localPort);
 
 	// init connections
 	for (ConnectionInfo &connection : this->connections) {
@@ -39,7 +39,7 @@ MqttSnBroker::MqttSnBroker(uint16_t localPort) {
 		forward();
 }
 
-AwaitableCoroutine MqttSnBroker::connect(network::Endpoint const &gatewayEndpoint, String name,
+AwaitableCoroutine MqttSnBroker::connect(Network::Endpoint const &gatewayEndpoint, String name,
 	bool cleanSession, bool willFlag)
 {
 	uint8_t message[6 + MAX_CLIENT_ID_LENGTH];
@@ -68,14 +68,14 @@ AwaitableCoroutine MqttSnBroker::connect(network::Endpoint const &gatewayEndpoin
 			w.u8(0x01); // protocol name/version
 			w.u16B(KEEP_ALIVE_TIME.toSeconds());
 			w.string(name);
-			co_await network::send(NETWORK_MQTT, gateway.endpoint, w.finish());
+			co_await Network::send(NETWORK_MQTT, gateway.endpoint, w.finish());
 		}
 
 		// wait for a reply from the gateway
 		{
 			int length = array::count(message);
 			int s = co_await select(this->ackWaitlist.wait(uint8_t(0), mqttsn::MessageType::CONNACK,
-				uint16_t(0), length, message), timer::sleep(RECONNECT_TIME));
+				uint16_t(0), length, message), Timer::sleep(RECONNECT_TIME));
 
 			// check if we received a message
 			if (s == 1) {
@@ -110,7 +110,7 @@ AwaitableCoroutine MqttSnBroker::keepAlive() {
 
 	// ping gateway as long as we are connected
 	while (isGatewayConnected()) {
-		int s = co_await select(timer::sleep(KEEP_ALIVE_TIME), this->keepAliveEvent.wait());
+		int s = co_await select(Timer::sleep(KEEP_ALIVE_TIME), this->keepAliveEvent.wait());
 
 		if (s == 1) {
 			if (isGatewayConnected()) {
@@ -120,14 +120,14 @@ AwaitableCoroutine MqttSnBroker::keepAlive() {
 					{
 						PacketWriter w(message);
 						w.e8<mqttsn::MessageType>(mqttsn::MessageType::PINGREQ);
-						co_await network::send(NETWORK_MQTT, gateway.endpoint, w.finish());
+						co_await Network::send(NETWORK_MQTT, gateway.endpoint, w.finish());
 					}
 
 					// wait for ping response
 					{
 						int length = array::count(message);
 						int s = co_await select(this->ackWaitlist.wait(uint8_t(0), mqttsn::MessageType::PINGRESP,
-							uint16_t(0), length, message), timer::sleep(RETRANSMISSION_TIME));
+							uint16_t(0), length, message), Timer::sleep(RETRANSMISSION_TIME));
 						if (s == 1)
 							break;
 					}
@@ -165,14 +165,14 @@ AwaitableCoroutine MqttSnBroker::keepAlive() {
 								w.e8(flags);
 								w.u16B(msgId);
 								w.string(topicName);
-								co_await network::send(NETWORK_MQTT, gateway.endpoint, w.finish());
+								co_await Network::send(NETWORK_MQTT, gateway.endpoint, w.finish());
 							}
 
 							// wait for acknowledge from gateway
 							{
 								int length = array::count(message);
 								int s = co_await select(this->ackWaitlist.wait(uint8_t(0), mqttsn::MessageType::SUBACK, msgId, length,
-									message), timer::sleep(RETRANSMISSION_TIME));
+									message), Timer::sleep(RETRANSMISSION_TIME));
 
 								// check if still connected
 								if (!isGatewayConnected())
@@ -211,14 +211,14 @@ AwaitableCoroutine MqttSnBroker::keepAlive() {
 								w.e8(flags);
 								w.u16B(msgId);
 								w.string(topicName);
-								co_await network::send(NETWORK_MQTT, gateway.endpoint, w.finish());
+								co_await Network::send(NETWORK_MQTT, gateway.endpoint, w.finish());
 							}
 
 							// wait for acknowledge from gateway
 							{
 								int length = array::count(message);
 								int s = co_await select(this->ackWaitlist.wait(uint8_t(0), mqttsn::MessageType::UNSUBACK, msgId, length,
-									message), timer::sleep(RETRANSMISSION_TIME));
+									message), Timer::sleep(RETRANSMISSION_TIME));
 
 								// check if still connected
 								if (!isGatewayConnected())
@@ -248,14 +248,14 @@ AwaitableCoroutine MqttSnBroker::keepAlive() {
 								w.u16B(0); // topic id not known yet
 								w.u16B(msgId);
 								w.string(topicName);
-								co_await network::send(NETWORK_MQTT, gateway.endpoint, w.finish());
+								co_await Network::send(NETWORK_MQTT, gateway.endpoint, w.finish());
 							}
 
 							// wait for acknowledge from gateway
 							{
 								int length = array::count(message);
 								int s = co_await select(this->ackWaitlist.wait(uint8_t(0), mqttsn::MessageType::REGACK, msgId, length,
-									message), timer::sleep(RETRANSMISSION_TIME));
+									message), Timer::sleep(RETRANSMISSION_TIME));
 
 								// check if still connected
 								if (!isGatewayConnected())
@@ -555,15 +555,15 @@ Coroutine MqttSnBroker::publish() {
 								break;
 
 #ifdef DEBUG_PRINT
-							terminal::out << (thisName + " publishes " + dec(w.current - c) + " bytes to ");
+							Terminal::out << (thisName + " publishes " + dec(w.current - c) + " bytes to ");
 							if (connectionIndex == 0)
-								terminal::out << ("gateway");
+								Terminal::out << ("gateway");
 							else
-								terminal::out << (connection.name);
-							terminal::out << (" on topic '" + this->topics.get(publisher.index)->key + "' msgid " + dec(msgId) + '\n');
+								Terminal::out << (connection.name);
+							Terminal::out << (" on topic '" + this->topics.get(publisher.index)->key + "' msgid " + dec(msgId) + '\n');
 #endif
 
-							co_await network::send(NETWORK_MQTT, connection.endpoint, w.finish());
+							co_await Network::send(NETWORK_MQTT, connection.endpoint, w.finish());
 						}
 
 						if (qos <= 0)
@@ -574,7 +574,7 @@ Coroutine MqttSnBroker::publish() {
 							int length = array::count(message);
 							int s = co_await select(this->ackWaitlist.wait(uint8_t(connectionIndex),
 								mqttsn::MessageType::PUBACK, msgId, length, message),
-								timer::sleep(RETRANSMISSION_TIME));
+								Timer::sleep(RETRANSMISSION_TIME));
 
 							// check if still connected
 							if (!isConnected(connectionIndex))
@@ -642,9 +642,9 @@ Coroutine MqttSnBroker::receive() {
 		auto &thisName = this->connections[0].name;
 
 		// receive a message from the gateway or a client
-		network::Endpoint source;
+		Network::Endpoint source;
 		int length = MAX_MESSAGE_LENGTH;
-		co_await network::receive(NETWORK_MQTT, source, length, message);
+		co_await Network::receive(NETWORK_MQTT, source, length, message);
 
 		// create message reader and check if complete (length of message longer than what was received)
 		PacketReader r(message);
@@ -675,7 +675,7 @@ Coroutine MqttSnBroker::receive() {
 			auto keepAliveDuration = r.u16B();
 			auto clientId = r.string();
 #ifdef DEBUG_PRINT
-			terminal::out << (clientId + " connects to " + thisName + '\n');
+			Terminal::out << (clientId + " connects to " + thisName + '\n');
 #endif
 			if (connectionIndex == -1) {
 				// try to find an unused connection
@@ -708,24 +708,24 @@ Coroutine MqttSnBroker::receive() {
 			PacketWriter w(message);
 			w.e8(mqttsn::MessageType::CONNACK);
 			w.e8(returnCode);
-			co_await network::send(NETWORK_MQTT, source, w.finish());
+			co_await Network::send(NETWORK_MQTT, source, w.finish());
 		} else if (connectionIndex == -1) {
 			// unknown client: reply with DISCONNECT
 			PacketWriter w(message);
 			w.e8<mqttsn::MessageType>(mqttsn::MessageType::DISCONNECT);
-			co_await network::send(NETWORK_MQTT, source, w.finish());
+			co_await Network::send(NETWORK_MQTT, source, w.finish());
 		} else if (msgType == mqttsn::MessageType::PINGREQ) {
 			// ping request: reply with PINGRESP
 			PacketWriter w(message);
 			w.e8(mqttsn::MessageType::PINGRESP);
-			co_await network::send(NETWORK_MQTT, source, w.finish());
+			co_await Network::send(NETWORK_MQTT, source, w.finish());
 		} else if (msgType == mqttsn::MessageType::REGISTER) {
 			// the gateway or a client want to register a topic
 			auto topicId = r.u16B();
 			auto msgId = r.u16B();
 			auto topicName = r.string();
 #ifdef DEBUG_PRINT
-			terminal::out << (this->connections[connectionIndex].name + " registers " + topicName + " at " + thisName + '\n');
+			Terminal::out << (this->connections[connectionIndex].name + " registers " + topicName + " at " + thisName + '\n');
 #endif
 			// register the topic
 			auto returnCode = mqttsn::ReturnCode::ACCEPTED;
@@ -755,7 +755,7 @@ Coroutine MqttSnBroker::receive() {
 				w.u16B(topicId);
 				w.u16B(msgId);
 				w.e8(returnCode);
-				co_await network::send(NETWORK_MQTT, source, w.finish());
+				co_await Network::send(NETWORK_MQTT, source, w.finish());
 			}
 		} else if (msgType == mqttsn::MessageType::SUBSCRIBE) {
 			// a client wants to subscribe to a topic
@@ -765,7 +765,7 @@ Coroutine MqttSnBroker::receive() {
 			auto msgId = r.u16B();
 			auto topicName = r.string();
 #ifdef DEBUG_PRINT
-			terminal::out << (this->connections[connectionIndex].name + " subscribes " + topicName + " at " + thisName + '\n');
+			Terminal::out << (this->connections[connectionIndex].name + " subscribes " + topicName + " at " + thisName + '\n');
 #endif
 			// register the topic
 			int topicIndex = -1;
@@ -798,7 +798,7 @@ Coroutine MqttSnBroker::receive() {
 				w.u16B(topicId);
 				w.u16B(msgId);
 				w.e8(returnCode);
-				co_await network::send(NETWORK_MQTT, source, w.finish());
+				co_await Network::send(NETWORK_MQTT, source, w.finish());
 			}
 		} else if (msgType == mqttsn::MessageType::UNSUBSCRIBE) {
 			// a client wants to unsubscribe to a topic
@@ -808,7 +808,7 @@ Coroutine MqttSnBroker::receive() {
 			auto msgId = r.u16B();
 			auto topicName = r.string();
 #ifdef DEBUG_PRINT
-			terminal::out << (this->connections[connectionIndex].name + " subscribes " + topicName + " from " + thisName + '\n');
+			Terminal::out << (this->connections[connectionIndex].name + " subscribes " + topicName + " from " + thisName + '\n');
 #endif
 			// register the topic
 			if (connectionIndex == 0) {
@@ -833,7 +833,7 @@ Coroutine MqttSnBroker::receive() {
 				PacketWriter w(message);
 				w.e8(mqttsn::MessageType::UNSUBACK);
 				w.u16B(msgId);
-				co_await network::send(NETWORK_MQTT, source, w.finish());
+				co_await Network::send(NETWORK_MQTT, source, w.finish());
 			}
 		} else if (msgType == mqttsn::MessageType::PUBLISH) {
 			// the gateway or a client published to a topic
@@ -889,7 +889,7 @@ Coroutine MqttSnBroker::receive() {
 				w.u16B(topicId);
 				w.u16B(msgId);
 				w.e8(topicOk ? mqttsn::ReturnCode::ACCEPTED : mqttsn::ReturnCode::REJECTED_INVALID_TOPIC_ID);
-				co_await network::send(NETWORK_MQTT, connection.endpoint, w.finish());
+				co_await Network::send(NETWORK_MQTT, connection.endpoint, w.finish());
 			}
 
 			// check if topic index is valid
@@ -898,12 +898,12 @@ Coroutine MqttSnBroker::receive() {
 			TopicInfo &topic = this->topics[topicIndex];
 
 #ifdef DEBUG_PRINT
-			terminal::out << (thisName + " receives " + dec(pubLength) + " bytes from ");
+			Terminal::out << (thisName + " receives " + dec(pubLength) + " bytes from ");
 			if (connectionIndex == 0)
-				terminal::out << ("gateway");
+				Terminal::out << ("gateway");
 			else
-				terminal::out << (connection.name);
-			terminal::out << (" on topic '" + this->topics.get(topicIndex)->key + "' msgid " + dec(msgId) + '\n');
+				Terminal::out << (connection.name);
+			Terminal::out << (" on topic '" + this->topics.get(topicIndex)->key + "' msgid " + dec(msgId) + '\n');
 #endif
 
 			// check if message is duplicate
@@ -993,12 +993,12 @@ Coroutine MqttSnBroker::receive() {
 			}
 
 #ifdef DEBUG_PRINT
-			terminal::out << (thisName + " received " + typeString + " from ");
+			Terminal::out << (thisName + " received " + typeString + " from ");
 			if (connectionIndex == 0)
-				terminal::out << ("gateway");
+				Terminal::out << ("gateway");
 			else
-				terminal::out << (this->connections[connectionIndex].name);
-			terminal::out << (" msgid " + dec(msgId) + '\n');
+				Terminal::out << (this->connections[connectionIndex].name);
+			Terminal::out << (" msgid " + dec(msgId) + '\n');
 #endif
 
 			// check if we read past the end of the message
@@ -1061,12 +1061,12 @@ Coroutine MqttSnBroker::forward() {
 				uint16_t msgId = qos <= 0 ? 0 : getNextMsgId();
 
 #ifdef DEBUG_PRINT
-				terminal::out << (thisName + " forwards " + dec(length) + " bytes to ");
+				Terminal::out << (thisName + " forwards " + dec(length) + " bytes to ");
 				if (connectionIndex == 0)
-					terminal::out << ("gateway");
+					Terminal::out << ("gateway");
 				else
-					terminal::out << (connection.name);
-				terminal::out << (" on topic '" + this->topics.get(topicIndex)->key + "' msgid " + dec(msgId) + '\n');
+					Terminal::out << (connection.name);
+				Terminal::out << (" on topic '" + this->topics.get(topicIndex)->key + "' msgid " + dec(msgId) + '\n');
 #endif
 
 				// message flags
@@ -1082,7 +1082,7 @@ Coroutine MqttSnBroker::forward() {
 						w.u16B(topicId);
 						w.u16B(msgId);
 						w.skip(length); // data is already in the message
-						co_await network::send(NETWORK_MQTT, connection.endpoint, w.finish());
+						co_await Network::send(NETWORK_MQTT, connection.endpoint, w.finish());
 					}
 
 					if (qos <= 0)
@@ -1094,7 +1094,7 @@ Coroutine MqttSnBroker::forward() {
 						int length2 = array::count(message);
 						int s = co_await select(this->ackWaitlist.wait(uint8_t(connectionIndex),
 							mqttsn::MessageType::PUBACK, msgId, length2, message2),
-							timer::sleep(RETRANSMISSION_TIME));
+							Timer::sleep(RETRANSMISSION_TIME));
 
 						// check if still connected
 						if (!isConnected(connectionIndex))

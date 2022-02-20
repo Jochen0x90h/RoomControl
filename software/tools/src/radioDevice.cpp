@@ -1,11 +1,11 @@
-#include <usb.hpp>
-#include <rng.hpp>
-#include <radio.hpp>
-#include <loop.hpp>
-#include <debug.hpp>
+#include <Usb.hpp>
+#include <Random.hpp>
+#include <Radio.hpp>
+#include <Loop.hpp>
+#include <Debug.hpp>
 #include <util.hpp>
-#include <boardConfig.hpp>
 #include <Queue.hpp>
+#include <boardConfig.hpp>
 
 
 /*
@@ -13,9 +13,9 @@
 */
 
 // device descriptor
-static const usb::DeviceDescriptor deviceDescriptor = {
-	.bLength = sizeof(usb::DeviceDescriptor),
-	.bDescriptorType = usb::DescriptorType::DEVICE,
+static const Usb::DeviceDescriptor deviceDescriptor = {
+	.bLength = sizeof(Usb::DeviceDescriptor),
+	.bDescriptorType = Usb::DescriptorType::DEVICE,
 	.bcdUSB = 0x0200, // USB 2.0
 	.bDeviceClass = 0xff, // no class
 	.bDeviceSubClass = 0xff,
@@ -32,16 +32,16 @@ static const usb::DeviceDescriptor deviceDescriptor = {
 
 // configuration descriptor
 struct UsbConfiguration {
-	struct usb::ConfigDescriptor config;
-	struct usb::InterfaceDescriptor interface;
-	struct usb::EndpointDescriptor endpoints[4 * 2];
+	struct Usb::ConfigDescriptor config;
+	struct Usb::InterfaceDescriptor interface;
+	struct Usb::EndpointDescriptor endpoints[4 * 2];
 } __attribute__((packed));
 
 static const UsbConfiguration configurationDescriptor = {
 	.config = {
-		.bLength = sizeof(usb::ConfigDescriptor),
-		.bDescriptorType = usb::DescriptorType::CONFIGURATION,
-		.wTotalLength = offsetof(UsbConfiguration, endpoints) + sizeof(usb::EndpointDescriptor) * RADIO_CONTEXT_COUNT * 2,
+		.bLength = sizeof(Usb::ConfigDescriptor),
+		.bDescriptorType = Usb::DescriptorType::CONFIGURATION,
+		.wTotalLength = offsetof(UsbConfiguration, endpoints) + sizeof(Usb::EndpointDescriptor) * RADIO_CONTEXT_COUNT * 2,
 		.bNumInterfaces = 1,
 		.bConfigurationValue = 1,
 		.iConfiguration = 0,
@@ -49,8 +49,8 @@ static const UsbConfiguration configurationDescriptor = {
 		.bMaxPower = 50 // 100 mA
 	},
 	.interface = {
-		.bLength = sizeof(usb::InterfaceDescriptor),
-		.bDescriptorType = usb::DescriptorType::INTERFACE,
+		.bLength = sizeof(Usb::InterfaceDescriptor),
+		.bDescriptorType = Usb::DescriptorType::INTERFACE,
 		.bInterfaceNumber = 0,
 		.bAlternateSetting = 0,
 		.bNumEndpoints = RADIO_CONTEXT_COUNT * 2,
@@ -62,73 +62,73 @@ static const UsbConfiguration configurationDescriptor = {
 	.endpoints = {
 		{
 			// endpoint 1 in (device to host, radio receive)
-			.bLength = sizeof(usb::EndpointDescriptor),
-			.bDescriptorType = usb::DescriptorType::ENDPOINT,
-			.bEndpointAddress = 1 | usb::IN,
-			.bmAttributes = usb::EndpointType::BULK,
+			.bLength = sizeof(Usb::EndpointDescriptor),
+			.bDescriptorType = Usb::DescriptorType::ENDPOINT,
+			.bEndpointAddress = 1 | Usb::IN,
+			.bmAttributes = Usb::EndpointType::BULK,
 			.wMaxPacketSize = 64,
 			.bInterval = 1 // polling interval
 		},
 		{
 			// endpoint 1 out (host to device, radio send)
-			.bLength = sizeof(usb::EndpointDescriptor),
-			.bDescriptorType = usb::DescriptorType::ENDPOINT,
-			.bEndpointAddress = 1 | usb::OUT,
-			.bmAttributes = usb::EndpointType::BULK,
+			.bLength = sizeof(Usb::EndpointDescriptor),
+			.bDescriptorType = Usb::DescriptorType::ENDPOINT,
+			.bEndpointAddress = 1 | Usb::OUT,
+			.bmAttributes = Usb::EndpointType::BULK,
 			.wMaxPacketSize = 64,
 			.bInterval = 1 // polling interval
 		},
 		{
 			// endpoint 2 in (device to host, radio receive)
-			.bLength = sizeof(usb::EndpointDescriptor),
-			.bDescriptorType = usb::DescriptorType::ENDPOINT,
-			.bEndpointAddress = 2 | usb::IN,
-			.bmAttributes = usb::EndpointType::BULK,
+			.bLength = sizeof(Usb::EndpointDescriptor),
+			.bDescriptorType = Usb::DescriptorType::ENDPOINT,
+			.bEndpointAddress = 2 | Usb::IN,
+			.bmAttributes = Usb::EndpointType::BULK,
 			.wMaxPacketSize = 64,
 			.bInterval = 1 // polling interval
 		},
 		{
 			// endpoint 2 out (host to device, radio send)
-			.bLength = sizeof(usb::EndpointDescriptor),
-			.bDescriptorType = usb::DescriptorType::ENDPOINT,
-			.bEndpointAddress = 2 | usb::OUT,
-			.bmAttributes = usb::EndpointType::BULK,
+			.bLength = sizeof(Usb::EndpointDescriptor),
+			.bDescriptorType = Usb::DescriptorType::ENDPOINT,
+			.bEndpointAddress = 2 | Usb::OUT,
+			.bmAttributes = Usb::EndpointType::BULK,
 			.wMaxPacketSize = 64,
 			.bInterval = 1 // polling interval
 		},
 		{
 			// endpoint 3 in (device to host, radio receive)
-			.bLength = sizeof(usb::EndpointDescriptor),
-			.bDescriptorType = usb::DescriptorType::ENDPOINT,
-			.bEndpointAddress = 3 | usb::IN,
-			.bmAttributes = usb::EndpointType::BULK,
+			.bLength = sizeof(Usb::EndpointDescriptor),
+			.bDescriptorType = Usb::DescriptorType::ENDPOINT,
+			.bEndpointAddress = 3 | Usb::IN,
+			.bmAttributes = Usb::EndpointType::BULK,
 			.wMaxPacketSize = 64,
 			.bInterval = 1 // polling interval
 		},
 		{
 			// endpoint 3 out (host to device, radio send)
-			.bLength = sizeof(usb::EndpointDescriptor),
-			.bDescriptorType = usb::DescriptorType::ENDPOINT,
-			.bEndpointAddress = 3 | usb::OUT,
-			.bmAttributes = usb::EndpointType::BULK,
+			.bLength = sizeof(Usb::EndpointDescriptor),
+			.bDescriptorType = Usb::DescriptorType::ENDPOINT,
+			.bEndpointAddress = 3 | Usb::OUT,
+			.bmAttributes = Usb::EndpointType::BULK,
 			.wMaxPacketSize = 64,
 			.bInterval = 1 // polling interval
 		},
 		{
 			// endpoint 4 in (device to host, radio receive)
-			.bLength = sizeof(usb::EndpointDescriptor),
-			.bDescriptorType = usb::DescriptorType::ENDPOINT,
-			.bEndpointAddress = 4 | usb::IN,
-			.bmAttributes = usb::EndpointType::BULK,
+			.bLength = sizeof(Usb::EndpointDescriptor),
+			.bDescriptorType = Usb::DescriptorType::ENDPOINT,
+			.bEndpointAddress = 4 | Usb::IN,
+			.bmAttributes = Usb::EndpointType::BULK,
 			.wMaxPacketSize = 64,
 			.bInterval = 1 // polling interval
 		},
 		{
 			// endpoint 4 out (host to device, radio send)
-			.bLength = sizeof(usb::EndpointDescriptor),
-			.bDescriptorType = usb::DescriptorType::ENDPOINT,
-			.bEndpointAddress = 4 | usb::OUT,
-			.bmAttributes = usb::EndpointType::BULK,
+			.bLength = sizeof(Usb::EndpointDescriptor),
+			.bDescriptorType = Usb::DescriptorType::ENDPOINT,
+			.bEndpointAddress = 4 | Usb::OUT,
+			.bmAttributes = Usb::EndpointType::BULK,
 			.wMaxPacketSize = 64,
 			.bInterval = 1 // polling interval
 		}		
@@ -143,69 +143,69 @@ Barrier<> barriers[RADIO_CONTEXT_COUNT][256];
 
 // receive from radio and send to usb host
 Coroutine receive(int index) {
-	radio::Packet packet;
+	Radio::Packet packet;
 	while (true) {
 		// receive from radio
-		co_await radio::receive(index, packet);
-		debug::setGreenLed(true);
+		co_await Radio::receive(index, packet);
+		Debug::setGreenLed(true);
 
 		// length without crc but with extra data
-		int length = packet[0] - 2 + radio::RECEIVE_EXTRA_LENGTH;
+		int length = packet[0] - 2 + Radio::RECEIVE_EXTRA_LENGTH;
 		
 		// check if packet has minimum length (2 bytes frame control and extra data)
-		if (length >= 2 + radio::RECEIVE_EXTRA_LENGTH) {			
+		if (length >= 2 + Radio::RECEIVE_EXTRA_LENGTH) {			
 			// send to usb host
-			co_await usb::send(1 + index, length, packet + 1);
+			co_await Usb::send(1 + index, length, packet + 1);
 		}
-		debug::setGreenLed(false);
+		Debug::setGreenLed(false);
 	}
 }
 
 // receive from usb host and send to radio
 Coroutine send(int index) {
-	radio::Packet packet;
+	Radio::Packet packet;
 	while (true) {
 		// receive from usb host
-		int length = RADIO_MAX_PAYLOAD_LENGTH + radio::SEND_EXTRA_LENGTH;
-		co_await usb::receive(1 + index, length, packet + 1);
+		int length = RADIO_MAX_PAYLOAD_LENGTH + Radio::SEND_EXTRA_LENGTH;
+		co_await Usb::receive(1 + index, length, packet + 1);
 
 		if (length == 1) {
 			// cancel by mac counter
 			uint8_t macCounter = packet[1];
 			barriers[index][macCounter].resumeAll();
-		} else if (length >= 2 + radio::SEND_EXTRA_LENGTH) {
-			debug::setRedLed(true);
+		} else if (length >= 2 + Radio::SEND_EXTRA_LENGTH) {
+			Debug::setRedLed(true);
 
 			// set length to first byte with space for crc but without extra data
-			packet[0] = length + 2 - radio::SEND_EXTRA_LENGTH;
+			packet[0] = length + 2 - Radio::SEND_EXTRA_LENGTH;
 
 			// get mac counter to identify the packet
 			uint8_t macCounter = packet[3];
 			
 			// send over the air
 			uint8_t result;
-			int r = co_await select(radio::send(index, packet, result), barriers[index][macCounter].wait());
+			int r = co_await select(Radio::send(index, packet, result), barriers[index][macCounter].wait());
 			if (r == 1) {
 				// send mac counter and result back to usb host
 				packet[0] = macCounter;
 				packet[1] = result;
-				co_await usb::send(1 + index, 2, packet);
+				co_await Usb::send(1 + index, 2, packet);
 			}
-			debug::setRedLed(false);
+			Debug::setRedLed(false);
 		}
 	}
 }
 
 
 int main(void) {
-	loop::init();
-	radio::init();
-	usb::init(
-		[](usb::DescriptorType descriptorType) {
+	Loop::init();
+	Radio::init();
+	Usb::init(
+		[](Usb::DescriptorType descriptorType) {
 			switch (descriptorType) {
-			case usb::DescriptorType::DEVICE:
+			case Usb::DescriptorType::DEVICE:
 				return Data(&deviceDescriptor);
-			case usb::DescriptorType::CONFIGURATION:
+			case Usb::DescriptorType::CONFIGURATION:
 				return Data(&configurationDescriptor);
 			default:
 				return Data();
@@ -214,7 +214,7 @@ int main(void) {
 		[](uint8_t bConfigurationValue) {
 			// enable bulk endpoints (keep control endpoint 0 enabled in both directions)
 			int flags = ~(0xffffffff << (1 + RADIO_CONTEXT_COUNT));
-			usb::enableEndpoints(flags, flags); 			
+			Usb::enableEndpoints(flags, flags); 			
 
 			// start coroutines to send and receive
 			for (int index = 0; index < RADIO_CONTEXT_COUNT; ++index) {
@@ -225,52 +225,52 @@ int main(void) {
 			}
 		},
 		[](uint8_t bRequest, uint16_t wValue, uint16_t wIndex) {
-			switch (radio::Request(bRequest)) {
-			case radio::Request::RESET:
-				radio::stop();
+			switch (Radio::Request(bRequest)) {
+			case Radio::Request::RESET:
+				Radio::stop();
 				for (int index = 0; index < RADIO_CONTEXT_COUNT; ++index) {
-					radio::setFlags(index, radio::ContextFlags::NONE);
-					radio::setPan(index, 0xffff);
-					radio::setShortAddress(index, 0xffff);
+					Radio::setFlags(index, Radio::ContextFlags::NONE);
+					Radio::setPan(index, 0xffff);
+					Radio::setShortAddress(index, 0xffff);
 				}
 				break;
-			case radio::Request::START:
+			case Radio::Request::START:
 				// check if the channel is in the allowed range
 				if (wValue >= 10 && wValue <= 26)
-					radio::start(wValue);
+					Radio::start(wValue);
 				break;
-			case radio::Request::STOP:
-				radio::stop();
+			case Radio::Request::STOP:
+				Radio::stop();
 				break;
-			case radio::Request::ENABLE_RECEIVER:
-				radio::enableReceiver(wValue != 0);
+			case Radio::Request::ENABLE_RECEIVER:
+				Radio::enableReceiver(wValue != 0);
 				break;
-			case radio::Request::SET_LONG_ADDRESS:
+			case Radio::Request::SET_LONG_ADDRESS:
 				// todo
 				break;
-			case radio::Request::SET_PAN:
+			case Radio::Request::SET_PAN:
 				if (wIndex < RADIO_CONTEXT_COUNT)
-					radio::setPan(wIndex, wValue);
+					Radio::setPan(wIndex, wValue);
 				break;
-			case radio::Request::SET_SHORT_ADDRESS:
+			case Radio::Request::SET_SHORT_ADDRESS:
 				if (wIndex < RADIO_CONTEXT_COUNT)
-					radio::setShortAddress(wIndex, wValue);
+					Radio::setShortAddress(wIndex, wValue);
 				break;
-			case radio::Request::SET_FLAGS:
+			case Radio::Request::SET_FLAGS:
 				if (wIndex < RADIO_CONTEXT_COUNT)
-					radio::setFlags(wIndex, radio::ContextFlags(wValue));
+					Radio::setFlags(wIndex, Radio::ContextFlags(wValue));
 				break;
 			default:
 				return false;
 			}
 			return true;
 		});
-	output::init();
+	Output::init();
 
 	// start radio, enable baseband decoder and pass all packets for sniffer or terminal
-	radio::start(15);
-	radio::enableReceiver(true);
-	radio::setFlags(0, radio::ContextFlags::PASS_ALL);
+	Radio::start(15);
+	Radio::enableReceiver(true);
+	Radio::setFlags(0, Radio::ContextFlags::PASS_ALL);
 
-	loop::run();
+	Loop::run();
 }

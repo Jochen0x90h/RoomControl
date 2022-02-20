@@ -1,11 +1,13 @@
 #include "BusInterface.hpp"
-#include <bus.hpp>
-#include <terminal.hpp>
-#include <timer.hpp>
+#include <BusMaster.hpp>
+#include <Terminal.hpp>
+#include <Timer.hpp>
 #include <Nonce.hpp>
 #include <StringOperators.hpp>
 #include <util.hpp>
 
+
+using EndpointType = Interface::EndpointType;
 
 AesKey const busDefaultAesKey = {{0x1337c6b3, 0xf16c7cb6, 0x2dec182d, 0x3078d618, 0xaec16bb7, 0x5fad1701, 0x72410f2c, 0x4239d934, 0xbef4739b, 0xe159649a, 0x93186bb6, 0xd121b282, 0x47c360a5, 0xa69a043f, 0x35826f89, 0xe4a3dd0b, 0x45024bcc, 0xe3984ff3, 0xd61a207a, 0x32b9fd71, 0x0356e8ef, 0xe0cea71c, 0x36d48766, 0x046d7a17, 0x1f8c181d, 0xff42bf01, 0xc9963867, 0xcdfb4270, 0x50a049a0, 0xafe2f6a1, 0x6674cec6, 0xab8f8cb6, 0xa3c407c2, 0x0c26f163, 0x6a523fa5, 0xc1ddb313, 0x79a97aba, 0x758f8bd9, 0x1fddb47c, 0xde00076f, 0x2c6cd2a7, 0x59e3597e, 0x463eed02, 0x983eea6d}};
 
@@ -79,7 +81,7 @@ DeviceId BusInterface::getDeviceId(int index) {
 	return this->devices[index]->deviceId;
 }
 
-Array<EndpointType const> BusInterface::getEndpoints(DeviceId deviceId) {
+Array<Interface::EndpointType const> BusInterface::getEndpoints(DeviceId deviceId) {
 	for (auto &device : this->devices) {
 		auto const &flash = *device;
 		if (flash.deviceId == deviceId) {
@@ -126,12 +128,12 @@ AwaitableCoroutine BusInterface::commission() {
 	while (true) {
 		DeviceFlash flash;
 
-		co_await timer::sleep(1s);
+		co_await Timer::sleep(1s);
 
 		// write zero as command prefix to bus and check if a device gets enumerated
 		outMessage[0] = 0;
 		int readLength = array::count(inMessage);
-		co_await bus::transfer(1, outMessage, readLength, inMessage);
+		co_await BusMaster::transfer(1, outMessage, readLength, inMessage);
 		if (readLength < minEnumerateLength)
 			continue;
 
@@ -193,7 +195,7 @@ AwaitableCoroutine BusInterface::commission() {
 		// continue if no free address found
 		if (j == 9)
 			continue;
-terminal::out << ("bus device " + hex(flash.deviceId) + ": assigned address " + dec(flash.address) + '\n');
+Terminal::out << ("bus device " + hex(flash.deviceId) + ": assigned address " + dec(flash.address) + '\n');
 
 		// commission device
 		{
@@ -226,7 +228,7 @@ terminal::out << ("bus device " + hex(flash.deviceId) + ": assigned address " + 
 
 			int writeLength = w.getLength();
 			int readLength = writeLength;
-			co_await bus::transfer(writeLength, outMessage, readLength, inMessage);
+			co_await BusMaster::transfer(writeLength, outMessage, readLength, inMessage);
 		}
 
 		Device* device = new Device(flash);
@@ -451,10 +453,10 @@ Coroutine BusInterface::awaitRequest() {
 	uint8_t inMessage[maxMessageLength];
 	while (true) {
 		// wait for a request by a device
-		co_await bus::request();
+		co_await BusMaster::request();
 
 		int readLength = maxMessageLength;
-		co_await bus::transfer(0, nullptr, readLength, inMessage);
+		co_await BusMaster::transfer(0, nullptr, readLength, inMessage);
 
 		if (readLength >= minMessageLength) {
 			MessageReader r(readLength, inMessage);
@@ -632,7 +634,7 @@ Coroutine BusInterface::publish() {
 								writeLength = w.getLength();
 							}
 							int readLength = maxMessageLength;
-							co_await bus::transfer(writeLength, outMessage, readLength, inMessage);
+							co_await BusMaster::transfer(writeLength, outMessage, readLength, inMessage);
 
 							// check if inMessage is same as outMessage which means send was successful
 							if (readLength == writeLength && array::equals(readLength, inMessage, outMessage))

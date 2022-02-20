@@ -1,15 +1,14 @@
 #include "RoomControl.hpp"
-#include <calendar.hpp>
-#include <flash.hpp>
-#include <bus.hpp>
-#include <radio.hpp>
-#include <poti.hpp>
-#include <input.hpp>
-#include <timer.hpp>
-#include <debug.hpp>
-#include <emu/spi.hpp>
-#include <emu/Gui.hpp>
-#include <emu/loop.hpp>
+#include <Calendar.hpp>
+#include <Flash.hpp>
+#include <BusMaster.hpp>
+#include <Radio.hpp>
+#include <Poti.hpp>
+#include <Input.hpp>
+#include <Timer.hpp>
+#include <Debug.hpp>
+#include <Spi.hpp>
+#include <Loop.hpp>
 #include <iostream>
 #include <fstream>
 #include <vector>
@@ -126,19 +125,19 @@ constexpr TimerData timerData[] = {
  */
 int main(int argc, const char **argv) {
 	// init drivers
-	loop::init();
-	flash::init();
-	timer::init();
-	calendar::init();
-	spi::init();
-	poti::init();
-	bus::init();
-	radio::init();
-	output::init();
-	input::init();
+	Loop::init();
+	Flash::init();
+	Timer::init();
+	Calendar::init();
+	Spi::init();
+	Poti::init();
+	BusMaster::init();
+	Radio::init();
+	Output::init();
+	Input::init();
 
-	radio::start(15); // start on channel 15
-	radio::enableReceiver(true); // enable baseband decoder
+	Radio::start(15); // start on channel 15
+	Radio::enableReceiver(true); // enable baseband decoder
 
 	// the room control application
 	RoomControl roomControl;
@@ -150,7 +149,7 @@ int main(int argc, const char **argv) {
 	setKey(configuration.aesKey, configuration.key);
 	configuration.ieeeLongAddress = UINT64_C(0x00124b00214f3c55);
 	configuration.mqttLocalPort = 1337;
-	configuration.mqttGateway = network::Endpoint::fromString("::1", 10000);
+	configuration.mqttGateway = Network::Endpoint::fromString("::1", 10000);
 	roomControl.configurations.write(0, configuration);
 	roomControl.applyConfiguration();
 /*
@@ -223,7 +222,7 @@ int main(int argc, const char **argv) {
 	roomControl.subscribeAll();
 */
 
-	loop::run();
+	Loop::run();
 
 	return 0;
 }
