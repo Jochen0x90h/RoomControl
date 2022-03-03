@@ -1,6 +1,6 @@
 #include "Flash.hpp"
 #include <algorithm>
-#include <assert.h>
+#include <assert.hpp>
 #include <util.hpp>
 #include <fstream>
 

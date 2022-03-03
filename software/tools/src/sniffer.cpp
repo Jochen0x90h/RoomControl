@@ -1155,24 +1155,31 @@ int main(int argc, char const *argv[]) {
 		// read from file
 
 		// open input pcap file
-		FILE *pcap = fopen(inputFile.string().c_str(), "rb");
+		char const *name = inputFile.string().c_str();
+		FILE *pcap = fopen(name, "rb");
+		if (pcap == nullptr) {
+			Terminal::err << "error: can't read pcap file " << str(name) << "\n";
+		} else {
+			// read pcap header
+			PcapHeader header;
+			if (fread(&header, sizeof(header), 1, pcap) < 1) {
+				Terminal::err << "error: pcap header incomplete!\n";
+			} else if (header.network != 0xC3) {
+				Terminal::err << "error: protocol not supported!\n";
+			} else {
+				// read packets
+				PcapPacket packet;
+				while (fread(&packet, offsetof(PcapPacket, data), 1, pcap) == 1) {
+					// read packet
+					if (fread(packet.data, 1, packet.incl_len, pcap) < packet.incl_len)
+						break;
 
-		// read pcap header
-		PcapHeader header;
-		fread(&header, sizeof(header), 1, pcap);
-		if (header.network != 0xC3) {
-			Terminal::err << ("error: protocol not supported!\n");
-		}
-
-		// read packets
-		PcapPacket packet;
-		while (fread(&packet, offsetof(PcapPacket, data), 1, pcap) == 1) {
-			// read packet
-			fread(packet.data, 1, packet.incl_len, pcap);
-
-			// dissect packet
-			PacketReader r(packet.incl_len, packet.data);
-			handleIeee(r);
+					// dissect packet
+					PacketReader r(packet.incl_len, packet.data);
+					handleIeee(r);
+				}
+			}
+			fclose(pcap);
 		}
 	}
 	return 0;

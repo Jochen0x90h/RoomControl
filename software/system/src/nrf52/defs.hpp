@@ -2,7 +2,6 @@
 
 #include "system/nrf.h"
 
-
 // construct bitfield from value
 #define V(field, value) ((value) << field##_Pos)
 

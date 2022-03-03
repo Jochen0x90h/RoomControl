@@ -1,14 +1,78 @@
 cmake_minimum_required(VERSION 3.9)
 
 # set project
-project(Emulator)
+project(RoomControl)
 
-#set(CMAKE_VERBOSE_MAKEFILE ON)
+# enable c, c++ and asm
+enable_language(C CXX ASM)
 
-# use C++20 standard
+# debug generated makefile
+#set(CMAKE_VERBOSE_MAKEFILE TRUE)
+
+# use C99 and C++20 standards
+set(CMAKE_C_STANDARD 99)
 set(CMAKE_CXX_STANDARD 20)
 
+separate_arguments(GENERATE_HEX)
+
+message("*** BOARD ${BOARD}")
+message("*** FAMILY ${FAMILY}")
+message("*** CPU ${CPU}")
+message("*** FPU ${FPU}")
+
+# CLion: use conan plugin and add -DCMAKE_TOOLCHAIN_FILE=conan_toolchain.cmake to the CMake options
+
+if(${CPU} MATCHES "cortex")
+	# cpu flags
+	set(CPU_FLAGS "-mcpu=${CPU} -mthumb -mabi=aapcs")
+
+	# fpu flags
+	set(FPU_FLAGS "-mfpu=${FPU} -mfloat-abi=hard")
+
+	# keep every function in a separate section, this allows linker to discard unused ones
+	set(COMPILER_FLAGS "-D__STACK_SIZE=8192 -D__HEAP_SIZE=8192 -fno-builtin -fshort-enums -fdata-sections -ffunction-sections -Wall")
+
+	# let linker dump unused sections, use newlib in nano version, add standard libs at end so that their symbols get found
+	set(LINKER_FLAGS "-Wl,--gc-sections -specs=nano.specs -lc -lm -lnosys -lstdc++")
+
+	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${CPU_FLAGS} ${FPU_FLAGS} ${COMPILER_FLAGS}")
+	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CPU_FLAGS} ${FPU_FLAGS} ${COMPILER_FLAGS}")
+	#set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${CPU_FLAGS} ${FPU_FLAGS} ${LINKER_FLAGS}")
+	set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${LINKER_FLAGS}")
+endif()
+
+if(${BOARD} STREQUAL "emu")
+	# dependencies
+	find_package(Boost CONFIG)
+	find_package(GTest CONFIG)
+	find_package(glfw3 CONFIG)
+	find_package(libusb CONFIG)
+
+	# enable address sanitizer
+	if(CMAKE_BUILD_TYPE STREQUAL Debug)
+		message("Enable Address Sanitizer")
+		set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address")
+		set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=address")
+	endif()
+
+	# set rpath so that shared libraries are searched in ../lib
+	if(APPLE)
+		set(CMAKE_INSTALL_RPATH "@executable_path/../lib")
+	else()
+		set(CMAKE_INSTALL_RPATH "\$ORIGIN/../lib")
+	endif()
+	set(CMAKE_BUILD_WITH_INSTALL_RPATH ON)
+
+	# define emulator flag
+	add_definitions(-DEMU)
+endif()
+if(${FAMILY} STREQUAL "nrf52")
+	set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -L${CMAKE_SOURCE_DIR}/system/src/nrf52/system -T${CMAKE_SOURCE_DIR}/board/${BOARD}/link.ld")
+endif()
+
+
 # enable coroutines
+# enable concepts
 # suppress warning for own s and ms literal operators that are used instad of those in std::chrono
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
 	# clang
@@ -16,39 +80,9 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ")
 else()
 	# gcc
-	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fcoroutines -Wno-literal-suffix")
+	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fcoroutines -fconcepts -Wno-literal-suffix")
 endif()
 
-# enable address sanitizer
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address")
-set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=address")
-
-# set rpath so that shared libraries are searched in ../lib
-if (APPLE)
-	set(CMAKE_INSTALL_RPATH "@executable_path/../lib")
-else()
-	set(CMAKE_INSTALL_RPATH "\$ORIGIN/../lib")
-endif()
-set(CMAKE_BUILD_WITH_INSTALL_RPATH ON)
-
-
-# define emulator flag
-add_definitions(-DEMU)
-
-
-# install conan dependencies if not done yet (CLion: use https://github.com/conan-io/conan-clion-plugin)
-if(${PROJECT_SOURCE_DIR}/conanfile.py IS_NEWER_THAN ${CMAKE_BINARY_DIR}/conanbuildinfo.cmake)
-	set(PROFILE default)
-	if("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
-		set(PROFILE Debug)
-	endif()
-	message("install conan dependencies for profile ${PROFILE}")
-	execute_process(COMMAND conan install ${PROJECT_SOURCE_DIR}/conanfile.py --profile ${PROFILE} WORKING_DIRECTORY ${CMAKE_BINARY_DIR})
-endif()
-
-# conan dependencies
-include(${CMAKE_BINARY_DIR}/conanbuildinfo.cmake)
-conan_basic_setup(TARGETS KEEP_RPATHS)
 
 # set debug define
 add_definitions(-DDEBUG)
@@ -120,56 +154,68 @@ list(APPEND PROTOCOL ${TINYCRYPT})
 
 # system
 set(SYSTEM
-	system/src/emu/BusMaster.cpp
+	system/src/${FAMILY}/BusMaster.cpp
 	system/src/BusMaster.hpp
-	system/src/emu/Calendar.cpp
+	system/src/${FAMILY}/Calendar.cpp
 	system/src/Calendar.hpp
 	system/src/ClockTime.hpp
 	system/src/Debug.hpp
-	system/src/emu/Flash.cpp
+	system/src/${FAMILY}/Flash.cpp
 	system/src/Flash.hpp
-	system/src/emu/Gui.cpp
-	system/src/emu/Gui.hpp
-	system/src/emu/Input.cpp
-	system/src/emu/Input.hpp
+	system/src/${FAMILY}/Input.cpp
+	#system/src/${FAMILY}/Input.hpp
 	system/src/Input.hpp
-	system/src/emu/Loop.cpp
-	system/src/emu/Loop.hpp
+	system/src/${FAMILY}/Loop.cpp
+	system/src/${FAMILY}/Loop.hpp
 	system/src/Loop.hpp
-	system/src/emu/Network.cpp
-	system/src/Network.hpp
-	system/src/emu/Output.cpp
+	system/src/${FAMILY}/Output.cpp
 	system/src/Output.hpp
-	system/src/emu/Poti.cpp
+	system/src/${FAMILY}/Poti.cpp
 	system/src/Poti.hpp
-	system/src/emu/Radio.cpp
+	system/src/${FAMILY}/Radio.cpp
 	system/src/Radio.hpp
 	system/src/RadioDefs.hpp
-	system/src/emu/Random.cpp
+	system/src/${FAMILY}/Random.cpp
 	system/src/Random.hpp
-	system/src/emu/Spi.cpp
+	system/src/${FAMILY}/Spi.cpp
 	system/src/Spi.hpp
 	system/src/SystemTime.hpp
-	system/src/emu/Terminal.cpp
+	system/src/${FAMILY}/Terminal.cpp
 	system/src/Terminal.hpp
-	system/src/emu/Timer.cpp
+	system/src/${FAMILY}/Timer.cpp
 	system/src/Timer.hpp
-	system/src/emu/Usb.cpp
+	system/src/${FAMILY}/Usb.cpp
 	system/src/Usb.hpp
 	system/src/UsbDefs.hpp
-	font/tahoma_8pt.cpp # used by Gui
-	font/tahoma_8pt.hpp
 )
+if(${BOARD} STREQUAL "emu")
+	list(APPEND SYSTEM
+		system/src/${FAMILY}/Network.cpp
+		system/src/Network.hpp
+		system/src/emu/Gui.cpp
+		system/src/emu/Gui.hpp
+		font/tahoma_8pt.cpp # used by Gui
+		font/tahoma_8pt.hpp
+	)
+endif()
+if (${FAMILY} STREQUAL "nrf52")
+	list(APPEND SYSTEM
+		system/src/nrf52/system/gcc_startup_nrf52840.S
+		system/src/nrf52/system/system_nrf52840.c
+	)
+endif()
 source_group(system FILES ${SYSTEM})
 
-# OpenGL support
-set(GLAD
-	glad/glad.c
-	glad/glad.h
-	glad/khrplatform.h
-)
-source_group(glad FILES ${GLAD})
-list(APPEND SYSTEM ${GLAD})
+if(${BOARD} STREQUAL "emu")
+	# OpenGL support
+	set(GLAD
+		glad/glad.c
+		glad/glad.h
+		glad/khrplatform.h
+	)
+	source_group(glad FILES ${GLAD})
+	list(APPEND SYSTEM ${GLAD})
+endif()
 
 
 # base code for nodes (control and gateway)
@@ -215,6 +261,21 @@ set(CONTROL
 source_group(control FILES ${CONTROL})
 
 
+if(${BOARD} STREQUAL "emu")
+	set(LIBRARIES
+		Boost::headers
+		Boost::filesystem
+		libusb::libusb
+		glfw
+		gtest::gtest
+	)
+else()
+	set(LIBRARIES)
+endif()
+
+
+if(${BOARD} STREQUAL "emu")
+
 # room control executable
 add_executable(control
 	control/src/main.cpp
@@ -237,7 +298,7 @@ target_include_directories(control
 	util/src
 	glad
 )
-conan_target_link_libraries(control)
+target_link_libraries(control ${LIBRARIES})
 
 # install the room control
 install(TARGETS control
@@ -249,18 +310,6 @@ install(TARGETS control
 
 # tools
 # -----
-
-# terminal for tests that output text or binary data via usb
-add_executable(terminal
-	tools/src/terminal.cpp
-)
-target_include_directories(terminal
-	PRIVATE
-	util/src
-	system/src
-)
-conan_target_link_libraries(terminal)
-
 
 
 # radio packet sniffer that can write .pcap files and analyze packets (needs radioTest on device)
@@ -277,120 +326,140 @@ target_include_directories(sniffer
 	protocol/src
 	system/src
 )
-conan_target_link_libraries(sniffer)
+target_link_libraries(sniffer ${LIBRARIES})
 
 
-# test executables
-# ----------------
+# terminal for tests that output text or binary data via usb
+add_executable(terminal
+	tools/src/terminal.cpp
+)
+target_include_directories(terminal
+	PRIVATE
+	util/src
+	system/src
+)
+target_link_libraries(terminal ${LIBRARIES})
+
+endif()
+
+if(NOT ${BOARD} STREQUAL "emu")
+
+# terminal for tests that output text or binary data via usb
+add_executable(radioDevice
+	tools/src/radioDevice.cpp
+	tools/src/appConfig.hpp
+	board/${BOARD}/boardConfig.hpp
+	#${PROTOCOL}
+
+	#system/src/${FAMILY}/BusMaster.cpp
+	#system/src/BusMaster.hpp
+	#system/src/${FAMILY}/Calendar.cpp
+	#system/src/Calendar.hpp
+	system/src/ClockTime.hpp
+	system/src/Debug.hpp
+	#system/src/${FAMILY}/Flash.cpp
+	#system/src/Flash.hpp
+	#system/src/${FAMILY}/Input.cpp
+	#system/src/${FAMILY}/Input.hpp
+	#system/src/Input.hpp
+	system/src/${FAMILY}/Loop.cpp
+	system/src/${FAMILY}/Loop.hpp
+	system/src/Loop.hpp
+	system/src/${FAMILY}/Output.cpp
+	system/src/Output.hpp
+	#system/src/${FAMILY}/Poti.cpp
+	#system/src/Poti.hpp
+	system/src/${FAMILY}/Radio.cpp
+	system/src/Radio.hpp
+	system/src/RadioDefs.hpp
+	system/src/${FAMILY}/Random.cpp
+	system/src/Random.hpp
+	#system/src/${FAMILY}/Spi.cpp
+	#system/src/Spi.hpp
+	system/src/SystemTime.hpp
+	#system/src/${FAMILY}/Terminal.cpp
+	#system/src/Terminal.hpp
+	system/src/${FAMILY}/Timer.cpp
+	system/src/Timer.hpp
+	system/src/${FAMILY}/Usb.cpp
+	system/src/Usb.hpp
+	system/src/UsbDefs.hpp
+	system/src/nrf52/system/gcc_startup_nrf52840.S
+	system/src/nrf52/system/system_nrf52840.c
+
+	#${SYSTEM}
+	${UTIL}
+)
+target_include_directories(radioDevice
+	PRIVATE
+	font
+	board/${BOARD} # boardConfig.hpp
+	tools/src
+	system/src
+	protocol/src
+	util/src
+	glad
+)
+target_link_libraries(radioDevice ${LIBRARIES})
+if(NOT "${GENERATE_HEX}" STREQUAL "")
+	add_custom_command(TARGET radioDevice
+		POST_BUILD
+		COMMAND ${GENERATE_HEX} radioDevice radioDevice.hex
+	)
+endif()
+
+endif()
+
+
+
+# system test executables
+# -----------------------
+
+function(add_system_test_executable NAME)
+	add_executable(${NAME}
+		system/test/${NAME}.cpp
+		system/test/appConfig.hpp
+		board/${BOARD}/boardConfig.hpp
+		${PROTOCOL}
+		${SYSTEM}
+		${UTIL}
+	)
+	target_include_directories(${NAME}
+		PRIVATE
+		font
+		board/${BOARD} # boardConfig.hpp
+		system/test # appConfig.hpp
+		system/src
+		protocol/src
+		util/src
+		glad
+	)
+	target_link_libraries(${NAME} ${LIBRARIES})
+	if(NOT "${GENERATE_HEX}" STREQUAL "")
+		add_custom_command(TARGET ${NAME}
+			POST_BUILD
+			COMMAND ${GENERATE_HEX} ${NAME} ${NAME}.hex
+		)
+	endif()
+endfunction()
 
 # system/Timer test (command line tool)
-add_executable(TimerTest
-	system/test/TimerTest.cpp
-	system/test/appConfig.hpp
-	board/emu/boardConfig.hpp
-	${UTIL}
-	${PROTOCOL}
-	${SYSTEM}
-)
-target_include_directories(TimerTest
-	PRIVATE
-	font
-	board/emu # boardConfig.hpp
-	system/test # appConfig.hpp
-	system/src
-	protocol/src
-	util/src
-	glad
-)
-conan_target_link_libraries(TimerTest)
+add_system_test_executable(TimerTest)
+add_system_test_executable(PotiTest)
+add_system_test_executable(CalendarTest)
+add_system_test_executable(RandomTest)
+add_system_test_executable(RadioSendTest)
+add_system_test_executable(SpiTest)
+add_system_test_executable(BusMasterTest)
+add_system_test_executable(UsbTest)
+if(${BOARD} STREQUAL "emu")
+	add_system_test_executable(NetworkTest)
+endif()
 
 
-# system/Poti test (command line tool)
-add_executable(PotiTest
-	system/test/PotiTest.cpp
-	system/test/appConfig.hpp
-	board/emu/boardConfig.hpp
-	${UTIL}
-	${PROTOCOL}
-	${SYSTEM}
-)
-target_include_directories(PotiTest
-	PRIVATE
-	font
-	board/emu # boardConfig.hpp
-	system/test # appConfig.hpp
-	system/src
-	protocol/src
-	util/src
-	glad
-)
-conan_target_link_libraries(PotiTest)
+if(${BOARD} STREQUAL "emu")
 
-
-# system/Calendar test (command line tool)
-add_executable(CalendarTest
-	system/test/CalendarTest.cpp
-	system/test/appConfig.hpp
-	board/emu/boardConfig.hpp
-	${UTIL}
-	${PROTOCOL}
-	${SYSTEM}
-)
-target_include_directories(CalendarTest
-	PRIVATE
-	font
-	board/emu # boardConfig.hpp
-	system/test # appConfig.hpp
-	system/src
-	protocol/src
-	util/src
-	glad
-)
-conan_target_link_libraries(CalendarTest)
-
-
-# system/Radio test that sends radio packets (command line tool)
-add_executable(RadioSendTest
-	system/test/RadioSendTest.cpp
-	${UTIL}
-	${PROTOCOL}
-	${SYSTEM}
-)
-target_include_directories(RadioSendTest
-	PRIVATE
-	font
-	board/emu # boardConfig.hpp
-	system/test # appConfig.hpp
-	system/src
-	protocol/src
-	util/src
-	glad
-
-)
-conan_target_link_libraries(RadioSendTest)
-
-
-# system/network test that sends udp packets (command line tool)
-add_executable(NetworkTest
-	system/test/NetworkTest.cpp
-	${UTIL}
-	${PROTOCOL}
-	${SYSTEM}
-)
-target_include_directories(NetworkTest
-	PRIVATE
-	font
-	board/emu # boardConfig.hpp
-	system/test # appConfig.hpp
-	system/src
-	protocol/src
-	util/src
-	glad
-)
-conan_target_link_libraries(NetworkTest)
-
-
-# system/usb test host, host for usbTest on device (command line tool)
+# system/usb test host, host for UsbTest on device (command line tool)
 add_executable(UsbTestHost
 	system/test/UsbTestHost.cpp
 )
@@ -399,7 +468,8 @@ target_include_directories(UsbTestHost
 	system/src
 	util/src
 )
-conan_target_link_libraries(UsbTestHost)
+#conan_target_link_libraries(UsbTestHost)
+target_link_libraries(UsbTestHost ${LIBRARIES})
 
 
 # node/MqttSnClient test
@@ -407,10 +477,10 @@ add_executable(MqttSnClientTest
 	node/test/MqttSnClientTest.cpp
 	control/src/appConfig.hpp
 	board/emu/boardConfig.hpp
-	${UTIL}
+	${NODE}
 	${PROTOCOL}
 	${SYSTEM}
-	${NODE}
+	${UTIL}
 )
 target_include_directories(MqttSnClientTest
 	PRIVATE
@@ -424,7 +494,8 @@ target_include_directories(MqttSnClientTest
 	util/src
 	glad
 )
-conan_target_link_libraries(MqttSnClientTest)
+#conan_target_link_libraries(MqttSnClientTest)
+target_link_libraries(MqttSnClientTest ${LIBRARIES})
 
 
 # node/MqttSnBroker test
@@ -432,10 +503,10 @@ add_executable(MqttSnBrokerTest
 	node/test/MqttSnBrokerTest.cpp
 	control/src/appConfig.hpp
 	board/emu/boardConfig.hpp
-	${UTIL}
+	${NODE}
 	${PROTOCOL}
 	${SYSTEM}
-	${NODE}
+	${UTIL}
 )
 target_include_directories(MqttSnBrokerTest
 	PRIVATE
@@ -449,7 +520,8 @@ target_include_directories(MqttSnBrokerTest
 	util/src
 	glad
 )
-conan_target_link_libraries(MqttSnBrokerTest)
+#conan_target_link_libraries(MqttSnBrokerTest)
+target_link_libraries(MqttSnBrokerTest ${LIBRARIES})
 
 
 # test for BME680 air sensor
@@ -474,7 +546,8 @@ target_include_directories(BME680Test
 	util/src
 	glad
 )
-conan_target_link_libraries(BME680Test)
+#conan_target_link_libraries(BME680Test)
+target_link_libraries(BME680Test ${LIBRARIES})
 
 
 # test for SSD1309 display
@@ -498,7 +571,8 @@ target_include_directories(SSD1309Test
 	util/src
 	glad
 )
-conan_target_link_libraries(SSD1309Test)
+#conan_target_link_libraries(SSD1309Test)
+target_link_libraries(SSD1309Test ${LIBRARIES})
 
 
 # test for Storage class
@@ -525,7 +599,7 @@ target_include_directories(StorageTest
 	util/src
 	glad
 )
-conan_target_link_libraries(StorageTest)
+target_link_libraries(StorageTest ${LIBRARIES})
 
 
 # unit tests (GTest)
@@ -543,7 +617,7 @@ target_include_directories(utilTest
 	PRIVATE
 	util/src
 )
-conan_target_link_libraries(utilTest)
+target_link_libraries(utilTest ${LIBRARIES})
 add_test(NAME utilTest
 	COMMAND utilTest --gtest_output=xml:report.xml
 	#WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/../testdata
@@ -560,7 +634,7 @@ target_include_directories(protocolTest
 	protocol/src
 	util/src
 )
-conan_target_link_libraries(protocolTest)
+target_link_libraries(protocolTest ${LIBRARIES})
 add_test(NAME protocolTest
 	COMMAND protocolTest --gtest_output=xml:report.xml
 	#WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/../testdata
@@ -576,8 +650,9 @@ target_include_directories(systemTest
 	system/src
 	util/src
 )
-conan_target_link_libraries(systemTest)
+target_link_libraries(systemTest ${LIBRARIES})
 add_test(NAME systemTest
 	COMMAND systemTest --gtest_output=xml:report.xml
 	#WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/../testdata
 )
+endif()

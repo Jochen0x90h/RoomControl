@@ -1,6 +1,7 @@
 #pragma once
 
 #include <assert.hpp>
+#include <cstdint>
 
 
 /**

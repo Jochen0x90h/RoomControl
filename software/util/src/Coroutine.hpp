@@ -1,25 +1,21 @@
 #pragma once
 
 #include "assert.hpp"
+#include <utility>
 
 #ifdef __clang__
-
 #include <experimental/coroutine>
+namespace std {
+	using namespace std::experimental::coroutines_v1;
+}
+#else
+#include <coroutine>
+#endif
+
 
 //#define COROUTINE_DEBUG_PRINT
 #ifdef COROUTINE_DEBUG_PRINT
 #include <iostream>
-#endif
-
-
-namespace std {
-	using namespace std::experimental::coroutines_v1;
-}
-
-#else
-
-#include <coroutine>
-
 #endif
 
 
@@ -384,7 +380,7 @@ struct Awaitable {
 	Awaitable() = default;
 
 	template <typename ...Args>
-	Awaitable(Waitlist<T> &list, Args &&...args) : element(std::forward<Args>(args)...) {
+	Awaitable(Waitlist<T> &list, Args &&...args) noexcept : element(std::forward<Args>(args)...) {
 		this->element.add(list.head);
 		#ifdef COROUTINE_DEBUG_PRINT
 			std::cout << "Awaitable add" << std::endl;
@@ -585,21 +581,21 @@ struct AwaitableCoroutine {
  */
 struct Coroutine {
 	struct promise_type {
-		Coroutine get_return_object() {
+		Coroutine get_return_object() noexcept {
 			#ifdef COROUTINE_DEBUG_PRINT
 				std::cout << "Coroutine get_return_object" << std::endl;
 			#endif
 			return {std::coroutine_handle<promise_type>::from_promise(*this)};
 		}
-		std::suspend_never initial_suspend() {
+		std::suspend_never initial_suspend() noexcept {
 			#ifdef COROUTINE_DEBUG_PRINT
 				std::cout << "Coroutine initial_suspend" << std::endl;
 			#endif
 			return {};
 		}
 		std::suspend_never final_suspend() noexcept {return {};}
-		void unhandled_exception() {}
-		void return_void() {}
+		void unhandled_exception() noexcept {}
+		void return_void() noexcept {}
 	};
 	
 	std::coroutine_handle<> handle;

@@ -365,7 +365,7 @@ static void backoff() {
 
 	// set timer for backoff duration
 	NRF_TIMER0->TASKS_CAPTURE[3] = TRIGGER;
-	NRF_TIMER0->CC[3] += backoffDuration;
+	NRF_TIMER0->CC[3] = NRF_TIMER0->CC[3] + backoffDuration;
 	NRF_TIMER0->EVENTS_COMPARE[3] = 0;
 	NRF_TIMER0->INTENSET = N(TIMER_INTENSET_COMPARE3, Set); // -> COMPARE[3]
 }

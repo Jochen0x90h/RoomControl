@@ -1,4 +1,4 @@
-#include "../terminal.hpp"
+#include "../Terminal.hpp"
 
 
 namespace Terminal {

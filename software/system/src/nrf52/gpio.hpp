@@ -116,11 +116,12 @@ inline void addOutputConfig(int pin, Drive drive, Pull pull, bool enabled) {
 // enable output
 inline void enableOutput(int pin, bool enabled) {
 	auto port = pin >= PORT1 ? NRF_P1 : NRF_P0;
-	auto &config = port->PIN_CNF[pin & 31];
+	uint32_t config = port->PIN_CNF[pin & 31];
 	if (enabled)
 		config |= N(GPIO_PIN_CNF_DIR, Output);
 	else
 		config &= ~GPIO_PIN_CNF_DIR_Msk;
+	port->PIN_CNF[pin & 31] = config;
 }
 
 // set output value
