@@ -16,7 +16,6 @@ void waitForEvent() {
 }
 
 
-
 Handler nextHandler = waitForEvent;
 Handler addHandler(Handler handler) {
 	Handler h = nextHandler;

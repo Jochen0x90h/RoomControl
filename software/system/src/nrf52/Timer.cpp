@@ -31,8 +31,12 @@ Loop::Handler nextHandler = nullptr;
 void handle() {
 	if (NRF_RTC0->EVENTS_COMPARE[0]) {
 		do {
+			// clear pending interrupt flags at peripheral and NVIC
+			NRF_RTC0->EVENTS_COMPARE[0] = 0;
+			clearInterrupt(RTC0_IRQn);
+
 			auto time = Timer::next;
-			next.value += 0xfffff;
+			Timer::next.value += 0xfffff;
 
 			// resume all coroutines that where timeout occurred
 			Timer::waitlist.resumeAll([time](SystemTime timeout) {
@@ -48,10 +52,6 @@ void handle() {
 
 			// repeat until next timeout is in the future
 		} while (now() >= Timer::next);
-
-		// clear pending interrupt flags at peripheral and NVIC
-		NRF_RTC0->EVENTS_COMPARE[0] = 0;
-		clearInterrupt(RTC0_IRQn);
 	}
 
 	// call next handler in chain
@@ -67,7 +67,7 @@ void init() {
 	Timer::nextHandler = Loop::addHandler(handle);
 
 	// initialize RTC0
-	next.value = 0xfffff;
+	Timer::next.value = 0xfffff;
 	NRF_RTC0->CC[0] = next.value << 4;
 	NRF_RTC0->EVTENSET = N(RTC_EVTENSET_OVRFLW, Set);
 	NRF_RTC0->INTENSET = N(RTC_INTENSET_COMPARE0, Set);
@@ -93,9 +93,8 @@ Awaitable<SystemTime> sleep(SystemTime time) {
 	}
 
 	// check if timeout already elapsed
-	if (now() >= time) {
+	if (now() >= time)
 		NRF_RTC0->EVENTS_COMPARE[0] = GENERATED;
-	}
 
 	return {Timer::waitlist, time};
 }

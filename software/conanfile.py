@@ -50,11 +50,6 @@ class Project(ConanFile):
         "control/*",\
         "glad/*",\
         "tools/*"
-    #requires = [
-    #    "boost/1.78.0",
-    #    "glfw/3.3.6",
-    #    "libusb/1.0.24",
-    #    "gtest/1.11.0"]
 
     def requirements(self):
         if self.options.board == "emu":

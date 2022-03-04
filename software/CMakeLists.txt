@@ -15,31 +15,14 @@ set(CMAKE_CXX_STANDARD 20)
 
 separate_arguments(GENERATE_HEX)
 
+message("*** TYPE ${CMAKE_BUILD_TYPE}")
 message("*** BOARD ${BOARD}")
 message("*** FAMILY ${FAMILY}")
+message("*** MCU ${MCU}")
 message("*** CPU ${CPU}")
 message("*** FPU ${FPU}")
 
 # CLion: use conan plugin and add -DCMAKE_TOOLCHAIN_FILE=conan_toolchain.cmake to the CMake options
-
-if(${CPU} MATCHES "cortex")
-	# cpu flags
-	set(CPU_FLAGS "-mcpu=${CPU} -mthumb -mabi=aapcs")
-
-	# fpu flags
-	set(FPU_FLAGS "-mfpu=${FPU} -mfloat-abi=hard")
-
-	# keep every function in a separate section, this allows linker to discard unused ones
-	set(COMPILER_FLAGS "-D__STACK_SIZE=8192 -D__HEAP_SIZE=8192 -fno-builtin -fshort-enums -fdata-sections -ffunction-sections -Wall")
-
-	# let linker dump unused sections, use newlib in nano version, add standard libs at end so that their symbols get found
-	set(LINKER_FLAGS "-Wl,--gc-sections -specs=nano.specs -lc -lm -lnosys -lstdc++")
-
-	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${CPU_FLAGS} ${FPU_FLAGS} ${COMPILER_FLAGS}")
-	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CPU_FLAGS} ${FPU_FLAGS} ${COMPILER_FLAGS}")
-	#set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${CPU_FLAGS} ${FPU_FLAGS} ${LINKER_FLAGS}")
-	set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${LINKER_FLAGS}")
-endif()
 
 if(${BOARD} STREQUAL "emu")
 	# dependencies
@@ -66,8 +49,35 @@ if(${BOARD} STREQUAL "emu")
 	# define emulator flag
 	add_definitions(-DEMU)
 endif()
+if(${CPU} MATCHES "cortex")
+	# cpu flags
+	set(CPU_FLAGS "-mcpu=${CPU} -mthumb -mabi=aapcs")
+
+	# fpu flags
+	if(${FPU} STREQUAL "None")
+		set(FPU_FLAGS "-mfloat-abi=soft")
+	else()
+		set(FPU_FLAGS "-mfpu=${FPU} -mfloat-abi=hard")
+	endif()
+
+	# keep every function in a separate section, this allows linker to discard unused ones
+	set(C_FLAGS "-D__STACK_SIZE=8192 -D__HEAP_SIZE=8192 -fshort-enums -fno-exceptions -fdata-sections -ffunction-sections -Wall")
+	#-fno-builtin
+	set(CXX_FLAGS "${C_FLAGS} -fno-rtti -fno-use-cxa-atexit")
+
+	# let linker dump unused sections, use newlib in nano version, add standard libs at end so that their symbols get found
+	set(LINKER_FLAGS "-Wl,--gc-sections -specs=nano.specs -specs=nosys.specs")
+	#-lstdc++ -lc -lm -lnosys
+
+	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${CPU_FLAGS} ${FPU_FLAGS} ${C_FLAGS}")
+	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CPU_FLAGS} ${FPU_FLAGS} ${CXX_FLAGS}")
+	set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${LINKER_FLAGS}")
+endif()
 if(${FAMILY} STREQUAL "nrf52")
 	set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -L${CMAKE_SOURCE_DIR}/system/src/nrf52/system -T${CMAKE_SOURCE_DIR}/board/${BOARD}/link.ld")
+endif()
+if(${FAMILY} STREQUAL "stm32f0")
+	set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -T${CMAKE_SOURCE_DIR}/board/${BOARD}/link.ld")
 endif()
 
 
@@ -125,6 +135,7 @@ set(UTIL
 )
 source_group(util FILES ${UTIL})
 
+
 # protocol utilities
 set(PROTOCOL
 	protocol/src/bus.hpp
@@ -152,46 +163,50 @@ source_group(protocol FILES ${PROTOCOL})
 source_group(protocol/tinycrypt FILES ${TINYCRYPT})
 list(APPEND PROTOCOL ${TINYCRYPT})
 
-# system
+
+# system files and drivers
 set(SYSTEM
-	system/src/${FAMILY}/BusMaster.cpp
-	system/src/BusMaster.hpp
-	system/src/${FAMILY}/Calendar.cpp
-	system/src/Calendar.hpp
 	system/src/ClockTime.hpp
 	system/src/Debug.hpp
-	system/src/${FAMILY}/Flash.cpp
-	system/src/Flash.hpp
-	system/src/${FAMILY}/Input.cpp
-	#system/src/${FAMILY}/Input.hpp
-	system/src/Input.hpp
-	system/src/${FAMILY}/Loop.cpp
-	system/src/${FAMILY}/Loop.hpp
-	system/src/Loop.hpp
-	system/src/${FAMILY}/Output.cpp
-	system/src/Output.hpp
-	system/src/${FAMILY}/Poti.cpp
-	system/src/Poti.hpp
-	system/src/${FAMILY}/Radio.cpp
-	system/src/Radio.hpp
 	system/src/RadioDefs.hpp
-	system/src/${FAMILY}/Random.cpp
-	system/src/Random.hpp
-	system/src/${FAMILY}/Spi.cpp
-	system/src/Spi.hpp
 	system/src/SystemTime.hpp
-	system/src/${FAMILY}/Terminal.cpp
-	system/src/Terminal.hpp
-	system/src/${FAMILY}/Timer.cpp
-	system/src/Timer.hpp
-	system/src/${FAMILY}/Usb.cpp
-	system/src/Usb.hpp
 	system/src/UsbDefs.hpp
+)
+macro(addDrivers)
+	foreach(NAME ${ARGV})
+		if(EXISTS ${CMAKE_SOURCE_DIR}/system/src/${FAMILY}/${NAME}.cpp)
+			list(APPEND SYSTEM system/src/${NAME}.hpp)
+			if(EXISTS ${CMAKE_SOURCE_DIR}/system/src/${FAMILY}/${NAME}.hpp)
+				list(APPEND SYSTEM system/src/${FAMILY}/${NAME}.hpp)
+			endif()
+			list(APPEND SYSTEM system/src/${FAMILY}/${NAME}.cpp)
+			list(APPEND DRIVERS ${NAME})
+		endif()
+	endforeach()
+endmacro()
+addDrivers(
+	BusMaster
+	Calendar
+	ClockTime
+	Debug
+	Flash
+	Input
+	Loop
+	Network
+	Output
+	Poti
+	Radio
+	RadioDefs
+	Random
+	Spi
+	SystemTime
+	Terminal
+	Timer
+	Usb
+	UsbDefs
 )
 if(${BOARD} STREQUAL "emu")
 	list(APPEND SYSTEM
-		system/src/${FAMILY}/Network.cpp
-		system/src/Network.hpp
 		system/src/emu/Gui.cpp
 		system/src/emu/Gui.hpp
 		font/tahoma_8pt.cpp # used by Gui
@@ -204,10 +219,16 @@ if (${FAMILY} STREQUAL "nrf52")
 		system/src/nrf52/system/system_nrf52840.c
 	)
 endif()
+if (${FAMILY} STREQUAL "stm32f0")
+	list(APPEND SYSTEM
+		system/src/stm32f0/system/startup_stm32f042x6.s
+	)
+endif()
 source_group(system FILES ${SYSTEM})
 
+
+# OpenGL support for emulator
 if(${BOARD} STREQUAL "emu")
-	# OpenGL support
 	set(GLAD
 		glad/glad.c
 		glad/glad.h
@@ -235,6 +256,7 @@ set(NODE
 	node/src/Subscriber.hpp
 )
 source_group(node FILES ${NODE})
+
 
 # room control
 set(CONTROL
@@ -343,118 +365,85 @@ target_link_libraries(terminal ${LIBRARIES})
 endif()
 
 if(NOT ${BOARD} STREQUAL "emu")
+if(Radio IN_LIST DRIVERS)
 
-# terminal for tests that output text or binary data via usb
-add_executable(radioDevice
-	tools/src/radioDevice.cpp
-	tools/src/appConfig.hpp
-	board/${BOARD}/boardConfig.hpp
-	#${PROTOCOL}
-
-	#system/src/${FAMILY}/BusMaster.cpp
-	#system/src/BusMaster.hpp
-	#system/src/${FAMILY}/Calendar.cpp
-	#system/src/Calendar.hpp
-	system/src/ClockTime.hpp
-	system/src/Debug.hpp
-	#system/src/${FAMILY}/Flash.cpp
-	#system/src/Flash.hpp
-	#system/src/${FAMILY}/Input.cpp
-	#system/src/${FAMILY}/Input.hpp
-	#system/src/Input.hpp
-	system/src/${FAMILY}/Loop.cpp
-	system/src/${FAMILY}/Loop.hpp
-	system/src/Loop.hpp
-	system/src/${FAMILY}/Output.cpp
-	system/src/Output.hpp
-	#system/src/${FAMILY}/Poti.cpp
-	#system/src/Poti.hpp
-	system/src/${FAMILY}/Radio.cpp
-	system/src/Radio.hpp
-	system/src/RadioDefs.hpp
-	system/src/${FAMILY}/Random.cpp
-	system/src/Random.hpp
-	#system/src/${FAMILY}/Spi.cpp
-	#system/src/Spi.hpp
-	system/src/SystemTime.hpp
-	#system/src/${FAMILY}/Terminal.cpp
-	#system/src/Terminal.hpp
-	system/src/${FAMILY}/Timer.cpp
-	system/src/Timer.hpp
-	system/src/${FAMILY}/Usb.cpp
-	system/src/Usb.hpp
-	system/src/UsbDefs.hpp
-	system/src/nrf52/system/gcc_startup_nrf52840.S
-	system/src/nrf52/system/system_nrf52840.c
-
-	#${SYSTEM}
-	${UTIL}
-)
-target_include_directories(radioDevice
-	PRIVATE
-	font
-	board/${BOARD} # boardConfig.hpp
-	tools/src
-	system/src
-	protocol/src
-	util/src
-	glad
-)
-target_link_libraries(radioDevice ${LIBRARIES})
-if(NOT "${GENERATE_HEX}" STREQUAL "")
-	add_custom_command(TARGET radioDevice
-		POST_BUILD
-		COMMAND ${GENERATE_HEX} radioDevice radioDevice.hex
+	# radio device that is used by the sniffer and radio driver of the emulator
+	add_executable(radioDevice
+		tools/src/radioDevice.cpp
+		tools/src/appConfig.hpp
+		board/${BOARD}/boardConfig.hpp
+		#${PROTOCOL}
+		${SYSTEM}
+		${UTIL}
 	)
-endif()
+	target_include_directories(radioDevice
+		PRIVATE
+		font
+		board/${BOARD} # boardConfig.hpp
+		tools/src
+		system/src
+		protocol/src
+		util/src
+		glad
+	)
+	target_link_libraries(radioDevice ${LIBRARIES})
+	if(NOT "${GENERATE_HEX}" STREQUAL "")
+		add_custom_command(TARGET radioDevice
+			POST_BUILD
+			COMMAND ${GENERATE_HEX} radioDevice radioDevice.hex
+		)
+	endif()
 
 endif()
-
+endif()
 
 
 # system test executables
 # -----------------------
 
 function(add_system_test_executable NAME)
-	add_executable(${NAME}
-		system/test/${NAME}.cpp
-		system/test/appConfig.hpp
-		board/${BOARD}/boardConfig.hpp
-		${PROTOCOL}
-		${SYSTEM}
-		${UTIL}
-	)
-	target_include_directories(${NAME}
-		PRIVATE
-		font
-		board/${BOARD} # boardConfig.hpp
-		system/test # appConfig.hpp
-		system/src
-		protocol/src
-		util/src
-		glad
-	)
-	target_link_libraries(${NAME} ${LIBRARIES})
-	if(NOT "${GENERATE_HEX}" STREQUAL "")
-		add_custom_command(TARGET ${NAME}
-			POST_BUILD
-			COMMAND ${GENERATE_HEX} ${NAME} ${NAME}.hex
+	# check if driver is available
+	if(${NAME} IN_LIST DRIVERS)
+		#message("*** Add ${NAME}Test")
+		# add test executable
+		add_executable(${NAME}Test
+			system/test/${NAME}Test.cpp
+			system/test/appConfig.hpp
+			board/${BOARD}/boardConfig.hpp
+			${PROTOCOL}
+			${SYSTEM}
+			${UTIL}
 		)
+		target_include_directories(${NAME}Test
+			PRIVATE
+			font
+			board/${BOARD} # boardConfig.hpp
+			system/test # appConfig.hpp
+			system/src
+			protocol/src
+			util/src
+			glad
+		)
+		target_link_libraries(${NAME}Test ${LIBRARIES})
+		if(NOT "${GENERATE_HEX}" STREQUAL "")
+			add_custom_command(TARGET ${NAME}Test
+				POST_BUILD
+				COMMAND ${GENERATE_HEX} ${NAME}Test ${NAME}Test.hex
+			)
+		endif()
 	endif()
 endfunction()
 
-# system/Timer test (command line tool)
-add_system_test_executable(TimerTest)
-add_system_test_executable(PotiTest)
-add_system_test_executable(CalendarTest)
-add_system_test_executable(RandomTest)
-add_system_test_executable(RadioSendTest)
-add_system_test_executable(SpiTest)
-add_system_test_executable(BusMasterTest)
-add_system_test_executable(UsbTest)
-if(${BOARD} STREQUAL "emu")
-	add_system_test_executable(NetworkTest)
-endif()
+add_system_test_executable(BusMaster)
+add_system_test_executable(Calendar)
+add_system_test_executable(Input)
+add_system_test_executable(Network)
+add_system_test_executable(Poti)
+add_system_test_executable(Radio)
+add_system_test_executable(Random)
+add_system_test_executable(Spi)
+add_system_test_executable(Timer)
+add_system_test_executable(Usb)
 
 
 if(${BOARD} STREQUAL "emu")
@@ -468,7 +457,6 @@ target_include_directories(UsbTestHost
 	system/src
 	util/src
 )
-#conan_target_link_libraries(UsbTestHost)
 target_link_libraries(UsbTestHost ${LIBRARIES})
 
 
@@ -546,7 +534,6 @@ target_include_directories(BME680Test
 	util/src
 	glad
 )
-#conan_target_link_libraries(BME680Test)
 target_link_libraries(BME680Test ${LIBRARIES})
 
 
@@ -571,7 +558,6 @@ target_include_directories(SSD1309Test
 	util/src
 	glad
 )
-#conan_target_link_libraries(SSD1309Test)
 target_link_libraries(SSD1309Test ${LIBRARIES})
 
 

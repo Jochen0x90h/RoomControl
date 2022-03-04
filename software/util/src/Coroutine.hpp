@@ -721,7 +721,7 @@ template <typename T = WaitlistElement>
 using Barrier = Waitlist<T>;
 
 /**
- * Auto reset event
+ * Manual reset event
  */
 class Event {
 public:

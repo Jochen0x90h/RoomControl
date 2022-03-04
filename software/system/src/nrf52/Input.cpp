@@ -8,7 +8,7 @@
 
 /*
 	Dependencies:
-		timer
+		Timer
 
 	Config:
 		INPUTS: Array of InputConfig
@@ -32,7 +32,6 @@ SystemTime next;
 
 // states for debounce filter
 struct State {	
-	//TriggerMode triggerMode;
 	SystemTime timeout;
 	bool value;
 };
@@ -49,7 +48,7 @@ void handle() {
 		auto timeout = Timer::now() + 50ms;
 		for (int index = 0; index < TRIGGER_COUNT; ++index) {
 			if (NRF_GPIOTE->EVENTS_IN[index]) {
-				// clear pending interrupt flags at peripheral and NVIC
+				// clear pending interrupt flags at peripheral
 				NRF_GPIOTE->EVENTS_IN[index] = 0;
 
 				auto &state = states[index];			
@@ -64,15 +63,21 @@ void handle() {
 				}
 			}		
 		}
+
+		// clear pending interrupt at NVIC
 		clearInterrupt(GPIOTE_IRQn);
 	}
 	if (NRF_RTC0->EVENTS_COMPARE[1]) {
 		do {
+			// clear pending interrupt flags at peripheral and NVIC
+			NRF_RTC0->EVENTS_COMPARE[1] = 0;
+			clearInterrupt(RTC0_IRQn);
+
 			// get current time
 			auto time = Input::next;
 			
 			// add RTC interval (is 24 - 4 bit)
-			next.value += 0xfffff;
+			Input::next.value += 0xfffff;
 			
 			for (int index = 0; index < TRIGGER_COUNT; ++index) {
 				auto &input = INPUTS[index];
@@ -83,7 +88,7 @@ void handle() {
 					state.timeout.value += 0x7fffffff;
 
 					// read input value
-					bool value = readInput(input.pin) != input.invert;					
+					bool value = readInput(input.index) != input.invert;					
 					bool old = state.value;
 					state.value = value;
 
@@ -108,10 +113,6 @@ void handle() {
 		
 			// repeat until next timeout is in the future
 		} while (Timer::now() >= Input::next);
-
-		// clear pending interrupt flags at peripheral and NVIC
-		NRF_RTC0->EVENTS_COMPARE[1] = 0;
-		clearInterrupt(RTC0_IRQn);
 	}
 	
 	// call next handler in chain
@@ -119,11 +120,12 @@ void handle() {
 }
 
 void init() {
-	// configure as inputs
+	// configure inputs
 	for (auto &input : INPUTS) {
-		addInputConfig(input.pin, input.pull);
+		addInputConfig(input);
 	}
 
+	// configure triggers
 	if (TRIGGER_COUNT > 0) {
 		Timer::init();
 	
@@ -134,8 +136,6 @@ void init() {
 		// add to event loop handler chain
 		Input::nextHandler = Loop::addHandler(handle);
 	
-
-		// initialize triggers
 		for (int index = 0; index < TRIGGER_COUNT; ++index) {
 			auto &input = INPUTS[index];
 			auto &state = states[index];
@@ -145,10 +145,10 @@ void init() {
 			// configure event
 			NRF_GPIOTE->CONFIG[index] = N(GPIOTE_CONFIG_MODE, Event)
 				| N(GPIOTE_CONFIG_POLARITY, Toggle)
-				| V(GPIOTE_CONFIG_PSEL, input.pin);
+				| V(GPIOTE_CONFIG_PSEL, input.index);
 				
 			// read input value
-			state.value = readInput(input.pin) != input.invert;
+			state.value = readInput(input.index) != input.invert;
 	
 			// clear pending event
 			NRF_GPIOTE->EVENTS_IN[index] = 0;
@@ -157,9 +157,9 @@ void init() {
 		// enable GPIOTE interrupts
 		NRF_GPIOTE->INTENSET = ~(0xffffffff << TRIGGER_COUNT);
 
-		// use channel 1 of RTC0 (on top of timer::init())
+		// use channel 1 of RTC0 (on top of Timer::init())
 		Input::next.value = 0xfffff;
-		NRF_RTC0->CC[1] = next.value << 4;
+		NRF_RTC0->CC[1] = Input::next.value << 4;
 		NRF_RTC0->INTENSET = N(RTC_INTENSET_COMPARE1, Set);
 	}
 }
@@ -167,7 +167,7 @@ void init() {
 bool read(int index) {
 	if (uint32_t(index) < INPUT_COUNT) {
 		auto &input = INPUTS[index];
-		return readInput(input.pin) != input.invert;
+		return readInput(input.index) != input.invert;
 	}
 	return false;
 }
