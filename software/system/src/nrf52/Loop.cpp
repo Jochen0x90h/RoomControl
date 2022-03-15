@@ -16,7 +16,6 @@ void waitForEvent() {
 }
 
 
-
 Handler nextHandler = waitForEvent;
 Handler addHandler(Handler handler) {
 	Handler h = nextHandler;
@@ -40,7 +39,7 @@ void init() {
 	NRF_CLOCK->EVENTS_LFCLKSTARTED = 0;
 		
 	// disabled interrupts trigger an event and wake up the processor from WFE
-	SCB->SCR |= SCB_SCR_SEVONPEND_Msk;
+	SCB->SCR = SCB->SCR | SCB_SCR_SEVONPEND_Msk;
 }
 
 void run() {

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <assert.hpp>
+#include <cstdint>
 
 
 /**
@@ -153,7 +154,7 @@ public:
 	 * Copy construct from buffer with different data type (e.g. non-const to const)
 	 */
 	template <typename T2>
-	Array(Array<T2> array) : buffer(array.data()) {}
+	Array(Array<T2> array) : length(array.count()), buffer(array.data()) {}
 
 	/**
 	 * Default assignment operator

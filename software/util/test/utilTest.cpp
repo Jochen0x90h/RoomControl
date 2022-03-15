@@ -40,6 +40,7 @@ TEST(utilTest, ArrayN) {
 	
 	// construct const array from non-const array
 	Array<int const, 3> b3(b1);
+	EXPECT_EQ(b3.count(), 3);
 
 	// comparison
 	EXPECT_TRUE(b1 != b2);

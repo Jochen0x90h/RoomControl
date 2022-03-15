@@ -22,7 +22,7 @@ struct Subscriber : public LinkedListNode<Subscriber> {
 	};
 
 	// barrier where the subscriber waits for new messages (owned by subscriber)
-	using Barrier = Barrier<Parameters>;
+	using Barrier = ::Barrier<Parameters>;
 	Barrier *barrier = nullptr;
 };
 using SubscriberList = LinkedListNode<Subscriber>;

@@ -1,5 +1,6 @@
 import os, shutil
-from conans import ConanFile, CMake
+from conans import ConanFile
+from conan.tools.cmake import CMakeToolchain, CMakeDeps, CMake
 
 # linux:
 # install conan: pip3 install --user conan
@@ -28,10 +29,18 @@ class Project(ConanFile):
     license="CC-BY-NC-SA-4.0"
     settings = "os", "compiler", "build_type", "arch"
     options = {
-        "debug": [False, True]}
+        "cpu": "ANY",
+        "fpu": "ANY",
+        "mcu": "ANY",
+        "family": "ANY",
+        "board": "ANY"}
     default_options = {
-        "debug": False}
-    generators = "cmake"
+        "cpu": None,
+        "fpu": None,
+        "mcu": None,
+        "family": "emu",
+        "board": "emu"}
+    generators = "CMakeDeps"
     exports_sources =\
         "CMakeLists.txt",\
         "util/*",\
@@ -41,12 +50,13 @@ class Project(ConanFile):
         "control/*",\
         "glad/*",\
         "tools/*"
-    requires = [
-        "boost/1.77.0",
-        "glfw/3.3.6",
-        "libusb/1.0.24",
-        "gtest/1.11.0"]
 
+    def requirements(self):
+        if self.options.board == "emu":
+            self.requires("boost/1.78.0")
+            self.requires("glfw/3.3.6")
+            self.requires("libusb/1.0.24")
+            self.requires("gtest/1.11.0")
 
     keep_imports = True
     def imports(self):
@@ -54,14 +64,35 @@ class Project(ConanFile):
         self.copy("*", src="@bindirs", dst="bin")
         self.copy("*", src="@libdirs", dst="lib")
 
-    def configure_cmake(self):
-        cmake = CMake(self, build_type = "RelWithDebInfo" if self.options.debug and self.settings.build_type == "Release" else None)
-        cmake.configure()
-        return cmake
+    def generate(self):
+        # generate "conan_toolchain.cmake"
+        toolchain = CMakeToolchain(self)
+        toolchain.variables["CPU"] = self.options.cpu
+        toolchain.variables["FPU"] = self.options.fpu
+        toolchain.variables["MCU"] = self.options.mcu
+        toolchain.variables["FAMILY"] = self.options.family
+        toolchain.variables["BOARD"] = self.options.board
+
+
+        # https://github.com/conan-io/conan/blob/develop/conan/tools/cmake/toolchain.py
+        if self.options.board != "emu":
+            toolchain.blocks["generic_system"].values["cmake_system_name"] = "Generic"
+            toolchain.blocks["generic_system"].values["cmake_system_processor"] = self.settings.arch
+            toolchain.variables["CMAKE_TRY_COMPILE_TARGET_TYPE"] = "STATIC_LIBRARY"
+            toolchain.variables["CMAKE_FIND_ROOT_PATH_MODE_PROGRAM"] = "NEVER"
+            toolchain.variables["CMAKE_FIND_ROOT_PATH_MODE_LIBRARY"] = "ONLY"
+            toolchain.variables["CMAKE_FIND_ROOT_PATH_MODE_INCLUDE"] = "ONLY"
+            toolchain.variables["GENERATE_HEX"] = self.env.get("GENERATE_HEX", None)
+
+        # bake CC and CXX from profile into toolchain
+        toolchain.blocks["generic_system"].values["compiler"] = self.env.get("CC", None)
+        toolchain.blocks["generic_system"].values["compiler_cpp"] = self.env.get("CXX", None)
+
+        toolchain.generate()
 
     def build(self):
-        # build
-        cmake = self.configure_cmake()
+        cmake = CMake(self)
+        cmake.configure()
         cmake.build()
 
         # run unit tests if CONAN_RUN_TESTS environment variable is set
@@ -70,7 +101,7 @@ class Project(ConanFile):
 
     def package(self):
         # install from build directory into package directory
-        cmake = self.configure_cmake()
+        cmake = CMake(self)
         cmake.install()
 
         # also copy dependent libraries into the package

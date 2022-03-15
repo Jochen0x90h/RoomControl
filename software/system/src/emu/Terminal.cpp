@@ -5,7 +5,7 @@
 namespace Terminal {
 
 void write(int index, String const &str) {
-	::write(index, str.data, str.count());
+	int size = ::write(index, str.data, str.count());
 }
 
 Stream out{1};

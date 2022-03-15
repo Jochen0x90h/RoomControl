@@ -376,7 +376,7 @@ void handle(Gui &gui) {
 			// read data
 			uint8_t packet[128];
 			packet[0] = header.orig_len;
-			fread(packet + 1, 1, header.incl_len, Radio::pcapIn);
+			int size = fread(packet + 1, 1, header.incl_len, Radio::pcapIn);
 			
 			// let the radio receive the packet
 			Radio::receiveData(Radio::channel, packet);

@@ -3,11 +3,24 @@
 #include <Debug.hpp>
 
 
+uint8_t displayData[] = {
+	0x00, 0xff,
+	0x0f, 0x33, 0x55};
+
+
+Coroutine writeDisplay() {
+	while (true) {
+		co_await Spi::writeCommand(SPI_DISPLAY, 2, displayData);
+		co_await Spi::transfer(SPI_DISPLAY, 3, displayData + 2, 0, nullptr);
+	}
+}
+
+
 uint8_t spiData[] = {0x00, 0xff, 0x0f, 0x55};
 
 Coroutine transferSpi() {
 	while (true) {
-		co_await Spi::transfer(0, 4, spiData, 0, nullptr);
+		co_await Spi::transfer(SPI_AIR_SENSOR, 4, spiData, 0, nullptr);
 	}
 }
 
@@ -16,6 +29,7 @@ int main(void) {
 	Spi::init();
 	Output::init(); // for debug led's
 
+	writeDisplay();
 	transferSpi();
 	
 	Loop::run();

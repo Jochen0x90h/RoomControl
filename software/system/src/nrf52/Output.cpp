@@ -17,33 +17,30 @@
 namespace Output {
 
 void init() {
+	// configure outputs
 	for (auto &output : OUTPUTS) {
-		// set to initial value
-		setOutput(output.pin, output.initialValue != output.invert);
-		
-		// configure as output
-		addOutputConfig(output.pin, output.drive, output.pull, output.enabled);
+		addOutputConfig(output);
 	}
 }
 
 void enable(int index, bool enabled) {
 	if (uint32_t(index) < OUTPUT_COUNT) {
 		auto &output = OUTPUTS[index];
-		enableOutput(output.pin, enabled);	
+		enableOutput(output.index, enabled);	
 	}
 }
 
 void set(int index, bool value) {
 	if (uint32_t(index) < OUTPUT_COUNT) {
 		auto &output = OUTPUTS[index];
-		setOutput(output.pin, value != output.invert);
+		setOutput(output.index, value != output.invert);
 	}
 }
 
 void toggle(int index) {
 	if (uint32_t(index) < OUTPUT_COUNT) {
 		auto &output = OUTPUTS[index];
-		toggleOutput(output.pin);
+		toggleOutput(output.index);
 	}
 }
 

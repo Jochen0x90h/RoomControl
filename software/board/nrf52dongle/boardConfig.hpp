@@ -20,8 +20,8 @@ constexpr int FLASH_WRITE_ALIGN = 4;
 // ------
 
 constexpr InputConfig INPUTS[] = {
-	{PORT0 | 6, Pull::UP, true}, // poti button
-	{PORT0 | 18, Pull::UP, true}, // reset/user button
+	{P0(6), Pull::UP, true}, // poti button
+	{P0(18), Pull::UP, true}, // reset/user button
 };
 constexpr int INPUT_COUNT = array::count(INPUTS);
 constexpr int TRIGGER_COUNT = INPUT_COUNT;
@@ -31,9 +31,9 @@ constexpr int TRIGGER_COUNT = INPUT_COUNT;
 // -------
 
 constexpr OutputConfig OUTPUTS[] = {
-	{PORT0 | 23, Drive::S0S1, Pull::DISABLED, true, true, false}, // red led
-	{PORT0 | 22, Drive::S0S1, Pull::DISABLED, true, true, false}, // green led
-	{PORT0 | 24, Drive::S0S1, Pull::DISABLED, true, true, false}, // blue led
+	{P0(23), Drive::S0S1, Pull::DISABLED, true, true, false}, // red led
+	{P0(22), Drive::S0S1, Pull::DISABLED, true, true, false}, // green led
+	{P0(24), Drive::S0S1, Pull::DISABLED, true, true, false}, // blue led
 };
 constexpr int OUTPUT_COUNT = array::count(OUTPUTS);
 
@@ -41,8 +41,8 @@ constexpr int OUTPUT_COUNT = array::count(OUTPUTS);
 // poti
 // ----
 
-constexpr int POTI_A_PIN = PORT0 | 4;
-constexpr int POTI_B_PIN = PORT0 | 5;
+constexpr int POTI_A_PIN = P0(4);
+constexpr int POTI_B_PIN = P0(5);
 
 
 // spi
@@ -55,31 +55,31 @@ struct SpiConfig {
 };
 
 constexpr SpiConfig SPIS[] = {
-	{SpiConfig::MASTER, PORT0 | 2}, // air sensor
-	{SpiConfig::MASTER, PORT0 | 3}, // fe-ram
-	{SpiConfig::WRITE_ONLY_MASTER, PORT0 | 3} // display
+	{SpiConfig::MASTER, P0(2)}, // air sensor
+	{SpiConfig::MASTER, P0(3)}, // fe-ram
+	{SpiConfig::WRITE_ONLY_MASTER, P0(3)} // display
 };
 
-constexpr int SPI_SCK_PIN = PORT0 | 19;
-constexpr int SPI_MOSI_PIN = PORT0 | 20;
-constexpr int SPI_MISO_PIN = PORT0 | 21;
-constexpr int SPI_DC_PIN = PORT0 | 21; // data/command for write-only display, can be same as MISO
+constexpr int SPI_SCK_PIN = P0(19);
+constexpr int SPI_MOSI_PIN = P0(20);
+constexpr int SPI_MISO_PIN = P0(21);
+constexpr int SPI_DC_PIN = P0(21); // data/command for write-only display, can be same as MISO
 
 
 // audio
 // -----
 
 constexpr int I2S_MCK_PIN = DISCONNECTED;
-constexpr int I2S_SCK_PIN = PORT0 | 19;
-constexpr int I2S_LRCK_PIN = PORT0 | 20;
-constexpr int I2S_SDOUT_PIN = PORT0 | 21;
+constexpr int I2S_SCK_PIN = P0(19);
+constexpr int I2S_LRCK_PIN = P0(20);
+constexpr int I2S_SDOUT_PIN = P0(21);
 
 
 // bus
 // ---
 
-constexpr int BUS_TX_PIN = PORT0 | 3;
-constexpr int BUS_RX_PIN = PORT0 | 2;
+constexpr int BUS_TX_PIN = P0(3);
+constexpr int BUS_RX_PIN = P0(2);
 
 
 // radio
@@ -97,9 +97,9 @@ constexpr int RADIO_MAX_PAYLOAD_LENGTH = 125; // payload length without leading 
 //constexpr int MOTION_DETECTOR_COMPARATOR_INPUT = 0; // analog input
 //constexpr int MOTION_DETECTOR_COMPARATOR_PIN = PORT0 | 2;
 
-constexpr int MOTION_DETECTOR_PIR_PIN = PORT0 | 2;
+constexpr int MOTION_DETECTOR_PIR_PIN = P0(2);
 constexpr int MOTION_DETECTOR_PIR_INPUT = 0;
-constexpr int MOTION_DETECTOR_TRACKER_PIN = PORT0 | 3;
+constexpr int MOTION_DETECTOR_TRACKER_PIN = P0(3);
 constexpr int MOTION_DETECTOR_TRACKER_INPUT = 1;
 
 

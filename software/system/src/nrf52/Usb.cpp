@@ -189,7 +189,7 @@ void handle() {
 				ep.receiveLength -= receivedCount;
 				if (receivedCount == 64) {
 					// more to receive
-					NRF_USBD->EPOUT[index].PTR += 64;
+					NRF_USBD->EPOUT[index].PTR = NRF_USBD->EPOUT[index].PTR + 64;
 				} else {
 					// finished: calculate length of received data
 					int length = ep.maxReceiveLength - ep.receiveLength;
@@ -237,7 +237,7 @@ void handle() {
 					ep.sendLength = length;
 					if (sentCount == 64) {
 						// more to send: Start DMA transfer from memory to internal buffer
-						NRF_USBD->EPIN[index].PTR += 64;
+						NRF_USBD->EPIN[index].PTR = NRF_USBD->EPIN[index].PTR + 64;
 						NRF_USBD->EPIN[index].MAXCNT = min(length, 64);
 						NRF_USBD->TASKS_STARTEPIN[index] = TRIGGER;
 					} else {
