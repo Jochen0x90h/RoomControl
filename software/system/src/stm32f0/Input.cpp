@@ -14,18 +14,14 @@
 		INPUTS: Array of InputConfig
 		INPUT_COUNT: Number of inputs
 		TRIGGER_COUNT: Number of inputs that support trigger()
+			Note: Pin index must be unique for each trigger, i.e. PA(0) and PB(0) can't be triggers at the same time 
 		
 	Resources:
 		GPIO
-		NRF_GPIOTE
-			IN[0-7]
-		NRF_RTC0
-			CC[1]
+		TIM2
+			CCR2
 */
 namespace Input {
-
-static_assert(TRIGGER_COUNT <= INPUT_COUNT);
-static_assert(TRIGGER_COUNT <= 8);
 
 // next timeout of an input
 SystemTime next;
@@ -43,14 +39,14 @@ Waitlist<Parameters> waitlist;
 // event loop handler chain
 Loop::Handler nextHandler = nullptr;
 void handle() {	
-	if (isInterruptPending(GPIOTE_IRQn)) {
+	int PR = EXTI->PR;
+	if ((PR & 0xffff) != 0) {
 		// debounce timeout
 		auto timeout = Timer::now() + 50ms;
 		for (int index = 0; index < TRIGGER_COUNT; ++index) {
-			if (NRF_GPIOTE->EVENTS_IN[index]) {
-				// clear pending interrupt flags at peripheral
-				NRF_GPIOTE->EVENTS_IN[index] = 0;
-
+			auto &input = INPUTS[index];
+			int pos = input.pin & 15;
+			if (PR & (1 << pos)) {
 				auto &state = states[index];			
 
 				// set debounce timeout
@@ -59,25 +55,28 @@ void handle() {
 				// check if this is the next timeout
 				if (timeout < Input::next) {
 					Input::next = timeout;
-					NRF_RTC0->CC[1] = timeout.value << 4;
+					TIM2->CCR2 = timeout.value;
 				}
 			}		
 		}
 
-		// clear pending interrupt at NVIC
-		clearInterrupt(GPIOTE_IRQn);
+		// clear pending interrupt flags at peripheral and NVIC
+		EXTI->PR = 0xffff;
+		clearInterrupt(EXTI0_1_IRQn);
+		clearInterrupt(EXTI2_3_IRQn);
+		clearInterrupt(EXTI4_15_IRQn);
 	}
-	if (NRF_RTC0->EVENTS_COMPARE[1]) {
+	if (TIM2->SR & TIM_SR_CC2IF) {
 		do {
 			// clear pending interrupt flags at peripheral and NVIC
-			NRF_RTC0->EVENTS_COMPARE[1] = 0;
-			clearInterrupt(RTC0_IRQn);
+			TIM2->SR = ~TIM_SR_CC2IF;
+			clearInterrupt(TIM2_IRQn);
 
 			// get current time
 			auto time = Input::next;
 			
-			// add RTC interval (is 24 - 4 bit)
-			Input::next.value += 0xfffff;
+			// add RTC interval
+			Input::next.value += 0x7fffffff;
 			
 			for (int index = 0; index < TRIGGER_COUNT; ++index) {
 				auto &input = INPUTS[index];
@@ -88,7 +87,7 @@ void handle() {
 					state.timeout.value += 0x7fffffff;
 
 					// read input value
-					bool value = readInput(input.pin) != input.invert;
+					bool value = readInput(input.pin) != input.invert;					
 					bool old = state.value;
 					state.value = value;
 
@@ -109,7 +108,7 @@ void handle() {
 					Input::next = state.timeout;
 				}
 			}
-			NRF_RTC0->CC[1] = Input::next.value << 4;
+			TIM2->CCR2 = Input::next.value;
 		
 			// repeat until next timeout is in the future
 		} while (Timer::now() >= Input::next);
@@ -139,28 +138,28 @@ void init() {
 		for (int index = 0; index < TRIGGER_COUNT; ++index) {
 			auto &input = INPUTS[index];
 			auto &state = states[index];
+			int port = input.pin >> 4;
+			int pin = input.pin & 15;
 	
 			state.timeout.value = 0x7fffffff;
 
 			// configure event
-			NRF_GPIOTE->CONFIG[index] = N(GPIOTE_CONFIG_MODE, Event)
-				| N(GPIOTE_CONFIG_POLARITY, Toggle)
-				| V(GPIOTE_CONFIG_PSEL, input.pin);
+			// see chapter 11.2 in reference manual and A.6.2 for code example
+			auto &EXTICR = SYSCFG->EXTICR[pin >> 2];
+			EXTICR = EXTICR | (port << (pin & 3));
+			EXTI->FTSR = EXTI->FTSR | 1 << pin; // detect falling edge
+			EXTI->RTSR = EXTI->RTSR | 1 << pin; // detect rising edge
+			EXTI->PR = 1 << pin; // clear pending interrupt			
+			EXTI->IMR = EXTI->IMR | 1 << pin; // enable interrupt
 				
 			// read input value
 			state.value = readInput(input.pin) != input.invert;
-	
-			// clear pending event
-			NRF_GPIOTE->EVENTS_IN[index] = 0;
 		}
 	
-		// enable GPIOTE interrupts
-		NRF_GPIOTE->INTENSET = ~(0xffffffff << TRIGGER_COUNT);
-
-		// use channel 1 of RTC0 (on top of Timer::init())
-		Input::next.value = 0xfffff;
-		NRF_RTC0->CC[1] = Input::next.value << 4;
-		NRF_RTC0->INTENSET = N(RTC_INTENSET_COMPARE1, Set);
+		// use channel 2 of TIM2 (on top of Timer::init())
+		Input::next.value = 0x7fffffff;
+		TIM2->CCR2 = Input::next.value;
+		TIM2->DIER = TIM2->DIER | TIM_DIER_CC2IE; // interrupt enable
 	}
 }
 
