@@ -9,17 +9,16 @@
 	Dependencies:
 
 	Config:
-		CONTEXT_COUNT: Number SPI contexts (can share the same SPI peripheral)
+		SPI_CONTEXTS: Configuration of SPI channels (can share the same SPI peripheral)
 
 	Resources:
 		NRF_SPIM3
 		GPIO
-			SPI_CS_PINS
-			DISPLAY_CS_PIN
+			CS-pins
 */
 namespace Spi {
 
-constexpr int CONTEXT_COUNT = array::count(SPIS);
+constexpr int CONTEXT_COUNT = array::count(SPI_CONTEXTS);
 
 struct Context {
 	Waitlist<Parameters> waitlist;
@@ -32,11 +31,11 @@ int transferContext;
 
 static void startTransfer(int index, Parameters const &p) {
 	// set CS pin
-	NRF_SPIM3->PSEL.CSN = SPIS[index].csPin;
+	NRF_SPIM3->PSEL.CSN = SPI_CONTEXTS[index].csPin;
 
 	// check if MISO and DC are on the same pin
 	if (SPI_MISO_PIN == SPI_DC_PIN) {
-		if (SPIS[index].type == SpiConfig::MASTER) {
+		if (SPI_CONTEXTS[index].type == SpiConfig::MASTER) {
 			// read/write master: does not support DC 
 			NRF_SPIM3->PSELDCX = DISCONNECTED;
 			NRF_SPIM3->PSEL.MISO = SPI_MISO_PIN;
@@ -70,9 +69,6 @@ static void startTransfer(int index, Parameters const &p) {
 Loop::Handler nextHandler = nullptr;
 void handle() {
 	if (NRF_SPIM3->EVENTS_END) {
-		// clear pending interrupt flags at peripheral and NVIC
-		NRF_SPIM3->EVENTS_END = 0;
-		clearInterrupt(SPIM3_IRQn);
 		int index = Spi::transferContext;
 
 		// resume first waiting coroutine
@@ -80,6 +76,10 @@ void handle() {
 		context.waitlist.resumeFirst([](Parameters p) {
 			return true;
 		});
+
+		// clear pending interrupt flags at peripheral and NVIC
+		NRF_SPIM3->EVENTS_END = 0;
+		clearInterrupt(SPIM3_IRQn);
 
 		// disable SPI (after resume to prevent queue-jumping of new transfers)
 		NRF_SPIM3->ENABLE = 0;
@@ -122,7 +122,7 @@ void init() {
 		configureOutput(SPI_DC_PIN);
 	
 	// set cs pins to output and high to disable devices
-	for (auto &spi : SPIS) {
+	for (auto &spi : SPI_CONTEXTS) {
 		setOutput(spi.csPin, true);
 		configureOutput(spi.csPin);
 	}
@@ -144,7 +144,7 @@ void init() {
 		| N(SPIM_CONFIG_ORDER, MsbFirst);
 }
 
-Awaitable<Parameters> transfer(int index, int writeLength, uint8_t const *writeData, int readLength, uint8_t *readData)
+Awaitable<Parameters> transfer(int index, int writeLength, void const *writeData, int readLength, void *readData)
 {
 	assert(Spi::nextHandler != nullptr && uint(index) < SPI_CONTEXT_COUNT); // init() not called or index out of range
 	auto &context = Spi::contexts[index];

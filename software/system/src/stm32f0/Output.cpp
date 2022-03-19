@@ -19,14 +19,14 @@ namespace Output {
 void init() {
 	// configure outputs
 	for (auto &output : OUTPUTS) {
-		addOutputConfig(output);
+		addOutputConfig(output);		
 	}
 }
 
 void enable(int index, bool enabled) {
 	if (uint32_t(index) < OUTPUT_COUNT) {
 		auto &output = OUTPUTS[index];
-		enableOutput(output.pin, enabled);
+		setMode(output.pin, enabled ? Mode::OUTPUT : Mode::INPUT);
 	}
 }
 

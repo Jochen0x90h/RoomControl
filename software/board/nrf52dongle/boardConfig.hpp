@@ -31,9 +31,9 @@ constexpr int TRIGGER_COUNT = INPUT_COUNT;
 // -------
 
 constexpr OutputConfig OUTPUTS[] = {
-	{P0(23), Drive::S0S1, Pull::DISABLED, true, true, false}, // red led
-	{P0(22), Drive::S0S1, Pull::DISABLED, true, true, false}, // green led
-	{P0(24), Drive::S0S1, Pull::DISABLED, true, true, false}, // blue led
+	{P0(23), Pull::DISABLED, Drive::S0S1, true, true, false}, // red led
+	{P0(22), Pull::DISABLED, Drive::S0S1, true, true, false}, // green led
+	{P0(24), Pull::DISABLED, Drive::S0S1, true, true, false}, // blue led
 };
 constexpr int OUTPUT_COUNT = array::count(OUTPUTS);
 
@@ -50,11 +50,12 @@ constexpr int POTI_B_PIN = P0(5);
 
 struct SpiConfig {
 	enum Type {MASTER, WRITE_ONLY_MASTER};
+
 	Type type;
 	int csPin;
 };
 
-constexpr SpiConfig SPIS[] = {
+constexpr SpiConfig SPI_CONTEXTS[] = {
 	{SpiConfig::MASTER, P0(2)}, // air sensor
 	{SpiConfig::MASTER, P0(3)}, // fe-ram
 	{SpiConfig::WRITE_ONLY_MASTER, P0(3)} // display

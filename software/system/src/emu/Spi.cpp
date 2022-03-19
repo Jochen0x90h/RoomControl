@@ -104,16 +104,18 @@ void handle(Gui &gui) {
 			int writeLength = p.writeLength & 0x7fffffff;
 			bool command = p.writeLength < 0;
 			if (index == SPI_EMU_AIR_SENSOR) {
-				if (p.writeData[0] & 0x80) {
+				auto readData = (uint8_t *)p.readData;
+				auto writeData = (uint8_t const *)p.writeData;
+				if (writeData[0] & 0x80) {
 					// read
-					int addr = p.writeData[0] & 0x7f;
-					p.readData[0] = 0xff;
-					memcpy(p.readData + 1, &Spi::airSensor[addr], p.readLength - 1);
+					int addr = writeData[0] & 0x7f;
+					readData[0] = 0xff;
+					memcpy(readData + 1, &Spi::airSensor[addr], p.readLength - 1);
 				} else {
 					// write
 					for (int i = 0; i < writeLength - 1; i += 2) {
-						int addr = p.writeData[i] & 0x7f;
-						uint8_t data = p.writeData[i + 1];
+						int addr = writeData[i] & 0x7f;
+						uint8_t data = writeData[i + 1];
 						
 						if (addr == 0x73) {
 							// switch page
@@ -126,38 +128,42 @@ void handle(Gui &gui) {
 				}
 			} else if (index == SPI_EMU_FRAM) {
 				// emulate e.g. MR45V064B (16 bit address)
+				auto readData = (uint8_t *)p.readData;
+				auto writeData = (uint8_t const *)p.writeData;
 				
-				uint8_t op = p.writeData[0];
+				uint8_t op = writeData[0];
 				
 				switch (op) {
 				case FRAM_READ:
 					{
-						int addr = (p.writeData[1] << 8) | p.writeData[2];
+						int addr = (writeData[1] << 8) | writeData[2];
 						for (int i = 0; i < p.readLength - 3; ++i)
-							p.readData[3 + i] = Spi::framData[(addr + i) & (FRAM_SIZE - 1)];
+							readData[3 + i] = Spi::framData[(addr + i) & (FRAM_SIZE - 1)];
 					}
 					break;
 				case FRAM_WRITE:
 					{
-						int addr = (p.writeData[1] << 8) | p.writeData[2];
+						int addr = (writeData[1] << 8) | writeData[2];
 						for (int i = 0; i < writeLength - 3; ++i)
-							Spi::framData[(addr + i) & (FRAM_SIZE - 1)] = p.writeData[3 + i];
+							Spi::framData[(addr + i) & (FRAM_SIZE - 1)] = writeData[3 + i];
 
 						// write to file
 						Spi::framFile.seekg(addr);
-						Spi::framFile.write(reinterpret_cast<char const *>(p.writeData + 3), writeLength - 3);
+						Spi::framFile.write(reinterpret_cast<char const *>(writeData + 3), writeLength - 3);
 						Spi::framFile.flush();
 					}
 					break;
 				}
 			} else if (index == SPI_EMU_DISPLAY) {
+				auto readData = (uint8_t *)p.readData;
+				auto writeData = (uint8_t const *)p.writeData;
 				if (command) {
 					// execute commands
 					for (int i = 0; i < writeLength; ++i) {
-						switch (p.writeData[i]) {
+						switch (writeData[i]) {
 						// set contrast control
 						case 0x81:
-							Spi::displayContrast = p.writeData[++i];
+							Spi::displayContrast = writeData[++i];
 							break;
 						
 						// entire display on
@@ -189,7 +195,7 @@ void handle(Gui &gui) {
 					// set data
 					for (int i = 0; i < writeLength; ++i) {
 						// copy byte (8 pixels in a column)
-						Spi::display[page * DISPLAY_WIDTH + Spi::column] = p.writeData[i];
+						Spi::display[page * DISPLAY_WIDTH + Spi::column] = writeData[i];
 
 						// increment column index
 						Spi::column = (Spi::column == DISPLAY_WIDTH - 1) ? 0 : Spi::column + 1;
@@ -274,8 +280,7 @@ void init(char const *fileName) {
 	}
 }
 
-Awaitable<Parameters> transfer(int index, int writeLength, uint8_t const *writeData, int readLength, uint8_t *readData)
-{
+Awaitable<Parameters> transfer(int index, int writeLength, void const *writeData, int readLength, void *readData) {
 	assert(Spi::nextHandler != nullptr && uint(index) < SPI_CONTEXT_COUNT); // init() not called or index out of range
 	auto &context = Spi::contexts[index];
 
