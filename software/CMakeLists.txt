@@ -24,7 +24,7 @@ message("*** FPU ${FPU}")
 
 # CLion: use conan plugin and add -DCMAKE_TOOLCHAIN_FILE=conan_toolchain.cmake to the CMake options
 
-if(${BOARD} STREQUAL "emu")
+if(${FAMILY} STREQUAL "emu")
 	# dependencies
 	find_package(Boost CONFIG)
 	find_package(GTest CONFIG)
@@ -186,6 +186,7 @@ macro(addDrivers)
 endmacro()
 addDrivers(
 	BusMaster
+	BusNode
 	Calendar
 	ClockTime
 	Debug
@@ -205,7 +206,7 @@ addDrivers(
 	Usb
 	UsbDefs
 )
-if(${BOARD} STREQUAL "emu")
+if(${FAMILY} STREQUAL "emu")
 	list(APPEND SYSTEM
 		system/src/emu/Gui.cpp
 		system/src/emu/Gui.hpp
@@ -228,7 +229,7 @@ source_group(system FILES ${SYSTEM})
 
 
 # OpenGL support for emulator
-if(${BOARD} STREQUAL "emu")
+if(${FAMILY} STREQUAL "emu")
 	set(GLAD
 		glad/glad.c
 		glad/glad.h
@@ -283,7 +284,7 @@ set(CONTROL
 source_group(control FILES ${CONTROL})
 
 
-if(${BOARD} STREQUAL "emu")
+if(${FAMILY} STREQUAL "emu")
 	set(LIBRARIES
 		Boost::headers
 		Boost::filesystem
@@ -333,7 +334,6 @@ install(TARGETS control
 # tools
 # -----
 
-
 # radio packet sniffer that can write .pcap files and analyze packets (needs radioTest on device)
 add_executable(sniffer
 	tools/src/sniffer.cpp
@@ -362,7 +362,37 @@ target_include_directories(terminal
 )
 target_link_libraries(terminal ${LIBRARIES})
 
-endif()
+endif() # ${BOARD} STREQUAL "emu"
+
+
+if(${BOARD} STREQUAL "emuSwitch")
+
+# room switch executable
+add_executable(switch
+	switch/src/main.cpp
+	switch/src/appConfig.hpp
+	board/emuSwitch/boardConfig.hpp
+	${UTIL}
+	${PROTOCOL}
+	${SYSTEM}
+	${NODE}
+	${CONTROL}
+)
+target_include_directories(switch
+	PRIVATE
+	board/emuSwitch # boardConfig.hpp
+	font
+	control/src
+	node/src
+	system/src
+	protocol/src
+	util/src
+	glad
+)
+target_link_libraries(switch ${LIBRARIES})
+
+endif() # ${BOARD} STREQUAL "emuSwitch"
+
 
 if(NOT ${BOARD} STREQUAL "emu")
 if(Radio IN_LIST DRIVERS)
@@ -395,7 +425,7 @@ if(Radio IN_LIST DRIVERS)
 	endif()
 
 endif()
-endif()
+endif() # NOT ${BOARD} STREQUAL "emu"
 
 
 # system test executables

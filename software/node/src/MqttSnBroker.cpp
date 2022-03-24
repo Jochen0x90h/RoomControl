@@ -80,7 +80,7 @@ AwaitableCoroutine MqttSnBroker::connect(Network::Endpoint const &gatewayEndpoin
 			// check if we received a message
 			if (s == 1) {
 				// get topic id and return code
-				MessageReader r(length, message);
+				DataReader r(length, message);
 				auto returnCode = r.e8<mqttsn::ReturnCode>();
 
 				// check if connect request was accepted
@@ -180,7 +180,7 @@ AwaitableCoroutine MqttSnBroker::keepAlive() {
 
 								// check if we received a message
 								if (s == 1) {
-									MessageReader r(length, message);
+									DataReader r(length, message);
 
 									// get flags, topic id and return code
 									auto flags = r.e8<mqttsn::Flags>();
@@ -226,7 +226,7 @@ AwaitableCoroutine MqttSnBroker::keepAlive() {
 
 								// check if we received a message
 								if (s == 1) {
-									MessageReader r(length, message);
+									DataReader r(length, message);
 									r.skip(2); // msgId
 
 									// check if successful
@@ -264,7 +264,7 @@ AwaitableCoroutine MqttSnBroker::keepAlive() {
 								// check if we received a message
 								if (s == 1) {
 									// get topic id and return code
-									MessageReader r(length, message);
+									DataReader r(length, message);
 									auto topicId = r.u16B();
 									r.skip(2); // msgId
 									auto returnCode = r.e8<mqttsn::ReturnCode>();
@@ -336,7 +336,7 @@ int MqttSnBroker::obtainTopicIndex(String name) {
 	return this->topics.getOrPut(name, []() {return TopicInfo{BitField<MAX_CONNECTION_COUNT, 2>().set(), 0, false, 0, 0};});
 }
 
-static bool writeMessage(MessageWriter &w, MessageType srcType, void const *srcMessage) {
+static bool writeMessage(DataWriter &w, MessageType srcType, void const *srcMessage) {
 	Message const &src = *reinterpret_cast<Message const *>(srcMessage);
 	static char const onOff[] = {'0', '1', '!'};
 	static char const trigger[] = {'#', '!'};
@@ -402,7 +402,7 @@ static int find(String message, Array<MessageValue const> messageValues) {
 	return -1;
 }
 
-static bool readMessage(MessageType dstType, void *dstMessage, MessageReader r) {
+static bool readMessage(MessageType dstType, void *dstMessage, DataReader r) {
 	Message &dst = *reinterpret_cast<Message *>(dstMessage);
 	static MessageValue const onOff[] = {
 		{"0", 0}, {"1", 1}, {"!", 2},
@@ -582,7 +582,7 @@ Coroutine MqttSnBroker::publish() {
 
 							// check if we received a message
 							if (s == 1) {
-								MessageReader r(length, message);
+								DataReader r(length, message);
 
 								// get topic id and return code
 								topicId = r.u16B();
@@ -1102,7 +1102,7 @@ Coroutine MqttSnBroker::forward() {
 
 						// check if we received a message
 						if (s == 1) {
-							MessageReader r(length2, message2);
+							DataReader r(length2, message2);
 
 							// get topic id and return code
 							auto topicId2 = r.u16B();

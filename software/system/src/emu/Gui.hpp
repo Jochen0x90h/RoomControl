@@ -79,7 +79,7 @@ public:
 	 * @param power power on/off
 	 * @param percentage brightness percentage
 	 */
-	void light(bool power, int percentage = 100);
+	void light(bool on, int percentage = 100);
 
 	/**
 	 * Add a blind

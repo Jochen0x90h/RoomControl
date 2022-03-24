@@ -34,7 +34,7 @@ bool read(int index);
  * @param fallingFlags for each input a flag to indicate that we want to wait for a falling edge
  * @param index index of the input that actually triggered the event
  * @param value value of the input after the trigger occurred
- * @return use co_await on return value to wait for the trigger
+ * @return use co_await on return value to await a trigger
  */
 [[nodiscard]] Awaitable<Parameters> trigger(uint32_t risingFlags, uint32_t fallingFlags, int &index, bool &value);
 

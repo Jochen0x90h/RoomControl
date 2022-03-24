@@ -39,8 +39,8 @@ constexpr int OUTPUT_EXT_COUNT = 3;
 // ---
 
 constexpr int SPI_AIR_SENSOR = 0;
-constexpr int SPI_FRAM = 1;
-constexpr int SPI_DISPLAY = 2;
+constexpr int SPI_DISPLAY = 1;
+constexpr int SPI_FRAM = 2;
 
 
 // fram

@@ -815,7 +815,7 @@ Coroutine RadioInterface::sendBeacon() {
 	}
 }
 
-static bool handleZclClusterSpecific(MessageType dstType, void *dstMessage, EndpointInfo const &info, MessageReader r) {
+static bool handleZclClusterSpecific(MessageType dstType, void *dstMessage, EndpointInfo const &info, DataReader r) {
 	// get command
 	uint8_t command = r.u8();
 
@@ -2536,7 +2536,7 @@ Coroutine RadioInterface::publish() {
 
 								// check if response was received
 								if (r == 1) {
-									MessageReader r(length, packet);
+									DataReader r(length, packet);
 									uint8_t responseToCommand = r.u8();
 									uint8_t status = r.u8();
 

@@ -426,6 +426,10 @@ void handle(Gui &gui) {
 }
 
 void init() {
+	// check if already initialized
+	if (BusMaster::nextHandler != nullptr)
+		return;
+
 	// add to event loop handler chain
 	BusMaster::nextHandler = Loop::addHandler(handle);
 

@@ -238,7 +238,7 @@ Terminal::out << ("bus device " + hex(flash.deviceId) + ": assigned address " + 
 	}
 }
 
-bool readMessage(MessageType dstType, void *dstMessage, MessageReader r, EndpointType srcType) {
+bool readMessage(MessageType dstType, void *dstMessage, DataReader r, EndpointType srcType) {
 	Message &dst = *reinterpret_cast<Message *>(dstMessage);
 
 	switch (dstType) {
@@ -465,7 +465,7 @@ Coroutine BusInterface::awaitRequest() {
 	}
 }
 
-bool writeMessage(MessageWriter &w, EndpointType endpointType, MessageType srcType, void const *srcMessage)
+bool writeMessage(DataWriter &w, EndpointType endpointType, MessageType srcType, void const *srcMessage)
 {
 	Message const &src = *reinterpret_cast<Message const *>(srcMessage);
 

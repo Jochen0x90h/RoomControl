@@ -6,13 +6,13 @@
 #include <cstdint>
 
 
-struct MessageReader {
+struct DataReader {
 	uint8_t *current;
 	uint8_t *end;
 
-	MessageReader() = default;
-	MessageReader(uint8_t *message, uint8_t *end) : current(message), end(end) {}
-	MessageReader(int length, uint8_t *message) : current(message), end(message + length) {}
+	DataReader() = default;
+	DataReader(uint8_t *message, uint8_t *end) : current(message), end(end) {}
+	DataReader(int length, uint8_t *message) : current(message), end(message + length) {}
 
 	/**
 	 * Returns true if the read packet is still valid, i.e. did not read past the end
@@ -171,12 +171,12 @@ struct MessageReader {
 };
 
 
-class DecryptReader : public MessageReader {
+class DecryptReader : public DataReader {
 public:
 
 	DecryptReader() = default;
-	DecryptReader(uint8_t *message, uint8_t *end) : MessageReader(message, end) {}
-	DecryptReader(int length, uint8_t *message) : MessageReader(length, message) {}
+	DecryptReader(uint8_t *message, uint8_t *end) : DataReader(message, end) {}
+	DecryptReader(int length, uint8_t *message) : DataReader(length, message) {}
 
 	/**
 	 * Set start of header at current position ("string a" for encryption)

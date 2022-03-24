@@ -605,13 +605,13 @@ std::optional<float> Gui::temperatureSensor(int id) {
 	return {};
 }
 
-void Gui::light(bool power, int percentage) {
+void Gui::light(bool on, int percentage) {
 	float const w = 0.1f;
 	float const h = 0.1f;
 
 	// set state
 	this->lightRender->setState(this->x, this->y, w, h);
-	float value = ((power ? percentage : 0) + 30.0f) / 130.0f;
+	float value = ((on ? percentage : 0) + 30.0f) / 130.0f;
 	glUniform4f(this->lightColor, value, value, 0, 1.0f);
 	glUniform4f(this->lightInnerColor, value, value, 0, 1.0f);
 

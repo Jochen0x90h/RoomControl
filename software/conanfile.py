@@ -52,7 +52,7 @@ class Project(ConanFile):
         "tools/*"
 
     def requirements(self):
-        if self.options.board == "emu":
+        if self.options.family == "emu":
             self.requires("boost/1.78.0")
             self.requires("glfw/3.3.6")
             self.requires("libusb/1.0.24")
@@ -75,7 +75,7 @@ class Project(ConanFile):
 
 
         # https://github.com/conan-io/conan/blob/develop/conan/tools/cmake/toolchain.py
-        if self.options.board != "emu":
+        if self.options.family != "emu":
             toolchain.blocks["generic_system"].values["cmake_system_name"] = "Generic"
             toolchain.blocks["generic_system"].values["cmake_system_processor"] = self.settings.arch
             toolchain.variables["CMAKE_TRY_COMPILE_TARGET_TYPE"] = "STATIC_LIBRARY"

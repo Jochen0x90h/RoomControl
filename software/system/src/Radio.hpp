@@ -132,17 +132,19 @@ void setShortAddress(int index, uint16_t shortAddress);
 void setFlags(int index, ContextFlags flags);
 
 /**
- * Suspend execution using co_await until a packet was received
+ * Receive data using the radio receiver
  * @param index context index (number of contexts defined by RADIO_CONTEXT_COUNT in sysConfig.hpp)
  * @param packet received packet, first byte is length of the following payload + 2 for CRC (not included in data)
+ * @return use co_await on return value to await a packet
  */
 [[nodiscard]] Awaitable<ReceiveParameters> receive(int index, Packet &packet);
 
 /**
- * Suspend execution using co_await until send is finished
+ * Send data over the air using the radio transmitter
  * @param index context index (number of contexts defined by RADIO_CONTEXT_COUNT in sysConfig.hpp)
  * @param packet packet to send, first byte is length of the following payload + 2 for CRC (not included in data)
  * @param result number of backoffs needed when successful, zero on failure
+ * @return use co_await on return value to await completion
  */
 [[nodiscard]] Awaitable<SendParameters> send(int index, uint8_t *packet, uint8_t &result);
 

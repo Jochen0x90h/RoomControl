@@ -8,10 +8,10 @@
 #include <cstdint>
 
 
-struct MessageWriter {
+struct DataWriter {
 	uint8_t *current;
 
-	explicit MessageWriter(uint8_t *message) : current(message) {}
+	explicit DataWriter(uint8_t *message) : current(message) {}
 
 	void u8(uint8_t value) {
 		this->current[0] = value;
@@ -126,19 +126,19 @@ struct MessageWriter {
 	}
 
 	// fulfill stream concept
-	MessageWriter &operator <<(char ch) {u8(ch); return *this;}
-	MessageWriter &operator <<(String const &str) {string(str); return *this;}
+	DataWriter &operator <<(char ch) {u8(ch); return *this;}
+	DataWriter &operator <<(String const &str) {string(str); return *this;}
 
 };
 
 
-class EncryptWriter : public MessageWriter {
+class EncryptWriter : public DataWriter {
 public:
 
 	/**
 	 * Constructor. Sets start of header at current position ("string a" for encryption)
 	 */
-	explicit EncryptWriter(uint8_t *message) : MessageWriter(message) {}
+	explicit EncryptWriter(uint8_t *message) : DataWriter(message) {}
 
 	/**
 	 * Set start of header at current position ("string a" for encryption)

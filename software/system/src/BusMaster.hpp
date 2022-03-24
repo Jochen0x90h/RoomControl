@@ -2,7 +2,6 @@
 
 #include <cstdint>
 #include <Coroutine.hpp>
-#include <enum.hpp>
 
 
 /*
@@ -20,7 +19,7 @@
 	A device can be set to commissioning mode e.g. by pressing a button or button combination for a longer time or by
 	power cycle, depending on security requirements. All devices in commissioning mode will send an enumerate command,
 	simultaneuous sending is resolved by bus arbitration. Commissioning command by master overrides all enumerate
-	commands (by sending a zero) and causes the commissioned device to leave commissioning mode.
+	commands (by sending a leading zero) and causes the commissioned device to leave commissioning mode.
 	Enumerate: <encoded device id> <list of endpoints> <mic(default key)>
 	Commission: 0 <device id> <address> <key> <mic(default key)>
 
@@ -60,21 +59,23 @@ struct Parameters {
 };
 
 /**
- * Initialize the bus
+ * Initialize the bus master
  */
 void init();
 
 /**
- * Transfer data to/from bus device. Use co_await to await end of transfer
+ * Transfer data to/from bus node
  * @param writeLength length of data to write
  * @param writeData data to write, must be in ram, not in flash
  * @param readLength in: maximum length of data to read, out: actual length of data read
  * @param readData data to read
+ * @return use co_await on return value to await end of transfer
  */
 [[nodiscard]] Awaitable<Parameters> transfer(int writeLength, uint8_t const *writeData, int &readLength, uint8_t *readData);
 
 /**
- * Wait for a request by a device to transfer data
+ * Wait for a request by a bus node to transfer data
+ * @return use co_await on return value to await a request
  */
 [[nodiscard]] Awaitable<> request();
 
