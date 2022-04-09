@@ -13,9 +13,9 @@
 */
 
 // device descriptor
-static const Usb::DeviceDescriptor deviceDescriptor = {
-	.bLength = sizeof(Usb::DeviceDescriptor),
-	.bDescriptorType = Usb::DescriptorType::DEVICE,
+static const usb::DeviceDescriptor deviceDescriptor = {
+	.bLength = sizeof(usb::DeviceDescriptor),
+	.bDescriptorType = usb::DescriptorType::DEVICE,
 	.bcdUSB = 0x0200, // USB 2.0
 	.bDeviceClass = 0xff, // no class
 	.bDeviceSubClass = 0xff,
@@ -32,16 +32,16 @@ static const Usb::DeviceDescriptor deviceDescriptor = {
 
 // configuration descriptor
 struct UsbConfiguration {
-	struct Usb::ConfigDescriptor config;
-	struct Usb::InterfaceDescriptor interface;
-	struct Usb::EndpointDescriptor endpoints[4 * 2];
+	struct usb::ConfigDescriptor config;
+	struct usb::InterfaceDescriptor interface;
+	struct usb::EndpointDescriptor endpoints[4 * 2];
 } __attribute__((packed));
 
 static const UsbConfiguration configurationDescriptor = {
 	.config = {
-		.bLength = sizeof(Usb::ConfigDescriptor),
-		.bDescriptorType = Usb::DescriptorType::CONFIGURATION,
-		.wTotalLength = offsetof(UsbConfiguration, endpoints) + sizeof(Usb::EndpointDescriptor) * RADIO_CONTEXT_COUNT * 2,
+		.bLength = sizeof(usb::ConfigDescriptor),
+		.bDescriptorType = usb::DescriptorType::CONFIGURATION,
+		.wTotalLength = offsetof(UsbConfiguration, endpoints) + sizeof(usb::EndpointDescriptor) * RADIO_CONTEXT_COUNT * 2,
 		.bNumInterfaces = 1,
 		.bConfigurationValue = 1,
 		.iConfiguration = 0,
@@ -49,8 +49,8 @@ static const UsbConfiguration configurationDescriptor = {
 		.bMaxPower = 50 // 100 mA
 	},
 	.interface = {
-		.bLength = sizeof(Usb::InterfaceDescriptor),
-		.bDescriptorType = Usb::DescriptorType::INTERFACE,
+		.bLength = sizeof(usb::InterfaceDescriptor),
+		.bDescriptorType = usb::DescriptorType::INTERFACE,
 		.bInterfaceNumber = 0,
 		.bAlternateSetting = 0,
 		.bNumEndpoints = RADIO_CONTEXT_COUNT * 2,
@@ -62,73 +62,73 @@ static const UsbConfiguration configurationDescriptor = {
 	.endpoints = {
 		{
 			// endpoint 1 in (device to host, radio receive)
-			.bLength = sizeof(Usb::EndpointDescriptor),
-			.bDescriptorType = Usb::DescriptorType::ENDPOINT,
-			.bEndpointAddress = 1 | Usb::IN,
-			.bmAttributes = Usb::EndpointType::BULK,
+			.bLength = sizeof(usb::EndpointDescriptor),
+			.bDescriptorType = usb::DescriptorType::ENDPOINT,
+			.bEndpointAddress = 1 | usb::IN,
+			.bmAttributes = usb::EndpointType::BULK,
 			.wMaxPacketSize = 64,
 			.bInterval = 1 // polling interval
 		},
 		{
 			// endpoint 1 out (host to device, radio send)
-			.bLength = sizeof(Usb::EndpointDescriptor),
-			.bDescriptorType = Usb::DescriptorType::ENDPOINT,
-			.bEndpointAddress = 1 | Usb::OUT,
-			.bmAttributes = Usb::EndpointType::BULK,
+			.bLength = sizeof(usb::EndpointDescriptor),
+			.bDescriptorType = usb::DescriptorType::ENDPOINT,
+			.bEndpointAddress = 1 | usb::OUT,
+			.bmAttributes = usb::EndpointType::BULK,
 			.wMaxPacketSize = 64,
 			.bInterval = 1 // polling interval
 		},
 		{
 			// endpoint 2 in (device to host, radio receive)
-			.bLength = sizeof(Usb::EndpointDescriptor),
-			.bDescriptorType = Usb::DescriptorType::ENDPOINT,
-			.bEndpointAddress = 2 | Usb::IN,
-			.bmAttributes = Usb::EndpointType::BULK,
+			.bLength = sizeof(usb::EndpointDescriptor),
+			.bDescriptorType = usb::DescriptorType::ENDPOINT,
+			.bEndpointAddress = 2 | usb::IN,
+			.bmAttributes = usb::EndpointType::BULK,
 			.wMaxPacketSize = 64,
 			.bInterval = 1 // polling interval
 		},
 		{
 			// endpoint 2 out (host to device, radio send)
-			.bLength = sizeof(Usb::EndpointDescriptor),
-			.bDescriptorType = Usb::DescriptorType::ENDPOINT,
-			.bEndpointAddress = 2 | Usb::OUT,
-			.bmAttributes = Usb::EndpointType::BULK,
+			.bLength = sizeof(usb::EndpointDescriptor),
+			.bDescriptorType = usb::DescriptorType::ENDPOINT,
+			.bEndpointAddress = 2 | usb::OUT,
+			.bmAttributes = usb::EndpointType::BULK,
 			.wMaxPacketSize = 64,
 			.bInterval = 1 // polling interval
 		},
 		{
 			// endpoint 3 in (device to host, radio receive)
-			.bLength = sizeof(Usb::EndpointDescriptor),
-			.bDescriptorType = Usb::DescriptorType::ENDPOINT,
-			.bEndpointAddress = 3 | Usb::IN,
-			.bmAttributes = Usb::EndpointType::BULK,
+			.bLength = sizeof(usb::EndpointDescriptor),
+			.bDescriptorType = usb::DescriptorType::ENDPOINT,
+			.bEndpointAddress = 3 | usb::IN,
+			.bmAttributes = usb::EndpointType::BULK,
 			.wMaxPacketSize = 64,
 			.bInterval = 1 // polling interval
 		},
 		{
 			// endpoint 3 out (host to device, radio send)
-			.bLength = sizeof(Usb::EndpointDescriptor),
-			.bDescriptorType = Usb::DescriptorType::ENDPOINT,
-			.bEndpointAddress = 3 | Usb::OUT,
-			.bmAttributes = Usb::EndpointType::BULK,
+			.bLength = sizeof(usb::EndpointDescriptor),
+			.bDescriptorType = usb::DescriptorType::ENDPOINT,
+			.bEndpointAddress = 3 | usb::OUT,
+			.bmAttributes = usb::EndpointType::BULK,
 			.wMaxPacketSize = 64,
 			.bInterval = 1 // polling interval
 		},
 		{
 			// endpoint 4 in (device to host, radio receive)
-			.bLength = sizeof(Usb::EndpointDescriptor),
-			.bDescriptorType = Usb::DescriptorType::ENDPOINT,
-			.bEndpointAddress = 4 | Usb::IN,
-			.bmAttributes = Usb::EndpointType::BULK,
+			.bLength = sizeof(usb::EndpointDescriptor),
+			.bDescriptorType = usb::DescriptorType::ENDPOINT,
+			.bEndpointAddress = 4 | usb::IN,
+			.bmAttributes = usb::EndpointType::BULK,
 			.wMaxPacketSize = 64,
 			.bInterval = 1 // polling interval
 		},
 		{
 			// endpoint 4 out (host to device, radio send)
-			.bLength = sizeof(Usb::EndpointDescriptor),
-			.bDescriptorType = Usb::DescriptorType::ENDPOINT,
-			.bEndpointAddress = 4 | Usb::OUT,
-			.bmAttributes = Usb::EndpointType::BULK,
+			.bLength = sizeof(usb::EndpointDescriptor),
+			.bDescriptorType = usb::DescriptorType::ENDPOINT,
+			.bEndpointAddress = 4 | usb::OUT,
+			.bmAttributes = usb::EndpointType::BULK,
 			.wMaxPacketSize = 64,
 			.bInterval = 1 // polling interval
 		}		
@@ -201,11 +201,11 @@ int main(void) {
 	Loop::init();
 	Radio::init();
 	Usb::init(
-		[](Usb::DescriptorType descriptorType) {
+		[](usb::DescriptorType descriptorType) {
 			switch (descriptorType) {
-			case Usb::DescriptorType::DEVICE:
+			case usb::DescriptorType::DEVICE:
 				return Data(&deviceDescriptor);
-			case Usb::DescriptorType::CONFIGURATION:
+			case usb::DescriptorType::CONFIGURATION:
 				return Data(&configurationDescriptor);
 			default:
 				return Data();

@@ -11,9 +11,10 @@ uint8_t receive[10];
 
 Coroutine transferBus() {
 	while (true) {
-		int receiveLength = array::count(receive);
-		co_await BusMaster::transfer(array::count(send), send, receiveLength, receive);
-			
+		co_await BusMaster::send(array::count(send), send);
+
+		//int receiveLength = array::count(receive);
+
 		co_await Timer::sleep(1s);
 		
 		Debug::toggleBlueLed();

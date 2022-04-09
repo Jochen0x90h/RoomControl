@@ -4,7 +4,7 @@
 #include <cstdint>
 
 
-namespace Usb {
+namespace usb {
 
 // descriptor type
 enum class DescriptorType : uint8_t {
@@ -22,29 +22,32 @@ enum class EndpointType : uint8_t {
 	INTERRUPT = 3
 };
 
-// transfer direction
+// endpoint transfer direction
 enum Direction {
 	OUT = 0, // to device
 	IN = 0x80 // to host
 };
 
-// control request type
-enum RequestType {
-	REQUEST_TYPE_MASK = 0x3 << 5,
-	REQUEST_TYPE_STANDARD = 0x0 << 5,
-	REQUEST_TYPE_CLASS = 0x1 << 5,
-	REQUEST_TYPE_VENDOR = 0x2 << 5,
-};
+// control request
+enum class Request : uint8_t {
+	// request type
+	TYPE_MASK = 0x3 << 5,
+	TYPE_STANDARD = 0x0 << 5,
+	TYPE_CLASS = 0x1 << 5,
+	TYPE_VENDOR = 0x2 << 5,
 
-// control request recipient
-enum RequestRecipient {
+	// request recipient
 	RECIPIENT_MASK = 0x1f,
 	RECIPIENT_DEVICE = 0x00,
 	RECIPIENT_INTERFACE = 0x01,
 	RECIPIENT_ENDPOINT = 0x02,
-	RECIPIENT_OTHER = 0x03
-};
+	RECIPIENT_OTHER = 0x03,
 
+	// request direction
+	OUT = 0, // to device
+	IN = 0x80 // to host
+};
+FLAGS_ENUM(Request)
 
 // device descriptor
 struct DeviceDescriptor {
@@ -99,4 +102,4 @@ struct EndpointDescriptor {
 	uint8_t bInterval;
 } __attribute__((packed));
 
-} // namespace Usb
+} // namespace usb

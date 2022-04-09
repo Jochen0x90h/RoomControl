@@ -15,7 +15,7 @@ public:
 	
 	Gui();
 	
-	~Gui();
+	~Gui() = default;
 	
 	/**
 	 * Handle mouse input and prepare for rendering
@@ -23,15 +23,37 @@ public:
 	void doMouse(GLFWwindow *window);
 	
 	void next(float w, float h);
+
+	/**
+	 * Put the following gui elements onto a new line
+	 */
 	void newLine();
 
 	/**
-	 * Add an 8 bit grayscale display
-	 * @param width width of display
-	 * @param height height of display
-	 * @param bitmap content of display
+	 * Add a switch with on/off states
+	 * @return switch state or -1 when no event
 	 */
-	void display(int width, int height, uint8_t const *displayBuffer);
+	std::optional<int> onOff(uint32_t id);
+
+	/**
+	 * Add a button with pressed/release states
+	 * @return button state or -1 when no event
+	 */
+	std::optional<int> button(uint32_t id, float size = 1.0f);
+
+	/**
+	 * Add a rocker with up/down/release states
+	 * @return rocker state or -1 when no event
+	 */
+	std::optional<int> rocker(uint32_t id);
+
+	/**
+	 * Add a virtual double rocker switch
+	 * @param id widget id
+	 * @param combinations support pressing button combinations
+	 * @return button state or -1 when no event
+	 */
+	std::optional<int> doubleRocker(uint32_t id, bool combinations = false);
 
 	struct Poti {
 		std::optional<int> delta;
@@ -42,56 +64,45 @@ public:
 	 * Add a digital potentiometer with button
 	 * @param id id of poti, must stay the same during its lifetime
 	 */
-	Poti poti(int id);
-
-	/**
-	 * Add a button with pressed/release states
-	 * @return button state or -1 when no event
-	 */
-	int button(int id);
-
-	/**
-	 * Add a switch with on/off states
-	 * @return switch state or -1 when no event
-	 */
-	int switcher(int id);
-
-	/**
-	 * Add a rocker with up/down/release states
-	 * @return rocker state or -1 when no event
-	 */
-	int rocker(int id);
-
-	/**
-	 * Add a virtual double rocker switch
-	 * @return button state or -1 when no event
-	 */
-	int doubleRocker(int id);
+	Poti poti(uint32_t id);
 
 	/**
 	 * Add a virtual temperature sensor
 	 * @return temperature in celsius
 	 */
-	std::optional<float> temperatureSensor(int id);
+	std::optional<float> temperatureSensor(uint32_t id);
+
+    enum class LightState {
+        DISABLED = 0,
+        OFF,
+        ON
+    };
 
 	/**
 	 * Add a light
 	 * @param power power on/off
 	 * @param percentage brightness percentage
 	 */
-	void light(bool on, int percentage = 100);
+    void light(LightState state, int percentage = 100);
+	void light(bool on, int percentage = 100) {light(on ? LightState::ON : LightState::OFF, percentage);}
 
 	/**
 	 * Add a blind
 	 */
 	void blind(int percentage);
-	
-	//bool button(int id);
 
 	/**
 	 * Add an indicator led
 	 */
 	void led(int color);
+
+	/**
+	 * Add an 8 bit grayscale display
+	 * @param width width of display
+	 * @param height height of display
+	 * @param bitmap content of display
+	 */
+	void display(int width, int height, uint8_t const *displayBuffer);
 
 protected:
 
@@ -105,19 +116,18 @@ protected:
 		
 		void drawAndResetState();
 	
-		GLuint getUniformLocation(char const *name) {return glGetUniformLocation(this->program, name);}
+		GLint getUniformLocation(char const *name) const {return glGetUniformLocation(this->program, name);}
 	
 	protected:
 		
 		GLuint program;
-		GLuint matLocation;
+		GLint matLocation;
 		GLuint vertexArray;
 	};
 
 	// widget
 	class Widget {
 	public:
-	
 		virtual ~Widget();
 	
 		virtual void touch(bool first, float x, float y) = 0;
@@ -126,7 +136,7 @@ protected:
 		/**
 		 * check if widget contains the given point
 		 */
-		bool contains(float x, float y) {
+		bool contains(float x, float y) const {
 			return x >= this->x1 && x <= this->x2 && y >= this->y1 && y <= this->y2;
 		}
 		
@@ -141,73 +151,47 @@ protected:
 	};
 
 	template <typename W, typename... Args>
-	W *getWidget(int id, float width, float height, Args... args) {
-		Widget *widget = this->widgets[id];
-		W *w = static_cast<W*>(widget);
-		if (w == nullptr) {
-			w = new W(args...);
-			this->widgets[id] = w;
-		} else {
-			// check if correct type
-			assert(dynamic_cast<W*>(widget) != nullptr);
+	W *getWidget(uint32_t id, float width, float height, Args... args) {
+		W *widget = dynamic_cast<W*>(this->widgets[id]);
+		if (widget == nullptr) {
+			delete this->widgets[id];
+			widget = new W(args...);
+			this->widgets[id] = widget;
 		}
-		w->used = true;
-		w->x1 = this->x;
-		w->y1 = this->y;
-		w->x2 = this->x + width;
-		w->y2 = this->y + height;
+		widget->used = true;
+		widget->x1 = this->x;
+		widget->y1 = this->y;
+		widget->x2 = this->x + width;
+		widget->y2 = this->y + height;
 		
-		return w;
+		return widget;
 	}
 	
 
 	// vertex buffer containing a quad for drawing widgets
 	GLuint quad;
 	
-	std::map<int, Widget*> widgets;
+	std::map<uint32_t, Widget*> widgets;
 	Widget *activeWidget = nullptr;
 
-	// display
-	Render *displayRender;
-	
-	// display texture
-	GLuint displayTexture;
-	
-	
-	// poti
-	Render *potiRender;
-	
-	// uniform locations
-	GLint potiValue;
-	GLint potiState;
-	
-	class PotiWidget : public Widget {
+
+	// switch
+	class SwitchWidget : public Widget {
 	public:
-	
-		PotiWidget(int defaultValue = 0) : value(defaultValue), lastValue(0) {}
-		~PotiWidget() override;
-	
+		SwitchWidget() = default;
+		~SwitchWidget() override;
+
 		void touch(bool first, float x, float y) override;
 		void release() override;
 
-		// current (mechanical) increment count in 16:16 format
-		uint32_t value;
-		int16_t lastValue;
-		
-		// current button state
-		bool button = false;
-		bool lastButton = false;
-		
-		// last mouse position
-		float x;
-		float y;
+		int state = 0;
+		int lastState = 0;
 	};
-	
-	
+
 	// button
 	class ButtonWidget : public Widget {
 	public:
-	
+		ButtonWidget() = default;
 		~ButtonWidget() override;
 	
 		void touch(bool first, float x, float y) override;
@@ -217,25 +201,10 @@ protected:
 		int lastState = 0;
 	};
 
-
-	// switch
-	class SwitchWidget : public Widget {
-	public:
-	
-		~SwitchWidget() override;
-	
-		void touch(bool first, float x, float y) override;
-		void release() override;
-
-		int state = 0;
-		int lastState = 0;
-	};
-
-
 	// rocker
 	class RockerWidget : public Widget {
 	public:
-	
+		RockerWidget() = default;
 		~RockerWidget() override;
 	
 		void touch(bool first, float x, float y) override;
@@ -245,33 +214,67 @@ protected:
 		int lastState = 0;
 	};
 
+	// rocker render state (also used by onOff and button)
 	Render *rockerRender;
 
-	// uniform locations
-	GLint rockerUp;
-	GLint rockerDown;
+	// rocker uniform locations (also used by onOff and button)
+	GLint rockerA0;
+	GLint rockerA1;
 
 
 	// double rocker
 	class DoubleRockerWidget : public Widget {
 	public:
-	
+		DoubleRockerWidget(bool combinations) : combinations(combinations) {}
 		~DoubleRockerWidget() override;
 	
 		void touch(bool first, float x, float y) override;
 		void release() override;
 
+		bool combinations;
 		int state = 0;
 		int lastState = 0;
 	};
 
+	// double rocker render state
 	Render *doubleRockerRender;
 
-	// uniform locations
+	// double rocker uniform locations
 	GLint doubleRockerA0;
 	GLint doubleRockerA1;
 	GLint doubleRockerB0;
 	GLint doubleRockerB1;
+
+
+	// poti
+	class PotiWidget : public Widget {
+	public:
+
+		PotiWidget(int defaultValue = 0) : value(defaultValue), lastValue(0) {}
+		~PotiWidget() override;
+
+		void touch(bool first, float x, float y) override;
+		void release() override;
+
+		// current (mechanical) increment count in 16:16 format
+		uint32_t value;
+		int lastValue;
+
+		// current button state
+		bool button = false;
+		bool lastButton = false;
+
+		// last mouse position
+		float x = 0;
+		float y = 0;
+	};
+
+	// poti render state
+	Render *potiRender;
+
+	// poti uniform locations
+	GLint potiValue;
+	GLint potiState;
 
 
 	// temperature sensor
@@ -290,22 +293,29 @@ protected:
 	};*/
 
 
-	// light
+	// light render state
 	Render *lightRender;
 	
-	// uniform locations
+	// light uniform locations
 	GLint lightColor;
 	GLint lightInnerColor;
 
 
-	// blind
+	// blind render state
 	Render *blindRender;
 	
-	// uniform locations
+	// blind uniform locations
 	GLint blindValue;
 
-	
-	
+
+	// display render state
+	Render *displayRender;
+
+	// display texture
+	GLuint displayTexture;
+
+
+
 	// current "paint" location
 	float x;
 	float y;

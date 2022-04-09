@@ -76,7 +76,10 @@ SystemTime now() {
 }
 
 Awaitable<SystemTime> sleep(SystemTime time) {
-	// check if this time is the next to elapse
+	// check if Timer::init() was called
+    assert(Timer::timer != nullptr);
+
+    // check if this time is the next to elapse
 	if (time < Timer::next) {
 		Timer::next = time;
 		Timer::timer->expires_at(toChronoTime(time));

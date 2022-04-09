@@ -15,6 +15,7 @@ constexpr int FLASH_WRITE_ALIGN = 4;
 // ------
 
 constexpr int INPUT_COUNT = 2;
+#define INPUT_EMU_POTI_BUTTON 0
 
 
 // outputs

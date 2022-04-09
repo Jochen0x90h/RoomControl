@@ -2,7 +2,6 @@
 
 #include "tinycrypt/aes.h"
 #include "DataBuffer.hpp"
-#include "zb.hpp"
 
 
 using AesKey = tc_aes_key_sched_struct;

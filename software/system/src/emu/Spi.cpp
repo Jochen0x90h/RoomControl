@@ -1,10 +1,13 @@
 #include "../Spi.hpp"
 #include "Loop.hpp"
+#include "../Terminal.hpp"
 #include <Queue.hpp>
 #include <util.hpp>
 #include <appConfig.hpp>
 #include <boardConfig.hpp>
 #include <fstream>
+#include <iostream>
+//#include <StringOperators.hpp>
 
 
 namespace Spi {
@@ -106,14 +109,21 @@ static std::fstream framFile;
 
 #ifdef SPI_EMU_MPQ6526
 
-bool relayStates[4];
+Gui::LightState relayStates[4];
 
 void updateState(int index, uint16_t data, int i1, int i2) {
-	bool b1 = (((data >> i1) ^ (data >> (i1 + 1))) & 1) != 0;
-	bool b2 = (((data >> i2) ^ (data >> (i2 + 1))) & 1) != 0;
-	
-	if (b1 != b2)
-		Spi::relayStates[index] = b1;
+    int x = (data >> i1) & 3;
+    int y = (data >> i2) & 3;
+
+    // high and low side of a half-bridge should never be on at the same time
+    assert(x != 3 && y != 3);
+
+    if ((x == 1 && y == 2) || (x == 2 && y == 1)) {
+        auto state = x == 2 ? Gui::LightState::ON : Gui::LightState::OFF;
+        if (state != Spi::relayStates[index])
+            std::cout << index << (state == Gui::LightState::ON ? ":on " : ":off ");
+        Spi::relayStates[index] = state;
+    }
 }
 
 #endif
@@ -135,7 +145,7 @@ void handle(Gui &gui) {
 			int writeLength = p.writeLength & 0x7fffffff;
 			bool command = p.writeLength < 0;
 			
-			#ifdef SPI_EMU_BME680
+#ifdef SPI_EMU_BME680
 			if (index == SPI_EMU_BME680) {
 				auto writeData = (uint8_t const *)p.writeData;
 				auto readData = (uint8_t *)p.readData;
@@ -160,9 +170,9 @@ void handle(Gui &gui) {
 					}
 				}
 			}
-			#endif
+#endif
 			
-			#ifdef SPI_EMU_SSD1309
+#ifdef SPI_EMU_SSD1309
 			if (index == SPI_EMU_SSD1309) {
 				auto writeData = (uint8_t const *)p.writeData;
 				auto readData = (uint8_t *)p.readData;
@@ -213,9 +223,9 @@ void handle(Gui &gui) {
 					}
 				}
 			}
-			#endif
+#endif
 			
-			#ifdef SPI_EMU_MR45V064B
+#ifdef SPI_EMU_MR45V064B
 			if (index == SPI_EMU_MR45V064B) {
 				// emulate MR45V064B (16 bit address)
 				auto writeData = (uint8_t const *)p.writeData;
@@ -245,26 +255,28 @@ void handle(Gui &gui) {
 					break;
 				}
 			}
-			#endif
+#endif
 
-			#ifdef SPI_EMU_MPQ6526
+#ifdef SPI_EMU_MPQ6526
 			if (index == SPI_EMU_MPQ6526) {
 				// emulate MPQ6526 hex half bridge driver
 				uint16_t writeData = *(uint16_t const *)p.writeData;
 				uint16_t &readData = *(uint16_t *)p.readData;
 				
-				bool driverEnable = (readData & 0x8000) != 0;
+				bool driverEnable = (writeData & 0x8000) != 0;
 				if (driverEnable) {
-					updateState(0, writeData, 1, 3);
+                    std::cout << "relays ";
+                    updateState(0, writeData, 1, 3);
 					updateState(1, writeData, 5, 3);
 					updateState(2, writeData, 7, 9);
 					updateState(3, writeData, 11, 9);
+                    std::cout << std::endl;
 				}
 				
 				// todo
-				readData = 0;
+				//readData = 0;
 			}
-			#endif
+#endif
 			
 			return true;
 		});
@@ -275,25 +287,25 @@ void handle(Gui &gui) {
 	
 	//gui.newLine();
 
-	#ifdef SPI_EMU_BME680
+#ifdef SPI_EMU_BME680
 	{
 		// draw temperature sensor on gui using random id
 		auto temperature = gui.temperatureSensor(0xbc5032ad);
 		if (temperature)
 			setTemperature(*temperature);
 	}
-	#endif
+#endif
 	
-	#ifdef SPI_EMU_SSD1309
+#ifdef SPI_EMU_SSD1309
 	{
 		// draw display on gui
 		uint8_t displayBuffer[DISPLAY_WIDTH * DISPLAY_HEIGHT];
 		getDisplay(displayBuffer);
 		gui.display(DISPLAY_WIDTH, DISPLAY_HEIGHT, displayBuffer);
 	}
-	#endif
+#endif
 	
-	#ifdef SPI_EMU_MPQ6526
+#ifdef SPI_EMU_MPQ6526
 	{
 		// draw relay driver on gui				
 		gui.light(Spi::relayStates[0]);
@@ -301,7 +313,7 @@ void handle(Gui &gui) {
 		gui.light(Spi::relayStates[2]);
 		gui.light(Spi::relayStates[3]);
 	}
-	#endif
+#endif
 }
 
 void init(char const *fileName) {
@@ -314,7 +326,7 @@ void init(char const *fileName) {
 
 	
 	// air sensor
-	#ifdef SPI_EMU_BME680
+#ifdef SPI_EMU_BME680
 	{
 		Spi::airSensor = &Spi::airSensorRegisters[128];
 
@@ -328,10 +340,10 @@ void init(char const *fileName) {
 		// set temperature
 		setTemperature(20.0f);
 	}
-	#endif
+#endif
 
 	// fram
-	#ifdef SPI_EMU_MR45V064B
+#ifdef SPI_EMU_MR45V064B
 	{
 		// read fram contents from file and one excess byte to check size
 		Spi::framFile.open(fileName, std::fstream::in | std::fstream::binary);
@@ -354,11 +366,12 @@ void init(char const *fileName) {
 
 		}
 	}
-	#endif
+#endif
 }
 
 Awaitable<Parameters> transfer(int index, int writeLength, void const *writeData, int readLength, void *readData) {
-	assert(Spi::nextHandler != nullptr && uint(index) < SPI_CONTEXT_COUNT); // init() not called or index out of range
+    // check if Spi::init() was called and index in range
+    assert(Spi::nextHandler != nullptr && uint(index) < SPI_CONTEXT_COUNT);
 	auto &context = Spi::contexts[index];
 
 	return {context.waitlist, writeLength, writeData, readLength, readData};

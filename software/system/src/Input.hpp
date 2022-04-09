@@ -29,7 +29,8 @@ void init();
 bool read(int index);
 
 /**
- * Wait for a trigger event on multiple inputs. e.g. to wait on rising edge on input 0 and falling edge on input 2: co_await trigger(1 << 0, 1 << 2, index, value);
+ * Wait for a trigger event on multiple inputs. When a trigger occurs all coroutines are resumed that wait for it.
+ * For example to wait on rising edge on input 0 and falling edge on input 2: co_await trigger(1 << 0, 1 << 2, index, value);
  * @param risingFlags for each input a flag to indicate that we want to wait for a rising edge
  * @param fallingFlags for each input a flag to indicate that we want to wait for a falling edge
  * @param index index of the input that actually triggered the event

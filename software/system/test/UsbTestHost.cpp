@@ -1,4 +1,4 @@
-#include <UsbDefs.hpp>
+#include <usb.hpp>
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
@@ -143,7 +143,7 @@ enum class Request : uint8_t {
 // sent vendor specific control request to usb device
 int controlOut(libusb_device_handle *handle, Request request, uint16_t wValue, uint16_t wIndex) {
 	return libusb_control_transfer(handle,
-		Usb::OUT | Usb::REQUEST_TYPE_VENDOR | Usb::RECIPIENT_INTERFACE,
+		uint8_t(usb::Request::OUT | usb::Request::TYPE_VENDOR | usb::Request::RECIPIENT_INTERFACE),
 		uint8_t(request),
 		wValue,
 		wIndex,
@@ -245,7 +245,7 @@ int main(void) {
 			for (int i = 0; i < sendLength; ++i) {
 				data[i] = sendLength + i;
 			}
-			ret = libusb_bulk_transfer(handle, 1 | Usb::OUT, data, sendLength, &transferred, 10000);
+			ret = libusb_bulk_transfer(handle, 1 | usb::OUT, data, sendLength, &transferred, 10000);
 			if (ret == LIBUSB_ERROR_TIMEOUT)
 				printf("send timeout!\n");
 			printStatus("sent", ret == 0 && transferred == sendLength);
@@ -253,10 +253,10 @@ int main(void) {
 			
 			// send zero length packet to indicate that transfer is complete if length is multiple of 64
 			if (sendLength > 0 && (sendLength & 63) == 0)
-				libusb_bulk_transfer(handle, 1 | Usb::OUT, data, 0, &transferred, 1000);
+				libusb_bulk_transfer(handle, 1 | usb::OUT, data, 0, &transferred, 1000);
 
 			// receive from device (we get back the same data that we sent)
-			ret = libusb_bulk_transfer(handle, 1 | Usb::IN, data, 128, &transferred, 10000);
+			ret = libusb_bulk_transfer(handle, 1 | usb::IN, data, 128, &transferred, 10000);
 			if (ret == LIBUSB_ERROR_TIMEOUT)
 				printf("receive timeout!\n");
 			printStatus("received", ret == 0 && transferred == sendLength);

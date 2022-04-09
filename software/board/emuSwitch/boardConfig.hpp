@@ -15,7 +15,7 @@ constexpr int FLASH_WRITE_ALIGN = 4;
 // ------
 
 constexpr int INPUT_COUNT = 4;
-#define INPUT_DOUBLE_ROCKER
+#define INPUT_EMU_DOUBLE_ROCKER
 
 
 // outputs
@@ -33,6 +33,7 @@ constexpr int OUTPUT_COUNT = array::count(OUTPUTS);
 
 constexpr int SPI_CONTEXT_COUNT = 1;
 #define SPI_EMU_MPQ6526 0
+constexpr int MPQ6526_MAPPING[] = {0, 1, 2, 3, 4, 5};
 
 
 // radio

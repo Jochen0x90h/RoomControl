@@ -40,52 +40,6 @@ public:
 
 	void addSubscriber(DeviceId deviceId, uint8_t endpointIndex, Subscriber &subscriber) override;
 
-	class MessageReader : public DecryptReader {
-	public:
-		MessageReader(int length, uint8_t *data) : DecryptReader(length, data) {}
-
-		/**
-		 * Read a value from 0 to 8 from bus arbitration, i.e. multiple devices can write at the same time and the
-		 * lowest value survives
-		 */
-		uint8_t arbiter();
-	};
-
-	class MessageWriter : public EncryptWriter {
-	public:
-		template <int N>
-		MessageWriter(uint8_t (&message)[N]) : EncryptWriter(message), begin(message)
-#ifdef EMU
-			, end(message + N)
-#endif
-		{}
-
-		MessageWriter(int length, uint8_t *message) : EncryptWriter(message), begin(message)
-#ifdef EMU
-			, end(message + length)
-#endif
-		{}
-
-		/**
-		 * Write a value from 0 to 8 for bus arbitration, i.e. multiple devices can write at the same time and the
-		 * lowest value survives
-		 */
-		void arbiter(uint8_t value);
-
-		int getLength() {
-			int length = this->current - this->begin;
-#ifdef EMU
-			assert(this->current <= this->end);
-#endif
-			return length;
-		}
-
-		uint8_t *begin;
-#ifdef EMU
-		uint8_t *end;
-#endif
-	};
-
 private:
 
 	// counters
@@ -94,11 +48,6 @@ private:
 	// configuration
 	DataBuffer<16> const *key;
 	AesKey const *aesKey;
-
-
-	AwaitableCoroutine commission();
-
-	AwaitableCoroutine commissionCoroutine;
 
 
 	// devices
@@ -146,13 +95,14 @@ public:
 	Storage::Array<Device> devices;
 
 private:
-	bool receive(MessageReader &r);
+	// receive from bus nodes
+	Coroutine receive();
 
-	// wait for a request by a device
-	Coroutine awaitRequest();
-
-	// publish messages to devices
+	// publish messages to bus nodes
 	Coroutine publish();
+
+	// true for commissioning mode, joining of new devices is allowed
+	bool commissioning = false;
 
 	Event publishEvent;
 };

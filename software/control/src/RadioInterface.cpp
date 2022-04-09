@@ -22,17 +22,7 @@ constexpr SystemDuration timeout = 500ms;
 // number of retries when a send fails
 constexpr int MAX_RETRY = 2;
 
-static uint8_t const za09LinkKey[] = {0x5A, 0x69, 0x67, 0x42, 0x65, 0x65, 0x41, 0x6C, 0x6C, 0x69, 0x61, 0x6E, 0x63, 0x65, 0x30, 0x39};
-
-static AesKey const za09LinkAesKey = {{0x5a696742, 0x6565416c, 0x6c69616e, 0x63653039, 0x166d75b9, 0x730834d5, 0x1f6155bb, 0x7c046582, 0xe62066a9, 0x9528527c, 0x8a4907c7, 0xf64d6245, 0x018a08eb, 0x94a25a97, 0x1eeb5d50, 0xe8a63f15, 0x2dff5170, 0xb95d0be7, 0xa7b656b7, 0x4f1069a2, 0xf7066bf4, 0x4e5b6013, 0xe9ed36a4, 0xa6fd5f06, 0x83c904d0, 0xcd9264c3, 0x247f5267, 0x82820d61, 0xd01eebc3, 0x1d8c8f00, 0x39f3dd67, 0xbb71d006, 0xf36e8429, 0xeee20b29, 0xd711d64e, 0x6c600648, 0x3801d679, 0xd6e3dd50, 0x01f20b1e, 0x6d920d56, 0x41d66745, 0x9735ba15, 0x96c7b10b, 0xfb55bc5d}};
-
-//static AesKey const hashedTrustCenterLinkAesKey = {{0x4bab0f17, 0x3e1434a2, 0xd572e1c1, 0xef478782, 0xeabc1cc8, 0xd4a8286a, 0x01dac9ab, 0xee9d4e29, 0xb693b9e0, 0x623b918a, 0x63e15821, 0x8d7c1608, 0xa2d489bd, 0xc0ef1837, 0xa30e4016, 0x2e72561e, 0xea65fb8c, 0x2a8ae3bb, 0x8984a3ad, 0xa7f6f5b3, 0xb88396d0, 0x9209756b, 0x1b8dd6c6, 0xbc7b2375, 0xb9a50bb5, 0x2bac7ede, 0x3021a818, 0x8c5a8b6d, 0x479837d1, 0x6c34490f, 0x5c15e117, 0xd04f6a7a, 0x439aeda1, 0x2faea4ae, 0x73bb45b9, 0xa3f42fc3, 0xe78fc3ab, 0xc8216705, 0xbb9a22bc, 0x186e0d7f, 0x4e581106, 0x86797603, 0x3de354bf, 0x258d59c0}};
-
-static AesKey const za09KeyTransportAesKey = {{0x4bab0f17, 0x3e1434a2, 0xd572e1c1, 0xef478782, 0xeabc1cc8, 0xd4a8286a, 0x01dac9ab, 0xee9d4e29, 0xb693b9e0, 0x623b918a, 0x63e15821, 0x8d7c1608, 0xa2d489bd, 0xc0ef1837, 0xa30e4016, 0x2e72561e, 0xea65fb8c, 0x2a8ae3bb, 0x8984a3ad, 0xa7f6f5b3, 0xb88396d0, 0x9209756b, 0x1b8dd6c6, 0xbc7b2375, 0xb9a50bb5, 0x2bac7ede, 0x3021a818, 0x8c5a8b6d, 0x479837d1, 0x6c34490f, 0x5c15e117, 0xd04f6a7a, 0x439aeda1, 0x2faea4ae, 0x73bb45b9, 0xa3f42fc3, 0xe78fc3ab, 0xc8216705, 0xbb9a22bc, 0x186e0d7f, 0x4e581106, 0x86797603, 0x3de354bf, 0x258d59c0}};
-static AesKey const za09KeyLoadAesKey = {{0xc5a47035, 0xc332ccbf, 0x251571d8, 0xbaded188, 0xd99ab4c1, 0x1aa8787e, 0x3fbd09a6, 0x8563d82e, 0x20fb8556, 0x3a53fd28, 0x05eef48e, 0x808d2ca0, 0x798a659b, 0x43d998b3, 0x46376c3d, 0xc6ba409d, 0x85833b2f, 0xc65aa39c, 0x806dcfa1, 0x46d78f3c, 0x9bf0d075, 0x5daa73e9, 0xddc7bc48, 0x9b103374, 0x71334261, 0x2c993188, 0xf15e8dc0, 0x6a4ebeb4, 0x1e9dcf63, 0x3204feeb, 0xc35a732b, 0xa914cd9f, 0x642014b0, 0x5624ea5b, 0x957e9970, 0x3c6a54ef, 0x7d00cb5b, 0x2b242100, 0xbe5ab870, 0x8230ec9f, 0x4fce1048, 0x64ea3148, 0xdab08938, 0x588065a7}};
-
 constexpr zb::SecurityControl securityLevel = zb::SecurityControl::LEVEL_ENC_MIC32; // encrypted + 32 bit message integrity code
-
 
 
 // role of a cluster
@@ -667,13 +657,13 @@ void RadioInterface::writeFooter(PacketWriter &w, Radio::SendFlags sendFlags) {
 		AesKey const *key;
 		switch (securityControl & zb::SecurityControl::KEY_MASK) {
 		case zb::SecurityControl::KEY_LINK:
-			key = &za09LinkAesKey;
+			key = &zb::za09LinkAesKey;
 			break;
 		case zb::SecurityControl::KEY_KEY_TRANSPORT:
-			key = &za09KeyTransportAesKey;
+			key = &zb::za09KeyTransportAesKey;
 			break;
 		case zb::SecurityControl::KEY_KEY_LOAD:
-			key = &za09KeyLoadAesKey;
+			key = &zb::za09KeyLoadAesKey;
 			break;
 		default:
 			// KEY_NETWORK
@@ -815,7 +805,7 @@ Coroutine RadioInterface::sendBeacon() {
 	}
 }
 
-static bool handleZclClusterSpecific(MessageType dstType, void *dstMessage, EndpointInfo const &info, DataReader r) {
+static bool handleZclClusterSpecific(MessageType dstType, void *dstMessage, EndpointInfo const &info, MessageReader r) {
 	// get command
 	uint8_t command = r.u8();
 
@@ -1297,13 +1287,13 @@ Terminal::out << ("Association Request Receive On When Idle: " + dec(receiveOnWh
 					AesKey const *key;
 					switch (keyType) {
 					case zb::SecurityControl::KEY_LINK:
-						key = &za09LinkAesKey;
+						key = &zb::za09LinkAesKey;
 						break;
 					case zb::SecurityControl::KEY_KEY_TRANSPORT:
-						key = &za09KeyTransportAesKey;
+						key = &zb::za09KeyTransportAesKey;
 						break;
 					case zb::SecurityControl::KEY_KEY_LOAD:
-						key = &za09KeyLoadAesKey;
+						key = &zb::za09KeyLoadAesKey;
 						break;
 					default:
 						continue;
@@ -1388,7 +1378,7 @@ Terminal::out << ("Association Request Receive On When Idle: " + dec(receiveOnWh
 
 									// link key
 									// todo: generate a link key per device
-									w.data(Array<uint8_t const, 16>(za09LinkKey));
+									w.data(Array<uint8_t const, 16>(zb::za09LinkKey));
 
 									// extended destination address
 									w.u64L(device->longAddress);
@@ -1428,7 +1418,7 @@ Terminal::out << ("Association Request Receive On When Idle: " + dec(receiveOnWh
 							{
 								// check key hash (4.4.10.7.4)
 								DataBuffer<16> hashedKey;
-								keyHash(hashedKey, za09LinkKey, 3);
+								keyHash(hashedKey, zb::za09LinkKey, 3);
 								bool success = hash == hashedKey;
 
 								// build packet (note: hash gets overwritten)
@@ -1761,9 +1751,9 @@ void RadioInterface::handleGp(uint8_t const *mac, PacketReader &r) {
 				return;
 			}
 
-			// check if security counter is greater than last security counter
-			if (securityCounter <= device.securityCounter)
-				return;
+			// todo: check if security counter is greater than last security counter
+			//if (securityCounter <= device.securityCounter)
+			//	return;
 			device.securityCounter = securityCounter;
 
 			// check message integrity code or decrypt message, depending on security level
@@ -1907,7 +1897,7 @@ void RadioInterface::handleGpCommission(uint32_t deviceId, PacketReader& r) {
 
 	// options
 	auto options = r.e8<gp::Options>();
-	uint32_t counter = 0;
+	uint32_t securityCounter = 0;
 	if ((options & gp::Options::EXTENDED) != 0) {
 		auto extendedOptions = r.e8<gp::ExtendedOptions>();;
 
@@ -1927,7 +1917,7 @@ void RadioInterface::handleGpCommission(uint32_t deviceId, PacketReader& r) {
 				DataBuffer<4> header;
 				header.setU32L(0, deviceId);
 
-				if (!decrypt(key, header.data, 4, key, 16, 4, nonce, za09LinkAesKey)) {
+				if (!decrypt(key, header.data, 4, key, 16, 4, nonce, zb::za09LinkAesKey)) {
 					//printf("error while decrypting key!\n");
 					return;
 				}
@@ -1943,7 +1933,7 @@ void RadioInterface::handleGpCommission(uint32_t deviceId, PacketReader& r) {
 			setKey(flash.aesKey, Array<uint8_t const, 16>(key));
 		}
 		if ((extendedOptions & gp::ExtendedOptions::COUNTER_PRESENT) != 0) {
-			counter = r.u32L();
+			securityCounter = r.u32L();
 			//printf("counter: %08x\n", counter);
 		}
 	}
@@ -1956,14 +1946,14 @@ void RadioInterface::handleGpCommission(uint32_t deviceId, PacketReader& r) {
 	for (auto &device : this->gpDevices) {
 		if (device->deviceId == deviceId) {
 			// yes: only update security counter
-			device.securityCounter = counter;
+			device.securityCounter = securityCounter;
 			return;
 		}
 	}
 
 	// create device state
 	auto* device = new GpDevice(flash);
-	device->securityCounter = counter;
+	device->securityCounter = securityCounter;
 
 	// store device in flash
 	this->gpDevices.write(this->gpDevices.count(), device);
@@ -2536,7 +2526,7 @@ Coroutine RadioInterface::publish() {
 
 								// check if response was received
 								if (r == 1) {
-									DataReader r(length, packet);
+									MessageReader r(length, packet);
 									uint8_t responseToCommand = r.u8();
 									uint8_t status = r.u8();
 

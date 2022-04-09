@@ -6,6 +6,7 @@
 #include <vector>
 #include <stdexcept>
 #include <cmath>
+#include <iostream>
 
 
 float const MARGIN = 0.02f;
@@ -27,7 +28,7 @@ GLuint createTexture() {//int width, int height) {
 
 GLuint createShader(GLenum type, char const *code) {
 	GLuint shader = glCreateShader(type);
-	glShaderSource(shader, 1, &code, NULL);
+	glShaderSource(shader, 1, &code, nullptr);
 	glCompileShader(shader);
 	
 	// check status
@@ -135,48 +136,6 @@ Gui::Widget::~Widget() {
 }
 
 
-// Gui::PotiWidget
-
-Gui::PotiWidget::~PotiWidget() {
-}
-
-void Gui::PotiWidget::touch(bool first, float x, float y) {
-	float ax = x - 0.5f;
-	float ay = y - 0.5f;
-	bool inner = std::sqrt(ax * ax + ay * ay) < 0.1;
-	if (first) {
-		// check if button (inner circle) was hit
-		this->button = inner;
-	} else if (!inner) {
-		float bx = this->x - 0.5f;
-		float by = this->y - 0.5f;
-
-		float d = (ax * by - ay * bx) / (std::sqrt(ax * ax + ay * ay) * std::sqrt(bx * bx + by * by));
-		this->value = this->value - int(d * 10000 * 24);
-	}
-	this->x = x;
-	this->y = y;
-}
-
-void Gui::PotiWidget::release() {
-	this->button = false;
-}
-
-
-// Gui::ButtonWidget
-
-Gui::ButtonWidget::~ButtonWidget() {
-}
-
-void Gui::ButtonWidget::touch(bool first, float x, float y) {
-	this->state = 1;
-}
-
-void Gui::ButtonWidget::release() {
-	this->state = 0;
-}
-
-
 // Gui::SwitchWidget
 
 Gui::SwitchWidget::~SwitchWidget() {
@@ -205,17 +164,79 @@ void Gui::RockerWidget::release() {
 }
 
 
+// Gui::ButtonWidget
+
+Gui::ButtonWidget::~ButtonWidget() {
+}
+
+void Gui::ButtonWidget::touch(bool first, float x, float y) {
+	this->state = 1;
+}
+
+void Gui::ButtonWidget::release() {
+	this->state = 0;
+}
+
+
 // Gui::DoubleRockerWidget
 
 Gui::DoubleRockerWidget::~DoubleRockerWidget() {
 }
 
 void Gui::DoubleRockerWidget::touch(bool first, float x, float y) {
-	this->state = x < 0.5f ? (y < 0.5f ? 1 : 2) : (y < 0.5f ? 4 : 8);
+	constexpr float min = 0.3f;
+	constexpr float max = 0.7f;
+	if (this->combinations && x > min && x < max && y > min && y < max) {
+		// inner area with 9 special function fields
+		int i = int((3.0f * (x - min)) / (max - min)) + int((3.0f * (y - min)) / (max - min)) * 3;
+		//std::cout << i << std::endl;
+		int const states[] = {
+			1 + 8, // upper left and lower right
+			1 + 4, // upper
+			2 + 4, // upper right and lower left
+			1 + 2, // left
+			0xf, // all
+			4 + 8, // right
+			2 + 4, // lower left and upper right
+			2 + 8, // lower
+			1 + 8, // lower right and upper left
+		};
+		this->state = states[i];
+	} else {
+		this->state = (y < 0.5f ? 1 : 2) << (x < 0.5f ? 0 : 2);
+	}
 }
 
 void Gui::DoubleRockerWidget::release() {
 	this->state = 0;
+}
+
+
+// Gui::PotiWidget
+
+Gui::PotiWidget::~PotiWidget() {
+}
+
+void Gui::PotiWidget::touch(bool first, float x, float y) {
+	float ax = x - 0.5f;
+	float ay = y - 0.5f;
+	bool inner = std::sqrt(ax * ax + ay * ay) < 0.1;
+	if (first) {
+		// check if button (inner circle) was hit
+		this->button = inner;
+	} else if (!inner) {
+		float bx = this->x - 0.5f;
+		float by = this->y - 0.5f;
+
+		float d = (ax * by - ay * bx) / (std::sqrt(ax * ax + ay * ay) * std::sqrt(bx * bx + by * by));
+		this->value = this->value - int(d * 10000 * 24);
+	}
+	this->x = x;
+	this->y = y;
+}
+
+void Gui::PotiWidget::release() {
+	this->button = false;
 }
 
 
@@ -237,31 +258,6 @@ Gui::Gui() {
 	glBindBuffer(GL_ARRAY_BUFFER, this->quad);
 	glBufferData(GL_ARRAY_BUFFER, sizeof(quadData), quadData, GL_STATIC_DRAW);
 
-	// display
-	this->displayRender = new Render("#version 330\n"
-		"uniform sampler2D tex;\n"
-		"in vec2 xy;\n"
-		"out vec4 pixel;\n"
-		"void main() {\n"
-			"pixel = texture(tex, xy).xxxw;\n"
-		"}\n");
-	this->displayTexture = createTexture();//DISPLAY_WIDTH, DISPLAY_HEIGHT);
-	
-	// poti
-	this->potiRender = new Render("#version 330\n"
-		"uniform float value;\n"
-		"uniform float state;\n"
-		"in vec2 xy;\n"
-		"out vec4 pixel;\n"
-		"void main() {\n"
-			"vec2 a = xy - vec2(0.5, 0.5f);\n"
-			"float angle = atan(a.y, a.x) - value;\n"
-			"float radius = sqrt(a.x * a.x + a.y * a.y);\n"
-			"float limit = cos(angle * 24) * 0.02 + 0.48;\n"
-			"pixel = radius < limit ? (radius < 0.1 ? vec4(state, state, state, 1) : vec4(0.7, 0.7, 0.7, 1)) : vec4(0, 0, 0, 1);\n"
-		"}\n");
-	this->potiValue = this->potiRender->getUniformLocation("value");
-	this->potiState = this->potiRender->getUniformLocation("state");
 
 	// rocker switch
 	this->rockerRender = new Render("#version 330\n"
@@ -273,8 +269,8 @@ Gui::Gui() {
 			"float state = xy.y < 0.5 ? up : down;\n"
 			"pixel = vec4(state, state, state, 1);\n"
 		"}\n");
-	this->rockerUp = this->rockerRender->getUniformLocation("up");
-	this->rockerDown = this->rockerRender->getUniformLocation("down");
+	this->rockerA0 = this->rockerRender->getUniformLocation("up");
+	this->rockerA1 = this->rockerRender->getUniformLocation("down");
 
 	// double rocker switch
 	this->doubleRockerRender = new Render("#version 330\n"
@@ -292,6 +288,22 @@ Gui::Gui() {
 	this->doubleRockerA1 = this->doubleRockerRender->getUniformLocation("a1");
 	this->doubleRockerB0 = this->doubleRockerRender->getUniformLocation("b0");
 	this->doubleRockerB1 = this->doubleRockerRender->getUniformLocation("b1");
+
+	// poti
+	this->potiRender = new Render("#version 330\n"
+		"uniform float value;\n"
+		"uniform float state;\n"
+		"in vec2 xy;\n"
+		"out vec4 pixel;\n"
+		"void main() {\n"
+		"vec2 a = xy - vec2(0.5, 0.5f);\n"
+		"float angle = atan(a.y, a.x) - value;\n"
+		"float radius = sqrt(a.x * a.x + a.y * a.y);\n"
+		"float limit = cos(angle * 24) * 0.02 + 0.48;\n"
+		"pixel = radius < limit ? (radius < 0.1 ? vec4(state, state, state, 1) : vec4(0.7, 0.7, 0.7, 1)) : vec4(0, 0, 0, 1);\n"
+		"}\n");
+	this->potiValue = this->potiRender->getUniformLocation("value");
+	this->potiState = this->potiRender->getUniformLocation("state");
 
 	// temperature sensor
 	this->temperatureTexture = createTexture();//TEMPERATURE_BITMAP_WIDTH, tahoma_8pt.height);
@@ -328,14 +340,18 @@ Gui::Gui() {
 		"}\n");
 	this->blindValue = this->blindRender->getUniformLocation("value");
 
-	// button
+	// display
+	this->displayRender = new Render("#version 330\n"
+		"uniform sampler2D tex;\n"
+		"in vec2 xy;\n"
+		"out vec4 pixel;\n"
+		"void main() {\n"
+		"pixel = texture(tex, xy).xxxw;\n"
+		"}\n");
+	this->displayTexture = createTexture();//DISPLAY_WIDTH, DISPLAY_HEIGHT);
 
 	// reset state
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
-}
-
-Gui::~Gui() {
-
 }
 
 void Gui::doMouse(GLFWwindow *window) {
@@ -405,83 +421,7 @@ void Gui::newLine() {
 	this->maxHeight = 0;
 }
 
-void Gui::display(int width, int height, uint8_t const *displayBuffer) {
-	float const w = 0.4f;
-	float const h = 0.2f;
-
-	// set state
-	this->displayRender->setState(this->x, this->y, w, h);
-	glBindTexture(GL_TEXTURE_2D, this->displayTexture);
-	//glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT, GL_RED, GL_UNSIGNED_BYTE,
-	//	displayBuffer);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, width, height, 0, GL_RED, GL_UNSIGNED_BYTE, displayBuffer);
-
-	// draw and reset state
-	this->displayRender->drawAndResetState();
-	glBindTexture(GL_TEXTURE_2D, 0);
-	
-	next(w, h);
-}
-
-Gui::Poti Gui::poti(int id) {
-	float const w = 0.2f;
-	float const h = 0.2f;
-
-	auto widget = getWidget<PotiWidget>(id, w, h);
-
-	// set state
-	this->potiRender->setState(this->x, this->y, w, h);
-	glUniform1f(this->potiValue, float(widget->value & 0xffff) / (65536.0f * 24.0f) * 2.0f * M_PI);
-	glUniform1f(this->potiState, widget->button ? 1.0f : 0.0f);
-	
-	// draw and reset state
-	this->potiRender->drawAndResetState();
-	
-	next(w, h);
-
-	
-	Poti poti;
-	
-	// delta
-	int16_t value = widget->value >> 16;
-	int delta = value - widget->lastValue;
-	widget->lastValue = value;
-	if (delta != 0)
-		poti.delta = delta;
-
-	// button
-	bool toggle = widget->button != widget->lastButton;
-	widget->lastButton = widget->button;
-	if (toggle)
-		poti.button = widget->button;
-
-	return poti;
-}
-
-int Gui::button(int id) {
-	float const w = 0.1f;
-	float const h = 0.1f;
-
-	auto widget = getWidget<ButtonWidget>(id, w, h);
-
-	// set state
-	this->rockerRender->setState(this->x, this->y, w, h);
-	glUniform1f(this->rockerUp, widget->state == 1 ? 1.0f : 0.6f);
-	glUniform1f(this->rockerDown, widget->state == 1 ? 1.0f : 0.6f);
-
-	// draw and reset state
-	this->rockerRender->drawAndResetState();
-	
-	next(w, h);
-
-	int state = widget->state;
-	bool activated = state != widget->lastState;
-	widget->lastState = state;
-
-	return activated ? state : -1;
-}
-
-int Gui::switcher(int id) {
+std::optional<int> Gui::onOff(uint32_t id) {
 	float const w = 0.1f;
 	float const h = 0.1f;
 
@@ -489,8 +429,8 @@ int Gui::switcher(int id) {
 
 	// set state
 	this->rockerRender->setState(this->x, this->y, w, h);
-	glUniform1f(this->rockerUp, widget->state == 0 ? 1.0f : 0.6f);
-	glUniform1f(this->rockerDown, widget->state == 1 ? 1.0f : 0.7f);
+	glUniform1f(this->rockerA0, widget->state == 0 ? 1.0f : 0.6f);
+	glUniform1f(this->rockerA1, widget->state == 1 ? 1.0f : 0.7f);
 
 	// draw and reset state
 	this->rockerRender->drawAndResetState();
@@ -501,10 +441,33 @@ int Gui::switcher(int id) {
 	bool activated = state != widget->lastState;
 	widget->lastState = state;
 
-	return activated ? state : -1;
+	return activated ? std::optional<int>(state) : std::nullopt;
 }
 
-int Gui::rocker(int id) {
+std::optional<int> Gui::button(uint32_t id, float size) {
+	float const w = 0.1f * size;
+	float const h = 0.1f * size;
+
+	auto widget = getWidget<ButtonWidget>(id, w, h);
+
+	// set state
+	this->rockerRender->setState(this->x, this->y, w, h);
+	glUniform1f(this->rockerA0, widget->state == 1 ? 1.0f : 0.6f);
+	glUniform1f(this->rockerA1, widget->state == 1 ? 1.0f : 0.6f);
+
+	// draw and reset state
+	this->rockerRender->drawAndResetState();
+
+	next(w, h);
+
+	int state = widget->state;
+	bool activated = state != widget->lastState;
+	widget->lastState = state;
+
+	return activated ? std::optional<int>(state) : std::nullopt;
+}
+
+std::optional<int> Gui::rocker(uint32_t id) {
 	float const w = 0.1f;
 	float const h = 0.1f;
 
@@ -512,8 +475,8 @@ int Gui::rocker(int id) {
 
 	// set state
 	this->rockerRender->setState(this->x, this->y, w, h);
-	glUniform1f(this->rockerUp, widget->state & 1 ? 1.0f : 0.6f);
-	glUniform1f(this->rockerDown, widget->state & 2 ? 1.0f : 0.7f);
+	glUniform1f(this->rockerA0, widget->state & 1 ? 1.0f : 0.6f);
+	glUniform1f(this->rockerA1, widget->state & 2 ? 1.0f : 0.7f);
 
 	// draw and reset state
 	this->rockerRender->drawAndResetState();
@@ -524,14 +487,14 @@ int Gui::rocker(int id) {
 	bool activated = state != widget->lastState;
 	widget->lastState = state;
 
-	return activated ? state : -1;
+	return activated ? std::optional<int>(state) : std::nullopt;
 }
 
-int Gui::doubleRocker(int id) {
+std::optional<int> Gui::doubleRocker(uint32_t id, bool combinations) {
 	float const w = 0.1f;
 	float const h = 0.1f;
 
-	auto widget = getWidget<DoubleRockerWidget>(id, w, h);
+	auto widget = getWidget<DoubleRockerWidget>(id, w, h, combinations);
 
 	// set state
 	this->doubleRockerRender->setState(this->x, this->y, w, h);
@@ -549,10 +512,44 @@ int Gui::doubleRocker(int id) {
 	bool activated = state != widget->lastState;
 	widget->lastState = state;
 
-	return activated ? state : -1;
+	return activated ? std::optional<int>(state) : std::nullopt;
 }
 
-std::optional<float> Gui::temperatureSensor(int id) {
+Gui::Poti Gui::poti(uint32_t id) {
+	float const w = 0.2f;
+	float const h = 0.2f;
+
+	auto widget = getWidget<PotiWidget>(id, w, h);
+
+	// set state
+	this->potiRender->setState(this->x, this->y, w, h);
+	glUniform1f(this->potiValue, float(widget->value & 0xffff) / (65536.0f * 24.0f) * 2.0f * M_PIf32);
+	glUniform1f(this->potiState, widget->button ? 1.0f : 0.0f);
+
+	// draw and reset state
+	this->potiRender->drawAndResetState();
+
+	next(w, h);
+
+	Poti poti;
+
+	// delta
+	int value = widget->value >> 16;
+	int delta = value - widget->lastValue;
+	widget->lastValue = value;
+	if (delta != 0)
+		poti.delta = delta;
+
+	// button
+	bool toggle = widget->button != widget->lastButton;
+	widget->lastButton = widget->button;
+	if (toggle)
+		poti.button = widget->button;
+
+	return poti;
+}
+
+std::optional<float> Gui::temperatureSensor(uint32_t id) {
 	float const w = 0.1f;
 	float const h = 0.1f;
 
@@ -562,7 +559,7 @@ std::optional<float> Gui::temperatureSensor(int id) {
 	{
 		// set state
 		this->potiRender->setState(this->x, this->y, w, h);
-		glUniform1f(this->potiValue, float(widget->value & 0xffff) / (65536.0f * 24.0f) * 2.0f * M_PI);
+		glUniform1f(this->potiValue, float(widget->value & 0xffff) / (65536.0f * 24.0f) * 2.0f * M_PIf32);
 		glUniform1f(this->potiState, 0.0f);
 		
 		// draw and reset state
@@ -570,7 +567,7 @@ std::optional<float> Gui::temperatureSensor(int id) {
 	}
 	
 	// get temperature from widget in 1/10 °C
-	int temperature = ((widget->value >> 14) & 0x1ff);
+	int temperature = int((widget->value >> 14) & 0x1ff);
 	bool changed = temperature != widget->lastValue;
 	widget->lastValue = temperature;
 
@@ -600,19 +597,18 @@ std::optional<float> Gui::temperatureSensor(int id) {
 
 	// return temperature in 1/20 Kelvin when changed, else -1
 	//return changed ? temperature * 2 + 27315 * 20 / 100 : -1;
-	if (changed)
-		return float(temperature * 0.1f);
-	return {};
+	return changed ? std::optional<float>(float(temperature) * 0.1f) : std::nullopt;
 }
 
-void Gui::light(bool on, int percentage) {
+void Gui::light(LightState state, int percentage) {
 	float const w = 0.1f;
 	float const h = 0.1f;
 
 	// set state
 	this->lightRender->setState(this->x, this->y, w, h);
-	float value = ((on ? percentage : 0) + 30.0f) / 130.0f;
-	glUniform4f(this->lightColor, value, value, 0, 1.0f);
+	float value = (float(state == LightState::ON ? percentage : 0) + 30.0f) / 130.0f;
+	float outerValue = state == LightState::DISABLED ? 0 : value;
+	glUniform4f(this->lightColor, outerValue, outerValue, 0, 1.0f);
 	glUniform4f(this->lightInnerColor, value, value, 0, 1.0f);
 
 	// draw and reset state
@@ -628,7 +624,7 @@ void Gui::blind(int percentage) {
 
 	// set state
 	this->blindRender->setState(this->x, this->y, w, h);
-	float value = percentage / 100.0f;
+	float value = float(percentage) / 100.0f;
 	glUniform1f(this->blindValue, value);
 
 	// draw and reset state
@@ -653,6 +649,24 @@ void Gui::led(int color) {
 	// draw and reset state
 	this->lightRender->drawAndResetState();
 
-	this->x += w + 0.01;
+	this->x += w + 0.01f;
 	this->maxHeight = std::max(this->maxHeight, h);
+}
+
+void Gui::display(int width, int height, uint8_t const *displayBuffer) {
+	float const w = 0.4f;
+	float const h = 0.2f;
+
+	// set state
+	this->displayRender->setState(this->x, this->y, w, h);
+	glBindTexture(GL_TEXTURE_2D, this->displayTexture);
+	//glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT, GL_RED, GL_UNSIGNED_BYTE,
+	//	displayBuffer);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, width, height, 0, GL_RED, GL_UNSIGNED_BYTE, displayBuffer);
+
+	// draw and reset state
+	this->displayRender->drawAndResetState();
+	glBindTexture(GL_TEXTURE_2D, 0);
+
+	next(w, h);
 }

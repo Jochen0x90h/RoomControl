@@ -14,9 +14,9 @@ enum class Request : uint8_t {
 
 
 // device descriptor
-static const Usb::DeviceDescriptor deviceDescriptor = {
-	.bLength = sizeof(Usb::DeviceDescriptor),
-	.bDescriptorType = Usb::DescriptorType::DEVICE,
+static const usb::DeviceDescriptor deviceDescriptor = {
+	.bLength = sizeof(usb::DeviceDescriptor),
+	.bDescriptorType = usb::DescriptorType::DEVICE,
 	.bcdUSB = 0x0200, // USB 2.0
 	.bDeviceClass = 0xff, // no class
 	.bDeviceSubClass = 0xff,
@@ -33,15 +33,15 @@ static const Usb::DeviceDescriptor deviceDescriptor = {
 
 // configuration descriptor
 struct UsbConfiguration {
-	struct Usb::ConfigDescriptor config;
-	struct Usb::InterfaceDescriptor interface;
-	struct Usb::EndpointDescriptor endpoints[2];
+	struct usb::ConfigDescriptor config;
+	struct usb::InterfaceDescriptor interface;
+	struct usb::EndpointDescriptor endpoints[2];
 } __attribute__((packed));
 
 static const UsbConfiguration configurationDescriptor = {
 	.config = {
-		.bLength = sizeof(Usb::ConfigDescriptor),
-		.bDescriptorType = Usb::DescriptorType::CONFIGURATION,
+		.bLength = sizeof(usb::ConfigDescriptor),
+		.bDescriptorType = usb::DescriptorType::CONFIGURATION,
 		.wTotalLength = sizeof(UsbConfiguration),
 		.bNumInterfaces = 1,
 		.bConfigurationValue = 1,
@@ -50,8 +50,8 @@ static const UsbConfiguration configurationDescriptor = {
 		.bMaxPower = 50 // 100 mA
 	},
 	.interface = {
-		.bLength = sizeof(Usb::InterfaceDescriptor),
-		.bDescriptorType = Usb::DescriptorType::INTERFACE,
+		.bLength = sizeof(usb::InterfaceDescriptor),
+		.bDescriptorType = usb::DescriptorType::INTERFACE,
 		.bInterfaceNumber = 0,
 		.bAlternateSetting = 0,
 		.bNumEndpoints = array::count(configurationDescriptor.endpoints),
@@ -61,18 +61,18 @@ static const UsbConfiguration configurationDescriptor = {
 		.iInterface = 0
 	},
 	.endpoints = {{
-		.bLength = sizeof(Usb::EndpointDescriptor),
-		.bDescriptorType = Usb::DescriptorType::ENDPOINT,
-		.bEndpointAddress = 1 | Usb::IN, // 1 in (device to host)
-		.bmAttributes = Usb::EndpointType::BULK,
+		.bLength = sizeof(usb::EndpointDescriptor),
+		.bDescriptorType = usb::DescriptorType::ENDPOINT,
+		.bEndpointAddress = 1 | usb::IN, // 1 in (device to host)
+		.bmAttributes = usb::EndpointType::BULK,
 		.wMaxPacketSize = 64,
 		.bInterval = 1 // polling interval
 	},
 	{
-		.bLength = sizeof(Usb::EndpointDescriptor),
-		.bDescriptorType = Usb::DescriptorType::ENDPOINT,
-		.bEndpointAddress = 1 | Usb::OUT, // 1 out (host to device)
-		.bmAttributes = Usb::EndpointType::BULK,
+		.bLength = sizeof(usb::EndpointDescriptor),
+		.bDescriptorType = usb::DescriptorType::ENDPOINT,
+		.bEndpointAddress = 1 | usb::OUT, // 1 out (host to device)
+		.bmAttributes = usb::EndpointType::BULK,
 		.wMaxPacketSize = 64,
 		.bInterval = 1 // polling interval
 	}}
@@ -107,11 +107,11 @@ Coroutine echo() {
 int main(void) {
 	Loop::init();
 	Usb::init(
-		[](Usb::DescriptorType descriptorType) {
+		[](usb::DescriptorType descriptorType) {
 			switch (descriptorType) {
-			case Usb::DescriptorType::DEVICE:
+			case usb::DescriptorType::DEVICE:
 				return Data(&deviceDescriptor);
-			case Usb::DescriptorType::CONFIGURATION:
+			case usb::DescriptorType::CONFIGURATION:
 				return Data(&configurationDescriptor);
 			default:
 				return Data();

@@ -46,12 +46,12 @@ void handle(Gui &gui) {
 }
 
 void init(
-	std::function<Data (DescriptorType)> const &getDescriptor,
+	std::function<Data (usb::DescriptorType)> const &getDescriptor,
 	std::function<void (uint8_t)> const &onSetConfiguration,
 	std::function<bool (uint8_t, uint16_t, uint16_t)> const &onRequest)
 {
 	// get device descriptor
-	auto &deviceDescriptor = getDescriptor(DescriptorType::DEVICE).cast<DeviceDescriptor>();
+	auto &deviceDescriptor = getDescriptor(usb::DescriptorType::DEVICE).cast<usb::DeviceDescriptor>();
 	Usb::text = deviceDescriptor.bDeviceProtocol == 1;
 	
 	// set configuration

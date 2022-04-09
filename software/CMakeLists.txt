@@ -1,17 +1,17 @@
 cmake_minimum_required(VERSION 3.9)
 
+# CLion: use conan plugin and add -DCMAKE_TOOLCHAIN_FILE=conan_toolchain.cmake to the CMake options
+
 # set project
 project(RoomControl)
 
-# enable c, c++ and asm
+# configure languages
 enable_language(C CXX ASM)
+set(CMAKE_C_STANDARD 99)
+set(CMAKE_CXX_STANDARD 20)
 
 # debug generated makefile
 #set(CMAKE_VERBOSE_MAKEFILE TRUE)
-
-# use C99 and C++20 standards
-set(CMAKE_C_STANDARD 99)
-set(CMAKE_CXX_STANDARD 20)
 
 separate_arguments(GENERATE_HEX)
 
@@ -22,33 +22,8 @@ message("*** MCU ${MCU}")
 message("*** CPU ${CPU}")
 message("*** FPU ${FPU}")
 
-# CLion: use conan plugin and add -DCMAKE_TOOLCHAIN_FILE=conan_toolchain.cmake to the CMake options
 
-if(${FAMILY} STREQUAL "emu")
-	# dependencies
-	find_package(Boost CONFIG)
-	find_package(GTest CONFIG)
-	find_package(glfw3 CONFIG)
-	find_package(libusb CONFIG)
-
-	# enable address sanitizer
-	if(CMAKE_BUILD_TYPE STREQUAL Debug)
-		message("Enable Address Sanitizer")
-		set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address")
-		set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=address")
-	endif()
-
-	# set rpath so that shared libraries are searched in ../lib
-	if(APPLE)
-		set(CMAKE_INSTALL_RPATH "@executable_path/../lib")
-	else()
-		set(CMAKE_INSTALL_RPATH "\$ORIGIN/../lib")
-	endif()
-	set(CMAKE_BUILD_WITH_INSTALL_RPATH ON)
-
-	# define emulator flag
-	add_definitions(-DEMU)
-endif()
+# cpu dependent configuration
 if(${CPU} MATCHES "cortex")
 	# cpu flags
 	set(CPU_FLAGS "-mcpu=${CPU} -mthumb -mabi=aapcs")
@@ -73,29 +48,58 @@ if(${CPU} MATCHES "cortex")
 	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CPU_FLAGS} ${FPU_FLAGS} ${CXX_FLAGS}")
 	set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${LINKER_FLAGS}")
 endif()
-if(${FAMILY} STREQUAL "nrf52")
+
+
+# family dependent configuration
+if(${FAMILY} STREQUAL "emu")
+	# dependencies
+	find_package(Boost CONFIG)
+	find_package(glfw3 CONFIG)
+	find_package(libusb CONFIG)
+	find_package(GTest CONFIG)
+
+	# enable address sanitizer
+	if(CMAKE_BUILD_TYPE STREQUAL Debug)
+		message("Enable Address Sanitizer")
+		set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address")
+		set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=address")
+	endif()
+
+	# set rpath so that shared libraries are searched in ../lib
+	if(APPLE)
+		set(CMAKE_INSTALL_RPATH "@executable_path/../lib")
+	else()
+		set(CMAKE_INSTALL_RPATH "\$ORIGIN/../lib")
+	endif()
+	set(CMAKE_BUILD_WITH_INSTALL_RPATH ON)
+
+	# define emulator flag
+	add_definitions(-DEMU)
+elseif(${FAMILY} STREQUAL "nrf52")
 	set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -L${CMAKE_SOURCE_DIR}/system/src/nrf52/system -T${CMAKE_SOURCE_DIR}/board/${BOARD}/link.ld")
-endif()
-if(${FAMILY} STREQUAL "stm32f0")
+elseif(${FAMILY} STREQUAL "stm32f0")
 	set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -T${CMAKE_SOURCE_DIR}/board/${BOARD}/link.ld")
 endif()
 
 
+# compiler dependent configuration
 # enable coroutines
 # enable concepts
 # suppress warning for own s and ms literal operators that are used instad of those in std::chrono
+# suppress warning for switch case labels outside of enumeration range (for "flags enum")
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
 	# clang
-	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fcoroutines-ts -Wno-user-defined-literals -ftemplate-backtrace-limit=0")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ")
+	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fcoroutines-ts -Wno-user-defined-literals")
 else()
 	# gcc
-	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fcoroutines -fconcepts -Wno-literal-suffix")
+	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fcoroutines -fconcepts -Wno-literal-suffix -Wno-switch")
 endif()
 
 
 # set debug define
-add_definitions(-DDEBUG)
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+	add_definitions(-DDEBUG)
+endif()
 
 # strip unused dylibs
 #add_link_options(-dead_strip_dylibs)
@@ -138,6 +142,7 @@ source_group(util FILES ${UTIL})
 
 # protocol utilities
 set(PROTOCOL
+	protocol/src/bus.cpp
 	protocol/src/bus.hpp
 	protocol/src/crypt.cpp
 	protocol/src/crypt.hpp
@@ -150,6 +155,8 @@ set(PROTOCOL
 	protocol/src/ieee.hpp
 	protocol/src/mqttsn.hpp
 	protocol/src/Nonce.hpp
+	protocol/src/usb.hpp
+	protocol/src/zb.cpp
 	protocol/src/zb.hpp
 )
 set(TINYCRYPT
@@ -170,9 +177,8 @@ set(SYSTEM
 	system/src/Debug.hpp
 	system/src/RadioDefs.hpp
 	system/src/SystemTime.hpp
-	system/src/UsbDefs.hpp
 )
-macro(addDrivers)
+macro(add_drivers)
 	foreach(NAME ${ARGV})
 		if(EXISTS ${CMAKE_SOURCE_DIR}/system/src/${FAMILY}/${NAME}.cpp)
 			list(APPEND SYSTEM system/src/${NAME}.hpp)
@@ -184,7 +190,7 @@ macro(addDrivers)
 		endif()
 	endforeach()
 endmacro()
-addDrivers(
+add_drivers(
 	BusMaster
 	BusNode
 	Calendar
@@ -284,6 +290,7 @@ set(CONTROL
 source_group(control FILES ${CONTROL})
 
 
+# external libraries
 if(${FAMILY} STREQUAL "emu")
 	set(LIBRARIES
 		Boost::headers
@@ -297,13 +304,24 @@ else()
 endif()
 
 
-if(${BOARD} STREQUAL "emu")
+# hex generator
+macro(generate_hex TARGET)
+	if(NOT "${GENERATE_HEX}" STREQUAL "")
+		add_custom_command(TARGET ${TARGET}
+			POST_BUILD
+			COMMAND ${GENERATE_HEX} ${TARGET} ${TARGET}.hex
+		)
+	endif()
+endmacro()
+
+
+if(${BOARD} STREQUAL "emuControl")
 
 # room control executable
 add_executable(control
 	control/src/main.cpp
 	control/src/appConfig.hpp
-	board/emu/boardConfig.hpp
+	board/${BOARD}/boardConfig.hpp
 	${UTIL}
 	${PROTOCOL}
 	${SYSTEM}
@@ -312,7 +330,7 @@ add_executable(control
 )
 target_include_directories(control
 	PRIVATE
-	board/emu # boardConfig.hpp
+	board/${BOARD} # boardConfig.hpp
 	font
 	control/src
 	node/src
@@ -358,51 +376,47 @@ add_executable(terminal
 target_include_directories(terminal
 	PRIVATE
 	util/src
+	protocol/src
 	system/src
 )
 target_link_libraries(terminal ${LIBRARIES})
 
-endif() # ${BOARD} STREQUAL "emu"
+endif() # ${BOARD} STREQUAL "emuControl"
 
-
-if(${BOARD} STREQUAL "emuSwitch")
 
 # room switch executable
-add_executable(switch
-	switch/src/main.cpp
-	switch/src/appConfig.hpp
-	board/emuSwitch/boardConfig.hpp
-	${UTIL}
-	${PROTOCOL}
-	${SYSTEM}
-	${NODE}
-	${CONTROL}
-)
-target_include_directories(switch
-	PRIVATE
-	board/emuSwitch # boardConfig.hpp
-	font
-	control/src
-	node/src
-	system/src
-	protocol/src
-	util/src
-	glad
-)
-target_link_libraries(switch ${LIBRARIES})
+set(SWITCH_BOARDS emuSwitch canable)
+if(${BOARD} IN_LIST SWITCH_BOARDS)
+	add_executable(switch
+		switch/src/main.cpp
+		switch/src/appConfig.hpp
+		board/${BOARD}/boardConfig.hpp
+		${UTIL}
+		${PROTOCOL}
+		${SYSTEM}
+	)
+	target_include_directories(switch
+		PRIVATE
+		board/${BOARD} # boardConfig.hpp
+		font
+		switch/src # appConfig.hpp
+		system/src
+		protocol/src
+		util/src
+		glad
+	)
+	target_link_libraries(switch ${LIBRARIES})
+	generate_hex(switch)
+endif()
 
-endif() # ${BOARD} STREQUAL "emuSwitch"
 
-
-if(NOT ${BOARD} STREQUAL "emu")
-if(Radio IN_LIST DRIVERS)
-
-	# radio device that is used by the sniffer and radio driver of the emulator
+# radio device that is used by the sniffer and radio driver of the emulator
+if(NOT ${FAMILY} STREQUAL "emu" AND Radio IN_LIST DRIVERS)
 	add_executable(radioDevice
 		tools/src/radioDevice.cpp
 		tools/src/appConfig.hpp
 		board/${BOARD}/boardConfig.hpp
-		#${PROTOCOL}
+		${PROTOCOL}
 		${SYSTEM}
 		${UTIL}
 	)
@@ -417,15 +431,8 @@ if(Radio IN_LIST DRIVERS)
 		glad
 	)
 	target_link_libraries(radioDevice ${LIBRARIES})
-	if(NOT "${GENERATE_HEX}" STREQUAL "")
-		add_custom_command(TARGET radioDevice
-			POST_BUILD
-			COMMAND ${GENERATE_HEX} radioDevice radioDevice.hex
-		)
-	endif()
-
+	generate_hex(radioDevice)
 endif()
-endif() # NOT ${BOARD} STREQUAL "emu"
 
 
 # system test executables
@@ -455,12 +462,7 @@ function(add_system_test_executable NAME)
 			glad
 		)
 		target_link_libraries(${NAME}Test ${LIBRARIES})
-		if(NOT "${GENERATE_HEX}" STREQUAL "")
-			add_custom_command(TARGET ${NAME}Test
-				POST_BUILD
-				COMMAND ${GENERATE_HEX} ${NAME}Test ${NAME}Test.hex
-			)
-		endif()
+		generate_hex(${NAME}Test)
 	endif()
 endfunction()
 
@@ -476,7 +478,7 @@ add_system_test_executable(Timer)
 add_system_test_executable(Usb)
 
 
-if(${BOARD} STREQUAL "emu")
+if(${BOARD} STREQUAL "emuControl")
 
 # system/usb test host, host for UsbTest on device (command line tool)
 add_executable(UsbTestHost
@@ -484,7 +486,7 @@ add_executable(UsbTestHost
 )
 target_include_directories(UsbTestHost
 	PRIVATE
-	system/src
+	protocol/src
 	util/src
 )
 target_link_libraries(UsbTestHost ${LIBRARIES})
@@ -494,7 +496,7 @@ target_link_libraries(UsbTestHost ${LIBRARIES})
 add_executable(MqttSnClientTest
 	node/test/MqttSnClientTest.cpp
 	control/src/appConfig.hpp
-	board/emu/boardConfig.hpp
+	board/${BOARD}/boardConfig.hpp
 	${NODE}
 	${PROTOCOL}
 	${SYSTEM}
@@ -502,7 +504,7 @@ add_executable(MqttSnClientTest
 )
 target_include_directories(MqttSnClientTest
 	PRIVATE
-	board/emu # boardConfig.hpp
+	board/${BOARD} # boardConfig.hpp
 	control/src # appConfig.hpp
 	font
 	node/test
@@ -520,7 +522,7 @@ target_link_libraries(MqttSnClientTest ${LIBRARIES})
 add_executable(MqttSnBrokerTest
 	node/test/MqttSnBrokerTest.cpp
 	control/src/appConfig.hpp
-	board/emu/boardConfig.hpp
+	board/${BOARD}/boardConfig.hpp
 	${NODE}
 	${PROTOCOL}
 	${SYSTEM}
@@ -528,7 +530,7 @@ add_executable(MqttSnBrokerTest
 )
 target_include_directories(MqttSnBrokerTest
 	PRIVATE
-	board/emu # boardConfig.hpp
+	board/${BOARD} # boardConfig.hpp
 	control/src # appConfig.hpp
 	font
 	node/test
@@ -545,7 +547,7 @@ target_link_libraries(MqttSnBrokerTest ${LIBRARIES})
 # test for BME680 air sensor
 add_executable(BME680Test
 	control/test/BME680Test.cpp
-	board/emu/boardConfig.hpp
+	board/${BOARD}/boardConfig.hpp
 	control/src/appConfig.hpp
 	${UTIL}
 	${PROTOCOL}
@@ -556,7 +558,7 @@ add_executable(BME680Test
 )
 target_include_directories(BME680Test
 	PRIVATE
-	board/emu # boardConfig.hpp
+	board/${BOARD} # boardConfig.hpp
 	font
 	control/src
 	system/src
@@ -570,7 +572,7 @@ target_link_libraries(BME680Test ${LIBRARIES})
 # test for SSD1309 display
 add_executable(SSD1309Test
 	control/test/SSD1309Test.cpp
-	board/emu/boardConfig.hpp
+	board/${BOARD}/boardConfig.hpp
 	control/src/appConfig.hpp
 	${UTIL}
 	${PROTOCOL}
@@ -580,7 +582,7 @@ add_executable(SSD1309Test
 )
 target_include_directories(SSD1309Test
 	PRIVATE
-	board/emu # boardConfig.hpp
+	board/${BOARD} # boardConfig.hpp
 	font
 	control/src
 	system/src
@@ -594,7 +596,7 @@ target_link_libraries(SSD1309Test ${LIBRARIES})
 # test for Storage class
 add_executable(StorageTest
 	control/test/StorageTest.cpp
-	board/emu/boardConfig.hpp
+	board/${BOARD}/boardConfig.hpp
 	${UTIL}
 	${PROTOCOL}
 	${SYSTEM}
@@ -606,7 +608,7 @@ add_executable(StorageTest
 )
 target_include_directories(StorageTest
 	PRIVATE
-	board/emu # boardConfig.hpp
+	board/${BOARD} # boardConfig.hpp
 	font
 	control/src
 	node/src

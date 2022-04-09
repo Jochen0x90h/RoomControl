@@ -29,27 +29,28 @@ class Project(ConanFile):
     license="CC-BY-NC-SA-4.0"
     settings = "os", "compiler", "build_type", "arch"
     options = {
-        "cpu": "ANY",
-        "fpu": "ANY",
-        "mcu": "ANY",
+        "board": "ANY",
         "family": "ANY",
-        "board": "ANY"}
+        "mcu": "ANY",
+        "cpu": "ANY",
+        "fpu": "ANY"}
     default_options = {
-        "cpu": None,
-        "fpu": None,
-        "mcu": None,
+        "board": "emuControl",
         "family": "emu",
-        "board": "emu"}
+        "mcu": None,
+        "cpu": None,
+        "fpu": None}
     generators = "CMakeDeps"
-    exports_sources =\
-        "CMakeLists.txt",\
-        "util/*",\
-        "network/*",\
-        "system/*",\
-        "node/*",\
-        "control/*",\
-        "glad/*",\
+    exports_sources = [
+        "CMakeLists.txt",
+        "util/*",
+        "network/*",
+        "system/*",
+        "node/*",
+        "control/*",
+        "glad/*",
         "tools/*"
+    ]
 
     def requirements(self):
         if self.options.family == "emu":
@@ -67,11 +68,11 @@ class Project(ConanFile):
     def generate(self):
         # generate "conan_toolchain.cmake"
         toolchain = CMakeToolchain(self)
+        toolchain.variables["BOARD"] = self.options.board
+        toolchain.variables["FAMILY"] = self.options.family
+        toolchain.variables["MCU"] = self.options.mcu
         toolchain.variables["CPU"] = self.options.cpu
         toolchain.variables["FPU"] = self.options.fpu
-        toolchain.variables["MCU"] = self.options.mcu
-        toolchain.variables["FAMILY"] = self.options.family
-        toolchain.variables["BOARD"] = self.options.board
 
 
         # https://github.com/conan-io/conan/blob/develop/conan/tools/cmake/toolchain.py

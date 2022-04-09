@@ -176,7 +176,7 @@ AwaitableCoroutine MqttSnClient::registerTopic(Result &result, uint16_t &topicId
 			// check if we received a message
 			if (s == 1) {
 				// get topic id and return code
-				DataReader r(length, message);
+				MessageReader r(length, message);
 				topicId = r.u16B();
 				r.skip(2); // msgId
 				auto returnCode = r.e8<mqttsn::ReturnCode>();
@@ -241,7 +241,7 @@ AwaitableCoroutine MqttSnClient::publish(Result &result, uint16_t topicId, mqtts
 
 			// check if we received a message
 			if (s == 1) {
-				DataReader r(length, message);
+				MessageReader r(length, message);
 				
 				// get topic id and return code
 				topicId = r.u16B();
@@ -306,7 +306,7 @@ AwaitableCoroutine MqttSnClient::subscribeTopic(Result &result, uint16_t &topicI
 
 			// check if we received a message
 			if (s == 1) {
-				DataReader r(length, message);
+				MessageReader r(length, message);
 					
 				// get flags, topic id and return code
 				auto flags = r.e8<mqttsn::Flags>();
@@ -401,7 +401,7 @@ AwaitableCoroutine MqttSnClient::receive(Result &result, uint16_t &msgId, uint16
 	}
 
 	// read message
-	DataReader r(length2, message);
+	MessageReader r(length2, message);
 	flags = r.e8<mqttsn::Flags>();
 	topicId = r.u16B();
 	msgId = r.u16B();

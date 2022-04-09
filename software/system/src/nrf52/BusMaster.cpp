@@ -27,8 +27,8 @@
 */
 namespace BusMaster {
 
-Waitlist<Parameters> transferWaitlist;
-Waitlist<> requestWaitlist;
+Waitlist<ReceiveParameters> receiveWaitlist;
+Waitlist<SendParameters> sendWaitlist;
 
 enum State {
 	BREAK,
@@ -271,6 +271,7 @@ void setRequestHandler(std::function<void (uint8_t)> const &onRequest) {
 }
 */
 
+/*
 Awaitable<Parameters> transfer(int writeLength, uint8_t const *writeData, int &readLength, uint8_t *readData) {
 
 	// start transfer immediately if bus is idle
@@ -281,6 +282,17 @@ Awaitable<Parameters> transfer(int writeLength, uint8_t const *writeData, int &r
 
 Awaitable<> request() {
 	return {BusMaster::requestWaitlist};
+}
+*/
+
+Awaitable<ReceiveParameters> receive(int &length, uint8_t *data) {
+	assert(BusMaster::nextHandler != nullptr);
+	return {BusMaster::receiveWaitlist, &length, data};
+}
+
+Awaitable<SendParameters> send(int length, uint8_t const *data) {
+	assert(BusMaster::nextHandler != nullptr);
+	return {BusMaster::sendWaitlist, length, data};
 }
 
 } // namespace BusMaster

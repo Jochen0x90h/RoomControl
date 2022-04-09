@@ -3393,18 +3393,14 @@ AwaitableCoroutine RoomControl::devicesMenu(Interface &interface) {
 
 
 AwaitableCoroutine RoomControl::deviceMenu(Interface &interface, DeviceId deviceId) {
-	bool hasEndpoints = interface.getEndpoints(deviceId).count() > 0;
-
 	Menu menu(this->swapChain);
 	while (true) {
-		if (hasEndpoints) {
-			if (menu.entry("Endpoints"))
-				co_await endpointsMenu(interface, deviceId);
-			if (menu.entry("Message Logger"))
-				co_await messageLogger(interface, deviceId);
-			if (menu.entry("Message Generator"))
-				co_await messageGenerator(interface, deviceId);
-		}
+		if (menu.entry("Endpoints"))
+			co_await endpointsMenu(interface, deviceId);
+		if (menu.entry("Message Logger"))
+			co_await messageLogger(interface, deviceId);
+		if (menu.entry("Message Generator"))
+			co_await messageGenerator(interface, deviceId);
 		if (menu.entry("Exit"))
 			break;
 
@@ -3414,10 +3410,9 @@ AwaitableCoroutine RoomControl::deviceMenu(Interface &interface, DeviceId device
 }
 
 AwaitableCoroutine RoomControl::endpointsMenu(Interface &interface, DeviceId deviceId) {
-	Array<Interface::EndpointType const> endpoints = interface.getEndpoints(deviceId);
-
 	Menu menu(this->swapChain);
 	while (true) {
+		Array<Interface::EndpointType const> endpoints = interface.getEndpoints(deviceId);
 		for (int i = 0; i < endpoints.count(); ++i) {
 			auto endpointType = endpoints[i];
 			StringBuffer<24> b = dec(i) + ": ";
@@ -3482,7 +3477,9 @@ AwaitableCoroutine RoomControl::endpointsMenu(Interface &interface, DeviceId dev
 			break;
 
 		// show menu
-		co_await menu.show();
+		//co_await menu.show();
+		// show menu and wait for new event until timeout so that we can show endpoints of recommissioned device
+		co_await select(menu.show(), Timer::sleep(250ms));
 	}
 }
 
@@ -3525,17 +3522,16 @@ static Message getDefaultMessage(Interface::EndpointType endpointType) {
 }
 
 AwaitableCoroutine RoomControl::messageLogger(Interface &interface, DeviceId deviceId) {
-	Array<Interface::EndpointType const> endpoints = interface.getEndpoints(deviceId);
 	Subscriber::Barrier barrier;
 
 	Subscriber subscribers[32];
 
 	// subscribe to all endpoints
-	for (uint8_t endpointIndex = 0; endpointIndex < min(endpoints.count(), array::count(subscribers)); ++endpointIndex) {
+	for (uint8_t endpointIndex = 0; endpointIndex < /*min(endpoints.count(), */array::count(subscribers)/*)*/; ++endpointIndex) {
 		auto &subscriber = subscribers[endpointIndex];
 		subscriber.subscriptionIndex = endpointIndex;
-		auto endpointType = endpoints[endpointIndex];
-		subscriber.messageType = getDefaultMessageType(endpointType);
+		//auto endpointType = endpoints[endpointIndex];
+		//subscriber.messageType = getDefaultMessageType(endpointType);
 		subscriber.barrier = &barrier;
 		interface.addSubscriber(deviceId, endpointIndex, subscriber);
 	}
@@ -3553,35 +3549,42 @@ AwaitableCoroutine RoomControl::messageLogger(Interface &interface, DeviceId dev
 	// menu loop
 	Menu menu(this->swapChain);
 	while (true) {
+		Array<Interface::EndpointType const> endpoints = interface.getEndpoints(deviceId);
+		for (uint8_t endpointIndex = 0; endpointIndex < min(endpoints.count(), array::count(subscribers)); ++endpointIndex) {
+			auto &subscriber = subscribers[endpointIndex];
+			auto endpointType = endpoints[endpointIndex];
+			subscriber.messageType = getDefaultMessageType(endpointType);
+		}
+
 		// display events
 		for (int i = queue.count() - 2; i >= 0; --i) {
 			Event &event = queue[i];
-			StringBuffer<24> b = dec(event.endpointIndex) + ": ";
-			
-			auto endpointType = endpoints[event.endpointIndex];
-			switch (endpointType & Interface::EndpointType::TYPE_MASK) {
-			case Interface::EndpointType::ON_OFF:
-				b += switchStatesLong[event.message.onOff & 3];
-				break;
-			case Interface::EndpointType::TRIGGER:
-				b += triggerStatesLong[event.message.trigger & 1];
-				break;
-			case Interface::EndpointType::UP_DOWN:
-				b += upDownStatesLong[event.message.upDown & 3];
-				break;
+			if (event.endpointIndex < endpoints.count()) {
+				StringBuffer<24> b = dec(event.endpointIndex) + ": ";
 
-			case Interface::EndpointType::TEMPERATURE:
-				b += flt(event.message.temperature, 1);
-				b += "oC";
-				break;
-			case Interface::EndpointType::AIR_PRESSURE:
-				b += flt(event.message.temperature, 1);
-				b += "hPa";
-				break;
-			default:
-				break;
+				auto endpointType = endpoints[event.endpointIndex];
+				switch (endpointType & Interface::EndpointType::TYPE_MASK) {
+					case Interface::EndpointType::ON_OFF:
+						b << switchStatesLong[event.message.onOff & 3];
+						break;
+					case Interface::EndpointType::TRIGGER:
+						b << triggerStatesLong[event.message.trigger & 1];
+						break;
+					case Interface::EndpointType::UP_DOWN:
+						b << upDownStatesLong[event.message.upDown & 3];
+						break;
+
+					case Interface::EndpointType::TEMPERATURE:
+						b << flt(event.message.temperature, 1) << "oC";
+						break;
+					case Interface::EndpointType::AIR_PRESSURE:
+						b << flt(event.message.temperature, 1) << "hPa";
+						break;
+					default:
+						break;
+				}
+				menu.entry(b);
 			}
-			menu.entry(b);
 		}
 		
 		if (menu.entry("Exit"))
@@ -3591,7 +3594,7 @@ AwaitableCoroutine RoomControl::messageLogger(Interface &interface, DeviceId dev
 		Event &event = queue.getBack();
 
 		// show menu or receive event (event gets filled in)
-		int selected = co_await select(menu.show(), barrier.wait(event.endpointIndex, &event.message));
+		int selected = co_await select(menu.show(), barrier.wait(event.endpointIndex, &event.message), Timer::sleep(250ms));
 		if (selected == 2) {
 			// received an event: add new empty event at the back of the queue
 			queue.addBack();
@@ -3600,117 +3603,89 @@ AwaitableCoroutine RoomControl::messageLogger(Interface &interface, DeviceId dev
 }
 
 AwaitableCoroutine RoomControl::messageGenerator(Interface &interface, DeviceId deviceId) {
-	Array<Interface::EndpointType const> endpoints = interface.getEndpoints(deviceId);
-
 	//! skip "in" endpoints -> or forward to subscriptions
-	auto endpointType = endpoints[0];
-	auto message = getDefaultMessage(endpointType);
+	Message message;
 
 	uint8_t endpointIndex = 0;
 	Publisher publisher;
-	//publisher.endpointIndex = 0;
-	publisher.messageType = getDefaultMessageType(endpointType);
 	publisher.message = &message;
 	
 	// menu loop
 	Menu menu(this->swapChain);
 	while (true) {
-		// select endpoint and value to publish
-		int edit = menu.getEdit(endpointType == Interface::EndpointType::LEVEL ? 3 : 2);
-		bool editIndex = edit == 1;
-		bool editMessage = edit == 2;
-		bool editMessage2 = edit == 3;
-		int delta = menu.getDelta();
-		
-		// endpoint index
-		if (editIndex) {
-			publisher.remove();
-			endpointIndex = clamp(endpointIndex + delta, 0, endpoints.count() - 1);
-			endpointType = endpoints[endpointIndex];
+		Array<Interface::EndpointType const> endpoints = interface.getEndpoints(deviceId);
+		if (endpoints.count() > 0) {
+			endpointIndex = clamp(endpointIndex, 0, endpoints.count() - 1);
+			auto endpointType = endpoints[endpointIndex];
+
+			// select endpoint and value to publish
+			int edit = menu.getEdit(endpointType == Interface::EndpointType::LEVEL ? 3 : 2);
+			bool editIndex = edit == 1;
+			bool editMessage = edit == 2;
+			bool editMessage2 = edit == 3;
+			int delta = menu.getDelta();
+
+			if (editIndex) {
+				// edit endpoint index
+				endpointIndex = clamp(endpointIndex + delta, 0, endpoints.count() - 1);
+				endpointType = endpoints[endpointIndex];
+			}
 			auto newMessageType = getDefaultMessageType(endpointType);
 			if (newMessageType != publisher.messageType)
 				message = getDefaultMessage(endpointType);
 			publisher.messageType = newMessageType;
+
+			// edit and dislpay message values
+			auto stream = menu.stream();
+			stream << underline(dec(endpointIndex), editIndex) << ": ";
+			switch (endpointType & Interface::EndpointType::TYPE_MASK) {
+				case Interface::EndpointType::ON_OFF:
+					if (editMessage)
+						message.onOff = clamp(message.onOff + delta, 0, 2);
+					stream << underline(switchStatesLong[message.onOff & 3], editMessage);
+					break;
+				case Interface::EndpointType::TRIGGER:
+					if (editMessage)
+						message.trigger = clamp(message.trigger + delta, 0, 1);
+					stream << underline(triggerStatesLong[message.trigger & 1], editMessage);
+					break;
+				case Interface::EndpointType::UP_DOWN:
+					if (editMessage)
+						message.upDown = clamp(message.upDown + delta, 0, 2);
+					stream << underline(upDownStatesLong[message.upDown & 3], editMessage);
+					break;
+				case Interface::EndpointType::LEVEL:
+					if (editMessage)
+						message.moveToLevel.level = clamp(float(message.moveToLevel.level) + delta * 0.05f, 0.0f, 1.0f);
+					if (editMessage2)
+						message.moveToLevel.move = clamp(float(message.moveToLevel.move) + delta * 0.5f, 0.0f, 100.0f);
+					stream << underline(flt(message.moveToLevel.level, 2), editMessage) << ' ';
+					stream << underline(flt(message.moveToLevel.move, 1), editMessage2) << 's';
+					break;
+				case Interface::EndpointType::TEMPERATURE:
+					if (editMessage)
+						message.temperature = std::round(message.temperature * 2.0f + delta) * 0.5f;
+					stream << underline(flt(message.temperature, -1), editMessage) << "oC";
+					break;
+				case Interface::EndpointType::AIR_PRESSURE:
+					if (editMessage)
+						message.airPressure = message.airPressure + delta;
+					stream << underline(flt(message.airPressure, 0), editMessage) << "hPa";
+					break;
+			}
+			menu.entry();
+
+			if (menu.entry("Send")) {
+				interface.addPublisher(deviceId, endpointIndex, publisher);
+				publisher.publish();
+			}
 		}
 
-		// message values
-		StringBuffer<16> valueString;
-		StringBuffer<16> valueString2;
-		String unitString;
-		switch (endpointType & Interface::EndpointType::TYPE_MASK) {
-		case Interface::EndpointType::ON_OFF:
-			if (editMessage)
-				message.onOff = clamp(message.onOff + delta, 0, 2);
-			valueString = switchStatesLong[message.onOff & 3];
-			//menu.entry(underline(dec(publisher.endpointIndex), editIndex) + ": "
-			//	+ underline(switchStatesLong[message.onOff & 3], editMessage));
-			break;
-		case Interface::EndpointType::TRIGGER:
-			if (editMessage)
-				message.trigger = clamp(message.trigger + delta, 0, 1);
-			valueString = triggerStatesLong[message.trigger & 1];
-			//menu.entry(underline(dec(publisher.endpointIndex), editIndex) + ": "
-			//	+ underline(triggerStatesLong[message.trigger & 1], editMessage));
-			break;
-		case Interface::EndpointType::UP_DOWN:
-			if (editMessage)
-				message.upDown = clamp(message.upDown + delta, 0, 2);
-			valueString = upDownStatesLong[message.upDown & 3];
-			//menu.entry(underline(dec(publisher.endpointIndex), editIndex) + ": "
-			//	+ underline(upDownStatesLong[message.upDown & 3], editMessage));
-			break;
-		case Interface::EndpointType::LEVEL:
-			if (editMessage)
-				message.moveToLevel.level = clamp(float(message.moveToLevel.level) + delta * 0.05f, 0.0f, 1.0f);
-			if (editMessage2)
-				message.moveToLevel.move = clamp(float(message.moveToLevel.move) + delta * 0.5f, 0.0f, 100.0f);
-			valueString = flt(message.moveToLevel.level, 2);
-			valueString2 = flt(message.moveToLevel.move, 1);
-			unitString = "s";
-			//menu.entry(underline(dec(publisher.endpointIndex), editIndex) + ": "
-			//	+ underline(flt(message.moveToLevel.level, -2), editMessage) + ' '
-			//	+ underline(flt(message.moveToLevel.move, 2), editMessage2) + 's');
-			break;
-		case Interface::EndpointType::TEMPERATURE:
-			if (editMessage)
-				message.temperature = std::round(message.temperature * 2.0f + delta) * 0.5f;
-			valueString = flt(message.temperature, -1);
-			unitString = "oC";
-			//menu.entry(underline(dec(publisher.endpointIndex), editIndex) + ": "
-			//	+ underline(flt(message.temperature, -1), editMessage) + "oC");
-			break;
-		case Interface::EndpointType::AIR_PRESSURE:
-			if (editMessage)
-				message.airPressure = message.airPressure + delta;
-			valueString = flt(message.airPressure, 0);
-			unitString = "hPa";
-			//menu.entry(underline(dec(publisher.endpointIndex), editIndex) + ": "
-			//	+ underline(flt(message.airPressure, 0), editMessage) + "hPa");
-			break;
-		}
-
-		// menu entry
-		if (valueString2.isEmpty()) {
-			menu.entry(underline(dec(endpointIndex), editIndex) + ": "
-				+ underline(valueString, editMessage) + unitString);
-		} else {
-			menu.entry(underline(dec(endpointIndex), editIndex) + ": "
-				+ underline(valueString, editMessage) + ' '
-				+ underline(valueString2, editMessage2) + unitString);
-		}
-		
-		if (menu.entry("Send")) {
-			interface.addPublisher(deviceId, endpointIndex, publisher);
-			//if (publisher.isEmpty())
-			//	interface.addPublisher(deviceId, publisher);
-			publisher.publish();
-		}
-		
 		if (menu.entry("Exit"))
 			break;
 			
 		// show menu
-		co_await menu.show();
+		co_await select(menu.show(), Timer::sleep(250ms));
 	}
 }
 

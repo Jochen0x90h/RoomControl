@@ -8,10 +8,10 @@
 #include <cstdint>
 
 
-struct DataWriter {
+struct MessageWriter {
 	uint8_t *current;
 
-	explicit DataWriter(uint8_t *message) : current(message) {}
+	explicit MessageWriter(uint8_t *message) : current(message) {}
 
 	void u8(uint8_t value) {
 		this->current[0] = value;
@@ -101,6 +101,17 @@ struct DataWriter {
 		this->current += array.count();
 	}
 
+	/**
+	 * Add the contents of an array, cast each element to uint8_t
+	 */
+	template <typename T, int N>
+	void data(T (&array)[N]) {
+		auto current = this->current;
+		for (int i = 0; i < N; ++i)
+			current[i] = uint8_t(array[i]);
+		this->current += N;
+	}
+
 	void data(int length, uint8_t const *data) {
 		auto current = this->current;
 		for (int i = 0; i < length; ++i)
@@ -126,19 +137,19 @@ struct DataWriter {
 	}
 
 	// fulfill stream concept
-	DataWriter &operator <<(char ch) {u8(ch); return *this;}
-	DataWriter &operator <<(String const &str) {string(str); return *this;}
+	MessageWriter &operator <<(char ch) {u8(ch); return *this;}
+	MessageWriter &operator <<(String const &str) {string(str); return *this;}
 
 };
 
 
-class EncryptWriter : public DataWriter {
+class EncryptWriter : public MessageWriter {
 public:
 
 	/**
 	 * Constructor. Sets start of header at current position ("string a" for encryption)
 	 */
-	explicit EncryptWriter(uint8_t *message) : DataWriter(message) {}
+	explicit EncryptWriter(uint8_t *message) : MessageWriter(message) {}
 
 	/**
 	 * Set start of header at current position ("string a" for encryption)

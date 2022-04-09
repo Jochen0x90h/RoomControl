@@ -3,73 +3,59 @@
 #include <Output.hpp>
 #include <Debug.hpp>
 #include <Spi.hpp>
+#include <BusNode.hpp>
 #include <Loop.hpp>
+#include <Terminal.hpp>
 #include <SystemTime.hpp>
+#include <bus.hpp>
 #include <MessageReader.hpp>
 #include <MessageWriter.hpp>
+#include <Queue.hpp>
+#include <StringOperators.hpp>
 #include "appConfig.hpp"
+#include <boardConfig.hpp>
 
 
-constexpr SystemDuration RELAY_TIME = 5ms;
+constexpr SystemDuration RELAY_TIME = 10ms;
 
 
-class MessageReader : public DecryptReader {
-public:
-	MessageReader(int length, uint8_t *data) : DecryptReader(length, data) {}
+constexpr auto ROCKER = bus::EndpointType::UP_DOWN_IN;
+constexpr auto LIGHT = bus::EndpointType::ON_OFF_OUT;
+constexpr auto BLIND = bus::EndpointType::UP_DOWN_OUT;
 
-	/**
-	 * Read a value from 0 to 8 from bus arbitration, i.e. multiple devices can write at the same time and the
-	 * lowest value survives
-	 */
-	uint8_t arbiter() {
-		uint8_t value = u8();
+enum class Mode : uint8_t {
+	LIGHT = 1,
+	DOUBLE_LIGHT = 2,
+	BLIND = 3,
+};
+Mode modeA = Mode::LIGHT;
+Mode modeB = Mode::LIGHT;
 
-		uint8_t count = 0;
-		while (value > 0) {
-			++count;
-			value <<= 1;
-		}
-		return count;
-	}
+bus::EndpointType const endpointsLight[] = {ROCKER, LIGHT};
+bus::EndpointType const endpointsDoubleLight[] = {ROCKER, LIGHT, LIGHT};
+bus::EndpointType const endpointsBlind[] = {ROCKER, BLIND};
+int const endpointCounts[4] = {0, 2, 3, 2};
+
+Array<bus::EndpointType const> const endpoints[] = {
+	Array<bus::EndpointType>(),
+	endpointsLight,
+	endpointsDoubleLight,
+	endpointsBlind
 };
 
-class MessageWriter : public EncryptWriter {
-public:
-	template <int N>
-	MessageWriter(uint8_t (&message)[N]) : EncryptWriter(message), begin(message)
-#ifdef EMU
-		, end(message + N)
-#endif
-	{}
 
-	MessageWriter(int length, uint8_t *message) : EncryptWriter(message), begin(message)
-#ifdef EMU
-		, end(message + length)
-#endif
-	{}
+// outputs
+int outputStates[4];
 
-	/**
-	 * Write a value from 0 to 8 for bus arbitration, i.e. multiple devices can write at the same time and the
-	 * lowest value survives
-	 */
-	void arbiter(uint8_t value) {
-		u8(~(0xff >> value));
-	}
+AesKey const busDefaultAesKey = {{0x1337c6b3, 0xf16c7cb6, 0x2dec182d, 0x3078d618, 0xaec16bb7, 0x5fad1701, 0x72410f2c, 0x4239d934, 0xbef4739b, 0xe159649a, 0x93186bb6, 0xd121b282, 0x47c360a5, 0xa69a043f, 0x35826f89, 0xe4a3dd0b, 0x45024bcc, 0xe3984ff3, 0xd61a207a, 0x32b9fd71, 0x0356e8ef, 0xe0cea71c, 0x36d48766, 0x046d7a17, 0x1f8c181d, 0xff42bf01, 0xc9963867, 0xcdfb4270, 0x50a049a0, 0xafe2f6a1, 0x6674cec6, 0xab8f8cb6, 0xa3c407c2, 0x0c26f163, 0x6a523fa5, 0xc1ddb313, 0x79a97aba, 0x758f8bd9, 0x1fddb47c, 0xde00076f, 0x2c6cd2a7, 0x59e3597e, 0x463eed02, 0x983eea6d}};
 
-	int getLength() {
-		int length = this->current - this->begin;
-#ifdef EMU
-		assert(this->current <= this->end);
-#endif
-		return length;
-	}
+constexpr int micLength = 4;
 
-	uint8_t *begin;
-#ifdef EMU
-	uint8_t *end;
-#endif
-};
 
+uint32_t deviceId = 0x12345678;
+int address = -1;
+AesKey aesKey;
+uint32_t securityCounter = 0;
 
 
 class Switch {
@@ -78,44 +64,162 @@ public:
 	Switch() {
 		// start coroutines
 		checkButtons();
-		//enumerate();
-		//receive();
+		send();
+		receive();
 		updateRelays();
 	}
 
 	Coroutine checkButtons() {
-		bool standalone = true;
-		int address = 5;
-		int securityCounter = 0;
-		
 		while (true) {
 			int index;
-			bool value;
+			bool state;
 
 			// wait until trigger detected on input
-			co_await Input::trigger(0xf, 0xf, index, value);
+			co_await Input::trigger(0xf, 0xf, index, state);
+			//Terminal::out << "trigger " << dec(index) << ' ' << dec(int(state)) << '\n';
 
-			if (standalone) {
-				// standalone mode: A and B channel each control one relay
-				if (value) {
-					if ((index & 2) == 0) {
-						this->relays &= ~0x11;
-						this->relays |= index & 1;
-					} else {
-						this->relays &= ~0x44;
-						this->relays |= (index & 1) << 2;
+			// configure when at least one button was held after all were pressed
+			if (this->configure && Timer::now() > this->allTime + 3s) {
+				// use button state as configuration
+				int a = this->buttons & 3;
+				if (a != 0)
+					modeA = Mode(a);
+				int b = this->buttons >> 2;
+				if (b != 0)
+					modeB = Mode(b);
+				this->configure = false;
+				Terminal::out << "config " << dec(modeA) << ' ' << dec(modeB) << '\n';
+			}
+
+			// update button state (only needed for configuration and commissioning)
+			uint8_t mask = 1 << index;
+			this->buttons = (this->buttons & ~mask) | (uint8_t(state) << index);
+
+			// check if all buttons are pressed
+			if (this->buttons == 0x0f) {
+				this->allTime = Timer::now();
+				this->enumerate = true;
+				this->configure = true;
+				//Terminal::out << "all\n";
+			}
+
+			// enumerate when all buttons were released
+			if (this->enumerate && this->buttons == 0) {
+				//Terminal::out << "enumerate\n";
+				this->enumerate = false;
+				this->configure = false;
+
+				// switch to standalone mode
+				address = -1;
+
+				// add enumerate to send queue
+				this->sendQueue.addBack(SendElement{255, 255});
+				this->sendBarrier.resumeFirst();
+			}
+
+
+			if (address == -1) {
+				// standalone mode: A and B channel each control one relay with 0 = off and 1 = on
+				if ((index & 2) == 0) {
+					// A
+					switch (modeA) {
+						case Mode::LIGHT:
+							if (state) {
+								this->relays &= ~0x11;
+								this->relays |= 1 - index;
+							}
+							break;
+						case Mode::DOUBLE_LIGHT:
+							this->relays &= ~0x10 << index;
+							if (state)
+								this->relays ^= 1 << index;
+							break;
+						case Mode::BLIND:
+							if (state) {
+								this->relays &= ~0x33;
+								this->relays |= 1 << index;
+							}
+							break;
+						default:
+							break;
+					}
+				} else {
+					// B
+					index &= 1;
+					switch (modeB) {
+						case Mode::LIGHT:
+							if (state) {
+								this->relays &= ~0x44;
+								this->relays |= (1 - index) << 2;
+							}
+							break;
+						case Mode::DOUBLE_LIGHT:
+							this->relays &= ~0x40 << index;
+							if (state)
+								this->relays ^= (1 << index) << 2;
+							break;
+						case Mode::BLIND:
+							if (state) {
+								this->relays &= ~0xcc;
+								this->relays |= (1 << index) << 2;
+							}
+							break;
+						default:
+							break;
 					}
 				}
-				this->event.set();
-			} /*else {
+				this->relayBarrier.resumeFirst();
+			} else {
 				// bus mode: report state change on bus
-				uint8_t sendData[64];
-				
-				// write into read data of transfer()
-				MessageWriter w(writeData);
 
-				// set start of header
-				w.setHeader();
+				// endpoint index
+				uint8_t endpointIndex = (index & 2) == 0 ? 0 : endpointCounts[int(modeA)];//(index >> 1) & 1;
+
+				// value
+				uint8_t value = int(state) << (index & 1);
+
+				// add to send queue
+				this->sendQueue.addBack(SendElement{endpointIndex, value});
+				this->sendBarrier.resumeFirst();
+			}
+		}
+	}
+
+	Coroutine send() {
+		uint8_t sendData[64];
+		while (true) {
+			if (this->sendQueue.isEmpty()) {
+				// wait until someone fills the queue
+				co_await this->sendBarrier.wait();
+			}
+
+			// get element from queue
+			auto const &element = this->sendQueue[0];
+
+			bus::MessageWriter w(sendData);
+			w.setHeader();
+
+			if (element.endpointIndex == 255) {
+				// enumerate message
+
+				// prefix with zero
+				w.u8(0);
+
+				// encoded device id
+				w.id(deviceId);
+
+				// list of endpoints
+				w.data(endpoints[int(modeA)]);
+				w.data(endpoints[int(modeB)]);
+
+				// encrypt
+				w.setMessage();
+				Nonce nonce(deviceId, 0);
+				w.encrypt(micLength, nonce, bus::defaultAesKey);
+
+				securityCounter = 0;
+			} else {
+				// data message
 
 				// encoded address
 				w.arbiter((address & 7) + 1);
@@ -128,65 +232,143 @@ public:
 				w.setMessage();
 
 				// endpoint index
-				uint8_t endpointIndex = (index >> 1) & 1;
-				w.u8(endpointIndex);
+				w.u8(element.endpointIndex);
 
-				// state
-				uint8_t state = int(value) << (index & 1);
-				w.u8(state);
+				// value
+				w.u8(element.value);
 
 				// encrypt
-				Nonce nonce(device.flash.address, device.securityCounter);
-				w.encrypt(4, nonce, device.flash.aesKey);
+				Nonce nonce(address, securityCounter);
+				w.encrypt(micLength, nonce, aesKey);
 
 				// increment security counter
 				++securityCounter;
+			}
+			this->sendQueue.removeFront();
 
-				co_await BusNode::send(w.getLength(), sendData);
-			}*/
-		}
-	}
-/*
-	coroutine enumerate() {
-		// commission
-		while (true) {
-
-			co_await BusNode::send();
-						
-			co_await Timer::sleep(1s);
+			co_await BusNode::send(w.getLength(), sendData);
 		}
 	}
 
-	coroutine receive() {
+	Coroutine receive() {
 		uint8_t receiveData[64];
 		while (true) {
-
+            // receive from bus
 			int length = array::count(receiveData);
 			co_await BusNode::receive(length, receiveData);
-			
+
 			// decode received message
-			
-			
+			bus::MessageReader r(length, receiveData);
+			r.setHeader();
+
+			// skip command prefix (0) and arbitration byte (0)
+			auto a1 = r.arbiter();
+			if (a1 == 0) {
+				// received command message
+				auto a2 = r.u8();
+				if (a2 == 0) {
+					// commission
+
+					// check device id
+					auto id = r.u32L();
+					if (id != deviceId)
+						continue;
+
+					// check message integrity code (mic)
+					r.setMessageFromEnd(micLength);
+					Nonce nonce(deviceId, 0);
+					if (!r.decrypt(micLength, nonce, busDefaultAesKey))
+						continue;
+
+					// set address
+					address = r.u8();
+					//Terminal::out << "commissioned on address " << dec(address) << '\n';
+
+					// set key
+					setKey(aesKey, r.data<16>());
+				}
+			} else {
+				// received data message
+				auto a2 = r.arbiter();
+
+				// check address
+				int addr = (a1 - 1) | (a2 << 3);
+				if (addr != address)
+					continue;
+
+				// security counter
+				uint32_t securityCounter = r.u32L();
+
+				// todo: check security counter
+
+				// decrypt
+				r.setMessage();
+				Nonce nonce(address, securityCounter);
+				if (!r.decrypt(micLength, nonce, aesKey))
+					break;
+
+				uint8_t endpointIndex = r.u8();
+
+				int endpointCountA = endpointCounts[int(modeA)];
+				int endpointCountB = endpointCounts[int(modeB)];
+				if (endpointIndex >= endpointCountA + endpointCountB)
+					break;
+
+				bus::EndpointType endpointType;
+				int relayIndex;
+				if (endpointIndex < endpointCountA) {
+					endpointType = endpoints[int(modeA)][endpointIndex];
+					relayIndex = endpointIndex == 2 ? 1 : 0;
+				} else {
+					endpointIndex -= endpointCountA;
+					endpointType = endpoints[int(modeB)][endpointIndex];
+					relayIndex = endpointIndex == 2 ? 3 : 2;
+				}
+
+				int &state = outputStates[relayIndex];
+
+				switch (endpointType) {
+					case LIGHT: {
+						// 0: off, 1: on, 2: toggle
+						uint8_t s = r.u8();
+						if (s < 2)
+							state = s;
+						else if (s == 2)
+							state ^= 1;
+						this->relays &= ~(0x11 << relayIndex);
+						this->relays |= state << relayIndex;
+						this->relayBarrier.resumeFirst();
+						break;
+					}
+					case BLIND: {
+						// 0: inactive, 1: up, 2: down
+						uint8_t s = r.u8();
+						state = s <= 2 ? s : 0;
+						this->relays &= ~(0x33 << relayIndex);
+						this->relays |= state << relayIndex;
+						this->relayBarrier.resumeFirst();
+						break;
+					}
+					default:
+						break;
+				}
+			}
 		}
-	}*/
+	}
 
 	Coroutine updateRelays() {
-		bool jpa = false;
-		bool jpb = false;
-		
-		// current state of 4 relays A0, A1, B0, B1, upper 4 bit indicate "unknown state" after power-on	
+		// current state of 4 relays A0, A1, B0, B1, upper 4 bit indicate "unknown state" after power-on
 		uint8_t relays = 0xf0;
 		
 		while (true) {
-			// wait until relays change
-			co_await this->event.wait();
-			event.clear();
-			
-			// enable driver
-			//Output::set(OUTPUT_DRIVER_EN);
-			
+			while (this->relays == relays) {
+				// wait until relays change
+				co_await this->relayBarrier.wait();
+			}
+
 			// repat until all relays have been changed
 			while (this->relays != relays) {
+				//Terminal::out << "relays " << hex(this->relays) << " " << hex(relays) << "\n";
 				uint8_t change = this->relays ^ relays;
 
 				// check if A0 or A1 need to be changed
@@ -194,24 +376,18 @@ public:
 				uint8_t ay = 0;
 				uint8_t az = 0;
 				if (change & 0x33) {
-					uint8_t a0 = relays & 1;
-					uint8_t a1 = (relays >> 1) & 1;
-		
-					if (a0 == a1) {
-						if (a0 == 0 || !jpa) {
-							ax = (a0 ^ 1) | a0 << 1;
-							ay = ax ^ 3;
-							az = ax;
-						}
-						this->relays = (this->relays & ~0x33) | (relays & 0x03);
-					} else if ((change & 0x11) != 0 && ((change & 0x22) == 0 || a0 == 0)) {
+					uint8_t a0 = this->relays & 1;
+					uint8_t a1 = (this->relays >> 1) & 1;
+
+					if ((change & 0x11) != 0 && ((change & 0x22) == 0 || a0 == 0 || a0 == a1)) {
 						ax = (a0 ^ 1) | a0 << 1;
 						ay = ax ^ 3;
-						this->relays = (this->relays & ~0x11) | (relays & 0x01);
-					} else {
+						relays = (relays & ~0x11) | (this->relays & 0x11);
+					}
+					if ((change & 0x22) != 0 && ((change & 0x11) == 0 || a1 == 0 || a1 == a0)) {
 						az = (a1 ^ 1) | a1 << 1;
 						ay = az ^ 3;
-						this->relays = (this->relays & ~0x22) | (relays & 0x02);
+						relays = (relays & ~0x22) | (this->relays & 0x22);
 					}
 				}
 			
@@ -220,37 +396,33 @@ public:
 				uint8_t by = 0;
 				uint8_t bz = 0;
 				if (change & 0xcc) {
-					uint8_t b0 = (relays >> 2) & 1;
-					uint8_t b1 = (relays >> 3) & 1;
-		
-					if (b0 == b1) {
-						if (b0 == 0 || !jpb) {
-							bx = (b0 ^ 1) | b0 << 1;
-							by = bx ^ 3;
-							bz = bx;
-						}
-						this->relays = (this->relays & ~0xcc) | (relays & 0x0c);
-					} else if ((change & 0x44) != 0 && ((change & 0x88) == 0 || b0 == 0)) {
+					uint8_t b0 = (this->relays >> 2) & 1;
+					uint8_t b1 = (this->relays >> 3) & 1;
+
+					if ((change & 0x44) != 0 && ((change & 0x88) == 0 || b0 == 0 || b0 == b1)) {
 						bx = (b0 ^ 1) | b0 << 1;
 						by = bx ^ 3;
-						this->relays = (this->relays & ~0x44) | (relays & 0x04);
-					} else {
+						relays = (relays & ~0x44) | (this->relays & 0x44);
+					}
+					if ((change & 0x88) != 0 && ((change & 0x44) == 0 || b1 == 0 || b1 == b0)) {
 						bz = (b1 ^ 1) | b1 << 1;
 						by = bz ^ 3;
-						this->relays = (this->relays & ~0x88) | (relays & 0x08);
+						relays = (relays & ~0x88) | (this->relays & 0x88);
 					}
 				}
-				
+				//Terminal::out << "ab " << dec(ax) << dec(ay) << dec(az) << " " << dec(bx) << dec(by) << dec(bz) << "\n";
+
 				// build 16 bit word for relay driver
 				uint16_t word = 0x8000 // enable
-					| ax << 1
-					| ay << 3
-					| az << 5
-					| bx << 7
-					| by << 9
-					| bz << 11;
+					| (ax << (MPQ6526_MAPPING[0] * 2 + 1))
+					| (ay << (MPQ6526_MAPPING[1] * 2 + 1))
+					| (az << (MPQ6526_MAPPING[2] * 2 + 1))
+					| (bx << (MPQ6526_MAPPING[3] * 2 + 1))
+					| (by << (MPQ6526_MAPPING[4] * 2 + 1))
+					| (bz << (MPQ6526_MAPPING[5] * 2 + 1));
+				//Terminal::out << "spi " << hex(word) << "\n";
 				co_await Spi::transfer(SPI_RELAY_DRIVER, 1, &word, 0, nullptr);
-			
+
 				// wait some time until relay contacts react
 				co_await Timer::sleep(RELAY_TIME);
 			}
@@ -258,15 +430,24 @@ public:
 			// switch off all half bridges
 			uint16_t word = 0;
 			co_await Spi::transfer(SPI_RELAY_DRIVER, 1, &word, 0, nullptr);
-			co_await Timer::sleep(RELAY_TIME);
-			//Output::clear(OUTPUT_DRIVER_EN);		
 		}
 	}
 	
-	
-	Event event;
-	
+
+	// commissioning and configuration
+	uint8_t buttons = 0;
+	SystemTime allTime;
+	bool enumerate = false;
+	bool configure = false;
+
+	// sending over bus
+	struct SendElement {uint8_t endpointIndex; uint8_t value;};
+	Queue<SendElement, 8> sendQueue;
+	Barrier<> sendBarrier;
+
+	// relays
 	uint8_t relays = 0xf0;
+	Barrier<> relayBarrier;
 };
 
 
@@ -274,6 +455,9 @@ int main(void) {
 	Loop::init();
 	Output::init(); // for debug signals on pins
 	Input::init();
+	Spi::init();
+	Timer::init();
+	BusNode::init();
 
 	Switch s;
 

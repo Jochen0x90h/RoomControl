@@ -1,6 +1,6 @@
 #pragma once
 
-#include "UsbDefs.hpp"
+#include <usb.hpp>
 #include <Coroutine.hpp>
 #include <Data.hpp>
 #include <cstdint>
@@ -29,7 +29,7 @@ struct SendParameters {
  * @param onRequest callback for vendor specific request
  */
 void init(
-	std::function<Data (DescriptorType)> const &getDescriptor,
+	std::function<Data (usb::DescriptorType)> const &getDescriptor,
 	std::function<void (uint8_t bConfigurationValue)> const &onSetConfiguration,
 	std::function<bool (uint8_t bRequest, uint16_t wValue, uint16_t wIndex)> const &onRequest);
 

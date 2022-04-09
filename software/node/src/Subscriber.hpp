@@ -11,7 +11,7 @@ struct Subscriber : public LinkedListNode<Subscriber> {
 	uint8_t subscriptionIndex;
 
 	// the message type that the subscriber expects (broker is responsible for conversion)
-	MessageType messageType;
+	MessageType messageType = MessageType::UNKNOWN;
 	
 	struct Parameters {
 		// index of subscription (needed by subscriber to identify the message)

@@ -178,7 +178,7 @@ public:
 	static bool isValid(String topic) {return uint32_t(topic.length - 1) <= uint32_t(MAX_MESSAGE_LENGTH - 5 - 1);}
 
 
-	struct PacketReader : public DataReader {
+	struct PacketReader : public MessageReader {
 		/**
 		 * Construct on message and get length from first bytes of messages
 		 */
@@ -195,12 +195,12 @@ public:
 		}
 	};
 	
-	struct PacketWriter : public DataWriter {
+	struct PacketWriter : public MessageWriter {
 		/**
 		 * Construct on message and allocate space for the length byte
 		 */
 		template <int N>
-		PacketWriter(uint8_t (&message)[N]) : DataWriter(message + 1), begin(message)
+		PacketWriter(uint8_t (&message)[N]) : MessageWriter(message + 1), begin(message)
 #ifdef EMU
 			, end(message + N)
 #endif

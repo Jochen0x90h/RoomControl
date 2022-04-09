@@ -25,17 +25,19 @@ public:
 	struct Stream {
 		int x;
 		int y;
-		Bitmap<DISPLAY_WIDTH, DISPLAY_HEIGHT> &bitmap;
+		Bitmap<DISPLAY_WIDTH, DISPLAY_HEIGHT> *bitmap;
 		int16_t underlineCount = 0;
 		int16_t underlineStart;
 		
 		Stream &operator <<(char ch) {
-			this->x = this->bitmap.drawText(this->x, this->y, tahoma_8pt, String(1, &ch));
+			if (this->bitmap != nullptr)
+				this->x = this->bitmap->drawText(this->x, this->y, tahoma_8pt, String(1, &ch));
 			return *this;
 		}
 		
 		Stream &operator <<(String const &str) {
-			this->x = this->bitmap.drawText(this->x, this->y, tahoma_8pt, str);
+			if (this->bitmap != nullptr)
+				this->x = this->bitmap->drawText(this->x, this->y, tahoma_8pt, str);
 			return *this;
 		}
 		
@@ -50,7 +52,8 @@ public:
 				if (this->underlineCount > 0) {
 					if (--this->underlineCount == 0) {
 						int s = this->underlineStart;
-						this->bitmap.hLine(s, this->y + tahoma_8pt.height, this->x - s - 1);
+						if (this->bitmap != nullptr)
+							this->bitmap->hLine(s, this->y + tahoma_8pt.height, this->x - s - 1);
 					}
 				}
 				break;
@@ -58,20 +61,21 @@ public:
 			return *this;
 		}
 	};
-	
+
+	Stream stream() {
+		return {10, this->entryY + 2 - this->offsetY, this->bitmap};
+	}
+
+	bool entry();
+
 	/**
 	 * Add a menu entry
 	 * @param markup graph of text with markup (e.g. underline)
 	 */
 	template <typename T>
 	bool entry(T markup) {
-		int x = 10;
-		int y = this->entryY + 2 - this->offsetY;
-		if (this->bitmap != nullptr) {
-			Stream s{10, this->entryY + 2 - this->offsetY, *this->bitmap};
-			s << markup;
-			//drawText(x, y, markup);
-		}
+		Stream s = stream();
+		s << markup;
 		return entry();
 	}
 
@@ -107,48 +111,6 @@ protected:
 			menu.bitmap = menu.swapChain.get();
 		}
 	};
-/*
-	int drawText(int x, int y, char ch) {
-		return this->bitmap->drawText(x, y, tahoma_8pt, String(1, &ch));
-	}
-
-	int drawText(int x, int y, String s) {
-		return this->bitmap->drawText(x, y, tahoma_8pt, s);
-	}
-
-	template <typename T>
-	int drawText(int x, int y, Dec<T> dec) {
-		StringBuffer<12> b = dec;
-		return this->bitmap->drawText(x, y, tahoma_8pt, b);
-	}
-
-	template <typename T>
-	int drawText(int x, int y, Hex<T> hex) {
-		StringBuffer<16> b = hex;
-		return this->bitmap->drawText(x, y, tahoma_8pt, b);
-	}
-
-	int drawText(int x, int y, Flt flt) {
-		StringBuffer<16> b = flt;
-		return this->bitmap->drawText(x, y, tahoma_8pt, b);
-	}
-
-	template <typename A>
-	int drawText(int x, int y, Underline<A> u) {
-		int e = drawText(x, y, u.a);
-		if (u.underline)
-			this->bitmap->hLine(x, y + tahoma_8pt.height, e - x - 1);
-		return e;
-	}
-
-	template <typename A, typename B>
-	int drawText(int x, int y, Plus<A, B> plus) {
-		x = drawText(x, y, plus.a);
-		x = drawText(x, y, plus.b);
-		return x;
-	}
-*/
-	bool entry();
 
 	SwapChain &swapChain;
 	Bitmap<DISPLAY_WIDTH, DISPLAY_HEIGHT> *bitmap;

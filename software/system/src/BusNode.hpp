@@ -10,16 +10,14 @@
 */
 namespace BusNode {
 
-struct SendParameters {
-	// write data
-	int writeLength;
-	uint8_t const *writeData;
+struct ReceiveParameters {
+	int *receiveLength;
+	uint8_t *receiveData;
 };
 
-struct ReceiveParameters {
-	// read data
-	int *readLength;
-	uint8_t *readData;
+struct SendParameters {
+	int sendLength;
+	uint8_t const *sendData;
 };
 
 /**
@@ -29,8 +27,8 @@ void init();
 
 /**
  * Receive data from bus master
- * @param length length of data to write
- * @param data data to write
+ * @param length in: maximum length of data to receive, out: actual length of data received
+ * @param data data to read
  * @return use co_await on return value to await received data
  */
 [[nodiscard]] Awaitable<ReceiveParameters> receive(int &length, uint8_t *data);

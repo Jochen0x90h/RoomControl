@@ -17,7 +17,7 @@
 */
 namespace Usb {
 
-std::function<Data (DescriptorType)> getDescriptor;
+std::function<Data (usb::DescriptorType)> getDescriptor;
 std::function<void (uint8_t)> onSetConfiguration;
 std::function<bool (uint8_t, uint16_t, uint16_t)> onRequest;
 
@@ -77,11 +77,11 @@ void handle() {
 			NRF_USBD->EVENTS_EP0SETUP = 0;
 
 			// setup request
-			uint8_t bmRequestType = NRF_USBD->BMREQUESTTYPE;
+			auto bmRequestType = usb::Request(NRF_USBD->BMREQUESTTYPE);
 			uint8_t bRequest = NRF_USBD->BREQUEST;
 
 			switch (bmRequestType) {
-			case OUT | REQUEST_TYPE_STANDARD | RECIPIENT_DEVICE:
+			case usb::Request::OUT | usb::Request::TYPE_STANDARD | usb::Request::RECIPIENT_DEVICE:
 				// write request to standard device
 				if (bRequest == 0x05) {
 					// set address, handled by hardware
@@ -97,11 +97,11 @@ void handle() {
 					NRF_USBD->TASKS_EP0STALL = TRIGGER;
 				}
 				break;
-			case IN | REQUEST_TYPE_STANDARD | RECIPIENT_DEVICE:
+			case usb::Request::IN | usb::Request::TYPE_STANDARD | usb::Request::RECIPIENT_DEVICE:
 				// read request to standard device
 				if (bRequest == 0x06) {
 					// get descriptor from user code by using the callback
-					auto descriptorType = DescriptorType(NRF_USBD->WVALUEH);
+					auto descriptorType = usb::DescriptorType(NRF_USBD->WVALUEH);
 					Data descriptor = Usb::getDescriptor(descriptorType);
 					if (descriptor.size > 0) {
 						// send descriptor
@@ -117,7 +117,7 @@ void handle() {
 					NRF_USBD->TASKS_EP0STALL = TRIGGER;
 				}
 				break;
-			case OUT | REQUEST_TYPE_STANDARD | RECIPIENT_INTERFACE:
+			case usb::Request::OUT | usb::Request::TYPE_STANDARD | usb::Request::RECIPIENT_INTERFACE:
 				// write request to standard interface
 				if (bRequest == 0x11) {
 					// set interface
@@ -131,7 +131,7 @@ void handle() {
 					NRF_USBD->TASKS_EP0STALL = TRIGGER;
 				}
 				break;
-			case OUT | REQUEST_TYPE_VENDOR | RECIPIENT_INTERFACE:
+			case usb::Request::OUT | usb::Request::TYPE_VENDOR | usb::Request::RECIPIENT_INTERFACE:
 				{
 					int wValue = (NRF_USBD->WVALUEH << 8) | NRF_USBD->WVALUEL;
 					int wIndex = (NRF_USBD->WINDEXH << 8) | NRF_USBD->WINDEXL;
@@ -290,7 +290,7 @@ void handle() {
 }
 
 void init(
-	std::function<Data (DescriptorType)> const &getDescriptor,
+	std::function<Data (usb::DescriptorType)> const &getDescriptor,
 	std::function<void (uint8_t)> const &onSetConfiguration,
 	std::function<bool (uint8_t, uint16_t, uint16_t)> const &onRequest)
 {

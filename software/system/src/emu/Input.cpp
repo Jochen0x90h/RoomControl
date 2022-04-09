@@ -47,18 +47,19 @@ void handle(Gui &gui) {
 	// call next handler in chain
 	Input::nextHandler(gui);
 
-	#ifdef INPUT_DOUBLE_ROCKER
+#ifdef INPUT_EMU_DOUBLE_ROCKER
 	{
 		// emulate a switch on the inputs
-		int value = gui.doubleRocker(0x47b8628e);
-		if (value != -1) {
-			set(0, (value & 1) != 0);
-			set(1, (value & 2) != 0);
-			set(2, (value & 4) != 0);
-			set(3, (value & 8) != 0);
+		auto value = gui.doubleRocker(0x47b8628e, true);
+		if (value) {
+			int rocker = *value;
+			set(0, (rocker & 1) != 0);
+			set(1, (rocker & 2) != 0);
+			set(2, (rocker & 4) != 0);
+			set(3, (rocker & 8) != 0);
 		}
 	}
-	#endif
+#endif
 }
 
 void init() {
