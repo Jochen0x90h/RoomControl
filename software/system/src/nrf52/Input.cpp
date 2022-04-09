@@ -88,7 +88,7 @@ void handle() {
 					state.timeout.value += 0x7fffffff;
 
 					// read input value
-					bool value = readInput(input.pin) != input.invert;
+					bool value = gpio::readInput(input.pin) != input.invert;
 					bool old = state.value;
 					state.value = value;
 
@@ -148,7 +148,7 @@ void init() {
 				| V(GPIOTE_CONFIG_PSEL, input.pin);
 				
 			// read input value
-			state.value = readInput(input.pin) != input.invert;
+			state.value = gpio::readInput(input.pin) != input.invert;
 	
 			// clear pending event
 			NRF_GPIOTE->EVENTS_IN[index] = 0;
@@ -167,7 +167,7 @@ void init() {
 bool read(int index) {
 	if (uint32_t(index) < INPUT_COUNT) {
 		auto &input = INPUTS[index];
-		return readInput(input.pin) != input.invert;
+		return gpio::readInput(input.pin) != input.invert;
 	}
 	return false;
 }

@@ -33,6 +33,7 @@ void SwapChain::put(Bitmap<DISPLAY_WIDTH, DISPLAY_HEIGHT> *bitmap) {
 }
 
 void SwapChain::show(Bitmap<DISPLAY_WIDTH, DISPLAY_HEIGHT> *bitmap) {
+	assert(bitmap != nullptr);
 	assert(this->showList == nullptr);
 	this->showList = bitmap;
 	this->barrier.resumeFirst();

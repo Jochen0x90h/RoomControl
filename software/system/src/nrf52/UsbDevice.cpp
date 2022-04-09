@@ -1,4 +1,4 @@
-#include "../Usb.hpp"
+#include "../UsbDevice.hpp"
 #include "Loop.hpp"
 #include "defs.hpp"
 #include <util.hpp>
@@ -15,9 +15,9 @@
 	Resources:
 		NRF_USBD
 */
-namespace Usb {
+namespace UsbDevice {
 
-std::function<Data (DescriptorType)> getDescriptor;
+std::function<Data (usb::DescriptorType)> getDescriptor;
 std::function<void (uint8_t)> onSetConfiguration;
 std::function<bool (uint8_t, uint16_t, uint16_t)> onRequest;
 
@@ -77,18 +77,18 @@ void handle() {
 			NRF_USBD->EVENTS_EP0SETUP = 0;
 
 			// setup request
-			uint8_t bmRequestType = NRF_USBD->BMREQUESTTYPE;
+			auto bmRequestType = usb::Request(NRF_USBD->BMREQUESTTYPE);
 			uint8_t bRequest = NRF_USBD->BREQUEST;
 
 			switch (bmRequestType) {
-			case OUT | REQUEST_TYPE_STANDARD | RECIPIENT_DEVICE:
+			case usb::Request::OUT | usb::Request::TYPE_STANDARD | usb::Request::RECIPIENT_DEVICE:
 				// write request to standard device
 				if (bRequest == 0x05) {
 					// set address, handled by hardware
 				} else if (bRequest == 0x09) {
 					// set configuration
 					uint8_t bConfigurationValue = NRF_USBD->WVALUEL;
-					Usb::onSetConfiguration(bConfigurationValue);
+					UsbDevice::onSetConfiguration(bConfigurationValue);
 
 					// enter status stage
 					NRF_USBD->TASKS_EP0STATUS = TRIGGER;
@@ -97,12 +97,12 @@ void handle() {
 					NRF_USBD->TASKS_EP0STALL = TRIGGER;
 				}
 				break;
-			case IN | REQUEST_TYPE_STANDARD | RECIPIENT_DEVICE:
+			case usb::Request::IN | usb::Request::TYPE_STANDARD | usb::Request::RECIPIENT_DEVICE:
 				// read request to standard device
 				if (bRequest == 0x06) {
 					// get descriptor from user code by using the callback
-					auto descriptorType = DescriptorType(NRF_USBD->WVALUEH);
-					Data descriptor = Usb::getDescriptor(descriptorType);
+					auto descriptorType = usb::DescriptorType(NRF_USBD->WVALUEH);
+					Data descriptor = UsbDevice::getDescriptor(descriptorType);
 					if (descriptor.size > 0) {
 						// send descriptor
 						int wLength = (NRF_USBD->WLENGTHH << 8) | NRF_USBD->WLENGTHL;
@@ -117,7 +117,7 @@ void handle() {
 					NRF_USBD->TASKS_EP0STALL = TRIGGER;
 				}
 				break;
-			case OUT | REQUEST_TYPE_STANDARD | RECIPIENT_INTERFACE:
+			case usb::Request::OUT | usb::Request::TYPE_STANDARD | usb::Request::RECIPIENT_INTERFACE:
 				// write request to standard interface
 				if (bRequest == 0x11) {
 					// set interface
@@ -131,13 +131,13 @@ void handle() {
 					NRF_USBD->TASKS_EP0STALL = TRIGGER;
 				}
 				break;
-			case OUT | REQUEST_TYPE_VENDOR | RECIPIENT_INTERFACE:
+			case usb::Request::OUT | usb::Request::TYPE_VENDOR | usb::Request::RECIPIENT_INTERFACE:
 				{
 					int wValue = (NRF_USBD->WVALUEH << 8) | NRF_USBD->WVALUEL;
 					int wIndex = (NRF_USBD->WINDEXH << 8) | NRF_USBD->WINDEXL;
 
 					// let user code handle the request
-					bool result = Usb::onRequest(bRequest, wValue, wIndex);
+					bool result = UsbDevice::onRequest(bRequest, wValue, wIndex);
 					if (result) {
 						// enter status stage
 						NRF_USBD->TASKS_EP0STATUS = TRIGGER;
@@ -183,7 +183,7 @@ void handle() {
 				// clear pending interrupt flag at peripheral
 				NRF_USBD->EVENTS_ENDEPOUT[index] = 0;
 
-				auto& ep = Usb::endpoints[index - 1];
+				auto& ep = UsbDevice::endpoints[index - 1];
 
 				int receivedCount = NRF_USBD->EPOUT[index].AMOUNT;
 				ep.receiveLength -= receivedCount;
@@ -229,7 +229,7 @@ void handle() {
 
 				if (EPDATASTATUS & inFlag) {
 					// finished send to host (IN)
-					auto& ep = Usb::endpoints[index - 1];
+					auto& ep = UsbDevice::endpoints[index - 1];
 
 					// check if more to send
 					int sentCount = NRF_USBD->EPIN[index].AMOUNT;
@@ -264,7 +264,7 @@ void handle() {
 
 				if (EPDATASTATUS & outFlag) {
 					// finished receive from host (OUT)
-					auto& ep = Usb::endpoints[index - 1];
+					auto& ep = UsbDevice::endpoints[index - 1];
 
 					// get length of data in internal buffer
 					int length = NRF_USBD->SIZE.EPOUT[index];
@@ -286,24 +286,24 @@ void handle() {
 	}
 
 	// call next handler in chain
-	Usb::nextHandler();
+	UsbDevice::nextHandler();
 }
 
 void init(
-	std::function<Data (DescriptorType)> const &getDescriptor,
+	std::function<Data (usb::DescriptorType)> const &getDescriptor,
 	std::function<void (uint8_t)> const &onSetConfiguration,
 	std::function<bool (uint8_t, uint16_t, uint16_t)> const &onRequest)
 {
 	// check if already initialized
-	if (Usb::nextHandler != nullptr)
+	if (UsbDevice::nextHandler != nullptr)
 		return;
 
 	// add to event loop handler chain
-	Usb::nextHandler = Loop::addHandler(handle);
+	UsbDevice::nextHandler = Loop::addHandler(handle);
 
-	Usb::getDescriptor = getDescriptor;
-	Usb::onSetConfiguration = onSetConfiguration;
-	Usb::onRequest = onRequest;
+	UsbDevice::getDescriptor = getDescriptor;
+	UsbDevice::onSetConfiguration = onSetConfiguration;
+	UsbDevice::onRequest = onRequest;
 
 	NRF_USBD->INTENSET = N(USBD_INTENSET_USBEVENT, Set)
 		| N(USBD_INTENSET_EP0SETUP, Set)
@@ -328,7 +328,7 @@ void enableEndpoints(uint8_t inFlags, uint8_t outFlags) {
 
 Awaitable<ReceiveParameters> receive(int index, int &length, void *data) {
 	assert(index >= 1 && endpoint < USB_ENDPOINT_COUNT);
-	auto& ep = Usb::endpoints[index - 1];
+	auto& ep = UsbDevice::endpoints[index - 1];
 
 	// check if usb receiver is idle
 	if (!ep.receiveBusy) {
@@ -347,7 +347,7 @@ Awaitable<ReceiveParameters> receive(int index, int &length, void *data) {
 
 Awaitable<SendParameters> send(int index, int length, void const *data) {
 	assert(index >= 1 && index < USB_ENDPOINT_COUNT);
-	auto& ep = Usb::endpoints[index - 1];
+	auto& ep = UsbDevice::endpoints[index - 1];
 
 	// check if usb sender is idle
 	if (!ep.sendBusy) {
@@ -364,4 +364,4 @@ Awaitable<SendParameters> send(int index, int length, void const *data) {
 	return {ep.sendWaitlist, length, data};
 }
 
-} // namespace Usb
+} // namespace UsbDevice

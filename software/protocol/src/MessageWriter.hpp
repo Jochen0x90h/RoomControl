@@ -101,6 +101,17 @@ struct MessageWriter {
 		this->current += array.count();
 	}
 
+	/**
+	 * Add the contents of an array, cast each element to uint8_t
+	 */
+	template <typename T, int N>
+	void data(T (&array)[N]) {
+		auto current = this->current;
+		for (int i = 0; i < N; ++i)
+			current[i] = uint8_t(array[i]);
+		this->current += N;
+	}
+
 	void data(int length, uint8_t const *data) {
 		auto current = this->current;
 		for (int i = 0; i < length; ++i)

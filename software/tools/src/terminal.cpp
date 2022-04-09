@@ -1,4 +1,4 @@
-#include <UsbDefs.hpp>
+#include <usb.hpp>
 #include <stdio.h>
 #include <libusb.h>
 #include <util.hpp>
@@ -69,7 +69,7 @@ int main(void) {
 		int length;
 		while (true) {
 			// receive from device (we get back the same data that we sent)
-			ret = libusb_bulk_transfer(handle, 1 | Usb::IN, data, 256, &length, 0);
+			ret = libusb_bulk_transfer(handle, 1 | usb::IN, data, 256, &length, 0);
 			if (ret != LIBUSB_SUCCESS) {
 				fprintf(stderr, "transfer error: %d\n", ret);
 				break;

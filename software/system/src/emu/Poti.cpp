@@ -1,7 +1,7 @@
 #include "../Poti.hpp"
 #include "Loop.hpp"
 #include "Input.hpp"
-#include <appConfig.hpp>
+#include <boardConfig.hpp>
 
 
 namespace Poti {
@@ -30,8 +30,10 @@ void handle(Gui &gui) {
 		});
 	}
 
+#ifdef INPUT_EMU_POTI_BUTTON
 	if (poti.button)
-		Input::set(INPUT_POTI_BUTTON, *poti.button);
+		Input::set(INPUT_EMU_POTI_BUTTON, *poti.button);
+#endif
 }
 
 void init() {

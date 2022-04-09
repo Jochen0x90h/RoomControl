@@ -8,11 +8,11 @@ compiler.version=10
 compiler.libcxx=libstdc++11
 build_type=Release
 [options]
+board=nrf52Dongle
+family=nrf52
+mcu=nrf52840
 cpu=cortex-m4
 fpu=fpv4-sp-d16
-mcu=nrf52840
-family=nrf52
-board=nrf52dongle
 [build_requires]
 [env]
 CC=arm-none-eabi-gcc

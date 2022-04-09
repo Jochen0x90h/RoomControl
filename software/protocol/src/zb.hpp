@@ -1,9 +1,20 @@
 #pragma once
 
+#include "crypt.hpp"
 #include <enum.hpp>
 
 
 namespace zb {
+
+// zbee alliance 2009 key
+extern uint8_t const za09LinkKey[16];
+extern AesKey const za09LinkAesKey;
+extern AesKey const za09KeyTransportAesKey;
+extern AesKey const za09KeyLoadAesKey;
+
+// zbee light link key
+extern uint8_t const zllLinkKey[16];
+
 
 // network layer frame control field
 enum class NwkFrameControl : uint16_t {

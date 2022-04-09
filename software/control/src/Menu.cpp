@@ -110,7 +110,7 @@ AwaitableCoroutine Menu::show() {
 	const int lineHeight = tahoma_8pt.height + 4;
 
 	// adjust yOffset so that selected entry is visible
-	bool redraw = this->bitmap == nullptr;
+	bool redraw = this->bitmap == nullptr;//this->redraw;
 	int upper = this->selectedY;
 	int lower = upper + lineHeight;
 	if (upper < this->offsetY) {
@@ -134,6 +134,7 @@ AwaitableCoroutine Menu::show() {
 	if (!redraw) {
 		// show menu
 		this->swapChain.show(this->bitmap);
+		this->bitmap = nullptr;
 
 		// get a new bitmap from the swap chain when poti::change returns or is interrupted
 		BitmapGetter getter{*this};
@@ -184,7 +185,7 @@ bool Menu::entry() {
 		// return the bitmap to the swap chain without drawing it
 		this->swapChain.put(this->bitmap);
 		
-		// clear pointer to trigger redraw
+		// trigger redraw
 		this->bitmap = nullptr;
 	}
 

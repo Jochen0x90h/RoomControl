@@ -1,9 +1,9 @@
-#include "../Usb.hpp"
+#include "../UsbDevice.hpp"
 #include "Loop.hpp"
 #include <stdio.h>
 
 
-namespace Usb {
+namespace UsbDevice {
 
 bool text;
 
@@ -18,10 +18,10 @@ Endpoint endpoints[1];
 // event loop handler chain
 Loop::Handler nextHandler;
 void handle(Gui &gui) {
-	for (auto &endpoint : Usb::endpoints) {
+	for (auto &endpoint : UsbDevice::endpoints) {
 
 		endpoint.sendWaitlist.resumeFirst([](SendParameters p) {
-			if (Usb::text) {
+			if (UsbDevice::text) {
 				printf("%.*s", p.length, reinterpret_cast<char const *>(p.data));
 			} else {
 				// binary
@@ -42,23 +42,23 @@ void handle(Gui &gui) {
 	}
 	
 	// call next handler in chain
-	Usb::nextHandler(gui);
+	UsbDevice::nextHandler(gui);
 }
 
 void init(
-	std::function<Data (DescriptorType)> const &getDescriptor,
+	std::function<Data (usb::DescriptorType)> const &getDescriptor,
 	std::function<void (uint8_t)> const &onSetConfiguration,
 	std::function<bool (uint8_t, uint16_t, uint16_t)> const &onRequest)
 {
 	// get device descriptor
-	auto &deviceDescriptor = getDescriptor(DescriptorType::DEVICE).cast<DeviceDescriptor>();
-	Usb::text = deviceDescriptor.bDeviceProtocol == 1;
+	auto &deviceDescriptor = getDescriptor(usb::DescriptorType::DEVICE).cast<usb::DeviceDescriptor>();
+	UsbDevice::text = deviceDescriptor.bDeviceProtocol == 1;
 	
 	// set configuration
 	Loop::context.post([onSetConfiguration]() {onSetConfiguration(1);});
 
 	// add to event loop handler chain
-	Usb::nextHandler = Loop::addHandler(handle);
+	UsbDevice::nextHandler = Loop::addHandler(handle);
 }
 
 void enableEndpoints(uint8_t inFlags, uint8_t outFlags) {
@@ -66,14 +66,14 @@ void enableEndpoints(uint8_t inFlags, uint8_t outFlags) {
 
 Awaitable<ReceiveParameters> receive(int index, int &length, void *data) {
 	assert(index == 1);
-	auto &endpoint = Usb::endpoints[index - 1];
+	auto &endpoint = UsbDevice::endpoints[index - 1];
 
 	return {endpoint.receiveWaitlist, length, data};
 }
 
 Awaitable<SendParameters> send(int index, int length, void const *data) {
 	assert(index == 1);
-	auto &endpoint = Usb::endpoints[index - 1];
+	auto &endpoint = UsbDevice::endpoints[index - 1];
 
 	return {endpoint.sendWaitlist, length, data};
 }

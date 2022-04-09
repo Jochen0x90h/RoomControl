@@ -1,10 +1,16 @@
 #pragma once
 
+#include "MessageReader.hpp"
+#include "MessageWriter.hpp"
 #include <enum.hpp>
 #include <cstdint>
 
 
 namespace bus {
+
+extern uint8_t const defaultKey[16];
+extern AesKey const defaultAesKey;
+
 
 /**
  * Type of device endpoint such as button, relay or temperature sensor
@@ -16,7 +22,7 @@ namespace bus {
 	// discrete types
 	// --------------
 	
-	// on/off with two stable states and toggle command (0: off, 1: on, 2: toggle)
+	// on/off switch with two stable states and toggle command (0: off, 1: on, 2: toggle)
 	ON_OFF = 0x01,
 	ON_OFF_IN = 0x81,
 	ON_OFF_OUT = 0x01,
@@ -118,5 +124,69 @@ enum class LevelControlCommand : uint8_t {
 };
 FLAGS_ENUM(LevelControlCommand);
 
+
+
+
+class MessageReader : public DecryptReader {
+public:
+	MessageReader(int length, uint8_t *data) : DecryptReader(length, data) {}
+
+	/**
+	 * Read a value from 0 to 8 from bus arbitration, i.e. multiple devices can write at the same time and the
+	 * lowest value survives
+	 * @return value
+	 */
+	uint8_t arbiter();
+
+	/**
+	 * Read an encoded device id
+	 * @return device id
+	 */
+	uint32_t id();
+};
+
+class MessageWriter : public EncryptWriter {
+public:
+	template <int N>
+	MessageWriter(uint8_t (&message)[N]) : EncryptWriter(message), begin(message)
+#ifdef EMU
+		, end(message + N)
+#endif
+	{}
+
+	MessageWriter(int length, uint8_t *message) : EncryptWriter(message), begin(message)
+#ifdef EMU
+		, end(message + length)
+#endif
+	{}
+
+	/**
+	 * Write a value from 0 to 8 for bus arbitration, i.e. multiple devices can write at the same time and the
+	 * lowest value survives
+	 * @param value value in range 0 to 8 to write
+	 */
+	void arbiter(uint8_t value) {
+		u8(~(0xff >> value));
+	}
+
+	/**
+	 * Write an encoded device id
+	 * @param id device id to encode
+	 */
+	void id(uint32_t id);
+
+	int getLength() {
+		int length = this->current - this->begin;
+#ifdef EMU
+		assert(this->current <= this->end);
+#endif
+		return length;
+	}
+
+	uint8_t *begin;
+#ifdef EMU
+	uint8_t *end;
+#endif
+};
 
 } // namespace bus

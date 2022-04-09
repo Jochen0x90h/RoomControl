@@ -87,7 +87,7 @@ void handle() {
 					state.timeout.value += 0x7fffffff;
 
 					// read input value
-					bool value = readInput(input.pin) != input.invert;					
+					bool value = gpio::readInput(input.pin) != input.invert;
 					bool old = state.value;
 					state.value = value;
 
@@ -153,7 +153,7 @@ void init() {
 			EXTI->IMR = EXTI->IMR | 1 << pin; // enable interrupt
 				
 			// read input value
-			state.value = readInput(input.pin) != input.invert;
+			state.value = gpio::readInput(input.pin) != input.invert;
 		}
 	
 		// use channel 2 of TIM2 (on top of Timer::init())
@@ -166,7 +166,7 @@ void init() {
 bool read(int index) {
 	if (uint32_t(index) < INPUT_COUNT) {
 		auto &input = INPUTS[index];
-		return readInput(input.pin) != input.invert;
+		return gpio::readInput(input.pin) != input.invert;
 	}
 	return false;
 }

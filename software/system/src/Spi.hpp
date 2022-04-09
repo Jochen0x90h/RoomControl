@@ -34,7 +34,7 @@ void init();
  * @param readLength length of data to read
  * @param readData data to read (8/16/32 bit and ram-only dependent on driver)
  * @param command true if this is a command which gets indicated on a separate pin
- * @return use co_await on return value to await end of transfer
+ * @return use co_await on return value to await completion
  */
 [[nodiscard]] Awaitable<Parameters> transfer(int index, int writeLength, void const *writeData, int readLength, void *readData);
 
@@ -43,7 +43,7 @@ void init();
  * @param index index of spi context
  * @param writeLength length of data to write
  * @param writeData data to write
- * @return use co_await on return value to await end of transfer
+ * @return use co_await on return value to await completion
  */
 [[nodiscard]] inline Awaitable<Parameters> writeCommand(int index, int writeLength, void const *writeData) {
 	return transfer(index, writeLength | 0x80000000, writeData, 0, nullptr);

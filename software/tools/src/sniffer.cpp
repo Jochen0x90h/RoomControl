@@ -1,6 +1,6 @@
 #include <Terminal.hpp>
 #include <RadioDefs.hpp>
-#include <UsbDefs.hpp>
+#include <usb.hpp>
 #include <crypt.hpp>
 #include <hash.hpp>
 #include <Nonce.hpp>
@@ -45,15 +45,6 @@ struct PcapPacket {
 	uint32_t orig_len;       // actual length of packet
 	uint8_t data[140];
 };
-
-// zbee alliance 2009 default trust center link key
-static uint8_t const za09LinkKey[] = {0x5A, 0x69, 0x67, 0x42, 0x65, 0x65, 0x41, 0x6C, 0x6C, 0x69, 0x61, 0x6E, 0x63, 0x65, 0x30, 0x39};
-
-// zbee light link key
-static uint8_t const zllKey[] = {0x81, 0x42, 0x86, 0x86, 0x5D, 0xC1, 0xC8, 0xB2, 0xC8, 0xCB, 0xC5, 0x2E, 0x5D, 0x65, 0xD1, 0xB8};
-
-// bus default key
-static uint8_t const busDefaultKey[] = {0x13, 0x37, 0xc6, 0xb3, 0xf1, 0x6c, 0x7c, 0xb6, 0x2d, 0xec, 0x18, 0x2d, 0x30, 0x78, 0xd6, 0x18};
 
 // default link key used by aps layer, prepared for aes encryption/decryption
 AesKey za09LinkAesKey;
@@ -955,7 +946,7 @@ void handleZcl(PacketReader &r, uint8_t destinationEndpoint) {
 
 int controlTransfer(libusb_device_handle *handle, Radio::Request request, uint16_t wValue, uint16_t wIndex) {
 	return libusb_control_transfer(handle,
-		Usb::OUT | Usb::REQUEST_TYPE_VENDOR | Usb::RECIPIENT_INTERFACE,
+		uint8_t(usb::Request::OUT | usb::Request::TYPE_VENDOR | usb::Request::RECIPIENT_INTERFACE),
 		uint8_t(request), wValue, wIndex,
 		nullptr, 0, 1000);
 }
@@ -965,18 +956,18 @@ int main(int argc, char const *argv[]) {
 	fs::path outputFile;
 
 	AesKey busDefaultAesKey;
-	//setKey(busDefaultAesKey, busDefaultKey);
+	//setKey(busDefaultAesKey, bus::defaultKey);
 	//printKey("busDefaultAesKey", busDefaultAesKey);
 
-	setKey(za09LinkAesKey, za09LinkKey);
+	setKey(za09LinkAesKey, zb::za09LinkKey);
 	//printKey("za09LinkAesKey", za09LinkAesKey);
-	setKey(linkAesKey, za09LinkKey);
+	setKey(linkAesKey, zb::za09LinkKey);
 
 	DataBuffer<16> hashedKey;
-	keyHash(hashedKey, za09LinkKey, 0);
+	keyHash(hashedKey, zb::za09LinkKey, 0);
 	setKey(za09KeyTransportAesKey, hashedKey);
 	//printKey("za09KeyTransportAesKey", za09KeyTransportAesKey);
-	keyHash(hashedKey, za09LinkKey, 2);
+	keyHash(hashedKey, zb::za09LinkKey, 2);
 	setKey(za09KeyLoadAesKey, hashedKey);
 	//printKey("za09KeyLoadAesKey", za09KeyLoadAesKey);
 
@@ -1013,6 +1004,8 @@ int main(int argc, char const *argv[]) {
 			radioFlags |= Radio::ContextFlags::HANDLE_ACK;
 		} else {
 			// output pcap file
+			if (arg == "-o" )
+				++i;
 			outputFile = argv[i];
 		}
 	}
@@ -1083,7 +1076,7 @@ int main(int argc, char const *argv[]) {
 
 			// reset the radio
 			controlTransfer(handle, Radio::Request::RESET, 0, 0);
-			while (libusb_bulk_transfer(handle, 1 | Usb::IN, packet.data, sizeof(packet.data), &length, 10) == LIBUSB_SUCCESS)
+			while (libusb_bulk_transfer(handle, 1 | usb::IN, packet.data, sizeof(packet.data), &length, 10) == LIBUSB_SUCCESS)
 				;
 
 			// configure the radio
@@ -1113,7 +1106,7 @@ int main(int argc, char const *argv[]) {
 			uint32_t startTime = -1;
 			while (true) {
 				// receive from radio
-				ret = libusb_bulk_transfer(handle, 1 | Usb::IN, packet.data, sizeof(packet.data), &length, 0);
+				ret = libusb_bulk_transfer(handle, 1 | usb::IN, packet.data, sizeof(packet.data), &length, 0);
 				if (ret != LIBUSB_SUCCESS) {
 					Terminal::err << ("transfer error: " + dec(ret) + '\n');
 					break;

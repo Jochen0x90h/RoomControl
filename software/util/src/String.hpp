@@ -175,7 +175,7 @@ inline bool operator ==(String a, String b) {
 	return true;
 }
 
-inline bool operator !=(String a, String b) {return !operator ==(a, b);}
+//inline bool operator !=(String a, String b) {return !operator ==(a, b);}
 
 inline bool operator <(String a, String b) {
 	int length = min(a.length, b.length);

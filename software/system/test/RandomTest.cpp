@@ -1,15 +1,15 @@
 #include <Timer.hpp>
 #include <Random.hpp>
-#include <Usb.hpp>
+#include <UsbDevice.hpp>
 #include <Debug.hpp>
 #include <Loop.hpp>
 #include <util.hpp>
 
 
 // device descriptor
-static const Usb::DeviceDescriptor deviceDescriptor = {
-	.bLength = sizeof(Usb::DeviceDescriptor),
-	.bDescriptorType = Usb::DescriptorType::DEVICE,
+static const usb::DeviceDescriptor deviceDescriptor = {
+	.bLength = sizeof(usb::DeviceDescriptor),
+	.bDescriptorType = usb::DescriptorType::DEVICE,
 	.bcdUSB = 0x0200, // USB 2.0
 	.bDeviceClass = 0xff, // no class
 	.bDeviceSubClass = 0xff,
@@ -26,15 +26,15 @@ static const Usb::DeviceDescriptor deviceDescriptor = {
 
 // configuration descriptor
 struct UsbConfiguration {
-	struct Usb::ConfigDescriptor config;
-	struct Usb::InterfaceDescriptor interface;
-	struct Usb::EndpointDescriptor endpoints[1];
+	struct usb::ConfigDescriptor config;
+	struct usb::InterfaceDescriptor interface;
+	struct usb::EndpointDescriptor endpoints[1];
 } __attribute__((packed));
 
 static const UsbConfiguration configurationDescriptor = {
 	.config = {
-		.bLength = sizeof(Usb::ConfigDescriptor),
-		.bDescriptorType = Usb::DescriptorType::CONFIGURATION,
+		.bLength = sizeof(usb::ConfigDescriptor),
+		.bDescriptorType = usb::DescriptorType::CONFIGURATION,
 		.wTotalLength = sizeof(UsbConfiguration),
 		.bNumInterfaces = 1,
 		.bConfigurationValue = 1,
@@ -43,8 +43,8 @@ static const UsbConfiguration configurationDescriptor = {
 		.bMaxPower = 50 // 100 mA
 	},
 	.interface = {
-		.bLength = sizeof(Usb::InterfaceDescriptor),
-		.bDescriptorType = Usb::DescriptorType::INTERFACE,
+		.bLength = sizeof(usb::InterfaceDescriptor),
+		.bDescriptorType = usb::DescriptorType::INTERFACE,
 		.bInterfaceNumber = 0,
 		.bAlternateSetting = 0,
 		.bNumEndpoints = array::count(configurationDescriptor.endpoints),
@@ -54,10 +54,10 @@ static const UsbConfiguration configurationDescriptor = {
 		.iInterface = 0
 	},
 	.endpoints = {{
-		.bLength = sizeof(Usb::EndpointDescriptor),
-		.bDescriptorType = Usb::DescriptorType::ENDPOINT,
-		.bEndpointAddress = 1 | Usb::IN, // 1 in (device to host)
-		.bmAttributes = Usb::EndpointType::BULK,
+		.bLength = sizeof(usb::EndpointDescriptor),
+		.bDescriptorType = usb::DescriptorType::ENDPOINT,
+		.bEndpointAddress = 1 | usb::IN, // 1 in (device to host)
+		.bmAttributes = usb::EndpointType::BULK,
 		.wMaxPacketSize = 64,
 		.bInterval = 1 // polling interval
 	}}
@@ -75,7 +75,7 @@ Coroutine send() {
 			sendData[i] = Random::int8();
 		
 		// send to host	
-		co_await Usb::send(1, array::count(sendData), sendData);
+		co_await UsbDevice::send(1, array::count(sendData), sendData);
 		Debug::toggleBlueLed();
 		
 		co_await Timer::sleep(1s);
@@ -86,12 +86,12 @@ int main(void) {
 	Loop::init();
 	Timer::init();
 	Random::init();
-	Usb::init(
-		[](Usb::DescriptorType descriptorType) {
+	UsbDevice::init(
+		[](usb::DescriptorType descriptorType) {
 			switch (descriptorType) {
-			case Usb::DescriptorType::DEVICE:
+			case usb::DescriptorType::DEVICE:
 				return Data(&deviceDescriptor);
-			case Usb::DescriptorType::CONFIGURATION:
+			case usb::DescriptorType::CONFIGURATION:
 				return Data(&configurationDescriptor);
 			default:
 				return Data();
@@ -99,7 +99,7 @@ int main(void) {
 		},
 		[](uint8_t bConfigurationValue) {
 			// enable bulk endpoints in 1 (keep control endpoint 0 enabled)
-			Usb::enableEndpoints(1 | (1 << 1), 1); 			
+			UsbDevice::enableEndpoints(1 | (1 << 1), 1);
 
 			// start to send random numbers to host
 			send();

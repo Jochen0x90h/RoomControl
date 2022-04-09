@@ -15,12 +15,13 @@ constexpr int FLASH_WRITE_ALIGN = 4;
 // ------
 
 constexpr int INPUT_COUNT = 2;
+#define INPUT_EMU_POTI_BUTTON 0
 
 
 // outputs
 // -------
 
-constexpr struct {uint32_t color; bool enabled; bool initialValue;} OUTPUTS[4] = {
+constexpr struct {uint32_t color; bool enabled; bool initialValue;} OUTPUTS[] = {
 	{0x0000ff, true, false}, // red led
 	{0x00ff00, true, false}, // green led
 	{0xff0000, true, false}, // blue led
@@ -33,9 +34,9 @@ constexpr int OUTPUT_COUNT = array::count(OUTPUTS);
 // ---
 
 constexpr int SPI_CONTEXT_COUNT = 3;
-constexpr int SPI_EMU_AIR_SENSOR = 0;
-constexpr int SPI_EMU_FRAM = 1;
-constexpr int SPI_EMU_DISPLAY = 2;
+#define SPI_EMU_BME680 0
+#define SPI_EMU_SSD1309 1
+#define SPI_EMU_MR45V064B 2
 
 
 // radio

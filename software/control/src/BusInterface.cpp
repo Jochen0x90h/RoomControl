@@ -9,35 +9,8 @@
 
 using EndpointType = Interface::EndpointType;
 
-AesKey const busDefaultAesKey = {{0x1337c6b3, 0xf16c7cb6, 0x2dec182d, 0x3078d618, 0xaec16bb7, 0x5fad1701, 0x72410f2c, 0x4239d934, 0xbef4739b, 0xe159649a, 0x93186bb6, 0xd121b282, 0x47c360a5, 0xa69a043f, 0x35826f89, 0xe4a3dd0b, 0x45024bcc, 0xe3984ff3, 0xd61a207a, 0x32b9fd71, 0x0356e8ef, 0xe0cea71c, 0x36d48766, 0x046d7a17, 0x1f8c181d, 0xff42bf01, 0xc9963867, 0xcdfb4270, 0x50a049a0, 0xafe2f6a1, 0x6674cec6, 0xab8f8cb6, 0xa3c407c2, 0x0c26f163, 0x6a523fa5, 0xc1ddb313, 0x79a97aba, 0x758f8bd9, 0x1fddb47c, 0xde00076f, 0x2c6cd2a7, 0x59e3597e, 0x463eed02, 0x983eea6d}};
-
-constexpr int minMessageLength = 2 + 4 + 1 + 4; // ecoded address, security counter, endpoint index, no payload, mic
-constexpr int maxMessageLength = minMessageLength + 8; // payload
+constexpr int maxMessageLength = 64;
 constexpr int micLength = 4;
-
-// number of retries when a send fails
-constexpr int MAX_RETRY = 4;
-
-
-// BusInterface::MessageReader
-
-uint8_t BusInterface::MessageReader::arbiter() {
-	uint8_t value = u8();
-
-	uint8_t count = 0;
-	while (value > 0) {
-		++count;
-		value <<= 1;
-	}
-	return count;
-}
-
-
-// BusInterface::MessageWriter
-
-void BusInterface::MessageWriter::arbiter(uint8_t value) {
-	u8(~(0xff >> value));
-}
 
 
 // BusInterface
@@ -48,7 +21,6 @@ BusInterface::BusInterface(PersistentStateManager &stateManager)
 }
 
 BusInterface::~BusInterface() {
-
 }
 
 Coroutine BusInterface::start(DataBuffer<16> const &key, AesKey const &aesKey) {
@@ -59,17 +31,12 @@ Coroutine BusInterface::start(DataBuffer<16> const &key, AesKey const &aesKey) {
 	co_await this->securityCounter.restore();
 
 	// start coroutines
+	receive();
 	publish();
-	awaitRequest();
 }
 
 void BusInterface::setCommissioning(bool enabled) {
-	if (enabled) {
-		// start commissioning coroutine that polls new devices
-		this->commissionCoroutine = commission();
-	} else {
-		this->commission().cancel();
-	}
+	this->commissioning = enabled;
 }
 
 int BusInterface::getDeviceCount() {
@@ -107,134 +74,12 @@ void BusInterface::addPublisher(DeviceId deviceId, uint8_t endpointIndex, Publis
 void BusInterface::addSubscriber(DeviceId deviceId, uint8_t endpointIndex, Subscriber &subscriber) {
 	for (auto &device : this->devices) {
 		auto const &flash = *device;
-		if (flash.deviceId == deviceId && endpointIndex < flash.endpointCount) {
+		if (flash.deviceId == deviceId/* && endpointIndex < flash.endpointCount*/) {
 			subscriber.remove();
 			subscriber.index = endpointIndex;
 			device.subscribers.add(subscriber);
 			break;
 		}
-	}
-}
-
-AwaitableCoroutine BusInterface::commission() {
-	constexpr int minEnumerateLength = 1 + 11 + 4; // command prefix, encoded device id, mic
-	constexpr int maxEnumerateLength = minEnumerateLength + DeviceFlash::MAX_ENDPOINT_COUNT; // endpoints
-	constexpr int commissionLength = 1 + 1 + 4 + 1 + 16 + 4; // command prefix, arbitration, device id, address, key, mic
-
-	uint8_t inMessage[maxEnumerateLength];
-	uint8_t outMessage[commissionLength];
-
-	// periodically enumerate new devices
-	while (true) {
-		DeviceFlash flash;
-
-		co_await Timer::sleep(1s);
-
-		// write zero as command prefix to bus and check if a device gets enumerated
-		outMessage[0] = 0;
-		int readLength = array::count(inMessage);
-		co_await BusMaster::transfer(1, outMessage, readLength, inMessage);
-		if (readLength < minEnumerateLength)
-			continue;
-
-		// get device id from enumerate response
-		{
-			MessageReader r(readLength, inMessage);
-
-			// set start of header
-			r.setHeader();
-
-			// check if zero was looped back
-			if (r.u8() != 0)
-				continue;
-
-			// check message integrity code
-			//r.setMessage(r.end - micLength);
-			r.setMessageFromEnd(micLength);
-			Nonce nonce(0, 0);
-			if (!r.decrypt(micLength, nonce, busDefaultAesKey))
-				continue;
-
-			// get device id
-			uint32_t deviceId = 0;
-			for (int i = 0; i < 11; ++i) {
-				deviceId |= (r.arbiter() - 1) << i * 3;
-			}
-			flash.deviceId = deviceId;
-
-			// get endpoints
-			flash.endpointCount = r.getRemaining();
-			array::copy(flash.endpointCount, flash.endpoints, r.current);
-		}
-
-		// check if device already exists and set used address flags
-		array::fill(9, outMessage, 0);
-		int index = this->devices.count();
-		for (int i = 0; i < this->devices.count(); ++i) {
-			if (this->devices[i]->deviceId == flash.deviceId)
-				index = i;
-			else
-				outMessage[i >> 3] |= 1 << (i & 7);
-		}
-
-		// find free address
-		int j;
-		for (j = 0; j < 9; ++j) {
-			uint8_t f = outMessage[j];
-			if (f != 0xff) {
-				for (int i = 0; i < 8; ++i) {
-					if ((f & (1 << (i & 7))) == 0) {
-						flash.address = j * 8 + i;
-						break;
-					}
-				}
-				break;
-			}
-		}
-
-		// continue if no free address found
-		if (j == 9)
-			continue;
-Terminal::out << ("bus device " + hex(flash.deviceId) + ": assigned address " + dec(flash.address) + '\n');
-
-		// commission device
-		{
-			MessageWriter w(outMessage);
-
-			// set start of header
-			w.setHeader();
-
-			// command prefix
-			w.u8(0);
-
-			// arbitration byte that always "wins" against enumeration messages sent by devices
-			w.u8(0);
-
-			// device id
-			w.u32L(flash.deviceId);
-
-			// address that gets assigned to the device
-			w.u8(flash.address);
-
-			// key
-			w.data(*this->key);
-
-			// set start of message (only mic, payload is in the header and therefore not encrypted)
-			w.setMessage();
-
-			// encrypt
-			Nonce nonce(0, 0);
-			w.encrypt(micLength, nonce, busDefaultAesKey);
-
-			int writeLength = w.getLength();
-			int readLength = writeLength;
-			co_await BusMaster::transfer(writeLength, outMessage, readLength, inMessage);
-		}
-
-		Device* device = new Device(flash);
-
-		// write the configured device to flash
-		this->devices.write(index, device);
 	}
 }
 
@@ -406,67 +251,161 @@ bool readMessage(MessageType dstType, void *dstMessage, MessageReader r, Endpoin
 	return true;
 }
 
-bool BusInterface::receive(MessageReader &r) {
-	// set start of header
-	r.setHeader();
+Coroutine BusInterface::receive() {
+	uint8_t receiveMessage[maxMessageLength];
 
-	// get address
-	uint8_t a1 = r.arbiter() - 1;
-	uint8_t address = a1 | (r.arbiter() << 3);
+	while (true) {
+		int receiveLength = maxMessageLength;
+		co_await BusMaster::receive(receiveLength, receiveMessage);
 
-	// get security counter
-	uint32_t securityCounter = r.u32L();
+		for (int i = 0; i < receiveLength; ++i)
+			Terminal::out << hex(receiveMessage[i]) << ' ';
+		Terminal::out << '\n';
 
-	// set start of encrypted message
-	r.setMessage();
 
-	// decrypt
-	Nonce nonce(address, securityCounter);
-	if (!r.decrypt(micLength, nonce, *this->aesKey))
-		return false;
+		bus::MessageReader r(receiveLength, receiveMessage);
+		// set start of header
+		r.setHeader();
 
-	for (auto &device : this->devices) {
-		auto const &flash = *device;
-		if (flash.address == address) {
-			uint8_t endpointIndex = r.u8();
+		// get address
+		uint8_t a1 = r.arbiter();
+		if (a1 == 0) {
+			// enumerate message
+			if (!this->commissioning)
+				continue;
 
-			// publish to subscribers
-			for (auto &subscriber : device.subscribers) {
-				// check if this is the right endpoint
-				if (subscriber.index == endpointIndex) {
-					EndpointType endpointType = flash.endpoints[endpointIndex];
-					subscriber.barrier->resumeFirst([&subscriber, &r, endpointType] (Subscriber::Parameters &p) {
-						p.subscriptionIndex = subscriber.subscriptionIndex;
+			// get device id
+			uint32_t deviceId = r.id();
 
-						// read message (note r is passed by value for multiple subscribers)
-						return readMessage(subscriber.messageType, p.message, r, endpointType);
-					});
+			// check message integrity code (mic)
+			r.setMessageFromEnd(micLength);
+			Nonce nonce(deviceId, 0);
+			if (!r.decrypt(micLength, nonce, bus::defaultAesKey))
+				continue;
+
+			// create a new device
+			DeviceFlash flash;
+			flash.deviceId = deviceId;
+
+			// get endpoints
+			flash.endpointCount = r.getRemaining();
+			array::copy(flash.endpointCount, flash.endpoints, r.current);
+
+			// commission the device
+			constexpr int commissionLength = 1 + 1 + 4 + 1 + 16 + micLength; // command prefix, arbitration, device id, address, key, mic
+			uint8_t sendMessage[commissionLength];
+
+			// check if device already exists and set flag for each used address to find a free address
+			array::fill(9, sendMessage, 0);
+			int index = this->devices.count();
+			for (int i = 0; i < this->devices.count(); ++i) {
+				if (this->devices[i]->deviceId == deviceId)
+					index = i;
+				else
+					sendMessage[i >> 3] |= 1 << (i & 7);
+			}
+
+			// find free address
+			int j;
+			for (j = 0; j < 9; ++j) {
+				uint8_t f = sendMessage[j];
+				if (f != 0xff) {
+					for (int i = 0; i < 8; ++i) {
+						if ((f & (1 << (i & 7))) == 0) {
+							flash.address = j * 8 + i;
+							break;
+						}
+					}
+					break;
 				}
 			}
-			break;
+
+			// continue if no free address found
+			if (j == 9)
+				continue;
+			Terminal::out << "bus device " << hex(deviceId) << ": assigned address " << dec(flash.address) << '\n';
+
+			// send commissioning message
+			{
+				bus::MessageWriter w(sendMessage);
+
+				// set start of header
+				w.setHeader();
+
+				// command prefix
+				w.u8(0);
+
+				// arbitration byte that always "wins" against enumeration messages sent by devices
+				w.u8(0);
+
+				// device id
+				w.u32L(deviceId);
+
+				// address that gets assigned to the device
+				w.u8(flash.address);
+
+				// key
+				w.data(*this->key);
+
+				// only add message integrity code (mic) using default key, message stays unencrypted
+				w.setMessage();
+				Nonce nonce(deviceId, 0);
+				w.encrypt(micLength, nonce, bus::defaultAesKey);
+
+				int sendLength = w.getLength();
+				co_await BusMaster::send(sendLength, sendMessage);
+			}
+
+			// write the configured device to flash
+			if (index < this->devices.count()) {
+				// only update flash, keep subscribers
+				this->devices.write(index, flash);
+			} else {
+				// create new device
+				Device* device = new Device(flash);
+				this->devices.write(index, device);
+			}
+		} else {
+			// data message
+			uint8_t address = a1 - 1 + r.arbiter() * 8;
+
+			// get security counter
+			uint32_t securityCounter = r.u32L();
+
+			// set start of encrypted message
+			r.setMessage();
+
+			// decrypt
+			Nonce nonce(address, securityCounter);
+			if (!r.decrypt(micLength, nonce, *this->aesKey))
+				continue;
+
+			for (auto &device: this->devices) {
+				auto const &flash = *device;
+				if (flash.address == address) {
+					uint8_t endpointIndex = r.u8();
+
+					// publish to subscribers
+					for (auto &subscriber: device.subscribers) {
+						// check if this is the right endpoint
+						if (subscriber.index == endpointIndex) {
+							EndpointType endpointType = flash.endpoints[endpointIndex];
+							subscriber.barrier->resumeFirst([&subscriber, &r, endpointType](Subscriber::Parameters &p) {
+								p.subscriptionIndex = subscriber.subscriptionIndex;
+
+								// read message (note r is passed by value for multiple subscribers)
+								return readMessage(subscriber.messageType, p.message, r, endpointType);
+							});
+						}
+					}
+					break;
+				}
+			}
 		}
 	}
-	return true;
 }
 
-Coroutine BusInterface::awaitRequest() {
-	uint8_t inMessage[maxMessageLength];
-	while (true) {
-		// wait for a request by a device
-		co_await BusMaster::request();
-
-		int readLength = maxMessageLength;
-		co_await BusMaster::transfer(0, nullptr, readLength, inMessage);
-
-		if (readLength >= minMessageLength) {
-			MessageReader r(readLength, inMessage);
-			receive(r);
-		}
-	}
-}
-
-bool writeMessage(MessageWriter &w, EndpointType endpointType, MessageType srcType, void const *srcMessage)
-{
+bool writeMessage(MessageWriter &w, EndpointType endpointType, MessageType srcType, void const *srcMessage) {
 	Message const &src = *reinterpret_cast<Message const *>(srcMessage);
 
 	switch (endpointType & EndpointType::TYPE_MASK) {
@@ -593,62 +532,45 @@ Coroutine BusInterface::publish() {
 					EndpointType endpointType = device->endpoints[endpointIndex];
 
 					if ((endpointType & EndpointType::OUT) == EndpointType::OUT) {
-						int retry = 0;
-						do {
-							// build packet
-							int writeLength;
-							{
-								DeviceFlash const &flash = *device;
+						// send data message to node
+						int sendLength;
+						{
+							DeviceFlash const &flash = *device;
 
-								MessageWriter w(outMessage);
+							bus::MessageWriter w(outMessage);
 
-								// set start of header
-								w.setHeader();
+							// set start of header
+							w.setHeader();
 
-								// encoded address
-								w.arbiter((flash.address & 7) + 1);
-								w.arbiter(flash.address >> 3);
+							// encoded address
+							w.arbiter((flash.address & 7) + 1);
+							w.arbiter(flash.address >> 3);
 
-								// security counter
-								w.u32L(this->securityCounter);
+							// security counter
+							w.u32L(this->securityCounter);
 
-								// set start of message
-								w.setMessage();
+							// set start of message
+							w.setMessage();
 
-								// endpoint index
-								w.u8(endpointIndex);
+							// endpoint index
+							w.u8(endpointIndex);
 
-								// message data
-								if (!writeMessage(w, endpointType, publisher.messageType, publisher.message))
-									break;
-
-								// encrypt
-								Nonce nonce(flash.address, this->securityCounter);
-								w.encrypt(micLength, nonce, *this->aesKey);
-
-								//bool ok = decrypt(message, nonce, header, headerLength, message, payloadLength, micLength, this->configuration->networkAesKey);
-
-								// increment security counter
-								++this->securityCounter;
-
-								writeLength = w.getLength();
-							}
-							int readLength = maxMessageLength;
-							co_await BusMaster::transfer(writeLength, outMessage, readLength, inMessage);
-
-							// check if inMessage is same as outMessage which means send was successful
-							if (readLength == writeLength && array::equals(readLength, inMessage, outMessage))
+							// message data
+							if (!writeMessage(w, endpointType, publisher.messageType, publisher.message))
 								break;
 
-							// maybe a device has sent a message and has overridden our message (don't count as retry)
-							if (readLength >= minMessageLength) {
-								MessageReader r(readLength, inMessage);
-								if (!receive(r))
-									++retry;
-							} else {
-								++retry;
-							}
-						} while (retry < MAX_RETRY);
+							// encrypt
+							Nonce nonce(flash.address, this->securityCounter);
+							w.encrypt(micLength, nonce, *this->aesKey);
+
+							//bool ok = decrypt(message, nonce, header, headerLength, message, payloadLength, micLength, this->configuration->networkAesKey);
+
+							// increment security counter
+							++this->securityCounter;
+
+							sendLength = w.getLength();
+						}
+						co_await BusMaster::send(sendLength, outMessage);
 					}
 
 					// forward to subscribers

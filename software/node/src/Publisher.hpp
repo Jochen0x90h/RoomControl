@@ -13,7 +13,7 @@ struct Publisher : public LinkedListNode<Publisher> {
 	bool dirty = false;
 
 	// type of message to be published
-	MessageType messageType;
+	MessageType messageType = MessageType::UNKNOWN;
 
 	// message (length is defined by messageType)
 	void const *message;

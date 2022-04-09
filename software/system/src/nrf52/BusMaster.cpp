@@ -27,8 +27,8 @@
 */
 namespace BusMaster {
 
-Waitlist<Parameters> transferWaitlist;
-Waitlist<> requestWaitlist;
+Waitlist<ReceiveParameters> receiveWaitlist;
+Waitlist<SendParameters> sendWaitlist;
 
 enum State {
 	BREAK,
@@ -87,9 +87,9 @@ void init() {
 	initSignal();
 
 	// init uart
-	setOutput(BUS_TX_PIN, true);
-	configureOutput(BUS_TX_PIN);
-	configureInput(BUS_RX_PIN, Pull::UP);
+	gpio::setOutput(BUS_TX_PIN, true);
+	gpio::configureOutput(BUS_TX_PIN);
+	configureInput(BUS_RX_PIN, gpio::Pull::UP);
 	//NRF_UART0->PSEL.TXD = BUS_TX_PIN;
 	NRF_UART0->PSEL.RXD = BUS_RX_PIN;
 	NRF_UART0->CONFIG = N(UART_CONFIG_STOP, One) | N(UART_CONFIG_PARITY, Excluded);
@@ -188,7 +188,7 @@ void TIMER1_IRQHandler(void) {
 		NRF_TIMER1->EVENTS_COMPARE[0] = 0;
 
 		if (state == BREAK) {
-			setOutput(BUS_TX_PIN, true);
+			gpio::setOutput(BUS_TX_PIN, true);
 
 			// reconfigure uart for transmission
 			NRF_UART0->ENABLE = 0;
@@ -271,6 +271,7 @@ void setRequestHandler(std::function<void (uint8_t)> const &onRequest) {
 }
 */
 
+/*
 Awaitable<Parameters> transfer(int writeLength, uint8_t const *writeData, int &readLength, uint8_t *readData) {
 
 	// start transfer immediately if bus is idle
@@ -281,6 +282,17 @@ Awaitable<Parameters> transfer(int writeLength, uint8_t const *writeData, int &r
 
 Awaitable<> request() {
 	return {BusMaster::requestWaitlist};
+}
+*/
+
+Awaitable<ReceiveParameters> receive(int &length, uint8_t *data) {
+	assert(BusMaster::nextHandler != nullptr);
+	return {BusMaster::receiveWaitlist, &length, data};
+}
+
+Awaitable<SendParameters> send(int length, uint8_t const *data) {
+	assert(BusMaster::nextHandler != nullptr);
+	return {BusMaster::sendWaitlist, length, data};
 }
 
 } // namespace BusMaster
