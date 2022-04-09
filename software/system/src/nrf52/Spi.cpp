@@ -37,16 +37,16 @@ static void startTransfer(int index, Parameters const &p) {
 	if (SPI_MISO_PIN == SPI_DC_PIN) {
 		if (SPI_CONTEXTS[index].type == SpiConfig::MASTER) {
 			// read/write master: does not support DC 
-			NRF_SPIM3->PSELDCX = DISCONNECTED;
+			NRF_SPIM3->PSELDCX = gpio::DISCONNECTED;
 			NRF_SPIM3->PSEL.MISO = SPI_MISO_PIN;
 		} else {
 			// write only master: we can use MISO pin for DC signal
-			NRF_SPIM3->PSEL.MISO = DISCONNECTED;
+			NRF_SPIM3->PSEL.MISO = gpio::DISCONNECTED;
 			NRF_SPIM3->PSELDCX = SPI_DC_PIN;
 			//configureOutput(SPI_DC_PIN); // done automatically by hardware		
 			NRF_SPIM3->DCXCNT = p.writeLength >> 31; // 0 for data and 0xf for command
 		}
-	} else if (SPI_DC_PIN != DISCONNECTED) {
+	} else if (SPI_DC_PIN != gpio::DISCONNECTED) {
 		// set command/data length
 		NRF_SPIM3->DCXCNT = p.writeLength >> 31; // 0 for data and 0xf for command
 	}
@@ -114,17 +114,17 @@ void init() {
 	Spi::nextHandler = Loop::addHandler(handle);
 
 	// configure idle levels
-	configureOutput(SPI_SCK_PIN);
-	setOutput(SPI_MOSI_PIN, true);
-	configureOutput(SPI_MOSI_PIN);
-	configureInput(SPI_MISO_PIN, Pull::UP);
-	if (SPI_MISO_PIN != SPI_DC_PIN && SPI_DC_PIN != DISCONNECTED)
-		configureOutput(SPI_DC_PIN);
+	gpio::configureOutput(SPI_SCK_PIN);
+	gpio::setOutput(SPI_MOSI_PIN, true);
+	gpio::configureOutput(SPI_MOSI_PIN);
+	configureInput(SPI_MISO_PIN, gpio::Pull::UP);
+	if (SPI_MISO_PIN != SPI_DC_PIN && SPI_DC_PIN != gpio::DISCONNECTED)
+		gpio::configureOutput(SPI_DC_PIN);
 	
 	// set cs pins to output and high to disable devices
 	for (auto &spi : SPI_CONTEXTS) {
-		setOutput(spi.csPin, true);
-		configureOutput(spi.csPin);
+		gpio::setOutput(spi.csPin, true);
+		gpio::configureOutput(spi.csPin);
 	}
 
 	// configure spi pins

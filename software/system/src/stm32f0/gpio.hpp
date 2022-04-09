@@ -7,13 +7,18 @@
 // data sheet: https://www.st.com/resource/en/datasheet/stm32f042f6.pdf
 // refernece manual: https://www.st.com/resource/en/reference_manual/dm00031936-stm32f0x1stm32f0x2stm32f0x8-advanced-armbased-32bit-mcus-stmicroelectronics.pdf
 
+namespace gpio {
 
 // ports
-constexpr int PA(int index) {return index;}
-constexpr int PB(int index) {return 16 + index;}
-constexpr int PC(int index) {return 32 + index;}
-constexpr int PF(int index) {return 80 + index;}
-constexpr GPIO_TypeDef *getPort(int pin) {return (GPIO_TypeDef *)(GPIOA_BASE + (pin >> 4) * 0x00000400UL);}
+constexpr int PA(int index) { return index; }
+
+constexpr int PB(int index) { return 16 + index; }
+
+constexpr int PC(int index) { return 32 + index; }
+
+constexpr int PF(int index) { return 80 + index; }
+
+constexpr GPIO_TypeDef *getPort(int pin) { return (GPIO_TypeDef *) (GPIOA_BASE + (pin >> 4) * 0x00000400UL); }
 
 
 enum class Mode {
@@ -66,7 +71,7 @@ inline void addInputConfig(InputConfig const &config) {
 
 	// enable peripheral clock for the port
 	RCC->AHBENR = RCC->AHBENR | (1 << (RCC_AHBENR_GPIOAEN_Pos + (config.pin >> 4)));
-	
+
 	// configure
 	// MODER is either input (reset state) or output (addOutputConfig() already called)
 	port->PUPDR = (port->PUPDR & ~(3 << pos2)) | (int(config.pull) << pos2);
@@ -75,7 +80,7 @@ inline void addInputConfig(InputConfig const &config) {
 // read input value
 inline bool readInput(int pin) {
 	auto port = getPort(pin);
-	return (port->IDR & (1 << (pin & 15))) != 0; 
+	return (port->IDR & (1 << (pin & 15))) != 0;
 }
 
 
@@ -83,8 +88,7 @@ inline bool readInput(int pin) {
 // ------
 
 inline void configureOutput(int pin, Pull pull = Pull::DISABLED, Speed speed = Speed::HIGH,
-	Drive drive = Drive::PUSH_PULL)
-{
+							Drive drive = Drive::PUSH_PULL) {
 	auto port = getPort(pin);
 	int pos = pin & 15;
 	int pos2 = (pin & 15) << 1;
@@ -120,7 +124,7 @@ inline void addOutputConfig(OutputConfig const &config) {
 
 	// enable peripheral clock for the port
 	RCC->AHBENR = RCC->AHBENR | (1 << (RCC_AHBENR_GPIOAEN_Pos + (config.pin >> 4)));
-	
+
 	// set initial value
 	port->BSRR = 1 << (pos + (config.initialValue != config.invert ? 0 : 16));
 
@@ -156,36 +160,36 @@ struct PinFunction {
 };
 
 // see STM32F042x4 STM32F042x6 datasheet
-template <int PIN>
+template<int PIN>
 auto SPI_CS() {
 	if constexpr (PIN == PA(4) || PIN == PA(15))
 		return PinFunction{PIN, 0};
 	else
-	    return nullptr;
+		return nullptr;
 }
 
-template <int PIN>
+template<int PIN>
 auto SPI_SCK() {
 	if constexpr (PIN == PA(5) || PIN == PB(3))
 		return PinFunction{PIN, 0};
 	else
-	    return nullptr;
+		return nullptr;
 }
 
-template <int PIN>
+template<int PIN>
 auto SPI_MOSI() {
 	if constexpr (PIN == PA(7) || PIN == PB(5))
 		return PinFunction{PIN, 0};
 	else
-	    return nullptr;
+		return nullptr;
 }
 
-template <int PIN>
+template<int PIN>
 auto SPI_MISO() {
 	if constexpr (PIN == PA(6) || PIN == PB(4))
 		return PinFunction{PIN, 0};
 	else
-	    return nullptr;
+		return nullptr;
 }
 
 inline void configureAlternateInput(PinFunction pf, Pull pull = Pull::DISABLED) {
@@ -199,19 +203,18 @@ inline void configureAlternateInput(PinFunction pf, Pull pull = Pull::DISABLED) 
 
 	// set pull
 	port->PUPDR = (port->PUPDR & ~(3 << pos2)) | (int(pull) << pos2);
-	
+
 	// set mode to alternate function
 	port->MODER = (port->MODER & ~(3 << pos2)) | (int(Mode::ALTERNATE) << pos2);
 }
 
 inline void configureAlternateOutput(PinFunction pf, Pull pull = Pull::DISABLED, Speed speed = Speed::HIGH,
-	Drive drive = Drive::PUSH_PULL)
-{
+									 Drive drive = Drive::PUSH_PULL) {
 	auto port = getPort(pf.pin);
 	int pos = pf.pin & 15;
 	int pos2 = (pf.pin & 15) << 1;
 	int pos4 = (pf.pin & 7) << 2;
-	
+
 	// set alternate function
 	auto &AFR = port->AFR[(pf.pin >> 3) & 1];
 	AFR = (AFR & ~(15 << pos4)) | (pf.function << pos4);
@@ -224,3 +227,5 @@ inline void configureAlternateOutput(PinFunction pf, Pull pull = Pull::DISABLED,
 	// set mode to alternate function
 	port->MODER = (port->MODER & ~(3 << pos2)) | (int(Mode::ALTERNATE) << pos2);
 }
+
+} // namespace gpio

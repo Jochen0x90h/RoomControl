@@ -53,8 +53,8 @@ void init() {
 	// add to event loop handler chain
 	Poti::nextHandler = Loop::addHandler(handle);
 
-	configureInput(POTI_A_PIN, Pull::UP);
-	configureInput(POTI_B_PIN, Pull::UP);
+	configureInput(POTI_A_PIN, gpio::Pull::UP);
+	configureInput(POTI_B_PIN, gpio::Pull::UP);
 
 	// quadrature decoder https://infocenter.nordicsemi.com/topic/ps_nrf52840/qdec.html?cp=4_0_0_5_17
 	NRF_QDEC->SHORTS = N(QDEC_SHORTS_REPORTRDY_RDCLRACC, Enabled); // clear accumulator register on report

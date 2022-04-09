@@ -1,4 +1,4 @@
-#include <Usb.hpp>
+#include <UsbDevice.hpp>
 #include <Random.hpp>
 #include <Radio.hpp>
 #include <Loop.hpp>
@@ -155,7 +155,7 @@ Coroutine receive(int index) {
 		// check if packet has minimum length (2 bytes frame control and extra data)
 		if (length >= 2 + Radio::RECEIVE_EXTRA_LENGTH) {			
 			// send to usb host
-			co_await Usb::send(1 + index, length, packet + 1);
+			co_await UsbDevice::send(1 + index, length, packet + 1);
 		}
 		Debug::setGreenLed(false);
 	}
@@ -167,7 +167,7 @@ Coroutine send(int index) {
 	while (true) {
 		// receive from usb host
 		int length = RADIO_MAX_PAYLOAD_LENGTH + Radio::SEND_EXTRA_LENGTH;
-		co_await Usb::receive(1 + index, length, packet + 1);
+		co_await UsbDevice::receive(1 + index, length, packet + 1);
 
 		if (length == 1) {
 			// cancel by mac counter
@@ -189,7 +189,7 @@ Coroutine send(int index) {
 				// send mac counter and result back to usb host
 				packet[0] = macCounter;
 				packet[1] = result;
-				co_await Usb::send(1 + index, 2, packet);
+				co_await UsbDevice::send(1 + index, 2, packet);
 			}
 			Debug::setRedLed(false);
 		}
@@ -200,7 +200,7 @@ Coroutine send(int index) {
 int main(void) {
 	Loop::init();
 	Radio::init();
-	Usb::init(
+	UsbDevice::init(
 		[](usb::DescriptorType descriptorType) {
 			switch (descriptorType) {
 			case usb::DescriptorType::DEVICE:
@@ -214,7 +214,7 @@ int main(void) {
 		[](uint8_t bConfigurationValue) {
 			// enable bulk endpoints (keep control endpoint 0 enabled in both directions)
 			int flags = ~(0xffffffff << (1 + RADIO_CONTEXT_COUNT));
-			Usb::enableEndpoints(flags, flags); 			
+			UsbDevice::enableEndpoints(flags, flags);
 
 			// start coroutines to send and receive
 			for (int index = 0; index < RADIO_CONTEXT_COUNT; ++index) {

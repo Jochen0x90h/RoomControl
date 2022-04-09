@@ -3,10 +3,14 @@
 #include "defs.hpp"
 
 
+namespace gpio {
+
 // ports
-constexpr int P0(int index) {return index;}
-constexpr int P1(int index) {return 32 + index;}
-constexpr NRF_GPIO_Type *getPort(int pin) {return (NRF_GPIO_Type *)(pin < 32 ? NRF_P0_BASE : NRF_P1_BASE);}
+constexpr int P0(int index) { return index; }
+
+constexpr int P1(int index) { return 32 + index; }
+
+constexpr NRF_GPIO_Type *getPort(int pin) { return (NRF_GPIO_Type *) (pin < 32 ? NRF_P0_BASE : NRF_P1_BASE); }
 
 // pin is disconnected
 constexpr int DISCONNECTED = 0xffffffff;
@@ -50,7 +54,7 @@ inline void configureInput(int pin, Pull pull = Pull::DISABLED) {
 	auto port = getPort(pin);
 	port->PIN_CNF[pin & 31] =
 		N(GPIO_PIN_CNF_INPUT, Connect)
-		| V(GPIO_PIN_CNF_PULL, int(pull));
+			| V(GPIO_PIN_CNF_PULL, int(pull));
 }
 
 // for boardConfig.hpp
@@ -89,9 +93,9 @@ inline void configureOutput(int pin, Pull pull = Pull::DISABLED, Drive drive = D
 	auto port = getPort(pin);
 	port->PIN_CNF[pin & 31] =
 		N(GPIO_PIN_CNF_DIR, Output)
-		| V(GPIO_PIN_CNF_DRIVE, int(drive))
-		| V(GPIO_PIN_CNF_PULL, int(pull))
-		| N(GPIO_PIN_CNF_INPUT, Disconnect);
+			| V(GPIO_PIN_CNF_DRIVE, int(drive))
+			| V(GPIO_PIN_CNF_PULL, int(pull))
+			| N(GPIO_PIN_CNF_INPUT, Disconnect);
 }
 
 // for boardConfig.hpp
@@ -108,11 +112,11 @@ struct OutputConfig {
 inline void addOutputConfig(OutputConfig const &config) {
 	auto port = getPort(config.pin);
 	int pos = config.pin & 31;
-	
+
 	// set initial value
 	if (config.initialValue != config.invert)
 		port->OUTSET = 1 << pos;
-	
+
 	// configure
 	auto &PIN_CNF = port->PIN_CNF[pos];
 	uint32_t c = PIN_CNF;
@@ -154,3 +158,5 @@ inline void toggleOutput(int pin) {
 	else
 		port->OUTCLR = bit;
 }
+
+} // namespace gpio

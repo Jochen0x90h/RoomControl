@@ -1,7 +1,7 @@
 #include <BME680.hpp>
 #include <Timer.hpp>
 #include <Spi.hpp>
-#include <Usb.hpp>
+#include <UsbDevice.hpp>
 #include <Debug.hpp>
 #include <Loop.hpp>
 #include <StringBuffer.hpp>
@@ -102,7 +102,7 @@ Coroutine getRegisters() {
 		co_await Spi::transfer(SPI_AIR_SENSOR, 1, buffer, 129, buffer);
 		
 		// send to usb host
-		co_await Usb::send(1, 128, buffer + 1);
+		co_await UsbDevice::send(1, 128, buffer + 1);
 		Debug::toggleBlueLed();
 
 		// wait for 5s
@@ -129,7 +129,7 @@ Coroutine measure() {
 			+ "Humidity: " + flt(sensor.getHumidity(), 1, 1) + "%\n"
 			+ "Gas: " + flt(sensor.getGasResistance(), 1, 1) + "Ω\n";
 
-		co_await Usb::send(1, string.count(), string.data());
+		co_await UsbDevice::send(1, string.count(), string.data());
 		Debug::toggleRedLed();
 
 		co_await Timer::sleep(10s);
@@ -142,7 +142,7 @@ int main(void) {
 	Timer::init();
 	Spi::init();
 	Output::init();
-	Usb::init(
+	UsbDevice::init(
 		[](usb::DescriptorType descriptorType) {
 			switch (descriptorType) {
 			case usb::DescriptorType::DEVICE:
@@ -155,7 +155,7 @@ int main(void) {
 		},
 		[](uint8_t bConfigurationValue) {
 			// enable bulk endpoints in 1 (keep control endpoint 0 enabled in both directions)
-			Usb::enableEndpoints(1 | (1 << 1), 1); 			
+			UsbDevice::enableEndpoints(1 | (1 << 1), 1);
 		
 			//getRegisters();
 		},

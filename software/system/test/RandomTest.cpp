@@ -1,6 +1,6 @@
 #include <Timer.hpp>
 #include <Random.hpp>
-#include <Usb.hpp>
+#include <UsbDevice.hpp>
 #include <Debug.hpp>
 #include <Loop.hpp>
 #include <util.hpp>
@@ -75,7 +75,7 @@ Coroutine send() {
 			sendData[i] = Random::int8();
 		
 		// send to host	
-		co_await Usb::send(1, array::count(sendData), sendData);
+		co_await UsbDevice::send(1, array::count(sendData), sendData);
 		Debug::toggleBlueLed();
 		
 		co_await Timer::sleep(1s);
@@ -86,7 +86,7 @@ int main(void) {
 	Loop::init();
 	Timer::init();
 	Random::init();
-	Usb::init(
+	UsbDevice::init(
 		[](usb::DescriptorType descriptorType) {
 			switch (descriptorType) {
 			case usb::DescriptorType::DEVICE:
@@ -99,7 +99,7 @@ int main(void) {
 		},
 		[](uint8_t bConfigurationValue) {
 			// enable bulk endpoints in 1 (keep control endpoint 0 enabled)
-			Usb::enableEndpoints(1 | (1 << 1), 1); 			
+			UsbDevice::enableEndpoints(1 | (1 << 1), 1);
 
 			// start to send random numbers to host
 			send();

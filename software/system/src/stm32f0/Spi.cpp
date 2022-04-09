@@ -84,7 +84,7 @@ static void startTransfer(int index, Parameters const &p) {
 	SPI1->CR1 = SPI_CR1;
 
 	// set cs pin low
-	setOutput(SPI_CONTEXTS[index].csPin, false);
+	gpio::setOutput(SPI_CONTEXTS[index].csPin, false);
 	
 	// store current index
 	Spi::transferContext = index;
@@ -113,7 +113,7 @@ void handle() {
 		//int x = SPI1->DR;
 		
 		// set CS pin high
-		setOutput(SPI_CONTEXTS[index].csPin, true);
+		gpio::setOutput(SPI_CONTEXTS[index].csPin, true);
 		
 		// disable SPI
 		SPI1->CR1 = 0;
@@ -160,14 +160,14 @@ void init() {
 
 	// configure CS pins
 	for (auto &config : SPI_CONTEXTS) {
-		setOutput(config.csPin, true);
-		configureOutput(config.csPin);
+		gpio::setOutput(config.csPin, true);
+		gpio::configureOutput(config.csPin);
 	}
 
 	// configure SPI pins (driven low when SPI is disabled)
-	configureAlternateOutput(SPI_SCK<SPI_SCK_PIN>());
-	configureAlternateOutput(SPI_MOSI<SPI_MOSI_PIN>());
-	configureAlternateOutput(SPI_MISO<SPI_MISO_PIN>());
+	configureAlternateOutput(gpio::SPI_SCK<SPI_SCK_PIN>());
+	configureAlternateOutput(gpio::SPI_MOSI<SPI_MOSI_PIN>());
+	configureAlternateOutput(gpio::SPI_MISO<SPI_MISO_PIN>());
 
 	// initialize TIM14
 	RCC->APB1ENR = RCC->APB1ENR | RCC_APB1ENR_TIM14EN;

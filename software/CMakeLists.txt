@@ -209,8 +209,7 @@ add_drivers(
 	SystemTime
 	Terminal
 	Timer
-	Usb
-	UsbDefs
+	UsbDevice
 )
 if(${FAMILY} STREQUAL "emu")
 	list(APPEND SYSTEM

@@ -7,7 +7,7 @@
 #include <functional>
 
 
-namespace Usb {
+namespace UsbDevice {
 
 // Internal helper: Stores the parameters and a reference to the result value in the awaitable during co_await
 struct ReceiveParameters {
@@ -57,4 +57,4 @@ void enableEndpoints(uint8_t inFlags, uint8_t outFlags);
  */
 [[nodiscard]] Awaitable<SendParameters> send(int index, int length, void const *data);
 
-} // namespace Usb
+} // namespace UsbDevice

@@ -26,21 +26,21 @@ void init() {
 void enable(int index, bool enabled) {
 	if (uint32_t(index) < OUTPUT_COUNT) {
 		auto &output = OUTPUTS[index];
-		setMode(output.pin, enabled ? Mode::OUTPUT : Mode::INPUT);
+		setMode(output.pin, enabled ? gpio::Mode::OUTPUT : gpio::Mode::INPUT);
 	}
 }
 
 void set(int index, bool value) {
 	if (uint32_t(index) < OUTPUT_COUNT) {
 		auto &output = OUTPUTS[index];
-		setOutput(output.pin, value != output.invert);
+		gpio::setOutput(output.pin, value != output.invert);
 	}
 }
 
 void toggle(int index) {
 	if (uint32_t(index) < OUTPUT_COUNT) {
 		auto &output = OUTPUTS[index];
-		toggleOutput(output.pin);
+		gpio::toggleOutput(output.pin);
 	}
 }
 
