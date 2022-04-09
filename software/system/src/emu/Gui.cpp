@@ -523,7 +523,7 @@ Gui::Poti Gui::poti(uint32_t id) {
 
 	// set state
 	this->potiRender->setState(this->x, this->y, w, h);
-	glUniform1f(this->potiValue, float(widget->value & 0xffff) / (65536.0f * 24.0f) * 2.0f * M_PIf32);
+	glUniform1f(this->potiValue, float(widget->value & 0xffff) / (65536.0f * 24.0f) * 2.0f * float(M_PI));
 	glUniform1f(this->potiState, widget->button ? 1.0f : 0.0f);
 
 	// draw and reset state
@@ -559,7 +559,7 @@ std::optional<float> Gui::temperatureSensor(uint32_t id) {
 	{
 		// set state
 		this->potiRender->setState(this->x, this->y, w, h);
-		glUniform1f(this->potiValue, float(widget->value & 0xffff) / (65536.0f * 24.0f) * 2.0f * M_PIf32);
+		glUniform1f(this->potiValue, float(widget->value & 0xffff) / (65536.0f * 24.0f) * 2.0f * float(M_PI));
 		glUniform1f(this->potiState, 0.0f);
 		
 		// draw and reset state
