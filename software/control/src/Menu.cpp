@@ -5,9 +5,6 @@
 #include "tahoma_8pt.hpp" // font
 
 
-constexpr String weekdaysShort[7] = {"M", "T", "W", "T", "F", "S", "S"};
-
-
 Menu::Menu(SwapChain &swapChain) : swapChain(swapChain), bitmap(swapChain.get()) {}
 
 void Menu::label(String s) {
@@ -25,69 +22,7 @@ void Menu::line() {
 		this->bitmap->fillRectangle(x, y, 108, 1);
 	this->entryY += 1 + 4;
 }
-/*
-bool Menu::entry(String s, bool underline, int begin, int end) {
-	const int lineHeight = tahoma_8pt.height + 4;
 
-	int x = 10;
-	int y = this->entryY + 2 - this->offsetY;
-	this->bitmap.drawText(x, y, tahoma_8pt, s);
-	if (underline) {
-		int start = tahoma_8pt.calcWidth(s.substring(0, begin));
-		int width = tahoma_8pt.calcWidth(s.substring(begin, end)) - 1;
-		this->bitmap.hLine(x + start, y + tahoma_8pt.height, width);
-	}
-
-	bool selected = this->entryIndex == this->selected;
-	if (selected) {
-		this->bitmap.drawText(0, y, tahoma_8pt, ">", 0);
-		this->selectedY = this->entryY;
-	}
-
-	++this->entryIndex;
-	this->entryY += lineHeight;
-
-	return selected && this->activated;
-}
-
-bool Menu::entryWeekdays(String s, int weekdays, bool underline, int index) {
-	int x = 10;
-	int y = this->entryY + 2 - this->offsetY;
-
-	// text (e.g. time)
-	int x2 = this->bitmap.drawText(x, y, tahoma_8pt, s, 1) + 1;
-	int start = x;
-	int width = x2 - x;
-
-	// week days
-	for (int i = 0; i < 7; ++i) {
-		int x3 = this->bitmap.drawText(x2 + 1, y, tahoma_8pt, weekdaysShort[i], 1);
-		if (weekdays & 1)
-			this->bitmap.fillRectangle(x2, y, x3 - x2, tahoma_8pt.height - 1, Mode::FLIP);
-		if (i == index) {
-			start = x2;
-			width = x3 - x2;
-		}
-		x2 = x3 + 4;
-		weekdays >>= 1;
-	}
-
-	bool selected = this->entryIndex == this->selected;
-	if (selected) {
-		this->bitmap.drawText(0, y, tahoma_8pt, ">", 1);
-		this->selectedY = this->entryY;
-	}
-	
-	if (underline) {
-		this->bitmap.hLine(start, y + tahoma_8pt.height, width);
-	}
-
-	++this->entryIndex;
-	this->entryY += tahoma_8pt.height + 4;
-
-	return selected && this->activated;
-}
-*/
 int Menu::getEdit(int editCount) {
 	// check if the next entry is selected
 	if (this->selected == this->entryIndex) {

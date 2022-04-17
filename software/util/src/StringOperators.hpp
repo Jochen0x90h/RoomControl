@@ -80,22 +80,45 @@ constexpr String str(char const *value) {return String(value);}
 template <typename A>
 struct Underline {
 	A const &a;
-	bool underline;
+	bool on;
 };
 
 template <Stream S, typename A>
 S &operator <<(S &s, Underline<A> underline) {
-	if (underline.underline)
+	if (underline.on)
 		s << StreamCommand::SET_UNDERLINE;
 	s << underline.a;
-	if (underline.underline)
+	if (underline.on)
 		s << StreamCommand::CLEAR_UNDERLINE;
 	return s;
 }
 
 template <typename A>
-constexpr Underline<A> underline(A const &a, bool underline = true) {
-	return {a, underline};
+constexpr Underline<A> underline(A const &a, bool on = true) {
+	return {a, on};
+}
+
+
+// invert node
+template <typename A>
+struct Invert {
+	A const &a;
+	bool on;
+};
+
+template <Stream S, typename A>
+S &operator <<(S &s, Invert<A> invert) {
+	if (invert.on)
+		s << StreamCommand::SET_INVERT;
+	s << invert.a;
+	if (invert.on)
+		s << StreamCommand::CLEAR_INVERT;
+	return s;
+}
+
+template <typename A>
+constexpr Invert<A> invert(A const &a, bool on = true) {
+	return {a, on};
 }
 
 

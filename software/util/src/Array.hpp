@@ -72,6 +72,19 @@ public:
 	}
 
 	/**
+	 * Assign from an iterator, also cast each value to destination type
+	 * @param src source iterator
+	 */
+	template <typename InputIt>
+	void assign(InputIt src) {
+		auto it = begin();
+		auto e = end();
+		for (; it < e; ++it, ++src) {
+			*it = T(*src);
+		}
+	}
+
+	/**
 	 * Comparison operator
 	 */
 	bool operator ==(Array<T const, N> array) const {
@@ -182,6 +195,20 @@ public:
 			element = value;
 		}
 	}
+
+	/**
+	 * Assign from an iterator, also cast each value to destination type
+	 * @param src source iterator
+	 */
+	template <typename InputIt>
+	void assign(InputIt src) {
+		auto it = begin();
+		auto e = end();
+		for (; it < e; ++it, ++src) {
+			*it = T(*src);
+		}
+	}
+
 	/**
 	 * Index operator
 	 */

@@ -6,6 +6,16 @@
 
 using EndpointType = Interface::EndpointType;
 
+// device names
+constexpr String deviceNames[] = {
+	"Air Sensor",
+	"Heating",
+	"Brightness Sensor",
+	"Motion Detector",
+	"Digital Inputs",
+	"Digital Outputs"
+};
+
 // air sensor endpoints
 constexpr int BME680_TEMPERATURE_ENDPOINT = 0;
 constexpr int BME680_PRESSURE_ENDPOINT = 1;
@@ -20,7 +30,7 @@ constexpr EndpointType bme680Endpoints[] = {
 	EndpointType::AIR_VOC_IN
 };
 constexpr MessageType bme680MessageTypes[] = {
-	MessageType::CELSIUS, MessageType::HECTOPASCAL, MessageType::HECTOPASCAL, MessageType::OHM
+	MessageType::CELSIUS, MessageType::HECTOPASCAL, MessageType::PERCENTAGE, MessageType::OHM
 };
 
 constexpr EndpointType heatingEndpoints[] = {
@@ -57,6 +67,10 @@ LocalInterface::LocalInterface() {
 		this->devices[i++].id = OUT_ID;
 	this->deviceCount = i;
 
+	// set backpointers
+	for (auto &device : this->devices)
+		device.interface = this;
+
 	// start coroutines
 	readAirSensor();
 	publish();
@@ -72,50 +86,17 @@ int LocalInterface::getDeviceCount() {
 	return this->deviceCount;
 }
 
-DeviceId LocalInterface::getDeviceId(int index) {
+Interface::Device &LocalInterface::getDeviceByIndex(int index) {
 	assert(index >= 0 && index < this->deviceCount);
-	return this->devices[index].id;
+	return this->devices[index];
 }
 
-Array<EndpointType const> LocalInterface::getEndpoints(DeviceId deviceId) {
-	switch (deviceId) {
-	case BME680_ID:
-		return bme680Endpoints;
-	case HEATING_ID:
-		return heatingEndpoints;
-	case BRIGHTNESS_SENSOR_ID:
-		return brightnessSensorEndpoints;
-	case MOTION_DETECTOR_ID:
-		return motionDetectorEndpoints;
-	case IN_ID:
-		return Array<EndpointType const>(INPUT_EXT_COUNT, inEndpoints);
-	case OUT_ID:
-		return Array<EndpointType const>(OUTPUT_EXT_COUNT, outEndpoints);
+Interface::Device *LocalInterface::getDeviceById(DeviceId id) {
+	for (auto &device : Array<LocalDevice>(this->deviceCount, this->devices)) {
+		if (device.id == id)
+			return &device;
 	}
-	return {};
-}
-
-void LocalInterface::addPublisher(DeviceId deviceId, uint8_t endpointIndex, Publisher &publisher) {
-	for (int i = 0; i < this->deviceCount; ++i) {
-		auto &device = this->devices[i];
-		if (device.id == deviceId && endpointIndex < getEndpoints(deviceId).count()) {
-			publisher.remove();
-			publisher.index = endpointIndex;
-			publisher.event = &this->publishEvent;
-			device.publishers.add(publisher);
-		}
-	}
-}
-
-void LocalInterface::addSubscriber(DeviceId deviceId, uint8_t endpointIndex, Subscriber &subscriber) {
-	for (int i = 0; i < this->deviceCount; ++i) {
-		auto &device = this->devices[i];
-		if (device.id == deviceId && endpointIndex < getEndpoints(deviceId).count()) {
-			subscriber.remove();
-			subscriber.index = endpointIndex;
-			device.subscribers.add(subscriber);
-		}
-	}
+	return nullptr;
 }
 
 Coroutine LocalInterface::readAirSensor() {
@@ -129,14 +110,16 @@ Coroutine LocalInterface::readAirSensor() {
 		300, 100); // heater temperature (celsius) and duration (ms)
 
 	// regularly read the air sensor
-	Device &device = this->devices[BME680_ID - 1];
+	auto &device = this->devices[BME680_ID - 1];
 	while (true) {
 		// measure
 		co_await airSensor.measure();
 
 		// publish to subscribers of air sensor
-		//for (auto &subscription : device.subscriptions) {
 		for (auto &subscriber : device.subscribers) {
+			if (subscriber.index >= array::count(bme680Endpoints))
+				break;
+
 			// get value
 			FloatWithFlag value;
 			switch (subscriber.index) {
@@ -178,10 +161,8 @@ Coroutine LocalInterface::readAirSensor() {
 
 Coroutine LocalInterface::publish() {
 	while (true) {
-		// wait until something was published
+		// wait until a publisher wants to publish a message to an endpoint of a local device
 		co_await this->publishEvent.wait();
-
-		// clear immediately as we have only one instance of this coroutine
 		this->publishEvent.clear();
 		
 		// iterate over devices
@@ -241,4 +222,51 @@ Coroutine LocalInterface::publish() {
 			}
 		}
 	}
+}
+
+
+// LocalInterface::LocalDevice
+
+DeviceId LocalInterface::LocalDevice::getId() {
+	return this->id;
+}
+
+String LocalInterface::LocalDevice::getName() {
+	int i = int(this->id) - 1;
+	return deviceNames[i];
+}
+
+void LocalInterface::LocalDevice::setName(String name) {
+
+}
+
+Array<EndpointType const> LocalInterface::LocalDevice::getEndpoints() {
+	switch (this->id) {
+		case BME680_ID:
+			return bme680Endpoints;
+		case HEATING_ID:
+			return heatingEndpoints;
+		case BRIGHTNESS_SENSOR_ID:
+			return brightnessSensorEndpoints;
+		case MOTION_DETECTOR_ID:
+			return motionDetectorEndpoints;
+		case IN_ID:
+			return {INPUT_EXT_COUNT, inEndpoints};
+		case OUT_ID:
+			return {OUTPUT_EXT_COUNT, outEndpoints};
+	}
+	return {};
+}
+
+void LocalInterface::LocalDevice::addPublisher(uint8_t endpointIndex, Publisher &publisher) {
+	publisher.remove();
+	publisher.index = endpointIndex;
+	publisher.event = &this->interface->publishEvent;
+	this->publishers.add(publisher);
+}
+
+void LocalInterface::LocalDevice::addSubscriber(uint8_t endpointIndex, Subscriber &subscriber) {
+	subscriber.remove();
+	subscriber.index = endpointIndex;
+	this->subscribers.add(subscriber);
 }

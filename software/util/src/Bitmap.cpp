@@ -2,8 +2,8 @@
 
 
 void fillBitmap(int w, int h, uint8_t *data, int x, int y, int width, int height, DrawMode mode) {
-	mode = mode & DrawMode::FORE_MASK;
-	if (mode == DrawMode::FORE_KEEP)
+	//mode = mode & DrawMode::FORE_MASK;
+	if (mode == DrawMode::KEEP)
 		return;
 	
 	// clamp to border
@@ -37,10 +37,10 @@ void fillBitmap(int w, int h, uint8_t *data, int x, int y, int width, int height
 		}
 		for (int i = 0; i < width; ++i) {
 			switch (mode) {
-			case DrawMode::FORE_CLEAR:
+			case DrawMode::CLEAR:
 				page[i] &= ~mask;
 				break;
-			case DrawMode::FORE_FLIP:
+			case DrawMode::FLIP:
 				page[i] ^= mask;
 				break;
 			default:
@@ -55,10 +55,10 @@ void fillBitmap(int w, int h, uint8_t *data, int x, int y, int width, int height
 	while (page < pageEnd) {
 		for (int i = 0; i < width; ++i) {
 			switch (mode) {
-			case DrawMode::FORE_CLEAR:
+			case DrawMode::CLEAR:
 				page[i] = 0;
 				break;
-			case DrawMode::FORE_FLIP:
+			case DrawMode::FLIP:
 				page[i] ^= 0xff;
 				break;
 			default:
@@ -74,10 +74,10 @@ void fillBitmap(int w, int h, uint8_t *data, int x, int y, int width, int height
 		uint8_t mask = 0xff >> (8 - endRows);
 		for (int i = 0; i < width; ++i) {
 			switch (mode) {
-			case DrawMode::FORE_CLEAR:
+			case DrawMode::CLEAR:
 				page[i] &= ~mask;
 				break;
-			case DrawMode::FORE_FLIP:
+			case DrawMode::FLIP:
 				page[i] ^= mask;
 				break;
 			default:
@@ -85,14 +85,13 @@ void fillBitmap(int w, int h, uint8_t *data, int x, int y, int width, int height
 				break;
 			}
 		}
-		page += w;
 	}
 }
 
 void copyBitmapH(int w, int h, uint8_t *data, int x, int y, int width, int height, const uint8_t *bitmap,
 	DrawMode mode)
 {
-	if (mode == (DrawMode::FORE_KEEP | DrawMode::BACK_KEEP))
+	if (mode == (DrawMode::KEEP /*| DrawMode::BACK_KEEP*/))
 		return;
 
 	// number of bytes in a row of the bitmap
@@ -124,20 +123,20 @@ void copyBitmapH(int w, int h, uint8_t *data, int x, int y, int width, int heigh
 		for (int i = 0; i < width; ++i) {
 			uint8_t bit = 1 << ((y + j) & 7);
 			if (bitmap[(o + i) >> 3] & (0x80 >> ((o + i) & 7))) {
-				switch (mode & DrawMode::FORE_MASK) {
-				case DrawMode::FORE_CLEAR:
+				switch (mode/* & DrawMode::FORE_MASK*/) {
+				case DrawMode::CLEAR:
 					page[i] &= ~bit;
 					break;
-				case DrawMode::FORE_FLIP:
+				case DrawMode::FLIP:
 					page[i] ^= bit;
 					break;
-				case DrawMode::FORE_SET:
+				case DrawMode::SET:
 					page[i] |= bit;
 				default:
 					break;
 				}
 			} else {
-				switch (mode & DrawMode::BACK_MASK) {
+				/*switch (mode & DrawMode::BACK_MASK) {
 				case DrawMode::BACK_CLEAR:
 					page[i] &= ~bit;
 					break;
@@ -148,7 +147,7 @@ void copyBitmapH(int w, int h, uint8_t *data, int x, int y, int width, int heigh
 					page[i] |= bit;
 				default:
 					break;
-				}
+				}*/
 			}
 		}
 		bitmap += bitmapStride;

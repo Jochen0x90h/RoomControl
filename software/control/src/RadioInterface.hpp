@@ -40,14 +40,8 @@ public:
 	void setCommissioning(bool enabled) override;
 
 	int getDeviceCount() override;
-
-	DeviceId getDeviceId(int index) override;
-
-	Array<EndpointType const> getEndpoints(DeviceId deviceId) override;
-
-	void addPublisher(DeviceId deviceId, uint8_t endpointIndex, Publisher &publisher) override;
-
-	void addSubscriber(DeviceId deviceId, uint8_t endpointIndex, Subscriber &subscriber) override;
+	Device &getDeviceByIndex(int index) override;
+	Device *getDeviceById(DeviceId id) override;
 
 private:
 
@@ -66,13 +60,13 @@ private:
 	AesKey const *aesKey;
 
 	// self-powered devices
-	struct GpDevice;
+	class GpDevice;
 
 	struct GpDeviceFlash {
 		static constexpr int MAX_ENDPOINT_COUNT = 32;
 
-		// device id, either 64 bit ieee 802.15.4 long device address or 32 bit green power id
-		DeviceId deviceId;
+		// 32 bit green power id
+		DeviceId id;
 
 		// device type from commissioning message
 		uint8_t deviceType;
@@ -101,11 +95,19 @@ private:
 		GpDevice *allocate() const;
 	};
 
-	class GpDevice : public Storage::Element<GpDeviceFlash> {
+	class GpDevice : public Device, public Storage::Element<GpDeviceFlash> {
 	public:
-
 		GpDevice(GpDeviceFlash const &flash) : Storage::Element<GpDeviceFlash>(flash) {}
 
+		DeviceId getId() override;
+		String getName() override;
+		void setName(String name) override;
+		Array<EndpointType const> getEndpoints() override;
+		void addPublisher(uint8_t endpointIndex, Publisher &publisher) override;
+		void addSubscriber(uint8_t endpointIndex, Subscriber &subscriber) override;
+
+		// back pointer to interface
+		RadioInterface *interface;
 
 		// last security counter value of device
 		// todo: make persistent
@@ -119,12 +121,12 @@ private:
 
 
 	// zbee devices
-	struct ZbDevice;
+	class ZbDevice;
 
 	struct ZbDeviceFlash {
 		static constexpr int MAX_ENDPOINT_COUNT = 32;
 
-		// device id, 64 bit ieee 802.15.4 long device address
+		// 64 bit ieee 802.15.4 long device address, also used as device id
 		uint64_t longAddress;
 
 		// short device address
@@ -157,17 +159,22 @@ private:
 		uint8_t const *getEndpointIndices() const {return this->endpoints + this->endpointCount;}
 	};
 
-	class ZbDevice : public Storage::Element<ZbDeviceFlash> {
+	class ZbDevice : public Storage::Element<ZbDeviceFlash>, public Device {
 	public:
+		ZbDevice(ZbDeviceFlash const &flash) : Storage::Element<ZbDeviceFlash>(flash) , sendFlags(flash.sendFlags) {}
 
-		ZbDevice(ZbDeviceFlash const &flash)
-			: Storage::Element<ZbDeviceFlash>(flash)
-			, sendFlags(flash.sendFlags)
-		{}
+		DeviceId getId() override;
+		String getName() override;
+		void setName(String name) override;
+		Array<EndpointType const> getEndpoints() override;
+		void addPublisher(uint8_t endpointIndex, Publisher &publisher) override;
+		void addSubscriber(uint8_t endpointIndex, Subscriber &subscriber) override;
+
+		// back pointer to interface
+		RadioInterface *interface;
 
 		// send flags for next hop in route (wait for data request or not)
 		Radio::SendFlags sendFlags;
-
 
 		// last security counter value of device
 		// todo: make persistent

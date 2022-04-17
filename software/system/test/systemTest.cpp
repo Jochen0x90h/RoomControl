@@ -1,4 +1,5 @@
-#include "SystemTime.hpp"
+#include <SystemTime.hpp>
+#include <ClockTime.hpp>
 #include <gtest/gtest.h>
 
 
@@ -21,6 +22,24 @@ TEST(systemTest, SystemTime) {
 	EXPECT_EQ(e1, r);
 	EXPECT_EQ(e2, r);
 	EXPECT_EQ(e3, SystemTime{0x00020010});
+}
+
+TEST(systemTest, ClockTime) {
+	// time 1 is Tuesday, 10:05:01
+	ClockTime time1(1, 10, 5, 1);
+
+	// time 2 is Wednesday, 10:05:01
+	ClockTime time2(2, 10, 5, 1);
+
+	// time 2 is Tuesday, 10:05:02
+	ClockTime time3(2, 10, 5, 1);
+
+	// alarm on Tuesday, 10:05:01
+	AlarmTime alarm(2, 10, 5, 1);
+
+	EXPECT_TRUE(alarm.matches(time1));
+	EXPECT_FALSE(alarm.matches(time2));
+	EXPECT_FALSE(alarm.matches(time3));
 }
 
 

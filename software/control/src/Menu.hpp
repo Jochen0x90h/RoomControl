@@ -28,7 +28,10 @@ public:
 		Bitmap<DISPLAY_WIDTH, DISPLAY_HEIGHT> *bitmap;
 		int16_t underlineCount = 0;
 		int16_t underlineStart;
-		
+		int16_t invertCount = 0;
+		int16_t invertStart;
+
+
 		Stream &operator <<(char ch) {
 			if (this->bitmap != nullptr)
 				this->x = this->bitmap->drawText(this->x, this->y, tahoma_8pt, String(1, &ch));
@@ -43,20 +46,34 @@ public:
 		
 		Stream &operator <<(StreamCommand command) {
 			switch (command) {
-			case StreamCommand::SET_UNDERLINE:
-				if (this->underlineCount == 0)
-					this->underlineStart = this->x;
-				++this->underlineCount;
-				break;
-			case StreamCommand::CLEAR_UNDERLINE:
-				if (this->underlineCount > 0) {
-					if (--this->underlineCount == 0) {
-						int s = this->underlineStart;
-						if (this->bitmap != nullptr)
-							this->bitmap->hLine(s, this->y + tahoma_8pt.height, this->x - s - 1);
+				case StreamCommand::SET_UNDERLINE:
+					if (this->underlineCount == 0)
+						this->underlineStart = this->x;
+					++this->underlineCount;
+					break;
+				case StreamCommand::CLEAR_UNDERLINE:
+					if (this->underlineCount > 0) {
+						if (--this->underlineCount == 0) {
+							int x = this->underlineStart;
+							if (this->bitmap != nullptr)
+								this->bitmap->hLine(x, this->y + tahoma_8pt.height, this->x - x - 1);
+						}
 					}
-				}
-				break;
+					break;
+				case StreamCommand::SET_INVERT:
+					if (this->invertCount == 0)
+						this->invertStart = this->x;
+					++this->invertCount;
+					break;
+				case StreamCommand::CLEAR_INVERT:
+					if (this->invertCount > 0) {
+						if (--this->invertCount == 0) {
+							int x = this->invertStart;
+							if (this->bitmap != nullptr)
+								this->bitmap->fillRectangle(x - 1, this->y, this->x - x + 1, tahoma_8pt.height, DrawMode::FLIP);
+						}
+					}
+					break;
 			}
 			return *this;
 		}
@@ -80,14 +97,9 @@ public:
 	}
 
 	/**
-	 * Add menu entry with weekday selector
-	 */
-	//bool entryWeekdays(String s, int weekdays, bool underline = false, int index = 0);
-
-	/**
 	 * Returns true if the current entry is selected
 	 */
-	bool isSelectedEntry() {
+	bool isSelectedEntry() const {
 		return this->selected == this->entryIndex;
 	}
 
@@ -96,7 +108,9 @@ public:
 	 * of the field being edited
 	 */
 	int getEdit(int editCount = 1);
-	int getDelta() {return this->delta;}
+	int getDelta() const {return this->delta;}
+
+	void remove() {--this->selected;}
 
 	/**
 	 * Show the menu on the display and wait for the next event

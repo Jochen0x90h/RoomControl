@@ -101,6 +101,11 @@ EndpointInfo const endpointInfos[] {
 RadioInterface::RadioInterface(PersistentStateManager &stateManager)
 	: securityCounter(stateManager)
 {
+	// set backpointers
+	for (auto &device : this->gpDevices)
+		device.interface = this;
+	for (auto &device : this->zbDevices)
+		device.interface = this;
 }
 
 Coroutine RadioInterface::start(uint16_t panId, DataBuffer<16> const &key, AesKey const &aesKey) {
@@ -148,67 +153,26 @@ int RadioInterface::getDeviceCount() {
 	return this->gpDevices.count() + this->zbDevices.count();
 }
 
-DeviceId RadioInterface::getDeviceId(int index) {
+Interface::Device &RadioInterface::getDeviceByIndex(int index) {
 	int gpDeviceCount = this->gpDevices.count();
+	assert(index >= 0 && index < gpDeviceCount + this->zbDevices.count());
+
 	if (index < gpDeviceCount)
-		return this->gpDevices[index]->deviceId;
-	else if (index < gpDeviceCount + this->zbDevices.count())
-		return this->zbDevices[index - gpDeviceCount]->longAddress;
-	else
-		assert(false);
-	return 0;
+		return this->gpDevices[index];
+	return this->zbDevices[index - gpDeviceCount];
 }
 
-Array<EndpointType const> RadioInterface::getEndpoints(DeviceId deviceId) {
+Interface::Device *RadioInterface::getDeviceById(DeviceId id) {
 	for (auto &device : this->gpDevices) {
-		auto const &flash = *device;
-		if (flash.deviceId == deviceId) {
-			return {flash.endpointCount, flash.endpoints};
-		}
+		if (device->id == id)
+			return &device;
 	}
 	for (auto &device : this->zbDevices) {
-		auto const &flash = *device;
-		if (flash.longAddress == deviceId) {
-			return {flash.endpointCount, reinterpret_cast<EndpointType const *>(flash.endpoints)};
-		}
+		if (device->longAddress == id)
+			return &device;
 	}
-	return {};
+	return nullptr;
 }
-
-void RadioInterface::addPublisher(DeviceId deviceId, uint8_t endpointIndex, Publisher &publisher) {
-	for (auto &device : this->zbDevices) {
-		auto const &flash = *device;
-		if (flash.longAddress == deviceId && endpointIndex < flash.endpointCount) {
-			publisher.remove();
-			publisher.index = endpointIndex;
-			publisher.event = &this->publishEvent;
-			device.publishers.add(publisher);
-			return;
-		}
-	}
-}
-
-void RadioInterface::addSubscriber(DeviceId deviceId, uint8_t endpointIndex, Subscriber &subscriber) {
-	for (auto &device : this->gpDevices) {
-		auto const &flash = *device;
-		if (flash.deviceId == deviceId && endpointIndex < flash.endpointCount) {
-			subscriber.remove();
-			subscriber.index = endpointIndex;
-			device.subscribers.add(subscriber);
-			return;
-		}
-	}
-	for (auto &device : this->zbDevices) {
-		auto const &flash = *device;
-		if (flash.longAddress == deviceId && endpointIndex < flash.endpointCount) {
-			subscriber.remove();
-			subscriber.index = endpointIndex;
-			device.subscribers.add(subscriber);
-			return;
-		}
-	}
-}
-
 
 RadioInterface::ZbDevice *RadioInterface::findZbDevice(uint16_t address) {
 	for (auto &device : this->zbDevices) {
@@ -1701,7 +1665,7 @@ void RadioInterface::handleGp(uint8_t const *mac, PacketReader &r) {
 
 	// search device
 	for (auto &device : this->gpDevices) {
-		if (device->deviceId == deviceId) {
+		if (device->id == deviceId) {
 			auto const &flash = *device;
 
 			// security
@@ -1866,7 +1830,7 @@ void RadioInterface::handleGpCommission(uint32_t deviceId, PacketReader& r) {
 	r.u8();
 
 	GpDeviceFlash flash;
-	flash.deviceId = deviceId;
+	flash.id = deviceId;
 
 	// A.4.2.1.1 Commissioning
 
@@ -1944,7 +1908,7 @@ void RadioInterface::handleGpCommission(uint32_t deviceId, PacketReader& r) {
 
 	// check if device already exists
 	for (auto &device : this->gpDevices) {
-		if (device->deviceId == deviceId) {
+		if (device->id == deviceId) {
 			// yes: only update security counter
 			device.securityCounter = securityCounter;
 			return;
@@ -1953,6 +1917,7 @@ void RadioInterface::handleGpCommission(uint32_t deviceId, PacketReader& r) {
 
 	// create device state
 	auto* device = new GpDevice(flash);
+	device->interface = this;
 	device->securityCounter = securityCounter;
 
 	// store device in flash
@@ -1969,6 +1934,7 @@ Terminal::out << ("handleAssociationRequest\n");
 
 	// create device
 	Pointer<ZbDevice> device = new ZbDevice(flash);
+	device->interface = this;
 
 	// set first hop
 	device->routerAddress = flash.shortAddress;
@@ -2571,6 +2537,35 @@ RadioInterface::GpDevice *RadioInterface::GpDeviceFlash::allocate() const {
 	return new GpDevice(*this);
 }
 
+// RadioInterface::GpDevice
+
+DeviceId RadioInterface::GpDevice::getId() {
+	auto &flash = **this;
+	return flash.id;
+}
+
+String RadioInterface::GpDevice::getName() {
+	return "x";
+}
+
+void RadioInterface::GpDevice::setName(String name) {
+
+}
+
+Array<EndpointType const> RadioInterface::GpDevice::getEndpoints() {
+	auto &flash = **this;
+	return {flash.endpointCount, flash.endpoints};
+}
+
+void RadioInterface::GpDevice::addPublisher(uint8_t endpointIndex, Publisher &publisher) {
+}
+
+void RadioInterface::GpDevice::addSubscriber(uint8_t endpointIndex, Subscriber &subscriber) {
+	subscriber.remove();
+	subscriber.index = endpointIndex;
+	this->subscribers.add(subscriber);
+}
+
 
 // RadioInterface::ZbDeviceFlash
 
@@ -2580,4 +2575,37 @@ int RadioInterface::ZbDeviceFlash::size() const {
 
 RadioInterface::ZbDevice *RadioInterface::ZbDeviceFlash::allocate() const {
 	return new ZbDevice(*this);
+}
+
+// RadioInterface::ZbDevice
+
+DeviceId RadioInterface::ZbDevice::getId() {
+	auto &flash = **this;
+	return flash.longAddress;
+}
+
+String RadioInterface::ZbDevice::getName() {
+	return "x";
+}
+
+void RadioInterface::ZbDevice::setName(String name) {
+
+}
+
+Array<EndpointType const> RadioInterface::ZbDevice::getEndpoints() {
+	auto &flash = **this;
+	return {flash.endpointCount, reinterpret_cast<EndpointType const*>(flash.endpoints)};
+}
+
+void RadioInterface::ZbDevice::addPublisher(uint8_t endpointIndex, Publisher &publisher) {
+	publisher.remove();
+	publisher.index = endpointIndex;
+	publisher.event = &this->interface->publishEvent;
+	this->publishers.add(publisher);
+}
+
+void RadioInterface::ZbDevice::addSubscriber(uint8_t endpointIndex, Subscriber &subscriber) {
+	subscriber.remove();
+	subscriber.index = endpointIndex;
+	this->subscribers.add(subscriber);
 }

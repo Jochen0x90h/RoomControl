@@ -29,16 +29,9 @@ public:
 
 	void setCommissioning(bool enabled) override;
 
-
 	int getDeviceCount() override;
-
-	DeviceId getDeviceId(int index) override;
-
-	Array<EndpointType const> getEndpoints(DeviceId deviceId) override;
-
-	void addPublisher(DeviceId deviceId, uint8_t endpointIndex, Publisher &publisher) override;
-
-	void addSubscriber(DeviceId deviceId, uint8_t endpointIndex, Subscriber &subscriber) override;
+	Device &getDeviceByIndex(int index) override;
+	Device *getDeviceById(DeviceId id) override;
 
 private:
 
@@ -51,13 +44,13 @@ private:
 
 
 	// devices
-	struct Device;
+	struct BusDevice;
 
 	struct DeviceFlash {
 		static constexpr int MAX_ENDPOINT_COUNT = 32;
 
 		// device id
-		uint32_t deviceId;
+		uint32_t id;
 
 		uint8_t address;
 
@@ -67,7 +60,7 @@ private:
 		// endpoint types
 		EndpointType endpoints[MAX_ENDPOINT_COUNT];
 
-		// note: endpoints must be the last member
+		// note: endpoints must be the last member because of variable size allocation
 
 		/**
 		 * Returns the size in bytes needed to store the device configuration in flash
@@ -79,20 +72,31 @@ private:
 		 * Allocates a state object
 		 * @return new state object
 		 */
-		Device *allocate() const;
+		BusDevice *allocate() const;
 	};
 
-	class Device : public Storage::Element<DeviceFlash> {
+	class BusDevice : public Storage::Element<DeviceFlash>, public Device {
 	public:
-		Device(DeviceFlash const &flash) : Storage::Element<DeviceFlash>(flash) {}
+		BusDevice(DeviceFlash const &flash) : Storage::Element<DeviceFlash>(flash) {}
 
+		DeviceId getId() override;
+		String getName() override;
+		void setName(String name) override;
+		Array<EndpointType const> getEndpoints() override;
+		void addPublisher(uint8_t endpointIndex, Publisher &publisher) override;
+		void addSubscriber(uint8_t endpointIndex, Subscriber &subscriber) override;
+
+		// back pointer to interface
+		BusInterface *interface;
+
+		// subscribers and publishers
 		SubscriberList subscribers;
 		PublisherList publishers;
 	};
 
 public:
 	// list of commissioned devices
-	Storage::Array<Device> devices;
+	Storage::Array<BusDevice> devices;
 
 private:
 	// receive from bus nodes

@@ -266,6 +266,8 @@ source_group(node FILES ${NODE})
 
 # room control
 set(CONTROL
+	control/src/AlarmInterface.cpp
+	control/src/AlarmInterface.hpp
 	control/src/BME680.cpp
 	control/src/BME680.hpp
 	control/src/BusInterface.cpp
