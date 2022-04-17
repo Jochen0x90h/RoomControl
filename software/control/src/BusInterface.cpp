@@ -18,6 +18,9 @@ constexpr int micLength = 4;
 BusInterface::BusInterface(PersistentStateManager &stateManager)
 	: securityCounter(stateManager)
 {
+	// set backpointers
+	for (auto &device : this->devices)
+		device.interface = this;
 }
 
 BusInterface::~BusInterface() {
@@ -43,44 +46,17 @@ int BusInterface::getDeviceCount() {
 	return this->devices.count();
 }
 
-DeviceId BusInterface::getDeviceId(int index) {
+Interface::Device &BusInterface::getDeviceByIndex(int index) {
 	assert(index >= 0 && index < this->devices.count());
-	return this->devices[index]->deviceId;
+	return this->devices[index];
 }
 
-Array<Interface::EndpointType const> BusInterface::getEndpoints(DeviceId deviceId) {
+Interface::Device *BusInterface::getDeviceById(DeviceId id) {
 	for (auto &device : this->devices) {
-		auto const &flash = *device;
-		if (flash.deviceId == deviceId) {
-			return {flash.endpointCount, flash.endpoints};
-		}
+		if (device->id == id)
+			return &device;
 	}
-	return {};
-}
-
-void BusInterface::addPublisher(DeviceId deviceId, uint8_t endpointIndex, Publisher &publisher) {
-	for (auto &device : this->devices) {
-		auto const &flash = *device;
-		if (flash.deviceId == deviceId && endpointIndex < flash.endpointCount) {
-			publisher.remove();
-			publisher.index = endpointIndex;
-			publisher.event = &this->publishEvent;
-			device.publishers.add(publisher);
-			break;
-		}
-	}
-}
-
-void BusInterface::addSubscriber(DeviceId deviceId, uint8_t endpointIndex, Subscriber &subscriber) {
-	for (auto &device : this->devices) {
-		auto const &flash = *device;
-		if (flash.deviceId == deviceId/* && endpointIndex < flash.endpointCount*/) {
-			subscriber.remove();
-			subscriber.index = endpointIndex;
-			device.subscribers.add(subscriber);
-			break;
-		}
-	}
+	return nullptr;
 }
 
 bool readMessage(MessageType dstType, void *dstMessage, MessageReader r, EndpointType srcType) {
@@ -264,6 +240,7 @@ Coroutine BusInterface::receive() {
 
 
 		bus::MessageReader r(receiveLength, receiveMessage);
+
 		// set start of header
 		r.setHeader();
 
@@ -285,7 +262,7 @@ Coroutine BusInterface::receive() {
 
 			// create a new device
 			DeviceFlash flash;
-			flash.deviceId = deviceId;
+			flash.id = deviceId;
 
 			// get endpoints
 			flash.endpointCount = r.getRemaining();
@@ -299,7 +276,7 @@ Coroutine BusInterface::receive() {
 			array::fill(9, sendMessage, 0);
 			int index = this->devices.count();
 			for (int i = 0; i < this->devices.count(); ++i) {
-				if (this->devices[i]->deviceId == deviceId)
+				if (this->devices[i]->id == deviceId)
 					index = i;
 				else
 					sendMessage[i >> 3] |= 1 << (i & 7);
@@ -362,7 +339,8 @@ Coroutine BusInterface::receive() {
 				this->devices.write(index, flash);
 			} else {
 				// create new device
-				Device* device = new Device(flash);
+				BusDevice* device = new BusDevice(flash);
+				device->interface = this;
 				this->devices.write(index, device);
 			}
 		} else {
@@ -598,6 +576,40 @@ int BusInterface::DeviceFlash::size() const {
 	return getOffset(DeviceFlash, endpoints[this->endpointCount]);
 }
 
-BusInterface::Device *BusInterface::DeviceFlash::allocate() const {
-	return new Device(*this);
+BusInterface::BusDevice *BusInterface::DeviceFlash::allocate() const {
+	return new BusDevice(*this);
+}
+
+
+// BusInterface::BusDevice
+
+DeviceId BusInterface::BusDevice::getId() {
+	auto &flash = **this;
+	return flash.id;
+}
+
+String BusInterface::BusDevice::getName() {
+	return "x";
+}
+
+void BusInterface::BusDevice::setName(String name) {
+
+}
+
+Array<EndpointType const> BusInterface::BusDevice::getEndpoints() {
+	auto &flash = **this;
+	return {flash.endpointCount, flash.endpoints};
+}
+
+void BusInterface::BusDevice::addPublisher(uint8_t endpointIndex, Publisher &publisher) {
+	publisher.remove();
+	publisher.index = endpointIndex;
+	publisher.event = &this->interface->publishEvent;
+	this->publishers.add(publisher);
+}
+
+void BusInterface::BusDevice::addSubscriber(uint8_t endpointIndex, Subscriber &subscriber) {
+	subscriber.remove();
+	subscriber.index = endpointIndex;
+	this->subscribers.add(subscriber);
 }

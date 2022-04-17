@@ -191,7 +191,7 @@ public:
 	struct Iterator {
 		ElementInternal **e;
 		void operator ++() {++this->e;}
-		T &operator *() const {return *reinterpret_cast<T *>(*this->e);}
+		T &operator *() const {return *static_cast<T *>(*this->e);}
 		bool operator !=(Iterator it) {return it.e != this->e;}
 	};
 
@@ -238,7 +238,7 @@ public:
 		 */
 		T &operator[](int index) const {
 			assert(index >= 0 && index < this->data.count);
-			return *reinterpret_cast<RamType*>(this->data.elements[index]);
+			return *static_cast<RamType*>(this->data.elements[index]);
 		}
 
 		/**

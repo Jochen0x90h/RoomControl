@@ -26,42 +26,65 @@ public:
 	 * @param enabled true to enable
 	 */
 	virtual void setCommissioning(bool enabled) = 0;
-	
+
+
+	class Device {
+	public:
+		/**
+		 * Get device id
+		 * @return device id
+		 */
+		virtual DeviceId getId() = 0;
+
+		/**
+		 * Get device name
+		 * @return device name
+		 */
+		virtual String getName() = 0;
+
+		/**
+		 * Set device name
+		 * @param device name
+		 */
+		virtual void setName(String name) = 0;
+
+		/**
+		 * Get endpoints
+		 * @return endpoints
+		 */
+		virtual Array<EndpointType const> getEndpoints() = 0;
+
+		/**
+		 * Add a publisher to the device that sends messages to an endpoint. Gets inserted into a linked list
+		 * @param endpointIndex endpoint index
+		 * @param publisher publisher to insert
+		 */
+		virtual void addPublisher(uint8_t endpointIndex, Publisher &publisher) = 0;
+
+		/**
+		 * Add a subscriber to the device that receives messages from an endpoint. Gets inserted into a linked list
+		 * @param endpointIndex endpoint index
+		 * @param publisher subscriber to insert
+		 */
+		virtual void addSubscriber(uint8_t endpointIndex, Subscriber &subscriber) = 0;
+	};
+
 	/**
 	 * Get number of devices connected to this interface
 	 */
 	virtual int getDeviceCount() = 0;
-	
+
 	/**
-	 * Get device id by index
+	 * Get a device by index
 	 * @param index index of device
-	 * @return device id
+	 * @return device
 	 */
-	virtual DeviceId getDeviceId(int index) = 0;
-	
-	/**
-	 * Remove the device from the internal list of devices. It the has to be commissioned again
-	 */
-	//virtual void removeDevice() = 0;
-	
-	/**
-	 * Get list of endpoints for a device
-	 * @param deviceId device id
-	 * @return list of endpoints
-	 */
-	virtual Array<EndpointType const> getEndpoints(DeviceId deviceId) = 0;
+	virtual Device &getDeviceByIndex(int index) = 0;
 
 	/**
-	 * Add a publisher to the device. Gets inserted into a linked list
-	 * @param deviceId device id
-	 * @param publisher publisher to insert
+	 * Get a device by id
+	 * @param id device id
+	 * @return device
 	 */
-	virtual void addPublisher(DeviceId deviceId, uint8_t endpointIndex, Publisher &publisher) = 0;
-
-	/**
-	 * Add a subscriber to the device. Gets inserted into a linked list
-	 * @param deviceId device id
-	 * @param publisher subscriber to insert
-	 */
-	virtual void addSubscriber(DeviceId deviceId, uint8_t endpointIndex, Subscriber &subscriber) = 0;
+	virtual Device *getDeviceById(DeviceId id) = 0;
 };

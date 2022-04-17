@@ -1,4 +1,4 @@
-//#include <iostream>
+#include <iostream>
 #include "RoomControl.hpp"
 #include "Menu.hpp"
 #include "Message.hpp"
@@ -17,13 +17,111 @@
 #include <cmath>
 
 
-constexpr String weekdays[7] = {"Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"};
+constexpr String weekdaysLong[7] = {"Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"};
 constexpr String weekdaysShort[7] = {"M", "T", "W", "T", "F", "S", "S"};
 
 constexpr String switchStatesLong[] = {"off", "on", "toggle", String()};
 constexpr String triggerStatesLong[] = {"inactive", "active"};
 constexpr String upDownStatesLong[] = {"inactive", "up", "down", String()};
 
+using EndpointType = Interface::EndpointType;
+
+static String getName(EndpointType endpointType) {
+	switch (endpointType & Interface::EndpointType::TYPE_MASK) {
+		case Interface::EndpointType::ON_OFF:
+			return "On/Off";
+		case Interface::EndpointType::TRIGGER:
+			return "Trigger";
+		case Interface::EndpointType::UP_DOWN:
+			return "Up/Down";
+
+		case Interface::EndpointType::LEVEL:
+			return "Level";
+
+		case Interface::EndpointType::TEMPERATURE:
+			return "Temperature";
+		case Interface::EndpointType::AIR_PRESSURE:
+			return "Air Pressure";
+		case Interface::EndpointType::AIR_HUMIDITY:
+			return "Air Humidity";
+		case Interface::EndpointType::AIR_VOC:
+			return "Air VOC";
+		case Interface::EndpointType::ILLUMINANCE:
+			return "Illuminance";
+
+		case Interface::EndpointType::VOLTAGE:
+			return "Voltage";
+		case Interface::EndpointType::CURRENT:
+			return "Current";
+		case Interface::EndpointType::BATTERY_LEVEL:
+			return "Battery Level";
+		case Interface::EndpointType::ENERGY_COUNTER:
+			return "Energy Counter";
+		case Interface::EndpointType::POWER:
+			return "Power";
+
+		default:
+			return "<Unknown>";
+	}
+}
+
+static int getComponentCount(EndpointType endpointType) {
+	return endpointType == EndpointType::LEVEL ? 2 : 1;
+}
+
+static Interface::EndpointType nextOut(EndpointType endpointType, int delta) {
+	static Interface::EndpointType const endpointTypes[] {
+		EndpointType::ON_OFF_OUT,
+		EndpointType::TRIGGER_OUT,
+		EndpointType::UP_DOWN_OUT,
+		EndpointType::LEVEL_OUT,
+
+		EndpointType::TEMPERATURE_OUT,
+	};
+
+	int index = array::binaryLowerBound(endpointTypes, endpointType);
+	index = (index + array::count(endpointTypes) * 256 + delta) % array::count(endpointTypes);
+	return endpointTypes[index];
+}
+
+static MessageType getDefaultMessageType(Interface::EndpointType endpointType) {
+	switch (endpointType & Interface::EndpointType::TYPE_MASK) {
+		case Interface::EndpointType::ON_OFF:
+			return MessageType::ON_OFF;
+		case Interface::EndpointType::TRIGGER:
+			return MessageType::TRIGGER;
+		case Interface::EndpointType::UP_DOWN:
+			return MessageType::UP_DOWN;
+		case Interface::EndpointType::LEVEL:
+			return MessageType::MOVE_TO_LEVEL;
+		case Interface::EndpointType::TEMPERATURE:
+			return MessageType::CELSIUS;
+		case Interface::EndpointType::AIR_PRESSURE:
+			return MessageType::HECTOPASCAL;
+		default:
+			break;
+	}
+	return MessageType::UNKNOWN;
+}
+
+static Message getDefaultMessage(Interface::EndpointType endpointType) {
+	switch (endpointType & Interface::EndpointType::TYPE_MASK) {
+		case Interface::EndpointType::ON_OFF:
+			return {.onOff = 0};
+		case Interface::EndpointType::TRIGGER:
+			return {.trigger = 0};
+		case Interface::EndpointType::UP_DOWN:
+			return {.upDown = 0};
+		case Interface::EndpointType::TEMPERATURE:
+			return {.temperature = 20.0f};
+		case Interface::EndpointType::AIR_PRESSURE:
+			return {.airPressure = 1000.0f};
+		default:
+			break;
+	}
+	return {};
+}
+/*
 constexpr String buttonStatesLong[] = {"release", "press"};
 constexpr String rockerStatesLong[] = {"release", "up", "down", String()};
 constexpr String blindStatesLong[] = {"stopped", "up", "down", String()};
@@ -33,7 +131,7 @@ constexpr String switchStates[] = {"0", "1"};
 constexpr String rockerStates[] = {"#", "+", "-", "!"};
 
 constexpr int8_t QOS = 1;
-
+*/
 
 // EndpointInfo
 // ------------
@@ -203,45 +301,9 @@ ValueInfo valueInfos[] = {
 
 // RoomControl
 // -----------
-/*
-static Configuration &initConfiguration(Storage::Array<Configuration> &configurations,
-	PersistentStateManager &stateManager)
-{
-	// set default configuration if necessary
-	if (configurations.isEmpty()) {
-		ConfigurationFlash configuration;
-		
-		// name
-		assign(configuration.name, "room");
-		
-		// generate a random 64 bit address
-		configuration.ieeeLongAddress = rng::int64();
-		
-		// set default pan
-		configuration.zbeePanId = 0x1a62;
-		
-		// generate random network key
-		for (uint8_t &b : configuration.key) {
-			b = rng::int8();
-		}
-		setKey(configuration.aesKey, configuration.key);
-		
-		
-		// state offsets for interfaces
-		configuration.busSecurityCounterOffset = stateManager.allocate<uint32_t>();
-		configuration.zbeeSecurityCounterOffset = stateManager.allocate<uint32_t>();
 
-		
-		// write to flash
-		configurations.write(0, new Configuration(configuration));
-	}
-
-	return configurations[0];
-}
-*/
 RoomControl::RoomControl()
-	//: storage(FLASH_PAGE_COUNT/2, FLASH_PAGE_COUNT/2, localDevices, busDevices, radioDevices, routes, timers)
-	: storage(0, FLASH_PAGE_COUNT, configurations, busInterface.devices, radioInterface.gpDevices, radioInterface.zbDevices)
+	: storage(0, FLASH_PAGE_COUNT, configurations, busInterface.devices, radioInterface.gpDevices, radioInterface.zbDevices, alarmInterface.alarms)
 	, stateManager()
 	, houseTopicId(), roomTopicId()
 	, busInterface(stateManager)
@@ -2867,9 +2929,9 @@ void RoomControl::enterTopicSelector(String topic, bool onlyCommands, int index)
 
 static void printDevices(Interface &interface) {
 	for (int i = 0; i < interface.getDeviceCount(); ++i) {
-		auto deviceId = interface.getDeviceId(i);
-		Terminal::out << (hex(deviceId) + '\n');
-		Array<Interface::EndpointType const> endpoints = interface.getEndpoints(deviceId);
+		auto &device = interface.getDeviceByIndex(i);
+		Terminal::out << (hex(device.getId()) + '\n');
+		Array<Interface::EndpointType const> endpoints = device.getEndpoints();
 		for (auto endpoint : endpoints) {
 			Terminal::out << ('\t');
 			switch (endpoint & Interface::EndpointType::TYPE_MASK) {
@@ -2918,17 +2980,17 @@ Coroutine RoomControl::testSwitch() {
 	bool haveIn = false;
 	bool haveOut = false;
 	for (int i = 0; i < interface.getDeviceCount(); ++i) {
-		auto deviceId = interface.getDeviceId(i);
-		Array<Interface::EndpointType const> endpoints = interface.getEndpoints(deviceId);
+		auto &device = interface.getDeviceByIndex(i);
+		Array<Interface::EndpointType const> endpoints = device.getEndpoints();
 		for (int endpointIndex = 0; endpointIndex < endpoints.count(); ++endpointIndex) {
 			auto endpointType = endpoints[endpointIndex];
 			if (!haveIn && (endpointType == Interface::EndpointType::ON_OFF_IN || endpointType == Interface::EndpointType::UP_DOWN_IN)) {
 				haveIn = true;
-				interface.addSubscriber(deviceId, endpointIndex, subscriber);
+				device.addSubscriber(endpointIndex, subscriber);
 			}
 			if (!haveOut && endpointType == Interface::EndpointType::ON_OFF_OUT) {
 				haveOut = true;
-				interface.addPublisher(deviceId, endpointIndex, publisher);
+				device.addPublisher(endpointIndex, publisher);
 			}
 		}
 	}
@@ -3301,7 +3363,7 @@ Coroutine RoomControl::idleDisplay() {
 		auto bitmap = this->swapChain.get();
 		
 		// display weekday and clock time
-		StringBuffer<16> b = weekdays[now.getWeekday()] + "  "
+		StringBuffer<16> b = weekdaysLong[now.getWeekday()] + "  "
 			+ dec(now.getHours()) + ':'
 			+ dec(now.getMinutes(), 2) + ':'
 			+ dec(now.getSeconds(), 2);
@@ -3325,6 +3387,59 @@ Coroutine RoomControl::idleDisplay() {
 	}
 }
 
+// menu helpers
+
+MessageType editMessage(Menu::Stream &stream, Interface::EndpointType endpointType,
+	MessageType messageType, Message &message, bool editMessage1, bool editMessage2, int delta)
+{
+
+	// get message type
+	auto newMessageType = getDefaultMessageType(endpointType);
+	if (newMessageType != messageType)
+		message = getDefaultMessage(endpointType);
+	messageType = newMessageType;
+
+	// edit and dislpay message values
+	switch (endpointType & Interface::EndpointType::TYPE_MASK) {
+		case Interface::EndpointType::ON_OFF:
+			if (editMessage1)
+				message.onOff = clamp(message.onOff + delta, 0, 2);
+			stream << underline(switchStatesLong[message.onOff & 3], editMessage1);
+			break;
+		case Interface::EndpointType::TRIGGER:
+			if (editMessage1)
+				message.trigger = clamp(message.trigger + delta, 0, 1);
+			stream << underline(triggerStatesLong[message.trigger & 1], editMessage1);
+			break;
+		case Interface::EndpointType::UP_DOWN:
+			if (editMessage1)
+				message.upDown = clamp(message.upDown + delta, 0, 2);
+			stream << underline(upDownStatesLong[message.upDown & 3], editMessage1);
+			break;
+		case Interface::EndpointType::LEVEL:
+			if (editMessage1)
+				message.moveToLevel.level = clamp(float(message.moveToLevel.level) + delta * 0.05f, 0.0f, 1.0f);
+			if (editMessage2)
+				message.moveToLevel.move = clamp(float(message.moveToLevel.move) + delta * 0.5f, 0.0f, 100.0f);
+			stream << underline(flt(message.moveToLevel.level, 2), editMessage1) << ' ';
+			stream << underline(flt(message.moveToLevel.move, 1), editMessage2) << 's';
+			break;
+		case Interface::EndpointType::TEMPERATURE:
+			if (editMessage1)
+				message.temperature = std::round(message.temperature * 2.0f + delta) * 0.5f;
+			stream << underline(flt(message.temperature, -1), editMessage1) << "oC";
+			break;
+		case Interface::EndpointType::AIR_PRESSURE:
+			if (editMessage1)
+				message.airPressure = message.airPressure + delta;
+			stream << underline(flt(message.airPressure, 0), editMessage1) << "hPa";
+			break;
+	}
+	return messageType;
+}
+
+// menu
+
 AwaitableCoroutine RoomControl::mainMenu() {
 	Menu menu(this->swapChain);
 	while (true) {
@@ -3334,6 +3449,8 @@ AwaitableCoroutine RoomControl::mainMenu() {
 			co_await devicesMenu(this->busInterface);
 		if (menu.entry("Radio Devices"))
 			co_await devicesMenu(this->radioInterface);
+		if (menu.entry("Alarms"))
+			co_await alarmsMenu(this->alarmInterface);
 		if (menu.entry("Functions"))
 			;
 		if (menu.entry("Routes"))
@@ -3347,40 +3464,25 @@ AwaitableCoroutine RoomControl::mainMenu() {
 		co_await menu.show();
 	}
 }
-/*
-AwaitableCoroutine RoomControl::devicesMenu(Interface &interface) {
-	interface.setCommissioning(true);
-	Menu menu(this->bitmap);
-	while (true) {
-		int count = interface.getDeviceCount();
-		for (int i = 0; i < count; ++i) {
-			auto deviceId = interface.getDeviceId(i);
-			StringBuffer<16> b = hex(deviceId);
-			menu.entry(b);
-		}
-		if (menu.entry("Exit"))
-			break;
 
-		// show menu
-		co_await menu.show(this->display);
-	}
-	interface.setCommissioning(false);
-}
-*/
 AwaitableCoroutine RoomControl::devicesMenu(Interface &interface) {
 	interface.setCommissioning(true);
 	Menu menu(this->swapChain);
 	while (true) {
 		int count = interface.getDeviceCount();
 		for (int i = 0; i < count; ++i) {
-			auto deviceId = interface.getDeviceId(i);
-			StringBuffer<16> b;
+			auto &device = interface.getDeviceByIndex(i);
+			/*StringBuffer<16> b;
 			if (deviceId <= 0xffffffff)
 				b = hex(uint32_t(deviceId));
 			else
 				b = hex(deviceId);
-			if (menu.entry(b))
-				co_await deviceMenu(interface, deviceId);
+			if (menu.entry(b))*/
+			auto stream = menu.stream();
+			stream << device.getName();
+			if (menu.entry()) {
+				co_await deviceMenu(device);
+			}
 		}
 		if (menu.entry("Exit"))
 			break;
@@ -3391,16 +3493,15 @@ AwaitableCoroutine RoomControl::devicesMenu(Interface &interface) {
 	interface.setCommissioning(false);
 }
 
-
-AwaitableCoroutine RoomControl::deviceMenu(Interface &interface, DeviceId deviceId) {
+AwaitableCoroutine RoomControl::deviceMenu(Interface::Device &device) {
 	Menu menu(this->swapChain);
 	while (true) {
 		if (menu.entry("Endpoints"))
-			co_await endpointsMenu(interface, deviceId);
+			co_await endpointsMenu(device);
 		if (menu.entry("Message Logger"))
-			co_await messageLogger(interface, deviceId);
+			co_await messageLogger(device);
 		if (menu.entry("Message Generator"))
-			co_await messageGenerator(interface, deviceId);
+			co_await messageGenerator(device);
 		if (menu.entry("Exit"))
 			break;
 
@@ -3409,137 +3510,201 @@ AwaitableCoroutine RoomControl::deviceMenu(Interface &interface, DeviceId device
 	}
 }
 
-AwaitableCoroutine RoomControl::endpointsMenu(Interface &interface, DeviceId deviceId) {
+AwaitableCoroutine RoomControl::alarmsMenu(AlarmInterface &interface) {
 	Menu menu(this->swapChain);
 	while (true) {
-		Array<Interface::EndpointType const> endpoints = interface.getEndpoints(deviceId);
-		for (int i = 0; i < endpoints.count(); ++i) {
-			auto endpointType = endpoints[i];
-			StringBuffer<24> b = dec(i) + ": ";
-			switch (endpointType & Interface::EndpointType::TYPE_MASK) {
-			case Interface::EndpointType::ON_OFF:
-				b += "On/Off";
-				break;
-			case Interface::EndpointType::TRIGGER:
-				b += "Trigger";
-				break;
-			case Interface::EndpointType::UP_DOWN:
-				b += "Up/Down";
-				break;
-				
-			case Interface::EndpointType::LEVEL:
-				b += "Level";
-				break;
+		int count = interface.getDeviceCount();
+		for (int i = 0; i < count; ++i) {
+			auto const &flash = interface.getAlarm(i);
+			auto stream = menu.stream();
 
-			case Interface::EndpointType::TEMPERATURE:
-				b += "Temperature";
-				break;
-			case Interface::EndpointType::AIR_PRESSURE:
-				b += "Air Pressure";
-				break;
-			case Interface::EndpointType::AIR_HUMIDITY:
-				b += "Air Humidity";
-				break;
-			case Interface::EndpointType::AIR_VOC:
-				b += "Air VOC";
-				break;
-			case Interface::EndpointType::ILLUMINANCE:
-				b += "Illuminance";
-				break;
-				
-			case Interface::EndpointType::VOLTAGE:
-				b += "Voltage";
-				break;
-			case Interface::EndpointType::CURRENT:
-				b += "Current";
-				break;
-			case Interface::EndpointType::BATTERY_LEVEL:
-				b += "Battery Level";
-				break;
-			case Interface::EndpointType::ENERGY_COUNTER:
-				b += "Energy Counter";
-				break;
-			case Interface::EndpointType::POWER:
-				b += "Power";
-				break;
+			// time
+			auto time = flash.time;
+			stream << dec(time.getHours()) << ':' << dec(time.getMinutes(), 2);
 
-			default:
-				b += "<Unknown>";
-				break;
+			// week days
+
+
+			//stream << interface.getDeviceName(i);
+			if (menu.entry()) {
+				AlarmInterface::AlarmFlash flash2(flash);
+				//flash2.endpointCount = 0;
+				co_await alarmMenu(interface, i, flash2);
 			}
-			if ((endpointType & Interface::EndpointType::DIRECTION_MASK) == Interface::EndpointType::IN)
-				b += " In";
-			else
-				b += " Out";
-			menu.entry(b);
+		}
+		if (menu.entry("Add")) {
+			AlarmInterface::AlarmFlash flash;
+			co_await alarmMenu(interface, count, flash);
 		}
 		if (menu.entry("Exit"))
 			break;
 
 		// show menu
-		//co_await menu.show();
+		co_await menu.show();
+	}
+}
+
+AwaitableCoroutine RoomControl::alarmMenu(AlarmInterface &interface, int index, AlarmInterface::AlarmFlash &flash) {
+	Menu menu(this->swapChain);
+	while (true) {
+		if (menu.entry("Time"))
+			co_await alarmTimeMenu(flash.time);
+		if (menu.entry("Actions"))
+			co_await alarmActionsMenu(flash);
+
+		if (index < interface.getDeviceCount()) {
+			auto &device = interface.getDeviceByIndex(index);
+			if (menu.entry("Endpoints"))
+				co_await endpointsMenu(device);
+			if (menu.entry("Message Logger"))
+				co_await messageLogger(device);
+			if (menu.entry("Message Generator"))
+				co_await messageGenerator(device);
+		}
+
+		if (menu.entry("Cancel"))
+			break;
+		if (menu.entry("Save")) {
+			// set alarm
+			interface.setAlarm(index, flash);
+			break;
+		}
+
+		// show menu
+		co_await menu.show();
+	}
+}
+
+AwaitableCoroutine RoomControl::alarmTimeMenu(AlarmTime &time) {
+	Menu menu(this->swapChain);
+	while (true) {
+		int edit = menu.getEdit(9);
+		bool editHours = edit == 1;
+		bool editMinutes = edit == 2;
+		unsigned int editWeekday = edit - 3;
+		int delta = menu.getDelta();
+
+		if (editHours)
+			time.addHours(delta);
+		if (editMinutes)
+			time.addMinutes(delta);
+		int weekdays = time.getWeekdays();
+		if (editWeekday < 7 && delta != 0) {
+			weekdays ^= 1 << editWeekday;
+			time.setWeekdays(weekdays);
+		}
+
+		auto stream = menu.stream();
+		stream << underline(dec(time.getHours()), editHours) << ':'
+			<< underline(dec(time.getMinutes(), 2), editMinutes);
+		for (int i = 0; i < 7; ++i) {
+			stream << "   " << invert(underline(weekdaysShort[i], i == editWeekday), ((weekdays >> i) & 1) != 0);
+		}
+		menu.entry();
+
+		if (menu.entry("Exit"))
+			break;
+
+		// show menu
+		co_await menu.show();
+	}
+}
+
+AwaitableCoroutine RoomControl::alarmActionsMenu(AlarmInterface::AlarmFlash &flash) {
+	Menu menu(this->swapChain);
+	while (true) {
+		// actions: messages to send when alarm goes off
+		for (int i = 0; i < flash.endpointCount; ++i) {
+			auto endpointType = flash.endpoints[i];
+
+			// get component to edit
+			int edit = menu.getEdit(1 + getComponentCount(endpointType));
+			bool editEndpointType = edit == 1;
+			bool editMessage1 = edit == 2;
+			bool editMessage2 = edit == 3;
+			int delta = menu.getDelta();
+
+			auto stream = menu.stream();
+
+			// edit endpoint type
+			if (editEndpointType) {
+				endpointType = nextOut(endpointType, delta);
+				flash.endpoints[i] = endpointType;
+			}
+			stream << underline(getName(endpointType), editEndpointType);
+			stream << ": ";
+
+			// edit message
+			flash.messageTypes[i] = editMessage(stream, endpointType, flash.messageTypes[i], flash.messages[i],
+				editMessage1, editMessage2, delta);
+			menu.entry();
+		}
+
+		// add action
+		if (flash.endpointCount < AlarmInterface::AlarmFlash::MAX_ENDPOINT_COUNT && menu.entry("Add")) {
+			int i = flash.endpointCount;
+			auto endpointType = Interface::EndpointType::ON_OFF_OUT;
+			flash.endpoints[i] = endpointType;
+			flash.messageTypes[i] = getDefaultMessageType(endpointType);
+			flash.messages[i] = getDefaultMessage(endpointType);
+			++flash.endpointCount;
+		}
+
+		// remove action
+		if (flash.endpointCount > 0 && menu.entry("Remove")) {
+			--flash.endpointCount;
+			menu.remove();
+		}
+
+		if (menu.entry("Exit"))
+			break;
+
+		// show menu
+		co_await menu.show();
+	}
+}
+
+AwaitableCoroutine RoomControl::endpointsMenu(Interface::Device &device) {
+	Menu menu(this->swapChain);
+	while (true) {
+		Array<Interface::EndpointType const> endpoints = device.getEndpoints();
+		for (int i = 0; i < endpoints.count(); ++i) {
+			auto endpointType = endpoints[i];
+			auto stream = menu.stream();
+			stream << dec(i) << ": " << getName(endpointType);
+			if ((endpointType & Interface::EndpointType::DIRECTION_MASK) == Interface::EndpointType::IN)
+				stream << " In";
+			else
+				stream << " Out";
+			menu.entry();
+		}
+		if (menu.entry("Exit"))
+			break;
+
 		// show menu and wait for new event until timeout so that we can show endpoints of recommissioned device
 		co_await select(menu.show(), Timer::sleep(250ms));
 	}
 }
 
-static MessageType getDefaultMessageType(Interface::EndpointType endpointType) {
-	switch (endpointType & Interface::EndpointType::TYPE_MASK) {
-	case Interface::EndpointType::ON_OFF:
-		return MessageType::ON_OFF;
-	case Interface::EndpointType::TRIGGER:
-		return MessageType::TRIGGER;
-	case Interface::EndpointType::UP_DOWN:
-		return MessageType::UP_DOWN;
-	case Interface::EndpointType::LEVEL:
-		return MessageType::MOVE_TO_LEVEL;
-	case Interface::EndpointType::TEMPERATURE:
-		return MessageType::CELSIUS;
-	case Interface::EndpointType::AIR_PRESSURE:
-		return MessageType::HECTOPASCAL;
-		default:
-			break;
-	}
-	return MessageType::UNKNOWN;
-}
 
-static Message getDefaultMessage(Interface::EndpointType endpointType) {
-	switch (endpointType & Interface::EndpointType::TYPE_MASK) {
-	case Interface::EndpointType::ON_OFF:
-		return {.onOff = 0};
-	case Interface::EndpointType::TRIGGER:
-		return {.trigger = 0};
-	case Interface::EndpointType::UP_DOWN:
-		return {.upDown = 0};
-	case Interface::EndpointType::TEMPERATURE:
-		return {.temperature = 20.0f};
-	case Interface::EndpointType::AIR_PRESSURE:
-		return {.airPressure = 1000.0f};
-	default:
-		break;
-	}
-	return {};
-}
 
-AwaitableCoroutine RoomControl::messageLogger(Interface &interface, DeviceId deviceId) {
+AwaitableCoroutine RoomControl::messageLogger(Interface::Device &device) {
 	Subscriber::Barrier barrier;
 
 	Subscriber subscribers[32];
 
 	// subscribe to all endpoints
-	for (uint8_t endpointIndex = 0; endpointIndex < /*min(endpoints.count(), */array::count(subscribers)/*)*/; ++endpointIndex) {
+	for (int endpointIndex = 0; endpointIndex < array::count(subscribers); ++endpointIndex) {
 		auto &subscriber = subscribers[endpointIndex];
 		subscriber.subscriptionIndex = endpointIndex;
-		//auto endpointType = endpoints[endpointIndex];
-		//subscriber.messageType = getDefaultMessageType(endpointType);
 		subscriber.barrier = &barrier;
-		interface.addSubscriber(deviceId, endpointIndex, subscriber);
+		device.addSubscriber(endpointIndex, subscriber);
 	}
 
 	// event queue
 	struct Event {
 		uint8_t endpointIndex;
-		::Message message;
+		Message message;
 	};
 	Queue<Event, 16> queue;
 	
@@ -3549,8 +3714,8 @@ AwaitableCoroutine RoomControl::messageLogger(Interface &interface, DeviceId dev
 	// menu loop
 	Menu menu(this->swapChain);
 	while (true) {
-		Array<Interface::EndpointType const> endpoints = interface.getEndpoints(deviceId);
-		for (uint8_t endpointIndex = 0; endpointIndex < min(endpoints.count(), array::count(subscribers)); ++endpointIndex) {
+		Array<Interface::EndpointType const> endpoints = device.getEndpoints();
+		for (int endpointIndex = 0; endpointIndex < min(endpoints.count(), array::count(subscribers)); ++endpointIndex) {
 			auto &subscriber = subscribers[endpointIndex];
 			auto endpointType = endpoints[endpointIndex];
 			subscriber.messageType = getDefaultMessageType(endpointType);
@@ -3602,7 +3767,7 @@ AwaitableCoroutine RoomControl::messageLogger(Interface &interface, DeviceId dev
 	}
 }
 
-AwaitableCoroutine RoomControl::messageGenerator(Interface &interface, DeviceId deviceId) {
+AwaitableCoroutine RoomControl::messageGenerator(Interface::Device &device) {
 	//! skip "in" endpoints -> or forward to subscriptions
 	Message message;
 
@@ -3613,70 +3778,35 @@ AwaitableCoroutine RoomControl::messageGenerator(Interface &interface, DeviceId 
 	// menu loop
 	Menu menu(this->swapChain);
 	while (true) {
-		Array<Interface::EndpointType const> endpoints = interface.getEndpoints(deviceId);
+		Array<Interface::EndpointType const> endpoints = device.getEndpoints();
 		if (endpoints.count() > 0) {
+			// get endpoint type
 			endpointIndex = clamp(endpointIndex, 0, endpoints.count() - 1);
 			auto endpointType = endpoints[endpointIndex];
 
-			// select endpoint and value to publish
-			int edit = menu.getEdit(endpointType == Interface::EndpointType::LEVEL ? 3 : 2);
+			// get component to edit
+			int edit = menu.getEdit(1 + getComponentCount(endpointType));
 			bool editIndex = edit == 1;
-			bool editMessage = edit == 2;
+			bool editMessage1 = edit == 2;
 			bool editMessage2 = edit == 3;
 			int delta = menu.getDelta();
 
+			// edit endpoint index
 			if (editIndex) {
-				// edit endpoint index
 				endpointIndex = clamp(endpointIndex + delta, 0, endpoints.count() - 1);
 				endpointType = endpoints[endpointIndex];
 			}
-			auto newMessageType = getDefaultMessageType(endpointType);
-			if (newMessageType != publisher.messageType)
-				message = getDefaultMessage(endpointType);
-			publisher.messageType = newMessageType;
 
-			// edit and dislpay message values
+			// edit message
 			auto stream = menu.stream();
 			stream << underline(dec(endpointIndex), editIndex) << ": ";
-			switch (endpointType & Interface::EndpointType::TYPE_MASK) {
-				case Interface::EndpointType::ON_OFF:
-					if (editMessage)
-						message.onOff = clamp(message.onOff + delta, 0, 2);
-					stream << underline(switchStatesLong[message.onOff & 3], editMessage);
-					break;
-				case Interface::EndpointType::TRIGGER:
-					if (editMessage)
-						message.trigger = clamp(message.trigger + delta, 0, 1);
-					stream << underline(triggerStatesLong[message.trigger & 1], editMessage);
-					break;
-				case Interface::EndpointType::UP_DOWN:
-					if (editMessage)
-						message.upDown = clamp(message.upDown + delta, 0, 2);
-					stream << underline(upDownStatesLong[message.upDown & 3], editMessage);
-					break;
-				case Interface::EndpointType::LEVEL:
-					if (editMessage)
-						message.moveToLevel.level = clamp(float(message.moveToLevel.level) + delta * 0.05f, 0.0f, 1.0f);
-					if (editMessage2)
-						message.moveToLevel.move = clamp(float(message.moveToLevel.move) + delta * 0.5f, 0.0f, 100.0f);
-					stream << underline(flt(message.moveToLevel.level, 2), editMessage) << ' ';
-					stream << underline(flt(message.moveToLevel.move, 1), editMessage2) << 's';
-					break;
-				case Interface::EndpointType::TEMPERATURE:
-					if (editMessage)
-						message.temperature = std::round(message.temperature * 2.0f + delta) * 0.5f;
-					stream << underline(flt(message.temperature, -1), editMessage) << "oC";
-					break;
-				case Interface::EndpointType::AIR_PRESSURE:
-					if (editMessage)
-						message.airPressure = message.airPressure + delta;
-					stream << underline(flt(message.airPressure, 0), editMessage) << "hPa";
-					break;
-			}
+			publisher.messageType = editMessage(stream, endpointType, publisher.messageType, message,
+				editMessage1, editMessage2, delta);
 			menu.entry();
 
+			// send message
 			if (menu.entry("Send")) {
-				interface.addPublisher(deviceId, endpointIndex, publisher);
+				device.addPublisher(endpointIndex, publisher);
 				publisher.publish();
 			}
 		}

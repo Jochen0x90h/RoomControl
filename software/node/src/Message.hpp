@@ -41,7 +41,10 @@ enum class MessageType : uint8_t {
 	
 	// air pressure
 	HECTOPASCAL,
-	
+
+	// air humidity
+	PERCENTAGE,
+
 	// voc
 	OHM
 };
@@ -95,6 +98,9 @@ union Message {
 	FloatWithFlag temperature; // flag false: absolute temperature, true: relative temperature
 	float airPressure;
 	float resistance;
+
+	// use this to copy the message
+	uint32_t data[2];
 };
 
 bool convert(MessageType dstType, void *dstMessage, MessageType srcType, void const *srcMessage);

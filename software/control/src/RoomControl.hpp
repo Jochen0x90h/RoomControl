@@ -3,6 +3,7 @@
 #include "LocalInterface.hpp"
 #include "BusInterface.hpp"
 #include "RadioInterface.hpp"
+#include "AlarmInterface.hpp"
 #include "SwapChain.hpp"
 #include <MqttSnBroker.hpp> // include at first because of strange compiler error
 #include <State.hpp>
@@ -1000,6 +1001,7 @@ public:
 	LocalInterface localInterface;
 	BusInterface busInterface;
 	RadioInterface radioInterface;
+	AlarmInterface alarmInterface;
 
 
 // Functions
@@ -1166,18 +1168,19 @@ public:
 // ----
 
 	// display
-	//Bitmap<DISPLAY_WIDTH, DISPLAY_HEIGHT> bitmap;
-	//SSD1309 display;
 	SwapChain swapChain;
 
 	Coroutine idleDisplay();
 	AwaitableCoroutine mainMenu();
-	//AwaitableCoroutine devicesMenu(Interface &interface);
 	AwaitableCoroutine devicesMenu(Interface &interface);
-	AwaitableCoroutine deviceMenu(Interface &interface, DeviceId deviceId);
-	AwaitableCoroutine endpointsMenu(Interface &interface, DeviceId deviceId);
-	AwaitableCoroutine messageLogger(Interface &interface, DeviceId deviceId);
-	AwaitableCoroutine messageGenerator(Interface &interface, DeviceId deviceId);
+	AwaitableCoroutine deviceMenu(Interface::Device &device);
+	AwaitableCoroutine alarmsMenu(AlarmInterface &interface);
+	AwaitableCoroutine alarmMenu(AlarmInterface &interface, int index, AlarmInterface::AlarmFlash &flash);
+	AwaitableCoroutine alarmTimeMenu(AlarmTime &time);
+	AwaitableCoroutine alarmActionsMenu(AlarmInterface::AlarmFlash &flash);
+	AwaitableCoroutine endpointsMenu(Interface::Device &device);
+	AwaitableCoroutine messageLogger(Interface::Device &device);
+	AwaitableCoroutine messageGenerator(Interface::Device &device);
 	//AwaitableCoroutine functionsMenu(Interface &interface, Storage2::Array<Device2, DeviceState2> &devices);
 
 };

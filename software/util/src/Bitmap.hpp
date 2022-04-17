@@ -24,18 +24,18 @@ public:
 			this->data[i] = 0;
 	}
 	
-	void drawRectangle(int x, int y, int width, int height, DrawMode mode = DrawMode::FORE_SET) {
+	void drawRectangle(int x, int y, int width, int height, DrawMode mode = DrawMode::SET) {
 		fillBitmap(W, H, this->data, x, y, width, 1, mode);
 		fillBitmap(W, H, this->data, x, y + height - 1, width, 1, mode);
 		fillBitmap(W, H, this->data, x, y + 1, 1, height - 2, mode);
 		fillBitmap(W, H, this->data, x + width - 1, y + 1, 1, height - 2, mode);
 	}
 
-	void fillRectangle(int x, int y, int width, int height, DrawMode mode = DrawMode::FORE_SET) {
+	void fillRectangle(int x, int y, int width, int height, DrawMode mode = DrawMode::SET) {
 		fillBitmap(W, H, this->data, x, y, width, height, mode);
 	}
 
-	void hLine(int x, int y, int length, DrawMode mode = DrawMode::FORE_SET) {
+	void hLine(int x, int y, int length, DrawMode mode = DrawMode::SET) {
 		fillBitmap(W, H, this->data, x, y, length, 1, mode);
 	}
 
@@ -44,13 +44,13 @@ public:
 	 * @param x
 	 * @param y
 	 * @param font
-	 * @param text
-	 * @param space
-	 * @param mode
+	 * @param text text to draw
+	 * @param space space between characters
+	 * @param mode draw mode
 	 * @return x coordinate of end of text
 	 */
 	int drawText(int x, int y, const Font &font, String text, int space = 1,
-		DrawMode mode = DrawMode::FORE_SET | DrawMode::BACK_KEEP)
+		DrawMode mode = DrawMode::SET /*| DrawMode::BACK_KEEP*/)
 	{
 		for (unsigned char ch : text) {
 			if (ch == '\t') {
@@ -65,7 +65,7 @@ public:
 				x += character.width;
 
 				// draw space
-				fillBitmap(W, H, this->data, x, y, space, font.height, DrawMode(uint8_t(mode) >> 2));
+				//fillBitmap(W, H, this->data, x, y, space, font.height, DrawMode(uint8_t(mode) >> 2));
 				x += space;
 			}
 		}

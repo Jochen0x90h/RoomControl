@@ -4,6 +4,8 @@
 enum class StreamCommand {
 	SET_UNDERLINE = 1,
 	CLEAR_UNDERLINE = 2,
+	SET_INVERT = 3,
+	CLEAR_INVERT = 4,
 };
 
 

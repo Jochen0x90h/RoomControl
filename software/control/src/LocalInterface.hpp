@@ -2,7 +2,6 @@
 
 #include "Interface.hpp"
 #include "BME680.hpp"
-#include <Coroutine.hpp>
 
 
 class LocalInterface : public Interface {
@@ -25,19 +24,27 @@ public:
 	void setCommissioning(bool enabled) override;
 
 	int getDeviceCount() override;
-	DeviceId getDeviceId(int index) override;
-
-	Array<EndpointType const> getEndpoints(DeviceId deviceId) override;
-	
-	void addPublisher(DeviceId deviceId, uint8_t endpointIndex, Publisher &publisher) override;
-
-	void addSubscriber(DeviceId deviceId, uint8_t endpointIndex, Subscriber &subscriber) override;
+	Device &getDeviceByIndex(int index) override;
+	Device *getDeviceById(DeviceId id) override;
 
 protected:
 
-	struct Device {
+	class LocalDevice : public Device {
+	public:
+		DeviceId getId() override;
+		String getName() override;
+		void setName(String name) override;
+		Array<EndpointType const> getEndpoints() override;
+		void addPublisher(uint8_t endpointIndex, Publisher &publisher) override;
+		void addSubscriber(uint8_t endpointIndex, Subscriber &subscriber) override;
+
+		// back pointer to interface
+		LocalInterface *interface;
+
+		// device id
 		uint8_t id;
-		
+
+		// subscribers and publishers
 		SubscriberList subscribers;
 		PublisherList publishers;
 	};
@@ -48,7 +55,7 @@ protected:
 	Coroutine publish();
 
 	uint8_t deviceCount;
-	Device devices[DEVICE_COUNT];
+	LocalDevice devices[DEVICE_COUNT];
 	
 	Event publishEvent;
 };

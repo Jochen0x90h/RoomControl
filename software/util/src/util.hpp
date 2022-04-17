@@ -38,19 +38,7 @@ constexpr int count(const T (&array)[N]) {return N;}
 
 template <typename T, int N>
 constexpr int count(T (&array)[N]) {return N;}
-/*
-template <typename T, int N>
-constexpr int size(const T (&array)[N]) {return N;}
 
-template <typename T, int N>
-constexpr int size(T (&array)[N]) {return N;}
-
-template <typename T, int N>
-constexpr int length(const T (&array)[N]) {return N;}
-
-template <typename T, int N>
-constexpr int length(T (&array)[N]) {return N;}
-*/
 template <typename T, int N>
 constexpr T *end(T (&array)[N]) {return array + N;}
 
@@ -87,13 +75,23 @@ void copy(OutputIt begin, OutputIt end, InputIt src) {
 	}
 }
 
-
+/**
+ * Fill a C-array
+ * @param array destination array
+ * @param value fill value
+ */
 template <typename T, int N, typename V>
-void fill(T (&array)[N], V const &value) {
-	for (T &element : array)
+void fill(T (&dst)[N], V const &value) {
+	for (T &element : dst)
 		element = value;
 }
 
+/**
+ * Fill an iterator range
+ * @param length
+ * @param dst destination iterator
+ * @param value fill value
+ */
 template <typename OutputIt, typename V>
 void fill(int length, OutputIt dst, V const &value) {
 	auto end = dst + length;
@@ -102,8 +100,20 @@ void fill(int length, OutputIt dst, V const &value) {
 	}
 }
 
+
 /**
- * Copy data, also cast each value to destination type
+ * Copy between C-arrays of same size
+ * @param dst destination array
+ * @param src source array
+ */
+template <typename T, int N>
+void copy(T (&dst)[N], T const (&src)[N]) {
+	for (int i = 0; i < N; ++i)
+		dst[i] = src[i];
+}
+
+/**
+ * Copy data using two iterators, also cast each value to destination type
  * @param length length to copy
  * @param dst destination iterator
  * @param src source iterator
@@ -116,15 +126,27 @@ void copy(int length, OutputIt dst, InputIt src) {
 	}
 }
 
-template <typename OutputElement, typename InputIt>
-void copy(Array<OutputElement> dst, InputIt src) {
+/**
+ * Copy data into an Array from an iterator, also cast each value to destination type
+ * @param length length to copy
+ * @param dst destination iterator
+ * @param src source iterator
+ */
+/*template <typename OutputElement, typename InputIt>
+void copy(Array<OutputElement> &dst, InputIt src) {
 	auto it = dst.begin();
 	auto end = dst.end();
 	for (; it < end; ++it, ++src) {
 		*it = OutputElement(*src);
 	}
-}
+}*/
 
+/**
+ * Compare data using two iterators
+ * @param length length to copy
+ * @param a iterator 1
+ * @param b iterator 2
+ */
 template <typename InputIt1, typename InputIt2>
 bool equals(int length, InputIt1 a, InputIt2 b) {
 	auto end = a + length;
@@ -135,13 +157,28 @@ bool equals(int length, InputIt1 a, InputIt2 b) {
 	return true;
 }
 
+template <typename T, int N, typename V>
+int binaryLowerBound(T (&array)[N], V const &element) {
+	int l = 0;
+	int h = N;
+	while (l < h) {
+		int mid = l + (h - l) / 2;
+		if (array[mid] < element) {
+			l = mid + 1;
+		} else {
+			h = mid;
+		}
+	}
+	return l;
+}
+
 } // namespace array
 
-
+/*
 constexpr int align4(int size) {
 	return (size + 3) & ~3;
 }
-
+*/
 
 template <int N>
 struct UIntBase {

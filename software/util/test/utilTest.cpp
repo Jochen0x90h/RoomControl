@@ -19,10 +19,20 @@
 
 constexpr String strings[] = {"a", "bar", "bar2", "foo", "foo2", "foobar", "foobar2", "z"};
 
+// array helper functions
+TEST(utilTest, array) {
+	int a1[] = {10, 20, 30};
+
+	EXPECT_EQ(array::binaryLowerBound(a1, 19), 1);
+	EXPECT_EQ(array::binaryLowerBound(a1, 20), 1);
+	EXPECT_EQ(array::binaryLowerBound(a1, 21), 2);
+}
+
+
 // array with fixed size
 TEST(utilTest, ArrayN) {
-	int a1[] = {1, 2, 3};
-	int const a2[] = {11, 12, 13};
+	int a1[] = {10, 11, 12};
+	int const a2[] = {20, 21, 22};
 	
 	// construct arrays from c-arrays
 	Array<int, 3> b1(a1);
@@ -67,10 +77,11 @@ TEST(utilTest, ArrayN) {
 	EXPECT_EQ(count, 3);
 }
 
+
 // array with variable size
 TEST(utilTest, Array) {
-	int a1[] = {1, 2, 3};
-	int const a2[] = {11, 12, 13};
+	int a1[] = {10, 11, 12};
+	int const a2[] = {20, 21, 22};
 	
 	// construct arrays from c-arrays
 	Array<int> b1(a1);
@@ -108,6 +119,10 @@ TEST(utilTest, Array) {
 		EXPECT_EQ(i, 50);
 	}
 	EXPECT_EQ(count, 3);
+
+	// assign
+	b1.assign(a2);
+	EXPECT_EQ(b1[2], 22);
 }
 
 
