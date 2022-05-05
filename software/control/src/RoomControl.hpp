@@ -5,6 +5,7 @@
 #include "RadioInterface.hpp"
 #include "AlarmInterface.hpp"
 #include "SwapChain.hpp"
+#include "Menu.hpp"
 #include <MqttSnBroker.hpp> // include at first because of strange compiler error
 #include <State.hpp>
 #include <Storage.hpp>
@@ -1006,163 +1007,265 @@ public:
 
 // Functions
 // ---------
-	
-	// list of inputs or output
-	struct InOutList {
-		static constexpr int BUFFER_SIZE = 512;
 
-		enum class Domain : uint8_t {
-			// 32 bit device id
+	static constexpr int MAX_INPUT_COUNT = 16;
+	static constexpr int MAX_OUTPUT_COUNT = 8;
+
+	// plug (input or output) of a function
+	struct Plug {
+		// platform and options
+		enum class Interface : uint8_t {
+			// local devices
 			LOCAL = 0,
 
-			// 32 bit device id
+			// bus devices (LIN physical layer)
 			BUS = 1,
 
-			// 64 bit device id
+			// radio (ieee 802.15.4)
 			RADIO = 2,
-			
-			// string topic
-			MQTT = 3,
-		};
 
-		struct Info {
-			Domain domain;
-			
-			// input data should be converted to this unit and type
-			MessageType messageType;
+			// alarms (pseudo-devices)
+			ALARMS = 3,
 
-			// index to identify the input
-			uint8_t index;
-		
-			// length of associated device id and endpoint index or topic string
-			uint8_t dataLength;
-		};
+			// mqtt-sn with string topic
+			MQTT = 4,
 
-		struct Iterator {
-			Info const *info;
-			uint32_t const *buffer;
-		
-			Info const &getInfo() const {return *this->info;}
-			DeviceId getDeviceId() const {
-				if (this->info->dataLength <= 5)
-					return this->buffer[0];
-				return *reinterpret_cast<DeviceId const *>(this->buffer);
-			}
-			uint8_t getEndpointIndex() {return this->buffer[(this->info->dataLength - 1) / 4];}
-			String getTopic() {return String(this->info->dataLength, this->buffer);}
-		
-			Iterator operator ++() {return {this->info + 1, this->buffer + (this->info->dataLength + 3) / 4};}
-			bool operator ==(Iterator const &b) {return this->info == b.info;}
-			bool operator !=(Iterator const &b) {return this->info != b.info;}
+			COUNT = 5,
 		};
 
 
-		int size() {return this->inputCount;}
+		// index to identify the input/output
+		uint8_t index = 0;
 
-		// direct access to info
-		Info const &getInfo(int index) {
-			return reinterpret_cast<Info const *>(this->buffer)[index];
-		}
-		
-		Iterator begin() {
-			auto info = reinterpret_cast<Info const *>(this->buffer);
-			return {info, this->buffer + (this->inputCount * sizeof(Info) + 3) / 4};
-		}
-		
-		Iterator end() {
-			auto info = reinterpret_cast<Info const *>(this->buffer);
-			return {info + this->inputCount, nullptr};
-		}
-		
-		/**
-		 * Size of this input list in flash
-		 */
-		int getFlashSize() {return getOffset(InOutList, buffer[this->bufferSize]);}
-		
-		uint16_t bufferSize;
-		uint8_t inputCount;
-		uint32_t buffer[BUFFER_SIZE / 4];
+		// platform and invert
+		uint8_t flags = 0;
+
+		// device id or length of MQTT topic string
+		uint8_t deviceId = 0;
+
+		uint8_t endpointIndex;
+
+		void setInterface(Interface interface) {this->flags = (this->flags & 0xf0) | uint8_t(interface);}
+		void setInvert(bool invert) {this->flags = (this->flags & 0x7f) | uint8_t(invert) << 7;}
+		Interface getInterface() const {return Interface(this->flags & 0x0f);}
+		bool isInvert() const {return (this->flags & 0x80) != 0;}
+		bool isMqtt() const {return getInterface() == Interface::MQTT;}
 	};
 
-	struct DeviceState2 {
-		Coroutine coroutine;
+	// plug info
+	struct PlugInfo {
+		bool input;
+
+		// message type that is expected/sent by the input/output
+		MessageType type;
+
+		// name if onput/output
+		String name;
 	};
 
-	struct Device2 {
+	struct PlugConstIterator {
+		uint32_t const *buffer;
+
+		PlugConstIterator &operator ++() {
+			auto &plug = *reinterpret_cast<Plug const *>(this->buffer);
+			int size = sizeof(Plug);
+			if (plug.isMqtt())
+				size += plug.deviceId - (sizeof(Plug) - offsetof(Plug, endpointIndex));
+			this->buffer += (size + 3) / 4;
+			return *this;
+		}
+		Plug const &getPlug() const {
+			return *reinterpret_cast<Plug const *>(this->buffer);
+		}
+		String getTopic() const {
+			Plug const &plug = *reinterpret_cast<Plug const *>(this->buffer);
+			return {plug.deviceId, reinterpret_cast<char const *>(this->buffer) + sizeof(Plug)};
+		}
+	};
+
+	struct FunctionFlash;
+
+	struct PlugIterator {
+		uint32_t *buffer;
+		FunctionFlash &flash;
+
+		PlugIterator &operator ++() {
+			auto &plug = *reinterpret_cast<Plug *>(this->buffer);
+			int size = sizeof(Plug);
+			if (plug.isMqtt())
+				size += plug.deviceId - (sizeof(Plug) - offsetof(Plug, endpointIndex));
+			this->buffer += (size + 3) / 4;
+			return *this;
+		}
+		Plug &getPlug() {
+			return *reinterpret_cast<Plug *>(this->buffer);
+		}
+		String getTopic() const {
+			Plug &plug = *reinterpret_cast<Plug *>(this->buffer);
+			return {plug.deviceId, reinterpret_cast<char *>(this->buffer) + offsetof(Plug, endpointIndex)};
+		}
+		void setTopic(String topic);
+
+		void insert();
+
+		void erase();
+	};
+
+	class Function;
+
+	struct FunctionFlash  {
 		static constexpr int BUFFER_SIZE = 1024;
 		
 		enum class Type : uint8_t {
+			UNKNOWN,
+
+			// simple on/off switch
 			SIMPLE_SWITCH,
-			AUTO_OFF_SWITCH,
-			DELAYED_SWITCH,
+
+			// switch that turns off after a configured time
+			TIMEOUT_SWITCH,
+
+			//DELAYED_SWITCH,
 		
+			// simple up/down blind
 			SIMPLE_BLIND,
+
+			// blind with known position using timing
 			TRACKED_BLIND,
 			
 			TWO_LEVEL_CONTROLLER,
+
+			TYPE_COUNT
 		};
 		
-		// device type
-		Type type;
+		// function type
+		Type type = Type::SIMPLE_SWITCH;
 	
 		// name is at offset 0 in buffer
-		uint8_t nameLength;
+		uint8_t nameLength = 0;
 		
-		// offset of device configuration
-		uint8_t configOffset;
+		// offset of function configuration in 32 bit units (only some functions need a configuration)
+		uint8_t configOffset = 0;
 		
-		// offset of device inputs
-		uint8_t inputsOffset;
-	
-		// offset of device outputs
-		uint16_t outputsOffset;
-	
-		// buffer size
-		uint16_t bufferSize;
+		// number of connections to the device plugs (inputs and outputs)
+		uint8_t connectionCount = 0;
+
+		// offset of plugs in 32 bit units
+		uint8_t connectionsOffset = 0;
+
+		// buffer size in 32 bit units
+		uint16_t bufferSize = 0;
+
+
+		FunctionFlash() = default;
+		FunctionFlash(FunctionFlash const &flash);
 
 		/**
-		 * Returns the name of the device
+		 * Set type and reallocate and clear configuration
+		 * @param type function type
+		 */
+		void setType(Type type);
+
+		/**
+		 * Returns the name of the function (e.g. "Ceiling Light")
 		 * @return device name
 		 */
 		String getName() const {return String(this->nameLength, this->buffer);}
+		void setName(String name);
 
 		/**
-		 * Get type specific configuration
+		 * Get function specific configuration
 		 */
 		template <typename T>
 		T const &getConfig() const {return *reinterpret_cast<T const *>(this->buffer + this->configOffset);}
+		template <typename T>
+		T &getConfig() {return *reinterpret_cast<T *>(this->buffer + this->configOffset);}
 
 		/**
 		 * Get list of inputs
 		 */
-		InOutList const &getInputList() const {return *reinterpret_cast<InOutList const *>(this->buffer + this->inputsOffset);}
-
-		/**
-		 * Get list of outputs
-		 */
-		InOutList const &getOutputList() const {return *reinterpret_cast<InOutList const *>(this->buffer + this->outputsOffset);}
+		PlugConstIterator getPlugs() const {return {this->buffer + this->connectionsOffset};}
+		PlugIterator getPlugs() {return {this->buffer + this->connectionsOffset, *this};}
 
 		/**
 		 * Returns the size in bytes needed to store the device configuration in flash
 		 * @return size in bytes
 		 */
-		int getFlashSize() const {return getOffset(Device2, buffer[this->bufferSize]);}
+		int size() const {return getOffset(FunctionFlash, buffer[this->bufferSize]);}
 
 		/**
 		 * Allocates a state object
 		 * @return new state object
 		 */
-		DeviceState2 *allocate() const {return new DeviceState2;}
+		Function *allocate() const;
 	
 	
 		// buffer for config, inputs and outputs
 		uint32_t buffer[BUFFER_SIZE / 4];
 	};
 
+	class Function : public Storage::Element<FunctionFlash> {
+	public:
+		explicit Function(FunctionFlash const &flash) : Storage::Element<FunctionFlash>(flash) {}
+		virtual ~Function();
 
+		// start the function coroutine
+		[[nodiscard]] virtual Coroutine start(RoomControl &roomControl) = 0;
+
+		// each function has its own coroutine
+		Coroutine coroutine;
+	};
+
+
+	// simple switch
+	class SimpleSwitch : public Function {
+	public:
+		explicit SimpleSwitch(FunctionFlash const &flash) : Function(flash) {}
+		~SimpleSwitch() override;
+
+		Coroutine start(RoomControl &roomControl) override;
+	};
+
+
+	// timeout switch
+	struct TimeoutSwitchConfig {
+		// timeout duration in 1/100 s
+		uint32_t duration;
+	};
+
+	class TimeoutSwitch : public Function {
+	public:
+		explicit TimeoutSwitch(FunctionFlash const &flash) : Function(flash) {}
+		~TimeoutSwitch() override;
+
+		Coroutine start(RoomControl &roomControl) override;
+	};
+
+
+	Interface &getInterface(Plug const &plug);
 
 	Coroutine testSwitch();
-	
+
+	int connectFunction(RoomControl::FunctionFlash const &flash, Array<PlugInfo const> plugInfos,
+		Array<Subscriber, MAX_INPUT_COUNT> subscribers, Subscriber::Barrier &barrier,
+		Array<Publisher, MAX_OUTPUT_COUNT> publishers, Array<void const *> states);
+
+	// list of functions
+	Storage::Array<Function> functions;
+
+
+// Menu Helpers
+// ------------
+
+	void printPlug(Menu::Stream &stream, Plug const &plug);
+
+	float stepTemperature(float value, int delta);
+	Flt displayTemperature(float kelvin);
+	String getTemperatureUnit();
+
+	MessageType editMessage(Menu::Stream &stream, Interface::EndpointType endpointType,
+		MessageType messageType, Message &message, bool editMessage1, bool editMessage2, int delta);
+
 
 // Menu
 // ----
@@ -1171,16 +1274,19 @@ public:
 	SwapChain swapChain;
 
 	Coroutine idleDisplay();
-	AwaitableCoroutine mainMenu();
-	AwaitableCoroutine devicesMenu(Interface &interface);
-	AwaitableCoroutine deviceMenu(Interface::Device &device);
-	AwaitableCoroutine alarmsMenu(AlarmInterface &interface);
-	AwaitableCoroutine alarmMenu(AlarmInterface &interface, int index, AlarmInterface::AlarmFlash &flash);
-	AwaitableCoroutine alarmTimeMenu(AlarmTime &time);
-	AwaitableCoroutine alarmActionsMenu(AlarmInterface::AlarmFlash &flash);
-	AwaitableCoroutine endpointsMenu(Interface::Device &device);
-	AwaitableCoroutine messageLogger(Interface::Device &device);
-	AwaitableCoroutine messageGenerator(Interface::Device &device);
-	//AwaitableCoroutine functionsMenu(Interface &interface, Storage2::Array<Device2, DeviceState2> &devices);
-
+	[[nodiscard]] AwaitableCoroutine mainMenu();
+	[[nodiscard]] AwaitableCoroutine devicesMenu(Interface &interface);
+	[[nodiscard]] AwaitableCoroutine deviceMenu(Interface::Device &device);
+	[[nodiscard]] AwaitableCoroutine alarmsMenu(AlarmInterface &interface);
+	[[nodiscard]] AwaitableCoroutine alarmMenu(AlarmInterface &interface, int index, AlarmInterface::AlarmFlash &flash);
+	[[nodiscard]] AwaitableCoroutine alarmTimeMenu(AlarmTime &time);
+	[[nodiscard]] AwaitableCoroutine alarmActionsMenu(AlarmInterface::AlarmFlash &flash);
+	[[nodiscard]] AwaitableCoroutine endpointsMenu(Interface::Device &device);
+	[[nodiscard]] AwaitableCoroutine messageLogger(Interface::Device &device);
+	[[nodiscard]] AwaitableCoroutine messageGenerator(Interface::Device &device);
+	[[nodiscard]] AwaitableCoroutine functionsMenu();
+	[[nodiscard]] AwaitableCoroutine functionMenu(int index, FunctionFlash &flash);
+	[[nodiscard]] AwaitableCoroutine editFunctionPlug(PlugIterator &it, Plug &plug, PlugInfo const &info, bool add);
+	[[nodiscard]] AwaitableCoroutine selectFunctionDevice(Plug &plug, PlugInfo const &info);
+	[[nodiscard]] AwaitableCoroutine selectFunctionEndpoint(Interface::Device &device, Plug &plug, PlugInfo const &info);
 };

@@ -11,11 +11,6 @@ class Menu {
 public:
 	
 	Menu(SwapChain &swapChain);
-	
-	/**
-	 * Add a label to the menu that can not be selected
-	 */
-	void label(String s);
 
 	/**
 	 * Add a divider line to the menu
@@ -83,11 +78,30 @@ public:
 		return {10, this->entryY + 2 - this->offsetY, this->bitmap};
 	}
 
+	/**
+	 * Add a label to the menu that can not be selected
+ 	 */
+	void label();
+
+	/**
+	 * Add a label to the menu that can not be selected
+	 * @param markup text with markup (e.g. underline)
+	 */
+	template <typename T>
+	void label(T markup) {
+		Stream s = stream();
+		s << markup;
+		label();
+	}
+
+	/**
+	 * Add a menu entry
+	 */
 	bool entry();
 
 	/**
 	 * Add a menu entry
-	 * @param markup graph of text with markup (e.g. underline)
+	 * @param markup text with markup (e.g. underline)
 	 */
 	template <typename T>
 	bool entry(T markup) {

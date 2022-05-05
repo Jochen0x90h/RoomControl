@@ -30,7 +30,7 @@ constexpr EndpointType bme680Endpoints[] = {
 	EndpointType::AIR_VOC_IN
 };
 constexpr MessageType bme680MessageTypes[] = {
-	MessageType::CELSIUS, MessageType::HECTOPASCAL, MessageType::PERCENTAGE, MessageType::OHM
+	MessageType::TEMPERATURE, MessageType::PRESSURE, MessageType::AIR_HUMIDITY, MessageType::AIR_VOC
 };
 
 constexpr EndpointType heatingEndpoints[] = {
@@ -57,14 +57,14 @@ constexpr EndpointType outEndpoints[] = {
 
 LocalInterface::LocalInterface() {
 	int i = 0;
-	this->devices[i++].id = BME680_ID;
-	this->devices[i++].id = HEATING_ID;
-	this->devices[i++].id = BRIGHTNESS_SENSOR_ID;
-	this->devices[i++].id = MOTION_DETECTOR_ID;
+	this->devices[i++].interfaceId = BME680_ID;
+	this->devices[i++].interfaceId = HEATING_ID;
+	this->devices[i++].interfaceId = BRIGHTNESS_SENSOR_ID;
+	this->devices[i++].interfaceId = MOTION_DETECTOR_ID;
 	if (INPUT_EXT_COUNT > 0)
-		this->devices[i++].id = IN_ID;
+		this->devices[i++].interfaceId = IN_ID;
 	if (OUTPUT_EXT_COUNT > 0)
-		this->devices[i++].id = OUT_ID;
+		this->devices[i++].interfaceId = OUT_ID;
 	this->deviceCount = i;
 
 	// set backpointers
@@ -91,9 +91,9 @@ Interface::Device &LocalInterface::getDeviceByIndex(int index) {
 	return this->devices[index];
 }
 
-Interface::Device *LocalInterface::getDeviceById(DeviceId id) {
+Interface::Device *LocalInterface::getDeviceById(uint8_t id) {
 	for (auto &device : Array<LocalDevice>(this->deviceCount, this->devices)) {
-		if (device.id == id)
+		if (device.interfaceId == id)
 			return &device;
 	}
 	return nullptr;
@@ -177,7 +177,7 @@ Coroutine LocalInterface::publish() {
 					uint8_t endpointIndex = publisher.index;
 
 					// set to device
-					switch (device.id) {
+					switch (device.interfaceId) {
 					case HEATING_ID:
 						{
 							// convert to on/off
@@ -227,12 +227,12 @@ Coroutine LocalInterface::publish() {
 
 // LocalInterface::LocalDevice
 
-DeviceId LocalInterface::LocalDevice::getId() {
-	return this->id;
+uint8_t LocalInterface::LocalDevice::getId() const {
+	return this->interfaceId;
 }
 
-String LocalInterface::LocalDevice::getName() {
-	int i = int(this->id) - 1;
+String LocalInterface::LocalDevice::getName() const {
+	int i = int(this->interfaceId) - 1;
 	return deviceNames[i];
 }
 
@@ -240,8 +240,8 @@ void LocalInterface::LocalDevice::setName(String name) {
 
 }
 
-Array<EndpointType const> LocalInterface::LocalDevice::getEndpoints() {
-	switch (this->id) {
+Array<EndpointType const> LocalInterface::LocalDevice::getEndpoints() const {
+	switch (this->interfaceId) {
 		case BME680_ID:
 			return bme680Endpoints;
 		case HEATING_ID:

@@ -52,24 +52,48 @@ void RNG_IRQHandler(void) {
 	}	
 }
 
-uint8_t int8() {	
+uint8_t u8() {
 	// assert that random number generator was initialized
 	assert(NRF_RNG->INTENSET == N(RNG_INTENSET_VALRDY, Enabled));
 
 	int index = Random::readIndex;
 	Random::readIndex = index + 1;
+	uint8_t value = queue[index & (array::count(queue) - 1)];
 	NRF_RNG->TASKS_START = TRIGGER;
-	return queue[index & (array::count(queue) - 1)];
+	return value;
 }
 
-uint64_t int64() {
+uint16_t u16() {
+	// assert that random number generator was initialized
+	assert(NRF_RNG->INTENSET == N(RNG_INTENSET_VALRDY, Enabled));
+
+	int index = (Random::readIndex + 1) & ~1;
+	Random::readIndex = index + 2;
+	uint16_t value = *(uint16_t*)&queue[index & (array::count(queue) - 1)];
+	NRF_RNG->TASKS_START = TRIGGER;
+	return value;
+}
+
+uint32_t u32() {
+	// assert that random number generator was initialized
+	assert(NRF_RNG->INTENSET == N(RNG_INTENSET_VALRDY, Enabled));
+
+	int index = (Random::readIndex + 3) & ~3;
+	Random::readIndex = index + 4;
+	uint32_t value = *(uint32_t*)&queue[index & (array::count(queue) - 1)];
+	NRF_RNG->TASKS_START = TRIGGER;
+	return value;
+}
+
+uint64_t u64() {
 	// assert that random number generator was initialized
 	assert(NRF_RNG->INTENSET == N(RNG_INTENSET_VALRDY, Enabled));
 
 	int index = (Random::readIndex + 7) & ~7;
 	Random::readIndex = index + 8;
+	uint64_t value = *(uint64_t*)&queue[index & (array::count(queue) - 1)];
 	NRF_RNG->TASKS_START = TRIGGER;
-	return *(uint64_t*)&queue[index & (array::count(queue) - 1)];
+	return value;
 }
 
 } // namespace Random

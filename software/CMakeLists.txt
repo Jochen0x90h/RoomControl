@@ -13,8 +13,6 @@ set(CMAKE_CXX_STANDARD 20)
 # debug generated makefile
 #set(CMAKE_VERBOSE_MAKEFILE TRUE)
 
-separate_arguments(GENERATE_HEX)
-
 message("*** TYPE ${CMAKE_BUILD_TYPE}")
 message("*** BOARD ${BOARD}")
 message("*** FAMILY ${FAMILY}")
@@ -272,7 +270,6 @@ set(CONTROL
 	control/src/BME680.hpp
 	control/src/BusInterface.cpp
 	control/src/BusInterface.hpp
-	control/src/Device.hpp
 	control/src/Interface.cpp
 	control/src/Interface.hpp
 	control/src/LocalInterface.cpp
@@ -306,6 +303,7 @@ endif()
 
 
 # hex generator
+separate_arguments(GENERATE_HEX)
 macro(generate_hex TARGET)
 	if(NOT "${GENERATE_HEX}" STREQUAL "")
 		add_custom_command(TARGET ${TARGET}

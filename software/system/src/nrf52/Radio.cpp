@@ -356,7 +356,7 @@ static void backoff() {
 	}
 
 	// throw the dice to determine backoff period
-	int backoff = (Random::int8() & ~(0xffffffff << Radio::backoffExponent)) + 1;
+	int backoff = (Random::u8() & ~(0xffffffff << Radio::backoffExponent)) + 1;
 	int backoffDuration = backoff * unitBackoffDuration;
 
 	// update backoff parameters

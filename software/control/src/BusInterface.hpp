@@ -31,7 +31,7 @@ public:
 
 	int getDeviceCount() override;
 	Device &getDeviceByIndex(int index) override;
-	Device *getDeviceById(DeviceId id) override;
+	Device *getDeviceById(uint8_t id) override;
 
 private:
 
@@ -44,14 +44,18 @@ private:
 
 
 	// devices
-	struct BusDevice;
+	class BusDevice;
 
 	struct DeviceFlash {
 		static constexpr int MAX_ENDPOINT_COUNT = 32;
 
 		// device id
-		uint32_t id;
+		uint32_t deviceId;
 
+		// interface id
+		uint8_t interfaceId;
+
+		// device address
 		uint8_t address;
 
 		// number of endpoints of the device
@@ -77,12 +81,12 @@ private:
 
 	class BusDevice : public Storage::Element<DeviceFlash>, public Device {
 	public:
-		BusDevice(DeviceFlash const &flash) : Storage::Element<DeviceFlash>(flash) {}
+		explicit BusDevice(DeviceFlash const &flash) : Storage::Element<DeviceFlash>(flash) {}
 
-		DeviceId getId() override;
-		String getName() override;
+		uint8_t getId() const override;
+		String getName() const override;
 		void setName(String name) override;
-		Array<EndpointType const> getEndpoints() override;
+		Array<EndpointType const> getEndpoints() const override;
 		void addPublisher(uint8_t endpointIndex, Publisher &publisher) override;
 		void addSubscriber(uint8_t endpointIndex, Subscriber &subscriber) override;
 

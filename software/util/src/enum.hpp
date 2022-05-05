@@ -13,5 +13,7 @@ constexpr T operator | (T a, T b) {return T(std::underlying_type<T>::type(a) | s
 inline T &operator |= (T &a, T b) {(std::underlying_type<T>::type &)a |= std::underlying_type<T>::type(b); return a;} \
 constexpr T operator & (T a, T b) {return T(std::underlying_type<T>::type(a) & std::underlying_type<T>::type(b));} \
 inline T &operator &= (T &a, T b) {(std::underlying_type<T>::type &)a &= std::underlying_type<T>::type(b); return a;} \
-constexpr bool operator != (T a, std::underlying_type<T>::type b) {return std::underlying_type<T>::type(a) != b;} \
+inline T &operator ^= (T &a, T b) {(std::underlying_type<T>::type &)a ^= std::underlying_type<T>::type(b); return a;} \
 constexpr bool operator == (T a, std::underlying_type<T>::type b) {return std::underlying_type<T>::type(a) == b;}
+
+//constexpr bool operator != (T a, std::underlying_type<T>::type b) {return std::underlying_type<T>::type(a) != b;}

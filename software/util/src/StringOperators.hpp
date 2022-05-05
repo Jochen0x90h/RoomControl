@@ -22,6 +22,12 @@ S &operator <<(S &s, Dec<T> dec) {
 	return s << toString(buffer, int32_t(dec.value), dec.digitCount);
 }
 
+template <Stream S, typename T>
+S &operator <<(S &&s, Dec<T> dec) {
+	char buffer[11];
+	return s << toString(buffer, int32_t(dec.value), dec.digitCount);
+}
+
 template <typename T>
 Dec<T> dec(T value, int digitCount = 1) {
 	return {value, digitCount};
@@ -37,6 +43,12 @@ struct Hex {
 
 template <Stream S, typename T>
 S &operator <<(S &s, Hex<T> hex) {
+	char buffer[16];
+	return s << toHexString(buffer, uint64_t(hex.value), hex.digitCount);
+}
+
+template <Stream S, typename T>
+S &operator <<(S &&s, Hex<T> hex) {
 	char buffer[16];
 	return s << toHexString(buffer, uint64_t(hex.value), hex.digitCount);
 }
@@ -60,6 +72,12 @@ struct Flt {
 
 template <Stream S>
 S &operator <<(S &s, Flt flt) {
+	char buffer[21];
+	return s << toString(buffer, flt.value, flt.digitCount, flt.decimalCount);
+}
+
+template <Stream S>
+S &operator <<(S &&s, Flt flt) {
 	char buffer[21];
 	return s << toString(buffer, flt.value, flt.digitCount, flt.decimalCount);
 }

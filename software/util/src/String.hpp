@@ -53,7 +53,7 @@ struct String {
 	int const length;
 	char const *const data;
 
-	constexpr String()
+	constexpr String() noexcept
 		: length(0), data()
 	{}
 
@@ -65,7 +65,7 @@ struct String {
 	 * Construct from c-string
 	 */
 	template <typename T> requires CString<T>
-	constexpr String(T const &str)
+	constexpr String(T const &str) noexcept
 		: length(getLength(str, IsArray<T>())), data(str)
 	{}
 

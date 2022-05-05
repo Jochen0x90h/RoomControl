@@ -141,7 +141,8 @@ RadioInterface::~RadioInterface() {
 void RadioInterface::setCommissioning(bool enabled) {
 	this->commissioning = enabled && getDeviceCount() < MAX_DEVICE_COUNT;
 	if (this->commissioning) {
-		// allocate next short address
+		// allocate next interface id and short address
+		allocateInterfaceId();
 		allocateNextAddress();
 	} else {
 		// cancel current association coroutine if it is still running
@@ -162,13 +163,13 @@ Interface::Device &RadioInterface::getDeviceByIndex(int index) {
 	return this->zbDevices[index - gpDeviceCount];
 }
 
-Interface::Device *RadioInterface::getDeviceById(DeviceId id) {
+Interface::Device *RadioInterface::getDeviceById(uint8_t id) {
 	for (auto &device : this->gpDevices) {
-		if (device->id == id)
+		if (device->interfaceId == id)
 			return &device;
 	}
 	for (auto &device : this->zbDevices) {
-		if (device->longAddress == id)
+		if (device->interfaceId == id)
 			return &device;
 	}
 	return nullptr;
@@ -182,9 +183,28 @@ RadioInterface::ZbDevice *RadioInterface::findZbDevice(uint16_t address) {
 	return nullptr;
 }
 
+void RadioInterface::allocateInterfaceId() {
+	// find a free id
+	int id;
+	for (id = 1; id < 256; ++id) {
+		for (auto &device : this->gpDevices) {
+			if (device->interfaceId == id)
+				goto found;
+		}
+		for (auto &device : this->zbDevices) {
+			if (device->interfaceId == id)
+				goto found;
+		}
+		break;
+	found:
+		;
+	}
+	this->nextInterfaceId =  id;
+}
+
 void RadioInterface::allocateNextAddress() {
 	while (true) {
-		uint16_t address = (Random::int8() << 8) | Random::int8();
+		uint16_t address = Random::u16();
 
 		// exclude some addresses at both ends of range
 		if (address < 0x0100 || address >= 0xff00)
@@ -1665,7 +1685,7 @@ void RadioInterface::handleGp(uint8_t const *mac, PacketReader &r) {
 
 	// search device
 	for (auto &device : this->gpDevices) {
-		if (device->id == deviceId) {
+		if (device->deviceId == deviceId) {
 			auto const &flash = *device;
 
 			// security
@@ -1830,7 +1850,9 @@ void RadioInterface::handleGpCommission(uint32_t deviceId, PacketReader& r) {
 	r.u8();
 
 	GpDeviceFlash flash;
-	flash.id = deviceId;
+	flash.deviceId = deviceId;
+	flash.interfaceId = this->nextInterfaceId;
+	allocateInterfaceId();
 
 	// A.4.2.1.1 Commissioning
 
@@ -1908,7 +1930,7 @@ void RadioInterface::handleGpCommission(uint32_t deviceId, PacketReader& r) {
 
 	// check if device already exists
 	for (auto &device : this->gpDevices) {
-		if (device->id == deviceId) {
+		if (device->deviceId == deviceId) {
 			// yes: only update security counter
 			device.securityCounter = securityCounter;
 			return;
@@ -1928,6 +1950,7 @@ AwaitableCoroutine RadioInterface::handleAssociationRequest(uint64_t sourceAddre
 Terminal::out << ("handleAssociationRequest\n");
 
 	ZbDeviceFlash flash;
+	flash.interfaceId = this->nextInterfaceId;
 	flash.longAddress = sourceAddress;
 	flash.shortAddress = this->nextShortAddress;
 	flash.sendFlags = sendFlags;
@@ -2368,7 +2391,8 @@ Terminal::out << ("endpoint info " + dec(flash.endpoints[ZbDeviceFlash::MAX_ENDP
 	// write the configured device to flash
 	this->zbDevices.write(index, std::move(device));
 
-	// allocate next short address
+	// allocate next short address and interface id
+	allocateInterfaceId();
 	allocateNextAddress();
 }
 
@@ -2539,12 +2563,12 @@ RadioInterface::GpDevice *RadioInterface::GpDeviceFlash::allocate() const {
 
 // RadioInterface::GpDevice
 
-DeviceId RadioInterface::GpDevice::getId() {
+uint8_t RadioInterface::GpDevice::getId() const {
 	auto &flash = **this;
-	return flash.id;
+	return flash.interfaceId;
 }
 
-String RadioInterface::GpDevice::getName() {
+String RadioInterface::GpDevice::getName() const {
 	return "x";
 }
 
@@ -2552,7 +2576,7 @@ void RadioInterface::GpDevice::setName(String name) {
 
 }
 
-Array<EndpointType const> RadioInterface::GpDevice::getEndpoints() {
+Array<EndpointType const> RadioInterface::GpDevice::getEndpoints() const {
 	auto &flash = **this;
 	return {flash.endpointCount, flash.endpoints};
 }
@@ -2579,12 +2603,12 @@ RadioInterface::ZbDevice *RadioInterface::ZbDeviceFlash::allocate() const {
 
 // RadioInterface::ZbDevice
 
-DeviceId RadioInterface::ZbDevice::getId() {
+uint8_t RadioInterface::ZbDevice::getId() const {
 	auto &flash = **this;
-	return flash.longAddress;
+	return flash.interfaceId;
 }
 
-String RadioInterface::ZbDevice::getName() {
+String RadioInterface::ZbDevice::getName() const {
 	return "x";
 }
 
@@ -2592,7 +2616,7 @@ void RadioInterface::ZbDevice::setName(String name) {
 
 }
 
-Array<EndpointType const> RadioInterface::ZbDevice::getEndpoints() {
+Array<EndpointType const> RadioInterface::ZbDevice::getEndpoints() const {
 	auto &flash = **this;
 	return {flash.endpointCount, reinterpret_cast<EndpointType const*>(flash.endpoints)};
 }

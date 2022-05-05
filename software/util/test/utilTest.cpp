@@ -23,9 +23,9 @@ constexpr String strings[] = {"a", "bar", "bar2", "foo", "foo2", "foobar", "foob
 TEST(utilTest, array) {
 	int a1[] = {10, 20, 30};
 
-	EXPECT_EQ(array::binaryLowerBound(a1, 19), 1);
-	EXPECT_EQ(array::binaryLowerBound(a1, 20), 1);
-	EXPECT_EQ(array::binaryLowerBound(a1, 21), 2);
+	EXPECT_EQ(array::binaryLowerBound(a1, [](int a) {return a < 19;}), 1);
+	EXPECT_EQ(array::binaryLowerBound(a1, [](int a) {return a < 20;}), 1);
+	EXPECT_EQ(array::binaryLowerBound(a1, [](int a) {return a < 21;}), 2);
 }
 
 

@@ -15,7 +15,7 @@ public:
 
 	int getDeviceCount() override;
 	Device &getDeviceByIndex(int index) override;
-	Device *getDeviceById(DeviceId id) override;
+	Device *getDeviceById(uint8_t id) override;
 
 protected:
 	class Alarm;
@@ -26,8 +26,8 @@ public:
 
 		AlarmTime time;
 
-		// device id
-		uint8_t id;
+		// interface id
+		uint8_t interfaceId;
 
 		// endpoints that send messages when the alarm goes off
 		uint8_t endpointCount = 0;
@@ -55,16 +55,17 @@ public:
 
 	AlarmFlash const &getAlarm(int index) const;
 	void setAlarm(int index, AlarmFlash &flash);
+	void eraseAlarm(int index) {this->alarms.erase(index);}
 
 protected:
 	class Alarm : public Storage::Element<AlarmFlash>, public Device {
 	public:
 		Alarm(AlarmFlash const &flash) : Storage::Element<AlarmFlash>(flash) {}
 
-		DeviceId getId() override;
-		String getName() override;
+		uint8_t getId() const override;
+		String getName() const override;
 		void setName(String name) override;
-		Array<EndpointType const> getEndpoints() override;
+		Array<EndpointType const> getEndpoints() const override;
 		void addPublisher(uint8_t endpointIndex, Publisher &publisher) override;
 		void addSubscriber(uint8_t endpointIndex, Subscriber &subscriber) override;
 

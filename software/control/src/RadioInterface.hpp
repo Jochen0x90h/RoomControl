@@ -41,7 +41,7 @@ public:
 
 	int getDeviceCount() override;
 	Device &getDeviceByIndex(int index) override;
-	Device *getDeviceById(DeviceId id) override;
+	Device *getDeviceById(uint8_t id) override;
 
 private:
 
@@ -66,13 +66,16 @@ private:
 		static constexpr int MAX_ENDPOINT_COUNT = 32;
 
 		// 32 bit green power id
-		DeviceId id;
-
-		// device type from commissioning message
-		uint8_t deviceType;
+		uint32_t deviceId;
 
 		// device key
 		AesKey aesKey;
+
+		// interface id
+		uint8_t interfaceId;
+
+		// device type from commissioning message
+		uint8_t deviceType;
 
 		// number of endpoints of the device
 		uint8_t endpointCount;
@@ -97,12 +100,12 @@ private:
 
 	class GpDevice : public Device, public Storage::Element<GpDeviceFlash> {
 	public:
-		GpDevice(GpDeviceFlash const &flash) : Storage::Element<GpDeviceFlash>(flash) {}
+		explicit GpDevice(GpDeviceFlash const &flash) : Storage::Element<GpDeviceFlash>(flash) {}
 
-		DeviceId getId() override;
-		String getName() override;
+		uint8_t getId() const override;
+		String getName() const override;
 		void setName(String name) override;
-		Array<EndpointType const> getEndpoints() override;
+		Array<EndpointType const> getEndpoints() const override;
 		void addPublisher(uint8_t endpointIndex, Publisher &publisher) override;
 		void addSubscriber(uint8_t endpointIndex, Subscriber &subscriber) override;
 
@@ -131,6 +134,9 @@ private:
 
 		// short device address
 		uint16_t shortAddress;
+
+		// interface id
+		uint8_t interfaceId;
 
 		// send flags for this device (wait for data request or not)
 		Radio::SendFlags sendFlags;
@@ -161,12 +167,12 @@ private:
 
 	class ZbDevice : public Storage::Element<ZbDeviceFlash>, public Device {
 	public:
-		ZbDevice(ZbDeviceFlash const &flash) : Storage::Element<ZbDeviceFlash>(flash) , sendFlags(flash.sendFlags) {}
+		explicit ZbDevice(ZbDeviceFlash const &flash) : Storage::Element<ZbDeviceFlash>(flash) , sendFlags(flash.sendFlags) {}
 
-		DeviceId getId() override;
-		String getName() override;
+		uint8_t getId() const override;
+		String getName() const override;
 		void setName(String name) override;
-		Array<EndpointType const> getEndpoints() override;
+		Array<EndpointType const> getEndpoints() const override;
 		void addPublisher(uint8_t endpointIndex, Publisher &publisher) override;
 		void addSubscriber(uint8_t endpointIndex, Subscriber &subscriber) override;
 
@@ -231,9 +237,11 @@ private:
 	// find zbee device by short address
 	ZbDevice *findZbDevice(uint16_t address);
 
+	void allocateInterfaceId();
 	void allocateNextAddress();
 
-	// next short address "on stock" to be fast when a device sends an association request
+	// next interface id and short address "on stock" to be fast when a device sends an association request
+	uint8_t nextInterfaceId;
 	uint16_t nextShortAddress;
 
 public:
@@ -399,7 +407,6 @@ private:
 
 	// coroutine for handling association requests from new devices
 	AwaitableCoroutine handleAssociationRequest(uint64_t sourceAddress, Radio::SendFlags sendFlags);
-
 
 	Coroutine publish();
 

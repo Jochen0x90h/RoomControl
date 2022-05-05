@@ -32,9 +32,9 @@ Interface::Device &AlarmInterface::getDeviceByIndex(int index) {
 	return this->alarms[index];
 }
 
-Interface::Device *AlarmInterface::getDeviceById(DeviceId id) {
+Interface::Device *AlarmInterface::getDeviceById(uint8_t id) {
 	for (auto &alarm : this->alarms) {
-		if (alarm->id == id)
+		if (alarm->interfaceId == id)
 			return &alarm;
 	}
 	return nullptr;
@@ -54,19 +54,7 @@ void AlarmInterface::setAlarm(int index, AlarmFlash &flash) {
 		alarm->interface = this;
 
 		// find a free id
-		int id;
-		for (id = 0; id < 256; ++id) {
-			bool found = false;
-			for (auto &alarm : this->alarms) {
-				if (alarm->id == id) {
-					found = true;
-					break;
-				}
-			}
-			if (!found)
-				break;
-		}
-		flash.id = id;
+		flash.interfaceId = allocateInterfaceId(this->alarms);
 
 		this->alarms.write(index, alarm);
 	}
@@ -107,7 +95,7 @@ Coroutine AlarmInterface::tick() {
 // AlarmInterface::DeviceFlash
 
 AlarmInterface::AlarmFlash::AlarmFlash(AlarmFlash const &flash) :
-	id(flash.id), time(flash.time), endpointCount(flash.endpointCount)
+	interfaceId(flash.interfaceId), time(flash.time), endpointCount(flash.endpointCount)
 {
 	array::copy(this->endpoints, flash.endpoints);
 	for (int i = 0; i < flash.endpointCount; ++i) {
@@ -126,12 +114,12 @@ AlarmInterface::Alarm *AlarmInterface::AlarmFlash::allocate() const {
 
 // AlarmInterface::Alarm
 
-DeviceId AlarmInterface::Alarm::getId() {
+uint8_t AlarmInterface::Alarm::getId() const {
 	auto &flash = **this;
-	return flash.id;
+	return flash.interfaceId;
 }
 
-String AlarmInterface::Alarm::getName() {
+String AlarmInterface::Alarm::getName() const {
 	return "x";
 }
 
@@ -139,7 +127,7 @@ void AlarmInterface::Alarm::setName(String name) {
 
 }
 
-Array<EndpointType const> AlarmInterface::Alarm::getEndpoints() {
+Array<EndpointType const> AlarmInterface::Alarm::getEndpoints() const {
 	auto &flash = **this;
 	return {flash.endpointCount, flash.endpoints};
 }

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Device.hpp"
+#include <bus.hpp>
 #include <Publisher.hpp>
 #include <State.hpp>
 #include <Subscriber.hpp>
@@ -31,16 +31,16 @@ public:
 	class Device {
 	public:
 		/**
-		 * Get device id
+		 * Get device id which is stable when other devices are added or removed
 		 * @return device id
 		 */
-		virtual DeviceId getId() = 0;
+		virtual uint8_t getId() const = 0;
 
 		/**
 		 * Get device name
 		 * @return device name
 		 */
-		virtual String getName() = 0;
+		virtual String getName() const = 0;
 
 		/**
 		 * Set device name
@@ -52,7 +52,7 @@ public:
 		 * Get endpoints
 		 * @return endpoints
 		 */
-		virtual Array<EndpointType const> getEndpoints() = 0;
+		virtual Array<EndpointType const> getEndpoints() const = 0;
 
 		/**
 		 * Add a publisher to the device that sends messages to an endpoint. Gets inserted into a linked list
@@ -86,5 +86,23 @@ public:
 	 * @param id device id
 	 * @return device
 	 */
-	virtual Device *getDeviceById(DeviceId id) = 0;
+	virtual Device *getDeviceById(uint8_t id) = 0;
+
+
+	// helper function: allocate a free interface id
+	template <typename T>
+	static uint8_t allocateInterfaceId(T const &devices) {
+		// find a free id
+		int id;
+		for (id = 1; id < 256; ++id) {
+			for (auto &device : devices) {
+				if (device->interfaceId == id)
+					goto found;
+			}
+			break;
+		found:
+			;
+		}
+		return id;
+	}
 };

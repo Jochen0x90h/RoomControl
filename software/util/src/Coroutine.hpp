@@ -601,7 +601,7 @@ struct Coroutine {
 	std::coroutine_handle<> handle;
 	
 	/**
-	 * Destroy the coroutine if it is still alive and suspended (using co_await).
+	 * Destroy the coroutine if it is still alive and suspended (coroutine has called co_await).
 	 */
 	void destroy() {
 		this->handle.destroy();

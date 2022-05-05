@@ -127,19 +127,34 @@ void copy(int length, OutputIt dst, InputIt src) {
 }
 
 /**
- * Copy data into an Array from an iterator, also cast each value to destination type
- * @param length length to copy
- * @param dst destination iterator
- * @param src source iterator
+ * Insert elements at the beginning of the array defined by (length, begin)
+ * @tparam It
+ * @param length
+ * @param it
+ * @param count
  */
-/*template <typename OutputElement, typename InputIt>
-void copy(Array<OutputElement> &dst, InputIt src) {
-	auto it = dst.begin();
-	auto end = dst.end();
-	for (; it < end; ++it, ++src) {
-		*it = OutputElement(*src);
+template <typename It>
+void insert(int length, It begin, int count = 1) {
+	auto it = begin + length - count;
+	while (it > begin) {
+		--it;
+		it[count] = *it;
 	}
-}*/
+}
+
+/**
+ * Erase elements from the beginning of the array defined by (length, begin)
+ * @param length
+ * @param begin
+ * @param count
+ */
+template <typename It>
+void erase(int length, It begin, int count = 1) {
+	auto end = begin + length - count;
+	for (It it = begin; it < end; ++it) {
+		*it = it[count];
+	}
+}
 
 /**
  * Compare data using two iterators
@@ -156,7 +171,7 @@ bool equals(int length, InputIt1 a, InputIt2 b) {
 	}
 	return true;
 }
-
+/*
 template <typename T, int N, typename V>
 int binaryLowerBound(T (&array)[N], V const &element) {
 	int l = 0;
@@ -164,6 +179,21 @@ int binaryLowerBound(T (&array)[N], V const &element) {
 	while (l < h) {
 		int mid = l + (h - l) / 2;
 		if (array[mid] < element) {
+			l = mid + 1;
+		} else {
+			h = mid;
+		}
+	}
+	return l;
+}
+*/
+template <typename T, int N, typename C>
+int binaryLowerBound(T (&array)[N], C const &compare) {
+	int l = 0;
+	int h = N;
+	while (l < h) {
+		int mid = l + (h - l) / 2;
+		if (compare(array[mid])) {
 			l = mid + 1;
 		} else {
 			h = mid;

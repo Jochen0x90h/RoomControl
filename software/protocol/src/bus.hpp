@@ -15,7 +15,7 @@ extern AesKey const defaultAesKey;
 /**
  * Type of device endpoint such as button, relay or temperature sensor
  */
- enum class EndpointType : uint8_t {
+enum class EndpointType : uint8_t {
 	// if a device contains multiple sub-devices, a separator can be used to structure the endpoints
 	//SEPARATOR = 0,
 	
@@ -27,7 +27,7 @@ extern AesKey const defaultAesKey;
 	ON_OFF_IN = 0x81,
 	ON_OFF_OUT = 0x01,
 
-	// trigger (button, motion detector), returns to inactive state (0: inactive, 1: active)
+	// trigger (button, motion detector), returns to inactive state (0: inactive, 1: activate)
 	TRIGGER = 0x02,
 	TRIGGER_IN = 0x82,
 	TRIGGER_OUT = 0x02,
@@ -41,7 +41,7 @@ extern AesKey const defaultAesKey;
 	// level, color etc.
 	// -----------------
 	
-	// level in percent (brightness of a light bulb)
+	// level in percent (brightness of a light bulb, position of blind)
 	LEVEL = 0x10,
 	LEVEL_IN = 0x90,
 	LEVEL_OUT = 0x10,
@@ -54,7 +54,7 @@ extern AesKey const defaultAesKey;
 	// environment
 	// -----------
 	
-	// temperature (Celsius, Fahrenheit, Kelvin)
+	// temperature (1/20 Kelvin)
 	TEMPERATURE = 0x20,
 	TEMPERATURE_IN = 0xa0,
 	TEMPERATURE_OUT = 0x20,
@@ -101,7 +101,8 @@ extern AesKey const defaultAesKey;
 
 	
 	TYPE_MASK = 0x7f,
-	
+
+	// direction relative to bus master, i.e. IN is host input and device output
 	IN = 0x80,
 	OUT = 0x00,
 	DIRECTION_MASK = 0x80

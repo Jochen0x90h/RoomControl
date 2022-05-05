@@ -74,7 +74,7 @@ bool Storage::ArrayData::hasSpace(void const *flashElement) {
 	return true;
 }
 
-void *Storage::ArrayData::write(int index, ElementInternal *element) {
+Storage::ElementInternal *Storage::ArrayData::write(int index, ElementInternal *element) {
 	auto storage = this->storage;
 	void const *flashElement = element->flash;
 
@@ -140,7 +140,7 @@ void *Storage::ArrayData::write(int index, ElementInternal *element) {
 	return oldElement;
 }
 
-void *Storage::ArrayData::erase(int index) {
+Storage::ElementInternal *Storage::ArrayData::erase(int index) {
 	auto storage = this->storage;
 
 	ElementInternal *oldElement = this->elements[index];

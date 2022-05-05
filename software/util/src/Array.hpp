@@ -16,13 +16,13 @@ public:
 	/**
 	 * Construct from pointer
 	 */
-	explicit Array(T *buffer) : buffer(buffer) {}
+	explicit Array(T *buffer) noexcept : buffer(buffer) {}
 
 	/**
 	 * Construct from C-array or C-string
 	 */
 	template <typename T2>
-	constexpr Array(T2 (&array)[N]) : buffer(array) {}
+	constexpr Array(T2 (&array)[N]) noexcept : buffer(array) {}
 
 	/**
 	 * Default copy constructor
@@ -33,7 +33,7 @@ public:
 	 * Copy construct from buffer with different data type (e.g. non-const to const)
 	 */
 	template <typename T2>
-	Array(Array<T2, N> array) : buffer(array.data()) {}
+	Array(Array<T2, N> array) noexcept : buffer(array.data()) {}
 
 	/**
 	 * Default assignment operator
@@ -148,15 +148,15 @@ public:
 	/**
 	 * Default constructor
 	 */
-	constexpr Array() : length(0), buffer(nullptr) {}
+	constexpr Array() noexcept : length(0), buffer(nullptr) {}
 
 	/**
 	 * Construct from C-array or C-string
 	 */
 	template <int N>
-	constexpr Array(T (&array)[N]) : length(N), buffer(array) {}
+	constexpr Array(T (&array)[N]) noexcept : length(N), buffer(array) {}
 
-	Array(int length, T *data) : length(length), buffer(data) {}
+	Array(int length, T *data) noexcept : length(length), buffer(data) {}
 
 	/**
 	 * Default copy constructor
@@ -167,7 +167,7 @@ public:
 	 * Copy construct from buffer with different data type (e.g. non-const to const)
 	 */
 	template <typename T2>
-	Array(Array<T2> array) : length(array.count()), buffer(array.data()) {}
+	Array(Array<T2> array) noexcept : length(array.count()), buffer(array.data()) {}
 
 	/**
 	 * Default assignment operator
@@ -184,7 +184,7 @@ public:
 	 * Number of elements in the array
 	 * @return number of elements
 	 */
-	int count() {return this->length;}
+	int count() const {return this->length;}
 
 	/**
 	 * Fill whole buffer with a value

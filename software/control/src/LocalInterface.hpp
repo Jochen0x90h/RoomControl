@@ -25,24 +25,24 @@ public:
 
 	int getDeviceCount() override;
 	Device &getDeviceByIndex(int index) override;
-	Device *getDeviceById(DeviceId id) override;
+	Device *getDeviceById(uint8_t id) override;
 
 protected:
 
 	class LocalDevice : public Device {
 	public:
-		DeviceId getId() override;
-		String getName() override;
+		uint8_t getId() const override;
+		String getName() const override;
 		void setName(String name) override;
-		Array<EndpointType const> getEndpoints() override;
+		Array<EndpointType const> getEndpoints() const override;
 		void addPublisher(uint8_t endpointIndex, Publisher &publisher) override;
 		void addSubscriber(uint8_t endpointIndex, Subscriber &subscriber) override;
 
 		// back pointer to interface
 		LocalInterface *interface;
 
-		// device id
-		uint8_t id;
+		// interface id
+		uint8_t interfaceId;
 
 		// subscribers and publishers
 		SubscriberList subscribers;

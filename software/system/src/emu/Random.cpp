@@ -11,11 +11,19 @@ std::uniform_int_distribution<uint64_t> dist;
 void init() {
 }
 
-uint8_t int8() {
+uint8_t u8() {
 	return Random::dist(Random::mt);
 }
 
-uint64_t int64() {
+uint16_t u16() {
+	return Random::dist(Random::mt);
+}
+
+uint32_t u32() {
+	return Random::dist(Random::mt);
+}
+
+uint64_t u64() {
 	return Random::dist(Random::mt);
 }
 
