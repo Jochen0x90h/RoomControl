@@ -44,7 +44,7 @@ void RNG_IRQHandler(void) {
 		
 		++w;
 		
-		// check if we catched up with the read index
+		// check if we catched up with the read plugIndex
 		if (r - w <= 0)
 			NRF_RNG->TASKS_STOP = TRIGGER;
 			

@@ -58,9 +58,30 @@ Interface::Device *BusInterface::getDeviceById(uint8_t id) {
 	return nullptr;
 }
 
-bool readMessage(MessageType dstType, void *dstMessage, MessageReader r, EndpointType srcType) {
+static bool readMessage(MessageType dstType, void *dstMessage, EndpointType srcType, MessageReader r,
+	ConvertOptions const &convertOptions)
+{
 	Message &dst = *reinterpret_cast<Message *>(dstMessage);
 
+	switch (srcType) {
+		case EndpointType::ON_OFF_IN:
+			return convertOnOffIn(dstType, dst, r.u8(), convertOptions);
+		case EndpointType::TRIGGER_IN:
+			return convertTriggerIn(dstType, dst, r.u8(), convertOptions);
+		case EndpointType::UP_DOWN_IN:
+			return convertUpDownIn(dstType, dst, r.u8(), convertOptions);
+		case EndpointType::TEMPERATURE_IN:
+			// convert temperature from 1/20 Kelvin to Kelvin
+			if (dstType != MessageType::TEMPERATURE)
+				return false; // conversion failed
+			dst.temperature = float(r.u16L()) * 0.05f;
+			break;
+		default:
+			// conversion failed
+			return false;
+	}
+
+/*
 	switch (dstType) {
 		case MessageType::ON_OFF:
 			switch (srcType) {
@@ -199,7 +220,7 @@ bool readMessage(MessageType dstType, void *dstMessage, MessageReader r, Endpoin
 					return false;
 			}
 			break;
-	/*
+	/ *
 		case MessageType::CELSIUS:
 			switch (srcType) {
 			case EndpointType::TEMPERATURE_IN:
@@ -222,12 +243,12 @@ bool readMessage(MessageType dstType, void *dstMessage, MessageReader r, Endpoin
 				return false;
 			}
 			break;
-	*/
+	* /
 		default:
 			// conversion failed
 			return false;
 	}
-
+*/
 	// conversion successful
 	return true;
 }
@@ -270,6 +291,18 @@ Coroutine BusInterface::receive() {
 			flash.deviceId = deviceId;
 			flash.interfaceId = allocateInterfaceId(this->devices);
 
+			int index = this->devices.count();
+			for (int i = 0; i < this->devices.count(); ++i) {
+				auto &device = this->devices[i];
+				if (device->deviceId == deviceId) {
+					index = i;
+					flash.interfaceId = device->interfaceId;
+					break;
+				}
+			}
+			flash.address = flash.interfaceId - 1;
+
+
 			// get endpoints
 			flash.endpointCount = r.getRemaining();
 			array::copy(flash.endpointCount, flash.endpoints, r.current);
@@ -278,13 +311,13 @@ Coroutine BusInterface::receive() {
 			constexpr int commissionLength =
 				1 + 1 + 4 + 1 + 16 + micLength; // command prefix, arbitration, device id, address, key, mic
 			uint8_t sendMessage[commissionLength];
-
+/*
 			// check if device already exists and set flag for each used address to find a free address
 			array::fill(9, sendMessage, 0);
-			int index = this->devices.count();
+			int plugIndex = this->devices.count();
 			for (int i = 0; i < this->devices.count(); ++i) {
 				if (this->devices[i]->deviceId == deviceId)
-					index = i;
+					plugIndex = i;
 				else
 					sendMessage[i >> 3] |= 1 << (i & 7);
 			}
@@ -306,6 +339,9 @@ Coroutine BusInterface::receive() {
 
 			// continue if no free address found
 			if (j == 9)
+				continue;
+*/
+			if (flash.address >= 8 * 9)
 				continue;
 			Terminal::out << "bus device " << hex(deviceId) << ": assigned address " << dec(flash.address) << '\n';
 
@@ -362,8 +398,10 @@ Coroutine BusInterface::receive() {
 
 			// decrypt
 			Nonce nonce(address, securityCounter);
-			if (!r.decrypt(micLength, nonce, *this->aesKey))
+			if (!r.decrypt(micLength, nonce, *this->aesKey)) {
+				Terminal::out << "bus: decrypt failed!\n";
 				continue;
+			}
 
 			for (auto &device: this->devices) {
 				auto const &flash = *device;
@@ -379,7 +417,8 @@ Coroutine BusInterface::receive() {
 								p.subscriptionIndex = subscriber.subscriptionIndex;
 
 								// read message (note r is passed by value for multiple subscribers)
-								return readMessage(subscriber.messageType, p.message, r, endpointType);
+								return readMessage(subscriber.messageType, p.message, endpointType, r,
+									subscriber.convertOptions);
 							});
 						}
 					}
@@ -390,69 +429,18 @@ Coroutine BusInterface::receive() {
 	}
 }
 
-bool writeMessage(MessageWriter &w, EndpointType endpointType, MessageType srcType, void const *srcMessage) {
+static bool writeMessage(MessageWriter &w, EndpointType endpointType, MessageType srcType, void const *srcMessage) {
 	Message const &src = *reinterpret_cast<Message const *>(srcMessage);
 
-	switch (endpointType & EndpointType::TYPE_MASK) {
-		case EndpointType::ON_OFF:
-			switch (srcType) {
-				case MessageType::ON_OFF:
-					w.u8(src.onOff);
-					break;
-				case MessageType::ON_OFF2:
-					// invert on/off (0, 1, 2 -> 1, 0, 2)
-					w.u8(src.onOff ^ 1 ^ (src.onOff >> 1));
-					break;
-				case MessageType::TRIGGER:
-				case MessageType::TRIGGER2:
-					// trigger (e.g.button) toggles on/off
-					if (src.trigger == 0)
-						return false;
-					w.u8(2);
-					break;
-				case MessageType::UP_DOWN:
-					// rocker switches off/on (1, 2 -> 0, 1)
-					if (src.upDown == 0)
-						return false;
-					w.u8(src.upDown - 1);
-					break;
-				case MessageType::UP_DOWN2:
-					// rocker switches on/off (1, 2 -> 1, 0)
-					if (src.upDown == 0)
-						return false;
-					w.u8(2 - src.upDown);
-					break;
-				default:
-					// conversion failed
-					return false;
-			}
-			break;
+	switch (endpointType) {
+		case EndpointType::ON_OFF_OUT:
+			return convertOnOffOut(w.u8(), srcType, src);
+		case EndpointType::TRIGGER_OUT:
+			return convertTriggerOut(w.u8(), srcType, src);
+		case EndpointType::UP_DOWN_OUT:
+			return convertUpDownOut(w.u8(), srcType, src);
 
-		case EndpointType::UP_DOWN:
-			switch (srcType) {
-				case MessageType::TRIGGER:
-					// use press as up (0, 1 -> 0, 1)
-					w.u8(src.trigger);
-					break;
-				case MessageType::TRIGGER2:
-					// use press as down (0, 1 -> 0, 2)
-					w.u8(src.trigger << 1);
-					break;
-				case MessageType::UP_DOWN:
-					w.u8(src.upDown);
-					break;
-				case MessageType::UP_DOWN2:
-					// invert up/down (0, 1, 2 -> 1, 0, 2)
-					//w.u8(src.upDown ^ 1 ^ (src.upDown >> 1));
-					// invert up/down (0, 1, 2 -> 0, 2, 1)
-					w.u8((src.upDown << 1) | (src.upDown >> 1));
-				default:
-					// conversion failed
-					return false;
-			}
-			break;
-
-		case EndpointType::LEVEL:
+		case EndpointType::LEVEL_OUT:
 			switch (srcType) {
 				case MessageType::LEVEL:
 				case MessageType::MOVE_TO_LEVEL: {
@@ -474,16 +462,16 @@ bool writeMessage(MessageWriter &w, EndpointType endpointType, MessageType srcTy
 						w.u8(clamp(abs(level), 0, 255));
 						w.u16L(clamp(int(src.moveToLevel.move * 5000.0f), 0, 65535)); // 1 / 5000s
 					}
-				}
 					break;
+				}
 				default:
 					// conversion failed
 					return false;
 			}
 			break;
 
-			//case EndpointType::TEMPERATURE:
-			//	break;
+		//case EndpointType::TEMPERATURE:
+		//	break;
 
 		default:
 			// conversion failed
@@ -557,7 +545,7 @@ Coroutine BusInterface::publish() {
 						}
 						co_await BusMaster::send(sendLength, outMessage);
 					}
-
+/*
 					// forward to subscribers
 					for (auto &subscriber: device.subscribers) {
 						if (subscriber.index == publisher.index) {
@@ -569,7 +557,7 @@ Coroutine BusInterface::publish() {
 									publisher.messageType, publisher.message);
 							});
 						}
-					}
+					}*/
 				}
 			}
 		}
@@ -589,6 +577,11 @@ BusInterface::BusDevice *BusInterface::DeviceFlash::allocate() const {
 
 
 // BusInterface::BusDevice
+
+BusInterface::BusDevice::~BusDevice() {
+	for (auto &publisher : this->publishers)
+		publisher.event = nullptr;
+}
 
 uint8_t BusInterface::BusDevice::getId() const {
 	auto &flash = **this;

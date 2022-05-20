@@ -307,7 +307,7 @@ static void selectForSend() {
 }
 
 static void prepareForSend(int index, ContextFlags flags, uint8_t const *packet, uint8_t &result) {
-	// set context index that initiated the send operation
+	// set context plugIndex that initiated the send operation
 	Radio::sendIndex = index;
 
 	// check if the packet requests an ACK

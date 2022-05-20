@@ -101,6 +101,7 @@ private:
 	class GpDevice : public Device, public Storage::Element<GpDeviceFlash> {
 	public:
 		explicit GpDevice(GpDeviceFlash const &flash) : Storage::Element<GpDeviceFlash>(flash) {}
+		~GpDevice() override;
 
 		uint8_t getId() const override;
 		String getName() const override;
@@ -168,6 +169,7 @@ private:
 	class ZbDevice : public Storage::Element<ZbDeviceFlash>, public Device {
 	public:
 		explicit ZbDevice(ZbDeviceFlash const &flash) : Storage::Element<ZbDeviceFlash>(flash) , sendFlags(flash.sendFlags) {}
+		~ZbDevice() override;
 
 		uint8_t getId() const override;
 		String getName() const override;
@@ -177,7 +179,7 @@ private:
 		void addSubscriber(uint8_t endpointIndex, Subscriber &subscriber) override;
 
 		// back pointer to interface
-		RadioInterface *interface;
+		RadioInterface *interface = nullptr;
 
 		// send flags for next hop in route (wait for data request or not)
 		Radio::SendFlags sendFlags;

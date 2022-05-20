@@ -67,10 +67,6 @@ bool Storage::ArrayData::hasSpace(void const *flashElement) {
 		+ this->sizeElement(flashElement);
 	if (flashSize > storage->pageCount * (FLASH_PAGE_SIZE * 2 / 3))
 		return false;
-	//int ramSize = &storage->ram[RAM_SIZE] - storage->ramElements[storage->elementCount]
-	//	+ this->ramSize(flashElement);
-	//if (ramSize > RAM_SIZE)
-	//	return false;
 	return true;
 }
 
@@ -123,14 +119,14 @@ Storage::ElementInternal *Storage::ArrayData::write(int index, ElementInternal *
 
 		// set element in flash
 		element->flash = storage->it;
-		//this->elements[index]->flash = storage->it;
+		//this->elements[plugIndex]->flash = storage->it;
 
 		// write element to flash
 		Flash::write(storage->it, flashElementSize, flashElement);
 		storage->it += alignedFlashElementSize;
 	} else {
 		// no: set flash element, gets copied to flash in switchFlashRegions()
-		//this->elements[index]->flash = flashElement;
+		//this->elements[plugIndex]->flash = flashElement;
 
 		// no: defragment flash, element->flash also gets copied to flash
 		storage->switchFlashRegions();
@@ -178,7 +174,7 @@ void Storage::ArrayData::move(int index, int newIndex) {
 	// element sizes
 	int alignedFlashHeaderSize = flashAlign(sizeof(FlashHeader));
 
-	// move element to new index and elements in between by one
+	// move element to new plugIndex and elements in between by one
 	if (newIndex > index) {
 		for (int i = index; i < newIndex; ++i) {
 			e[i] = e[i + 1];
@@ -236,7 +232,7 @@ void Storage::init() {
 		const FlashHeader *header = reinterpret_cast<const FlashHeader *>(it);
 		it += flashAlign(sizeof(FlashHeader));
 
-		// get array by index
+		// get array by plugIndex
 		ArrayData *arrayData = this->first;
 		int arrayIndex = this->arrayCount - 1;
 		while (arrayIndex > header->arrayIndex) {

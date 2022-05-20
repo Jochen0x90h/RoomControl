@@ -82,6 +82,7 @@ private:
 	class BusDevice : public Storage::Element<DeviceFlash>, public Device {
 	public:
 		explicit BusDevice(DeviceFlash const &flash) : Storage::Element<DeviceFlash>(flash) {}
+		~BusDevice() override;
 
 		uint8_t getId() const override;
 		String getName() const override;
@@ -91,7 +92,7 @@ private:
 		void addSubscriber(uint8_t endpointIndex, Subscriber &subscriber) override;
 
 		// back pointer to interface
-		BusInterface *interface;
+		BusInterface *interface = nullptr;
 
 		// subscribers and publishers
 		SubscriberList subscribers;

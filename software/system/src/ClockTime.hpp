@@ -137,81 +137,31 @@ public:
 	}
 };
 
-
-struct ClockDuration {
+/**
+ * Duration in hours with 1/100s resolution
+ */
+struct HourDuration100 {
 	uint8_t hundredths;
 	uint8_t seconds;
 	uint8_t minutes;
 	uint8_t hours;
-	uint16_t days;
+	//uint16_t days;
 };
 
-inline ClockDuration unpackClockDuration(uint32_t duration) {
-	ClockDuration d;
+inline HourDuration100 unpackHourDuration100(uint32_t duration) {
+	HourDuration100 d;
 	d.hundredths = duration % 100;
 	duration /= 100;
 	d.seconds = duration % 60;
 	duration /= 60;
 	d.minutes = duration % 60;
 	duration /= 60;
-	d.hours = duration % 24;
-	duration /= 24;
-	d.days = duration;
+	d.hours = duration;// % 24;
+	//duration /= 24;
+	//d.days = duration;
 	return d;
 }
 
-inline uint32_t packClockDuration(ClockDuration const &duration) {
-	return duration.hundredths + (duration.seconds + (duration.minutes + (duration.hours + duration.days * 24) * 60) * 60) * 100;
+inline uint32_t packHourDuration100(HourDuration100 const &duration) {
+	return duration.hundredths + (duration.seconds + (duration.minutes + (duration.hours /*+ duration.days * 24*/) * 60) * 60) * 100;
 }
-
-
-/*
-class ClockDuration {
-public:
-
-	static constexpr uint32_t MILLISECONDS_MASK = 0x3ff;
-	static constexpr uint32_t SECONDS_MASK = 0x3f;
-	static constexpr uint32_t MINUTES_MASK = 0x3f;
-	static constexpr uint32_t HOURS_MASK   = 0x1f;
-
-	static constexpr int SECONDS_SHIFT_LO = 0;
-	static constexpr int SECONDS_SHIFT_HI = 10;
-	static constexpr int MINUTES_SHIFT_LO = 6;
-	static constexpr int MINUTES_SHIFT_HI = 16;
-	static constexpr int HOURS_SHIFT_LO   = 12;
-	static constexpr int HOURS_SHIFT_HI   = 22;
-
-
-	int getMilliseconds() const {
-		return isHighResolution() ? (this->duration & MILLISECONDS_MASK) : 0;
-	}
-
-	void setMilliseconds() {}
-
-	int getSeconds() const {
-		return (this->duration >> (isHighResolution() ? SECONDS_SHIFT_HI : SECONDS_SHIFT_LO)) & SECONDS_MASK;
-	}
-
-	void setSeconds() {}
-
-	int getMinutes() const {
-		return (this->duration >> (isHighResolution() ? MINUTES_SHIFT_HI : MINUTES_SHIFT_LO)) & MINUTES_MASK;
-	}
-
-	void setMinutes() {}
-
-	int getHours() const {
-		return (this->duration >> (isHighResolution() ? MINUTES_SHIFT_HI : MINUTES_SHIFT_LO)) & HOURS_MASK;
-	}
-
-	void setHours() {}
-
-	int getDays() const {}
-
-	void setDays() {}
-
-	bool isHighResolution() const {return }
-
-	uint32_t duration = 0;
-};
-*/

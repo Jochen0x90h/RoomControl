@@ -26,7 +26,7 @@ struct Context {
 
 Context contexts[CONTEXT_COUNT];
 
-// index of context that is currently in progress
+// plugIndex of context that is currently in progress
 int transferContext;
 
 static void startTransfer(int index, Parameters const &p) {
@@ -146,7 +146,7 @@ void init() {
 
 Awaitable<Parameters> transfer(int index, int writeLength, void const *writeData, int readLength, void *readData)
 {
-	assert(Spi::nextHandler != nullptr && uint(index) < SPI_CONTEXT_COUNT); // init() not called or index out of range
+	assert(Spi::nextHandler != nullptr && uint(index) < SPI_CONTEXT_COUNT); // init() not called or plugIndex out of range
 	auto &context = Spi::contexts[index];
 
 	Awaitable<Parameters> r = {context.waitlist, writeLength, writeData, readLength, readData};

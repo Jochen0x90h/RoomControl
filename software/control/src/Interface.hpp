@@ -30,6 +30,8 @@ public:
 
 	class Device {
 	public:
+		virtual ~Device();
+
 		/**
 		 * Get device id which is stable when other devices are added or removed
 		 * @return device id

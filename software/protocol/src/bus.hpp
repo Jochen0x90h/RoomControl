@@ -41,7 +41,7 @@ enum class EndpointType : uint8_t {
 	// level, color etc.
 	// -----------------
 	
-	// level in percent (brightness of a light bulb, position of blind)
+	// level in percent (brightness of a light bulb, position of blind), optionally with duration/speed
 	LEVEL = 0x10,
 	LEVEL_IN = 0x90,
 	LEVEL_OUT = 0x10,

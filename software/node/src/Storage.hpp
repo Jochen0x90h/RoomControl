@@ -307,15 +307,7 @@ public:
 			assert(newIndex >= 0 && newIndex < this->data.count);
 			this->data.move(index, newIndex);
 		}
-/*
-		Iterator<FlashType, RamType> begin() const {
-			return {this->data.flashElements, this->data.ramElements};
 
-		}
-		Iterator<FlashType, RamType> end() const {
-			return {this->data.flashElements + this->data.count, this->data.ramElements + this->data.count};
-		}
-*/
 		Iterator<RamType> begin() const {
 			return {this->data.elements};
 		}
@@ -331,8 +323,6 @@ protected:
 
 	void switchFlashRegions();
 
-	//void ramInsert(uint32_t **ramElement, int sizeChange);
-
 	// configuration
 	uint8_t pageStart;
 	uint8_t pageCount;
@@ -344,20 +334,12 @@ protected:
 	// total number of elements in all arrays
 	int elementCount = 0;
 
-
 	// flash pointers
 	uint8_t const *it;
 	uint8_t const *end;
 
-	// space for array elements of all arrays
-	//void const *flashElements[MAX_ELEMENT_COUNT];
-
 	// accumulated size of all flash elements bytes
 	int flashElementsSize = 0;
-
-
-	// space for array elements of all arrays followed by an "end"-pointer
-	//void *ramElements[MAX_ELEMENT_COUNT + 1];
 
 	// space for array elements of all arrays
 	ElementInternal *elements[MAX_ELEMENT_COUNT];

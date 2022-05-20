@@ -10757,9 +10757,9 @@ OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define RADIO_RXCRC_RXCRC_Msk (0xFFFFFFUL << RADIO_RXCRC_RXCRC_Pos) /*!< Bit mask of RXCRC field. */
 
 /* Register: RADIO_DAI */
-/* Description: Device address match index */
+/* Description: Device address match plugIndex */
 
-/* Bits 2..0 : Device address match index */
+/* Bits 2..0 : Device address match plugIndex */
 #define RADIO_DAI_DAI_Pos (0UL) /*!< Position of DAI field. */
 #define RADIO_DAI_DAI_Msk (0x7UL << RADIO_DAI_DAI_Pos) /*!< Bit mask of DAI field. */
 

@@ -45,6 +45,20 @@ struct LinkedListNode {
 	}
 
 	/**
+	 * Return the number of entries in the list
+	 * @return number of entries
+	 */
+	int count() const {
+		int count = 0;
+		auto node = this->next;
+		while (node != this) {
+			node = node->next;
+			++count;
+		}
+		return count;
+	}
+
+	/**
 	 * Add a node before this node (add at end of list if this is the list head)
 	 */
 	void add(T &node) {

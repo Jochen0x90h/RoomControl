@@ -175,6 +175,7 @@ Coroutine LocalInterface::publish() {
 				if (publisher.dirty) {
 					publisher.dirty = false;
 					uint8_t endpointIndex = publisher.index;
+					auto &src = *reinterpret_cast<Message const *>(publisher.message);
 
 					// set to device
 					switch (device.interfaceId) {
@@ -182,7 +183,7 @@ Coroutine LocalInterface::publish() {
 						{
 							// convert to on/off
 							uint8_t message;
-							if (convert(MessageType::ON_OFF, &message, publisher.messageType, publisher.message)) {
+							if (convertOnOffOut(message, publisher.messageType, src)) {
 								// set output
 								if (message <= 1)
 									Output::set(OUTPUT_HEATING, message);
@@ -195,7 +196,7 @@ Coroutine LocalInterface::publish() {
 						{
 							// convert to on/off
 							uint8_t message;
-							if (convert(MessageType::ON_OFF, &message, publisher.messageType, publisher.message)) {
+							if (convertOnOffOut(message, publisher.messageType, src)) {
 								// set output
 								if (message <= 1)
 									Output::set(OUTPUT_EXT_INDEX + endpointIndex, message);

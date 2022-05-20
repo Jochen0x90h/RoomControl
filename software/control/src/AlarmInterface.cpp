@@ -8,6 +8,33 @@
 using EndpointType = AlarmInterface::EndpointType;
 
 
+static bool convertMessage(MessageType dstType, void *dstMessage, EndpointType srcType, Message const &src,
+	ConvertOptions const &convertOptions)
+{
+	Message &dst = *reinterpret_cast<Message *>(dstMessage);
+
+	switch (srcType) {
+		case EndpointType::ON_OFF_IN:
+			return convertOnOffIn(dstType, dst, src.onOff, convertOptions);
+		case EndpointType::TRIGGER_IN:
+			return convertTriggerIn(dstType, dst, src.trigger, convertOptions);
+		case EndpointType::UP_DOWN_IN:
+			return convertUpDownIn(dstType, dst, src.upDown, convertOptions);
+		case EndpointType::TEMPERATURE_IN:
+			if (dstType != MessageType::TEMPERATURE)
+				return false; // conversion failed
+			dst.temperature = src.temperature;
+			break;
+		default:
+			// conversion failed
+			return false;
+	}
+
+	// conversion successful
+	return true;
+}
+
+
 AlarmInterface::AlarmInterface() {
 	// set backpointers
 	for (auto &alarm : this->alarms)
@@ -40,12 +67,12 @@ Interface::Device *AlarmInterface::getDeviceById(uint8_t id) {
 	return nullptr;
 }
 
-AlarmInterface::AlarmFlash const &AlarmInterface::getAlarm(int index) const {
+AlarmInterface::AlarmFlash const &AlarmInterface::get(int index) const {
 	assert(index >= 0 && index < this->alarms.count());
 	return *this->alarms[index];
 }
 
-void AlarmInterface::setAlarm(int index, AlarmFlash &flash) {
+void AlarmInterface::set(int index, AlarmFlash &flash) {
 	assert(index >= 0 && index <= this->alarms.count());
 	if (index < this->alarms.count()) {
 		this->alarms.write(index, flash);
@@ -57,6 +84,32 @@ void AlarmInterface::setAlarm(int index, AlarmFlash &flash) {
 		flash.interfaceId = allocateInterfaceId(this->alarms);
 
 		this->alarms.write(index, alarm);
+	}
+}
+
+int AlarmInterface::getSubscriberCount(int index) {
+	assert(index >= 0 && index < this->alarms.count());
+	return this->alarms[index].subscribers.count();
+}
+
+void AlarmInterface::test(int index, AlarmFlash const &flash) {
+	assert(index >= 0 && index < this->alarms.count());
+	auto &alarm = this->alarms[index];
+
+	for (auto &subscriber: alarm.subscribers) {
+		if (subscriber.index >= flash.endpointCount)
+			continue;
+
+		// publish to subscriber
+		subscriber.barrier->resumeFirst([&subscriber, &flash] (Subscriber::Parameters &p) {
+			p.subscriptionIndex = subscriber.subscriptionIndex;
+
+			// convert to target unit and type and resume coroutine if conversion was successful
+			//MessageType type = flash.messageTypes[subscriber.index];
+			EndpointType type = flash.endpoints[subscriber.index];
+			auto &message = flash.messages[subscriber.index];
+			return convertMessage(subscriber.messageType, p.message, type, message, subscriber.convertOptions);
+		});
 	}
 }
 
@@ -82,9 +135,11 @@ Coroutine AlarmInterface::tick() {
 						p.subscriptionIndex = subscriber.subscriptionIndex;
 
 						// convert to target unit and type and resume coroutine if conversion was successful
-						MessageType type = flash.messageTypes[subscriber.index];
-						Message const &message = flash.messages[subscriber.index];
-						return convert(subscriber.messageType, p.message, type, &message);
+						//MessageType type = flash.messageTypes[subscriber.index];
+						EndpointType type = flash.endpoints[subscriber.index];
+						auto &message = flash.messages[subscriber.index];
+						return convertMessage(subscriber.messageType, p.message, type, message,
+							subscriber.convertOptions);
 					});
 				}
 			}
@@ -113,6 +168,9 @@ AlarmInterface::Alarm *AlarmInterface::AlarmFlash::allocate() const {
 
 
 // AlarmInterface::Alarm
+
+AlarmInterface::Alarm::~Alarm() {
+}
 
 uint8_t AlarmInterface::Alarm::getId() const {
 	auto &flash = **this;

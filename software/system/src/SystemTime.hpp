@@ -34,6 +34,10 @@ struct SystemDuration {
 	
 };
 
+constexpr SystemDuration operator -(SystemDuration a) {
+	return {-a.value};
+}
+
 constexpr SystemDuration operator +(SystemDuration a, SystemDuration b) {
 	return {a.value + b.value};
 }
@@ -76,6 +80,10 @@ constexpr DurationDiv operator /(SystemDuration a, SystemDuration b) {
 
 constexpr SystemDuration operator %(SystemDuration a, SystemDuration b) {
 	return {a.value % b.value};
+}
+
+constexpr bool operator ==(SystemDuration a, SystemDuration b) {
+	return a.value == b.value;
 }
 
 constexpr bool operator <(SystemDuration a, SystemDuration b) {

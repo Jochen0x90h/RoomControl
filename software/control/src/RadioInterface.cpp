@@ -563,35 +563,11 @@ bool writeZclClusterSpecific(RadioInterface::PacketWriter &w, uint8_t zclCounter
 		| zb::ZclFrameControl::DIRECTION_CLIENT_TO_SERVER);
 	w.u8(zclCounter);
 
-	Message const &src = *reinterpret_cast<Message const *>(srcMessage);
+	auto &src = *reinterpret_cast<Message const *>(srcMessage);
 
 	switch (info.cluster) {
 	case zb::ZclCluster::ON_OFF:
-		switch (srcType) {
-		case MessageType::ON_OFF:
-			w.u8(src.onOff);
-			break;
-		case MessageType::ON_OFF2:
-			// invert on/off (0, 1, 2 -> 1, 0, 2)
-			w.u8(src.onOff ^ 1 ^ (src.onOff >> 1));
-			break;
-		case MessageType::TRIGGER:
-			// trigger (e.g.button) toggles on/off
-			if (src.trigger == 0)
-				return false;
-			w.u8(2);
-			break;
-		case MessageType::UP_DOWN:
-			// rocker switches off/on (1, 2 -> 0, 1)
-			if (src.upDown == 0)
-				return false;
-			w.u8(src.upDown - 1);
-			break;
-		default:
-			// conversion failed
-			return false;
-		}
-		break;
+		return convertOnOffOut(w.u8(), srcType, src);
 	case zb::ZclCluster::LEVEL_CONTROL:
 		switch (srcType) {
 		case MessageType::LEVEL:
@@ -789,11 +765,49 @@ Coroutine RadioInterface::sendBeacon() {
 	}
 }
 
-static bool handleZclClusterSpecific(MessageType dstType, void *dstMessage, EndpointInfo const &info, MessageReader r) {
+static bool handleZclClusterSpecific(MessageType dstType, void *dstMessage, EndpointInfo const &info, MessageReader r,
+	ConvertOptions const &convertOptions)
+{
 	// get command
 	uint8_t command = r.u8();
 
 	Message &dst = *reinterpret_cast<Message *>(dstMessage);
+	switch (info.cluster) {
+		case zb::ZclCluster::ON_OFF:
+			return convertOnOffIn(dstType, dst, command, convertOptions);
+		case zb::ZclCluster::LEVEL_CONTROL:
+			if (dstType != MessageType::MOVE_TO_LEVEL)
+				return false; // conversion failed
+			switch (zb::ZclLevelControlCommand(command)) {
+				case zb::ZclLevelControlCommand::MOVE_TO_LEVEL:
+				case zb::ZclLevelControlCommand::MOVE_TO_LEVEL_WITH_ON_OFF: {
+					uint8_t level = r.u8();
+					uint16_t transitionTime = r.u16L();
+
+					dst.moveToLevel.level = float(level) / 254.0f;
+					dst.moveToLevel.move = float(transitionTime) / 10.0f;
+					break;
+				}
+				case zb::ZclLevelControlCommand::STEP:
+				case zb::ZclLevelControlCommand::STEP_WITH_ON_OFF: {
+					bool up = r.u8() == 0;
+					int diff = r.u8();
+					uint16_t transitionTime = r.u16L();
+
+					dst.moveToLevel.level.set(float(up ? diff : -diff) / 254.0f, true);
+					dst.moveToLevel.move = float(transitionTime) / 10.0f;
+					break;
+				}
+				default:
+					// conversion failed
+					return false;
+			}
+			break;
+		default:
+			// conversion failed
+			return false;
+	}
+/*
 	switch (dstType) {
 	case MessageType::ON_OFF:
 		switch (info.cluster) {
@@ -842,7 +856,9 @@ static bool handleZclClusterSpecific(MessageType dstType, void *dstMessage, Endp
 	default:
 		// conversion failed
 		return false;
-	}
+	}*/
+
+	// conversion successful
 	return true;
 }
 
@@ -1609,7 +1625,8 @@ Terminal::out << ("Association Request Receive On When Idle: " + dec(receiveOnWh
 							p.subscriptionIndex = subscriber.subscriptionIndex;
 
 							// convert from zbee command to message (note r is passed by value for multiple subscribers)
-							return handleZclClusterSpecific(subscriber.messageType, p.message, endpointInfo, r);
+							return handleZclClusterSpecific(subscriber.messageType, p.message, endpointInfo, r,
+								subscriber.convertOptions);
 						});
 
 						// reset reader to command
@@ -2563,6 +2580,9 @@ RadioInterface::GpDevice *RadioInterface::GpDeviceFlash::allocate() const {
 
 // RadioInterface::GpDevice
 
+RadioInterface::GpDevice::~GpDevice() {
+}
+
 uint8_t RadioInterface::GpDevice::getId() const {
 	auto &flash = **this;
 	return flash.interfaceId;
@@ -2602,6 +2622,11 @@ RadioInterface::ZbDevice *RadioInterface::ZbDeviceFlash::allocate() const {
 }
 
 // RadioInterface::ZbDevice
+
+RadioInterface::ZbDevice::~ZbDevice() {
+	for (auto &publisher : this->publishers)
+		publisher.event = nullptr;
+}
 
 uint8_t RadioInterface::ZbDevice::getId() const {
 	auto &flash = **this;

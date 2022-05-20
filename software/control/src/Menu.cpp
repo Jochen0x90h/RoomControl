@@ -16,10 +16,6 @@ void Menu::line() {
 }
 
 void Menu::label() {
-	/*int x = 10;
-	int y = this->entryY + 2 - this->offsetY;
-	if (this->bitmap != nullptr)
-		this->bitmap->drawText(x, y, tahoma_8pt, s, 1);*/
 	this->entryY += tahoma_8pt.height + 4;
 }
 
