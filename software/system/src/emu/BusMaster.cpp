@@ -31,10 +31,10 @@ struct Device {
 	int states[16];
 };
 
-constexpr auto SWITCH = EndpointType::ON_OFF_IN;
+constexpr auto SWITCH = EndpointType::OFF_ON_IN;
 constexpr auto BUTTON = EndpointType::TRIGGER_IN;
 constexpr auto ROCKER = EndpointType::UP_DOWN_IN;
-constexpr auto LIGHT = EndpointType::ON_OFF_OUT;
+constexpr auto LIGHT = EndpointType::OFF_ON_TOGGLE_OUT;
 constexpr auto BLIND = EndpointType::UP_DOWN_OUT;
 
 const EndpointType endpoints1a[] = {

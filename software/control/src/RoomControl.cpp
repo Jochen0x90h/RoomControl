@@ -17,334 +17,99 @@
 #include <cmath>
 
 
-using EndpointType = Interface::EndpointType;
-
 constexpr String weekdaysLong[7] = {"Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"};
 constexpr String weekdaysShort[7] = {"M", "T", "W", "T", "F", "S", "S"};
 
-//constexpr String switchStatesLong[] = {"off", "on", "toggle", String()};
-//constexpr String triggerStatesLong[] = {"inactive", "active"};
-//constexpr String upDownStatesLong[] = {"inactive", "up", "down", String()};
-
-static String const onOffCommands[] = {"off", "on", "toggle"};
-static String const triggerCommands[] = {"release", "trigger"};
-static String const upDownCommands[] = {"release", "up", "down"};
-
-static String getCommandName(EndpointType endpointType, Command command) {
-	switch (command) {
-		case Command::OFF:
-			return "off";
-		case Command::ON:
-			return "on";
-		case Command::TRIGGER:
-			return (endpointType & EndpointType::TYPE_MASK) == EndpointType::ON_OFF ? "toggle" : "trigger";
-		case Command::UP:
-			return "up";
-		case Command::DOWN:
-			return "down";
-		case Command::RELEASE:
-			return "release";
-	}
-	return {};
-}
+static String const commandNames[] = {"off", "on", "toggle", "release", "trigger", "up", "down", "open", "close"};
+static uint8_t const onOffCommands[] = {0, 1};
+static uint8_t const onOffToggleCommands[] = {0, 1, 2};
+static uint8_t const triggerCommands[] = {3, 4};
+static uint8_t const upDownCommands[] = {3, 5, 6};
+static uint8_t const openCloseCommands[] = {7, 8};
 
 
 // functions
 
-struct FunctionInfo {
-	RoomControl::FunctionFlash::Type type;
-	String name;
-	Array<RoomControl::PlugInfo const> plugs;
-};
-
-constexpr uint8_t onOffFlags = flag(Command::ON) | flag(Command::OFF);
-constexpr uint8_t onOffToggleFlags = onOffFlags | flag(Command::TOGGLE);
-constexpr uint8_t upDownToggleFlags = flag(Command::RELEASE) | flag(Command::UP) | flag(Command::DOWN) | flag(Command::TOGGLE);
-
+// function plugs
 static RoomControl::PlugInfo const switchPlugs[] = {
-	{"Switch", RoomControl::PlugInfo::INPUT, MessageType::COMMAND, onOffToggleFlags},
-	{"Switch", RoomControl::PlugInfo::OUTPUT, MessageType::ON_OFF}};
+	{"Switch", MessageType::OFF_ON_TOGGLE_IN},
+	{"Switch", MessageType::OFF_ON_OUT}};
 static RoomControl::PlugInfo const blindPlugs[] = {
-	{"Up/Down", RoomControl::PlugInfo::INPUT, MessageType::COMMAND, upDownToggleFlags},
-	{"Position", RoomControl::PlugInfo::INPUT, MessageType::LEVEL},
-	{"Up/Down", RoomControl::PlugInfo::OUTPUT, MessageType::UP_DOWN},
-	{"Position", RoomControl::PlugInfo::OUTPUT, MessageType::LEVEL}};
+	{"Up/Down", MessageType::UP_DOWN_IN},
+	{"Trigger", MessageType::TRIGGER_IN},
+	{"Position", MessageType::LEVEL_IN},
+	{"Up/Down", MessageType::UP_DOWN_OUT},
+	{"Position", MessageType::LEVEL_OUT}};
 static RoomControl::PlugInfo const heatingControlPlugs[] = {
-	{"On/Off", RoomControl::PlugInfo::INPUT, MessageType::COMMAND, onOffToggleFlags},
-	{"Night", RoomControl::PlugInfo::INPUT, MessageType::COMMAND, onOffToggleFlags},
-	{"Summer", RoomControl::PlugInfo::INPUT, MessageType::COMMAND, onOffToggleFlags},
-	{"Windows", RoomControl::PlugInfo::INPUT, MessageType::INDEXED_COMMAND, onOffFlags},
-	{"Temperature", RoomControl::PlugInfo::INPUT, MessageType::TEMPERATURE},
-	{"Set Temperature", RoomControl::PlugInfo::INPUT, MessageType::SET_TEMPERATURE},
-	{"Valve", RoomControl::PlugInfo::OUTPUT, MessageType::ON_OFF},
+	{"On/Off", MessageType::OFF_ON_TOGGLE_IN},
+	{"Night", MessageType::OFF_ON_TOGGLE_IN},
+	{"Summer", MessageType::OFF_ON_TOGGLE_IN},
+	{"Windows", MessageType::OPEN_CLOSE_IN, 1},
+	{"Temperature", MessageType::TEMPERATURE_IN},
+	{"Set Temperature", MessageType::SET_TEMPERATURE_IN},
+	{"Valve", MessageType::OFF_ON_OUT},
 };
 
-static FunctionInfo const functionInfos[] = {
-	{RoomControl::FunctionFlash::Type::SIMPLE_SWITCH, "Switch", switchPlugs},
-	{RoomControl::FunctionFlash::Type::TIMEOUT_SWITCH, "Timeout Switch", switchPlugs},
-	{RoomControl::FunctionFlash::Type::TIMED_BLIND, "Blind", blindPlugs},
+struct FunctionInfo {
+	String name;
+	RoomControl::FunctionFlash::Type type;
+	RoomControl::FunctionFlash::TypeClass typeClass;
+	uint16_t configSize;
+	Array<RoomControl::PlugInfo const> plugs;
+
 };
-static FunctionInfo const unknownFunctionInfo = {RoomControl::FunctionFlash::Type::UNKNOWN, "<unknown>", {}};
+
+// function infos (must be sorted by type)
+static FunctionInfo const functionInfos[] = {
+	{
+			"Switch",
+			RoomControl::FunctionFlash::Type::SIMPLE_SWITCH,
+			RoomControl::FunctionFlash::TypeClass::SWITCH,
+			0,
+			switchPlugs
+		},
+	{
+			"Timeout Switch",
+			RoomControl::FunctionFlash::Type::TIMEOUT_SWITCH,
+			RoomControl::FunctionFlash::TypeClass::SWITCH,
+			sizeof(RoomControl::TimeoutSwitch::Config),
+			switchPlugs
+		},
+	{
+			"Blind",
+			RoomControl::FunctionFlash::Type::TIMED_BLIND,
+			RoomControl::FunctionFlash::TypeClass::BLIND,
+			sizeof(RoomControl::TimedBlind::Config),
+			blindPlugs
+		},
+	{
+			"Heating Control",
+			RoomControl::FunctionFlash::Type::HEATING_CONTROL,
+			RoomControl::FunctionFlash::TypeClass::HEATING_CONTROL,
+			sizeof(RoomControl::HeatingControl::Config),
+			heatingControlPlugs
+		},
+};
 
 static FunctionInfo const &getFunctionInfo(RoomControl::FunctionFlash::Type type) {
 	int i = array::binaryLowerBound(functionInfos, [type](FunctionInfo const &info) {return info.type < type;});
 	FunctionInfo const &functionInfo = functionInfos[i];
-	return functionInfo.type == type ? functionInfo : unknownFunctionInfo;
+	assert(functionInfo.type == type);
+	return functionInfo;
 }
 
-static int isInputCompatible(MessageType dstType, EndpointType srcType) {
-	switch (srcType) {
-		case EndpointType::ON_OFF_IN:
-		case EndpointType::TRIGGER_IN:
-		case EndpointType::UP_DOWN_IN:
-			switch (dstType) {
-				/*case MessageType::ON_OFF:
-					return 4;
-				case MessageType::TRIGGER:
-				case MessageType::UP_DOWN:
-					return 2;*/
-				case MessageType::COMMAND:
-				case MessageType::INDEXED_COMMAND:
-				case MessageType::SET_TEMPERATURE:
-					return 1;
-				default:
-					return 0;
-			}
-		case EndpointType::TEMPERATURE_IN:
-			return dstType == MessageType::TEMPERATURE ? 1 : 0;
-		default:
-			return 0;
-	}
+RoomControl::FunctionFlash::Type nextFunctionType(RoomControl::FunctionFlash::Type type, int delta) {
+	int i = array::binaryLowerBound(functionInfos, [type](FunctionInfo const &info) {return info.type < type;});
+	i = (i + array::count(functionInfos) * 256 + delta) % array::count(functionInfos);
+	return functionInfos[i].type;
 }
 
-static int isOutputCompatible(EndpointType dstType, MessageType srcType) {
-	switch (srcType) {
-		case MessageType::ON_OFF:
-			switch (dstType) {
-				case EndpointType::ON_OFF_OUT:
-				case EndpointType::TRIGGER_OUT:
-				case EndpointType::UP_DOWN_OUT:
-					return 2;
-				default:
-					return 0;
-			}
-
-		case MessageType::TRIGGER:
-			switch (dstType) {
-				case EndpointType::TRIGGER_OUT:
-				case EndpointType::UP_DOWN_OUT:
-					return 2;
-				default:
-					return 0;
-			}
-
-		case MessageType::UP_DOWN:
-			switch (dstType) {
-				case EndpointType::ON_OFF_OUT:
-				case EndpointType::TRIGGER_OUT:
-				case EndpointType::UP_DOWN_OUT:
-					return 2;
-				default:
-					return 0;
-			}
-
-		case MessageType::TEMPERATURE:
-			switch (dstType) {
-				case EndpointType::TEMPERATURE_OUT:
-					return 1;
-				default:
-					return 0;
-			}
-
-		default:
-			return 0;
-	}
-}
-
-static int isCompatible(RoomControl::PlugInfo const &info, EndpointType endpointType) {
+static bool isCompatible(RoomControl::PlugInfo const &info, MessageType messageType) {
 	if (info.isInput())
-		return isInputCompatible(info.type, endpointType);
-	return isOutputCompatible(endpointType, info.type);
+		return isCompatibleIn(info.messageType, messageType);
+	return isCompatibleOut(messageType, info.messageType);
 }
 
-
-/*
-constexpr String buttonStatesLong[] = {"release", "press"};
-constexpr String rockerStatesLong[] = {"release", "up", "down", String()};
-constexpr String blindStatesLong[] = {"stopped", "up", "down", String()};
-
-constexpr String buttonStates[] = {"#", "^", "!"};
-constexpr String switchStates[] = {"0", "1"};
-constexpr String rockerStates[] = {"#", "+", "-", "!"};
-
-constexpr int8_t QOS = 1;
-*/
-
-// EndpointInfo
-// ------------
-/*
-struct EndpointInfo {
-	// type of endpoint
-	EndpointType type;
-	
-	// name of endpoint (used in gui)
-	String name;
-	
-	// number of array elements
-	uint8_t elementCount;
-};
-
-constexpr EndpointInfo endpointInfos[1] = {
-/ *	//{EndpointType::BINARY_SENSOR, "Binary Sensor", 0},
-	{EndpointType::BUTTON, "Button Sensor", 0},
-	{EndpointType::ON_OFF, "Switch Sensor", 0},
-	{EndpointType::ROCKER, "Rocker Sensor", 2},
-	{EndpointType::RELAY, "Relay Actuator", 0},
-	{EndpointType::LIGHT, "Light Actuator", 0},
-	{EndpointType::BLIND, "Blind Actuator", 2},
-	{EndpointType::TEMPERATURE_IN, "Temperature Sensor", 0},
-	{EndpointType::AIR_PRESSURE_IN, "Air Pressure Sensor", 0},
-	{EndpointType::AIR_HUMIDITY_IN, "Air Humidity Sensor", 0},
-	{EndpointType::AIR_VOC_IN, "Air VOC Sensor", 0},* /
-};
-
-EndpointInfo const *findEndpointInfo(EndpointType type) {
-	int l = 0;
-	int h = array::size(endpointInfos) - 1;
-	while (l < h) {
-		int mid = l + (h - l) / 2;
-		if (endpointInfos[mid].type < type) {
-			l = mid + 1;
-		} else {
-			h = mid;
-		}
-	}
-	EndpointInfo const *endpointInfo = &endpointInfos[l];
-	return endpointInfo->type == type ? endpointInfo : nullptr;
-}
-
-
-// ComponentInfo
-// -------------
-
-struct ClassInfo {
-	uint8_t size;
-	uint8_t classFlags;
-};
-
-struct ComponentInfo {
-	// component has an element plugIndex
-	static constexpr uint8_t ELEMENT_INDEX_1 = 1;
-	static constexpr uint8_t ELEMENT_INDEX_2 = 2;
-
-	// component has a configurable duration (derives from DurationElement)
-	static constexpr uint8_t DURATION = 4;
-
-	// component can receive commands (state derives from CommandElement)
-	static constexpr uint8_t COMMAND = 8;
-
-
-	RoomControl::Device::Component::Type type;
-	String name;
-	uint8_t shortNameIndex;
-	bool hasCommand;
-	ClassInfo component;
-	ClassInfo state;
-	uint8_t elementIndexStep;
-};
-
-template <typename T>
-constexpr ClassInfo makeClassInfo() {
-	return {uint8_t((sizeof(T) + 3) / 4), uint8_t(T::CLASS_FLAGS)};
-}
-
-constexpr String componentShortNames[] = {
-	"bt",
-	"sw",
-	"rk",
-	"rl",
-	"bl",
-	"tc",
-	"tf"
-};
-
-constexpr int BT = 0;
-constexpr int SW = 1;
-constexpr int RK = 2;
-constexpr int RL = 3;
-constexpr int BL = 4;
-constexpr int TC = 5;
-constexpr int TF = 6;
-
-constexpr ComponentInfo componentInfos[] = {
-	{RoomControl::Device::Component::BUTTON, "Button", BT, false,
-		makeClassInfo<RoomControl::Device::Button>(),
-		makeClassInfo<RoomControl::DeviceState::Button>(),
-		1},
-	{RoomControl::Device::Component::HOLD_BUTTON, "Hold Button", BT, false,
-		makeClassInfo<RoomControl::Device::HoldButton>(),
-		makeClassInfo<RoomControl::DeviceState::HoldButton>(),
-		1},
-	{RoomControl::Device::Component::DELAY_BUTTON, "Delay Button", BT, false,
-		makeClassInfo<RoomControl::Device::DelayButton>(),
-		makeClassInfo<RoomControl::DeviceState::DelayButton>(),
-		1},
-	{RoomControl::Device::Component::SWITCH, "Switch", SW, false,
-		makeClassInfo<RoomControl::Device::Switch>(),
-		makeClassInfo<RoomControl::DeviceState::Switch>(),
-		1},
-	{RoomControl::Device::Component::ROCKER, "Rocker", RK, false,
-		makeClassInfo<RoomControl::Device::Rocker>(),
-		makeClassInfo<RoomControl::DeviceState::Rocker>(),
-		2},
-	{RoomControl::Device::Component::HOLD_ROCKER, "Hold Rocker", RK, false,
-		makeClassInfo<RoomControl::Device::HoldRocker>(),
-		makeClassInfo<RoomControl::DeviceState::HoldRocker>(),
-		2},
-	{RoomControl::Device::Component::RELAY, "Relay", RL, true,
-		makeClassInfo<RoomControl::Device::Relay>(),
-		makeClassInfo<RoomControl::DeviceState::Relay>(),
-		0},
-	{RoomControl::Device::Component::TIME_RELAY, "Time Relay", RL, true,
-		makeClassInfo<RoomControl::Device::TimeRelay>(),
-		makeClassInfo<RoomControl::DeviceState::TimeRelay>(),
-		0},
-	{RoomControl::Device::Component::BLIND, "Blind", BL, true,
-		makeClassInfo<RoomControl::Device::Blind>(),
-		makeClassInfo<RoomControl::DeviceState::Blind>(),
-		0},
-	{RoomControl::Device::Component::CELSIUS, "Celsius", TC, false,
-		makeClassInfo<RoomControl::Device::TemperatureSensor>(),
-		makeClassInfo<RoomControl::DeviceState::TemperatureSensor>(),
-		0},
-	{RoomControl::Device::Component::FAHRENHEIT, "Fahrenheit", TF, false,
-		makeClassInfo<RoomControl::Device::TemperatureSensor>(),
-		makeClassInfo<RoomControl::DeviceState::TemperatureSensor>(),
-		0}
-};
-
-
-// ValueInfo
-// -----------
-
-struct ValueInfo {
-	RoomControl::Command::ValueType type;
-	String name;
-	uint8_t size;
-	uint8_t elementCount;
-};
-
-ValueInfo valueInfos[] = {
-	{RoomControl::Command::ValueType::BUTTON, "Button", 0, 0},
-	{RoomControl::Command::ValueType::SWITCH, "Switch", 1, 1},
-	{RoomControl::Command::ValueType::ROCKER, "Rocker", 1, 1},
-	{RoomControl::Command::ValueType::PERCENTAGE, "Percentage", 1, 1},
-	{RoomControl::Command::ValueType::CELSIUS, "Celsius", 2, 1},
-	{RoomControl::Command::ValueType::FAHRENHEIT, "Fahrenheit", 2, 1},
-	{RoomControl::Command::ValueType::COLOR_RGB, "Color RGB", 3, 3},
-	{RoomControl::Command::ValueType::VALUE8, "Value 0-255", 1, 1},
-};
-*/
 
 // RoomControl
 // -----------
@@ -1974,31 +1739,37 @@ static void printDevices(Interface &interface) {
 	for (int i = 0; i < interface.getDeviceCount(); ++i) {
 		auto &device = interface.getDeviceByIndex(i);
 		Terminal::out << (hex(device.getId()) + '\n');
-		Array<Interface::EndpointType const> endpoints = device.getEndpoints();
+		Array<MessageType const> endpoints = device.getEndpoints();
 		for (auto endpoint : endpoints) {
-			Terminal::out << ('\t');
-			switch (endpoint & Interface::EndpointType::TYPE_MASK) {
-			case Interface::EndpointType::ON_OFF:
-				Terminal::out << ("ON_OFF");
+			Terminal::out << '\t' << getTypeName(endpoint);
+			/*switch (endpoint & MessageType::TYPE_MASK) {
+			case MessageType::ON_OFF:
+				Terminal::out << "ON_OFF";
 				break;
-			case Interface::EndpointType::TRIGGER:
-				Terminal::out << ("TRIGGER");
+			case MessageType::ON_OFF_TOGGLE:
+				Terminal::out << "ON_OFF_TOGGLE";
 				break;
-			case Interface::EndpointType::UP_DOWN:
-				Terminal::out << ("UP_DOWN");
+			case MessageType::TRIGGER:
+				Terminal::out << "TRIGGER";
 				break;
-			case Interface::EndpointType::BATTERY_LEVEL:
-				Terminal::out << ("BATTERY_LEVEL");
+			case MessageType::UP_DOWN:
+				Terminal::out << "UP_DOWN";
+				break;
+			case MessageType::UP_DOWN_TRIGGER:
+				Terminal::out << "UP_DOWN_TRIGGER";
+				break;
+			case MessageType::BATTERY_LEVEL:
+				Terminal::out << "BATTERY_LEVEL";
 				break;
 			default:
-				Terminal::out << ("unknown");
+				Terminal::out << "unknown";
 				break;
-			}
-			if ((endpoint & Interface::EndpointType::DIRECTION_MASK) == Interface::EndpointType::IN)
-				Terminal::out << (" IN");
+			}*/
+			if ((endpoint & MessageType::DIRECTION_MASK) == MessageType::IN)
+				Terminal::out << " In";
 			else
-				Terminal::out << (" OUT");
-			Terminal::out << ('\n');
+				Terminal::out << " Out";
+			Terminal::out << '\n';
 		}
 	}
 }
@@ -2026,12 +1797,12 @@ Coroutine RoomControl::testSwitch() {
 
 	Subscriber subscriber;
 	subscriber.subscriptionIndex = 0;
-	subscriber.messageType = MessageType::ON_OFF;
+	subscriber.messageType = MessageType::OFF_ON;
 	subscriber.barrier = &barrier;
 
 	Publisher publisher;
 	uint8_t message;
-	publisher.messageType = MessageType::ON_OFF;
+	publisher.messageType = MessageType::OFF_ON;
 	publisher.message = &message;
 	
 	//Interface &interface = this->busInterface;
@@ -2040,14 +1811,14 @@ Coroutine RoomControl::testSwitch() {
 	bool haveOut = false;
 	for (int i = 0; i < interface.getDeviceCount(); ++i) {
 		auto &device = interface.getDeviceByIndex(i);
-		Array<Interface::EndpointType const> endpoints = device.getEndpoints();
+		Array<MessageType const> endpoints = device.getEndpoints();
 		for (int endpointIndex = 0; endpointIndex < endpoints.count(); ++endpointIndex) {
 			auto endpointType = endpoints[endpointIndex];
-			if (!haveIn && (endpointType == Interface::EndpointType::ON_OFF_IN || endpointType == Interface::EndpointType::UP_DOWN_IN)) {
+			if (!haveIn && (endpointType == MessageType::OFF_ON_IN || endpointType == MessageType::UP_DOWN_IN)) {
 				haveIn = true;
 				device.addSubscriber(endpointIndex, subscriber);
 			}
-			if (!haveOut && endpointType == Interface::EndpointType::ON_OFF_OUT) {
+			if (!haveOut && endpointType == MessageType::OFF_ON_OUT) {
 				haveOut = true;
 				device.addPublisher(endpointIndex, publisher);
 			}
@@ -2100,7 +1871,7 @@ int RoomControl::connectFunction(RoomControl::FunctionFlash const &flash, Array<
 		// initialize subscriber
 		auto &subscriber = subscribers[inputIndex];
 		subscriber.subscriptionIndex = connection.plugIndex;
-		subscriber.messageType = info.type;
+		subscriber.messageType = info.messageType;
 		subscriber.convertOptions = connection.convertOptions;
 		subscriber.barrier = &barrier;
 
@@ -2130,9 +1901,9 @@ int RoomControl::connectFunction(RoomControl::FunctionFlash const &flash, Array<
 
 		// initialize publisher
 		auto &publisher = publishers[outputIndex];
-		publisher.messageType = info.type;
-		//publisher.
+		publisher.messageType = info.messageType;
 		publisher.message = states[connection.plugIndex - inputCount];
+		publisher.convertOptions = connection.convertOptions;
 
 		// add publisher to device
 		auto &interface = getInterface(connection);
@@ -2438,63 +2209,24 @@ Coroutine RoomControl::idleDisplay() {
 
 // menu helpers
 
-static String getTypeName(EndpointType endpointType) {
-	switch (endpointType & Interface::EndpointType::TYPE_MASK) {
-		case Interface::EndpointType::ON_OFF:
-			return "On/Off";
-		case Interface::EndpointType::TRIGGER:
-			return "Trigger";
-		case Interface::EndpointType::UP_DOWN:
-			return "Up/Down";
-
-		case Interface::EndpointType::LEVEL:
-			return "Level";
-
-		case Interface::EndpointType::TEMPERATURE:
-			return "Temperature";
-		case Interface::EndpointType::AIR_PRESSURE:
-			return "Air Pressure";
-		case Interface::EndpointType::AIR_HUMIDITY:
-			return "Air Humidity";
-		case Interface::EndpointType::AIR_VOC:
-			return "Air VOC";
-		case Interface::EndpointType::ILLUMINANCE:
-			return "Illuminance";
-
-		case Interface::EndpointType::VOLTAGE:
-			return "Voltage";
-		case Interface::EndpointType::CURRENT:
-			return "Current";
-		case Interface::EndpointType::BATTERY_LEVEL:
-			return "Battery Level";
-		case Interface::EndpointType::ENERGY_COUNTER:
-			return "Energy Counter";
-		case Interface::EndpointType::POWER:
-			return "Power";
-
-		default:
-			return "<unknown>";
-	}
+static int getComponentCount(MessageType messageType) {
+	return (messageType & MessageType::TYPE_MASK) == MessageType::MOVE_TO_LEVEL ? 2 : 1;
 }
 
-
-static int getComponentCount(EndpointType endpointType) {
-	return endpointType == EndpointType::LEVEL ? 2 : 1;
-}
-
-static Interface::EndpointType nextIn(EndpointType endpointType, int delta) {
-	static Interface::EndpointType const endpointTypes[] {
-		EndpointType::ON_OFF_IN,
-		EndpointType::TRIGGER_IN,
-		EndpointType::UP_DOWN_IN,
-		EndpointType::LEVEL_IN,
-
-		EndpointType::TEMPERATURE_IN,
+static MessageType nextIn(MessageType messageType, int delta) {
+	static MessageType const types[] {
+		MessageType::OFF_ON_IN,
+		MessageType::OFF_ON_TOGGLE_IN,
+		MessageType::TRIGGER_IN,
+		MessageType::UP_DOWN_IN,
+		MessageType::OPEN_CLOSE_IN,
+		MessageType::LEVEL_IN,
+		MessageType::TEMPERATURE_IN,
 	};
 
-	int index = array::binaryLowerBound(endpointTypes, [endpointType](Interface::EndpointType a) {return a < endpointType;});
-	index = (index + array::count(endpointTypes) * 256 + delta) % array::count(endpointTypes);
-	return endpointTypes[index];
+	int index = array::binaryLowerBound(types, [messageType](MessageType a) {return a < messageType;});
+	index = (index + array::count(types) * 256 + delta) % array::count(types);
+	return types[index];
 }
 
 void RoomControl::printPlug(Menu::Stream &stream, Connection const &plug) {
@@ -2513,6 +2245,7 @@ void RoomControl::printPlug(Menu::Stream &stream, Connection const &plug) {
 	}
 }
 
+/*
 static MessageType getDefaultMessageType(Interface::EndpointType endpointType) {
 	switch (endpointType & Interface::EndpointType::TYPE_MASK) {
 		case Interface::EndpointType::ON_OFF:
@@ -2533,22 +2266,9 @@ static MessageType getDefaultMessageType(Interface::EndpointType endpointType) {
 			break;
 	}
 	return MessageType::UNKNOWN;
-}
+}*/
 
-static ConvertOptions getDefaultConvertOptions(Interface::EndpointType endpointType) {
-	switch (endpointType & Interface::EndpointType::TYPE_MASK) {
-		case Interface::EndpointType::ON_OFF:
-			return {.i32 = int(Command::OFF) | (int(Command::ON) << 3) | (int(Command::TOGGLE) << 6)};
-		case Interface::EndpointType::TRIGGER:
-			return {.i32 = int(Command::RELEASE) | (int(Command::TRIGGER) << 3)};
-		case Interface::EndpointType::UP_DOWN:
-			return {.i32 = int(Command::RELEASE) | (int(Command::UP) << 3) | (int(Command::DOWN) << 6)};
-		default:
-			break;
-	}
-	return {};
-}
-
+/*
 static Message getDefaultMessage(Interface::EndpointType endpointType) {
 	switch (endpointType & Interface::EndpointType::TYPE_MASK) {
 		case Interface::EndpointType::ON_OFF:
@@ -2581,6 +2301,116 @@ static Message getDefaultMessage(MessageType messageType) {
 	}
 	return {};
 }
+*/
+static Message getDefaultMessage(MessageType messageType) {
+	switch (messageType & MessageType::TYPE_MASK) {
+		case MessageType::OFF_ON:
+		case MessageType::OFF_ON_TOGGLE:
+		case MessageType::TRIGGER:
+		case MessageType::UP_DOWN:
+		case MessageType::OPEN_CLOSE:
+			return {.command = 1};
+		case MessageType::TEMPERATURE:
+			return {.temperature = 273.15f + 20.0f};
+		case MessageType::SET_TEMPERATURE:
+			return {.setTemperature = 273.15f + 20.0f};
+		case MessageType::PRESSURE:
+			return {.pressure = 1000.0f * 100.0f};
+		default:
+			return {};
+	}
+}
+
+// command convert matrix
+static int const commandConvert[5][5] = {
+	// OFF_ON ->
+	{
+		0 | (1 << 3) | -1 << 6, // OFF_ON
+		0 | (1 << 3) | -1 << 6, // OFF_ON_TOGGLE
+		7 | (1 << 3) | -1 << 6, // TRIGGER
+		7 | (1 << 3) | -1 << 6, // UP_DOWN
+		0 | (1 << 3) | -1 << 6, // OPEN_CLOSE
+	},
+	// OFF_ON_TOGGLE ->
+	{
+		0 | (1 << 3) | -1 << 6, // OFF_ON
+		0 | (1 << 3) | (2 << 6) | -1 << 9, // OFF_ON_TOGGLE
+		7 | (7 << 3) | (1 << 6) | -1 << 9, // TRIGGER
+		7 | (1 << 3) | -1 << 6, // UP_DOWN
+		0 | (1 << 3) | -1 << 6, // OPEN_CLOSE
+	},
+	// TRIGGER ->
+	{
+		7 | (1 << 3) | -1 << 6, // OFF_ON
+		7 | (2 << 3) | -1 << 6, // OFF_ON_TOGGLE
+		0 | (1 << 3) | -1 << 6, // TRIGGER
+		0 | (1 << 3) | -1 << 6, // UP_DOWN
+		7 | (1 << 3) | -1 << 6, // OPEN_CLOSE
+	},
+	// UP_DOWN ->
+	{
+		7 | (1 << 3) | (0 << 6) | -1 << 9, // OFF_ON
+		7 | (1 << 3) | (0 << 6) | -1 << 9, // OFF_ON_TOGGLE
+		0 | (1 << 3) | -1 << 6, // TRIGGER
+		0 | (1 << 3) | (2 << 6) | -1 << 9, // UP_DOWN
+		7 | (1 << 3) | (0 << 6) | -1 << 9, // OPEN_CLOSE
+	},
+	// OPEN_CLOSE ->
+	{
+		0 | (1 << 3) | -1 << 6, // OFF_ON
+		0 | (1 << 3) | -1 << 6, // OFF_ON_TOGGLE
+		7 | (1 << 3) | -1 << 6, // TRIGGER
+		7 | (1 << 3) | -1 << 6, // UP_DOWN
+		0 | (1 << 3) | -1 << 6, // OPEN_CLOSE
+	},
+};
+
+// default convert options for message logger and generator
+static ConvertOptions getDefaultConvertOptions(MessageType messageType) {
+
+	switch (messageType & MessageType::TYPE_MASK) {
+		case MessageType::OFF_ON:
+		case MessageType::OFF_ON_TOGGLE:
+		case MessageType::TRIGGER:
+		case MessageType::UP_DOWN:
+		case MessageType::OPEN_CLOSE: {
+			auto mt = int(messageType & MessageType::TYPE_MASK) - int(MessageType::OFF_ON);
+			return {.i32 = commandConvert[mt][mt]};
+		}
+		default:
+			break;
+	}
+	return {};
+}
+
+// default convert options for function connection
+static ConvertOptions getDefaultConvertOptions(MessageType dstType, MessageType srcType) {
+	switch (dstType & MessageType::TYPE_MASK) {
+		case MessageType::OFF_ON:
+		case MessageType::OFF_ON_TOGGLE:
+		case MessageType::TRIGGER:
+		case MessageType::UP_DOWN:
+		case MessageType::OPEN_CLOSE:
+			switch (srcType & MessageType::TYPE_MASK) {
+				case MessageType::OFF_ON:
+				case MessageType::OFF_ON_TOGGLE:
+				case MessageType::TRIGGER:
+				case MessageType::UP_DOWN:
+				case MessageType::OPEN_CLOSE: {
+					auto d = int(dstType & MessageType::TYPE_MASK) - int(MessageType::OFF_ON);
+					auto s = int(srcType & MessageType::TYPE_MASK) - int(MessageType::OFF_ON);
+					return {.i32 = commandConvert[s][d]};
+				}
+				default:
+					break;
+			}
+			break;
+		default:
+			;
+	}
+	return {};
+}
+
 
 float RoomControl::stepTemperature(float value, int delta) {
 	return std::round(value * 2.0f + float(delta)) * 0.5f;
@@ -2594,27 +2424,33 @@ String RoomControl::getTemperatureUnit() {
 	return "oC";
 }
 
-void RoomControl::editMessage(Menu::Stream &stream, Interface::EndpointType endpointType,
+static void editCommand(Menu::Stream &stream, Message &message, bool editMessage, int delta, Array<uint8_t const> commands) {
+	if (editMessage)
+		message.command = (message.command + 30 + delta) % commands.count();
+	stream << underline(commandNames[commands[message.command]], editMessage);
+}
+
+void RoomControl::editMessage(Menu::Stream &stream, MessageType messageType,
 	Message &message, bool editMessage1, bool editMessage2, int delta)
 {
 	// edit and display message values
-	switch (endpointType & Interface::EndpointType::TYPE_MASK) {
-		case Interface::EndpointType::ON_OFF:
-			if (editMessage1)
-				message.onOff = (message.onOff + 30 + delta) % 3;
-			stream << underline(onOffCommands[message.onOff], editMessage1);
+	switch (messageType & MessageType::TYPE_MASK) {
+		case MessageType::OFF_ON:
+			editCommand(stream, message, editMessage1, delta, onOffCommands);
 			break;
-		case Interface::EndpointType::TRIGGER:
-			if (editMessage1)
-				message.trigger = (message.trigger + delta) & 1;
-			stream << underline(triggerCommands[message.trigger], editMessage1);
+		case MessageType::OFF_ON_TOGGLE:
+			editCommand(stream, message, editMessage1, delta, onOffToggleCommands);
 			break;
-		case Interface::EndpointType::UP_DOWN:
-			if (editMessage1)
-				message.upDown = (message.upDown + 30 + delta) % 3;
-			stream << underline(upDownCommands[message.upDown], editMessage1);
+		case MessageType::TRIGGER:
+			editCommand(stream, message, editMessage1, delta, triggerCommands);
 			break;
-		case Interface::EndpointType::LEVEL:
+		case MessageType::UP_DOWN:
+			editCommand(stream, message, editMessage1, delta, upDownCommands);
+			break;
+		case MessageType::OPEN_CLOSE:
+			editCommand(stream, message, editMessage1, delta, openCloseCommands);
+			break;
+		case MessageType::LEVEL:
 			if (editMessage1)
 				message.moveToLevel.level = clamp(float(message.moveToLevel.level) + delta * 0.05f, 0.0f, 1.0f);
 			if (editMessage2)
@@ -2622,12 +2458,12 @@ void RoomControl::editMessage(Menu::Stream &stream, Interface::EndpointType endp
 			stream << underline(flt(message.moveToLevel.level, 2), editMessage1) << ' ';
 			stream << underline(flt(message.moveToLevel.move, 1), editMessage2) << 's';
 			break;
-		case Interface::EndpointType::TEMPERATURE:
+		case MessageType::TEMPERATURE:
 			if (editMessage1)
 				message.temperature = stepTemperature(message.temperature, delta);
 			stream << underline(displayTemperature(message.temperature), editMessage1) << getTemperatureUnit();
 			break;
-		case Interface::EndpointType::AIR_PRESSURE:
+		case MessageType::PRESSURE:
 			if (editMessage1)
 				message.pressure = message.pressure + delta;
 			stream << underline(flt(message.pressure, 0), editMessage1) << "hPa";
@@ -2764,14 +2600,8 @@ AwaitableCoroutine RoomControl::alarmMenu(AlarmInterface &alarms, int index, Ala
 		if (index < alarms.getDeviceCount()) {
 			auto &device = alarms.getDeviceByIndex(index);
 
-			//if (menu.entry("Endpoints"))
-			//	co_await endpointsMenu(device);
-
 			if (menu.entry("Message Logger"))
 				co_await messageLogger(device);
-
-			//if (menu.entry("Message Generator"))
-			//	co_await messageGenerator(device);
 
 			// test alarm
 			menu.stream() << "Test (-> " << dec(alarms.getSubscriberCount(index)) << ')';
@@ -2838,11 +2668,11 @@ AwaitableCoroutine RoomControl::alarmActionsMenu(AlarmInterface::AlarmFlash &fla
 	while (true) {
 		// actions: messages to send when alarm goes off
 		for (int i = 0; i < flash.endpointCount; ++i) {
-			auto endpointType = flash.endpoints[i];
+			auto messageType = flash.endpoints[i];
 
 			// get component to edit
-			int edit = menu.getEdit(1 + getComponentCount(endpointType));
-			bool editEndpointType = edit == 1;
+			int edit = menu.getEdit(1 + getComponentCount(messageType));
+			bool editMessageType = edit == 1;
 			bool editMessage1 = edit == 2;
 			bool editMessage2 = edit == 3;
 			int delta = menu.getDelta();
@@ -2850,24 +2680,25 @@ AwaitableCoroutine RoomControl::alarmActionsMenu(AlarmInterface::AlarmFlash &fla
 			auto stream = menu.stream();
 
 			// edit endpoint type
-			if (editEndpointType) {
-				endpointType = nextIn(endpointType, delta);
-				flash.endpoints[i] = endpointType;
+			if (editMessageType && delta != 0) {
+				messageType = nextIn(messageType, delta);
+				flash.endpoints[i] = messageType;
+				flash.messages[i] = getDefaultMessage(messageType);
 			}
-			stream << underline(getTypeName(endpointType), editEndpointType);
+			stream << underline(getTypeName(messageType), editMessageType);
 			stream << ": ";
 
 			// edit message
-			editMessage(stream, endpointType, flash.messages[i], editMessage1, editMessage2, delta);
+			editMessage(stream, messageType, flash.messages[i], editMessage1, editMessage2, delta);
 			menu.entry();
 		}
 
 		// add action
 		if (flash.endpointCount < AlarmInterface::AlarmFlash::MAX_ENDPOINT_COUNT && menu.entry("Add")) {
 			int i = flash.endpointCount;
-			auto endpointType = Interface::EndpointType::ON_OFF_IN;
-			flash.endpoints[i] = endpointType;
-			flash.messages[i] = getDefaultMessage(endpointType);
+			auto messageType = MessageType::OFF_ON_IN;
+			flash.endpoints[i] = messageType;
+			flash.messages[i] = getDefaultMessage(messageType);
 			++flash.endpointCount;
 		}
 
@@ -2888,12 +2719,12 @@ AwaitableCoroutine RoomControl::alarmActionsMenu(AlarmInterface::AlarmFlash &fla
 AwaitableCoroutine RoomControl::endpointsMenu(Interface::Device &device) {
 	Menu menu(this->swapChain);
 	while (true) {
-		Array<Interface::EndpointType const> endpoints = device.getEndpoints();
+		Array<MessageType const> endpoints = device.getEndpoints();
 		for (int i = 0; i < endpoints.count(); ++i) {
-			auto endpointType = endpoints[i];
+			auto messageType = endpoints[i];
 			auto stream = menu.stream();
-			stream << dec(i) << ": " << getTypeName(endpointType);
-			if ((endpointType & Interface::EndpointType::DIRECTION_MASK) == Interface::EndpointType::IN)
+			stream << dec(i) << ": " << getTypeName(messageType);
+			if ((messageType & MessageType::DIRECTION_MASK) == MessageType::IN)
 				stream << " In";
 			else
 				stream << " Out";
@@ -2925,7 +2756,6 @@ AwaitableCoroutine RoomControl::messageLogger(Interface::Device &device) {
 	// event queue
 	struct Event {
 		uint8_t endpointIndex;
-		EndpointType endpointType;
 		MessageType messageType;
 		Message message;
 	};
@@ -2942,11 +2772,22 @@ AwaitableCoroutine RoomControl::messageLogger(Interface::Device &device) {
 			Event &event = queue[i];
 			auto stream = menu.stream();
 			stream << dec(event.endpointIndex) << ": ";
-			switch (event.messageType) {
-				case MessageType::COMMAND:
-					stream << getCommandName(event.endpointType, event.message.command);
+			switch (event.messageType & MessageType::TYPE_MASK) {
+				case MessageType::OFF_ON:
+					stream << commandNames[onOffCommands[event.message.command]];
 					break;
-
+				case MessageType::OFF_ON_TOGGLE:
+					stream << commandNames[onOffToggleCommands[event.message.command]];
+					break;
+				case MessageType::TRIGGER:
+					stream << commandNames[triggerCommands[event.message.command]];
+					break;
+				case MessageType::UP_DOWN:
+					stream << commandNames[upDownCommands[event.message.command]];
+					break;
+				case MessageType::OPEN_CLOSE:
+					stream << commandNames[openCloseCommands[event.message.command]];
+					break;
 				case MessageType::TEMPERATURE:
 					stream << flt(event.message.temperature, 1) << "oC";
 					break;
@@ -2963,12 +2804,12 @@ AwaitableCoroutine RoomControl::messageLogger(Interface::Device &device) {
 			break;
 
 		// update subscribers
-		Array<Interface::EndpointType const> endpoints = device.getEndpoints();
+		Array<MessageType const> endpoints = device.getEndpoints();
 		for (int endpointIndex = 0; endpointIndex < min(endpoints.count(), array::count(subscribers)); ++endpointIndex) {
 			auto &subscriber = subscribers[endpointIndex];
-			auto endpointType = endpoints[endpointIndex];
-			subscriber.messageType = getDefaultMessageType(endpointType);
-			subscriber.convertOptions = getDefaultConvertOptions(endpointType);
+			auto messageType = endpoints[endpointIndex];
+			subscriber.messageType = messageType;
+			subscriber.convertOptions = getDefaultConvertOptions(messageType);
 		}
 
 		// get the empty event at the back of the queue
@@ -2978,7 +2819,6 @@ AwaitableCoroutine RoomControl::messageLogger(Interface::Device &device) {
 		int selected = co_await select(menu.show(), barrier.wait(event.endpointIndex, &event.message), Timer::sleep(250ms));
 		if (selected == 2) {
 			// received an event: add new empty event at the back of the queue
-			event.endpointType = endpoints[event.endpointIndex];
 			event.messageType = subscribers[event.endpointIndex].messageType;
 			queue.addBack();
 		}
@@ -2996,14 +2836,14 @@ AwaitableCoroutine RoomControl::messageGenerator(Interface::Device &device) {
 	// menu loop
 	Menu menu(this->swapChain);
 	while (true) {
-		Array<Interface::EndpointType const> endpoints = device.getEndpoints();
+		Array<MessageType const> endpoints = device.getEndpoints();
 		if (endpoints.count() > 0) {
 			// get endpoint type
 			endpointIndex = clamp(endpointIndex, 0, endpoints.count() - 1);
-			auto endpointType = endpoints[endpointIndex];
+			auto messageType = endpoints[endpointIndex];
 
 			// get message component to edit (some messages such as MOVE_TO_LEVEL have two components)
-			int edit = menu.getEdit(1 + getComponentCount(endpointType));
+			int edit = menu.getEdit(1 + getComponentCount(messageType));
 			bool editIndex = edit == 1;
 			bool editMessage1 = edit == 2;
 			bool editMessage2 = edit == 3;
@@ -3012,20 +2852,20 @@ AwaitableCoroutine RoomControl::messageGenerator(Interface::Device &device) {
 			// edit endpoint index
 			if (editIndex) {
 				endpointIndex = clamp(endpointIndex + delta, 0, endpoints.count() - 1);
-				endpointType = endpoints[endpointIndex];
+				messageType = endpoints[endpointIndex];
 			}
 
 			// update message type and reset message if type has changed
-			auto messageType = getDefaultMessageType(endpointType);
 			if (messageType != publisher.messageType) {
 				publisher.messageType = messageType;
-				message = getDefaultMessage(endpointType);
+				message = getDefaultMessage(messageType);
+				publisher.convertOptions = getDefaultConvertOptions(messageType);
 			}
 
 			// edit message
 			auto stream = menu.stream();
 			stream << underline(dec(endpointIndex), editIndex) << ": ";
-			editMessage(stream, endpointType, /*messageType,*/ message, editMessage1, editMessage2, delta);
+			editMessage(stream, messageType, message, editMessage1, editMessage2, delta);
 			menu.entry();
 
 			// send message
@@ -3142,10 +2982,8 @@ AwaitableCoroutine RoomControl::functionMenu(int index, FunctionFlash &flash) {
 
 		// edit function type
 		bool editType = menu.getEdit(1) == 1;
-		if (editType && delta != 0) {
-			int typeCount = int(FunctionFlash::Type::TYPE_COUNT);
-			flash.setType(FunctionFlash::Type((int(flash.type) + typeCount * 256 + delta) % typeCount));
-		}
+		if (editType && delta != 0)
+			flash.setType(nextFunctionType(flash.type, delta));
 
 		// get info for function type
 		auto &functionInfo = getFunctionInfo(flash.type);
@@ -3161,7 +2999,7 @@ AwaitableCoroutine RoomControl::functionMenu(int index, FunctionFlash &flash) {
 		// type dependent configuration
 		switch (flash.type) {
 			case FunctionFlash::Type::TIMEOUT_SWITCH: {
-				auto &config = flash.getConfig<TimeoutSwitchConfig>();
+				auto &config = flash.getConfig<TimeoutSwitch::Config>();
 
 				auto stream = menu.stream();
 				stream << "Timeout: ";
@@ -3169,7 +3007,7 @@ AwaitableCoroutine RoomControl::functionMenu(int index, FunctionFlash &flash) {
 				break;
 			}
 			case FunctionFlash::Type::TIMED_BLIND: {
-				auto &config = flash.getConfig<TimedBlindConfig>();
+				auto &config = flash.getConfig<TimedBlind::Config>();
 
 				// minimum rocker hold time to cause switch-off on release
 				auto stream1 = menu.stream();
@@ -3186,7 +3024,7 @@ AwaitableCoroutine RoomControl::functionMenu(int index, FunctionFlash &flash) {
 					for (int connectionIndex = 0; connectionIndex < flash.connectionCount; ++connectionIndex, ++it) {
 						auto &connection = it.getConnection();
 						auto &info = functionInfo.plugs[connection.plugIndex];
-						if (info.isOutput() && info.type == MessageType::UP_DOWN && !connection.isMqtt()) {
+						if (info.isOutput() && info.messageType == MessageType::UP_DOWN && !connection.isMqtt()) {
 							auto &interface = getInterface(connection);
 							auto *device = interface.getDeviceById(connection.deviceId);
 							if (device != nullptr)
@@ -3212,6 +3050,7 @@ AwaitableCoroutine RoomControl::functionMenu(int index, FunctionFlash &flash) {
 			menu.stream() << (info.isInput() ? "Input:" : "Output:") << ' ' << info.name;
 			menu.label();
 
+			// edit existing connections
 			while (i < flash.connectionCount) {
 				auto &plug = it.getConnection();
 				if (plug.plugIndex != plugIndex)
@@ -3220,18 +3059,22 @@ AwaitableCoroutine RoomControl::functionMenu(int index, FunctionFlash &flash) {
 				auto stream = menu.stream();
 				printPlug(stream, plug);
 				if (menu.entry())
-					co_await editFunctionPlug(it, plug, info, false);
+					co_await editFunctionConnection(it, plug, info, false);
 
 				++i;
 				++it;
 			}
+
+			// add new connection if maximum connection count not reached
 			if (((info.isInput() && inputCount < MAX_INPUT_COUNT) || (info.isOutput() && outputCount < MAX_OUTPUT_COUNT))
 				&& menu.entry("Connect..."))
 			{
 				Connection plug;
 				plug.plugIndex = plugIndex;
-				co_await editFunctionPlug(it, plug, info, true);
+				co_await editFunctionConnection(it, plug, info, true);
 			}
+
+			// count inputs and outputs
 			if (info.isInput())
 				++inputCount;
 			else
@@ -3327,48 +3170,84 @@ AwaitableCoroutine RoomControl::measureRunTime(Interface::Device &device, uint8_
 	}
 }
 
-static void editConvertOptions(Menu &menu, ConvertOptions &convertOptions, EndpointType endpointType,
-	RoomControl::PlugInfo const &info, Array<const String> commandNames)
-{
+static void editConvertOptionsCommandCommand(Menu &menu, ConvertOptions &convertOptions, Array<uint8_t const> dstCommands, Array<uint8_t const> srcCommands) {
 	int delta = menu.getDelta();
-	switch (info.type) {
-		case MessageType::COMMAND:
-		case MessageType::INDEXED_COMMAND:
-			for (int i = 0; i < commandNames.count(); ++i) {
-				int supportedFlags = info.flags /*flag(Command::OFF) | flag(Command::ON) | flag(Command::TOGGLE)*/ | 1 << 7;
-				auto stream = menu.stream();
-				stream << commandNames[i] << " -> ";
 
-				int offset = i * 3;
-				int command = (convertOptions.i32 >> offset) & 7;
-				bool editCommand = menu.getEdit(1) == 1;
-				while (editCommand && delta != 0) {
-					if (delta > 0) {
-						command = (command + 1) & 7;
-						if ((supportedFlags & (1 << command)) != 0)
-							--delta;
-					} else {
-						command = (command - 1) & 7;
-						if ((supportedFlags & (1 << command)) != 0)
-							++delta;
-					}
-				}
-				convertOptions.i32 = (convertOptions.i32 & ~(7 << offset))
-					| command << offset;
+	// one menu entry per source command
+	for (int i = 0; i < srcCommands.count(); ++i) {
+		auto stream = menu.stream();
 
-				stream << underline(command < 7 ? getCommandName(endpointType, Command(command)) : "(discard)", editCommand);
-				menu.entry();
-			}
-			break;
-		//case MessageType::SET_TEMPERATURE:
-		//	return 1;
-		default:
-			;
+		// source command
+		stream << commandNames[srcCommands[i]] << " -> ";
+
+		// edit destination command
+		int offset = i * 3;
+		int command = (convertOptions.i32 >> offset) & 7;
+		bool editCommand = menu.getEdit(1) == 1;
+		int commandCount = dstCommands.count();
+		if (editCommand) {
+			command += delta;
+			while (command > commandCount)
+				command -= commandCount + 1;
+			while (command < 0)
+				command += commandCount + 1;
+			if (command >= commandCount)
+				command = 7;
+			convertOptions.i32 = (convertOptions.i32 & ~(7 << offset)) | command << offset;
+		}
+
+		stream << underline(command < commandCount ? commandNames[dstCommands[command]] : "(discard)", editCommand);
+		menu.entry();
+	}
+	for (int i = srcCommands.count(); i < 4; ++i) {
+		int offset = i * 3;
+		convertOptions.i32 |= 7 << offset;
 	}
 }
 
-AwaitableCoroutine RoomControl::editFunctionPlug(ConnectionIterator &it, Connection &connection, PlugInfo const &info,
-	bool add)
+static void editConvertOptionsCommand(Menu &menu, ConvertOptions &convertOptions, Array<uint8_t const> dstCommands, MessageType srcType) {
+	switch (srcType & MessageType::TYPE_MASK) {
+		case MessageType::OFF_ON:
+			editConvertOptionsCommandCommand(menu, convertOptions, dstCommands, onOffCommands);
+			break;
+		case MessageType::OFF_ON_TOGGLE:
+			editConvertOptionsCommandCommand(menu, convertOptions, dstCommands, onOffToggleCommands);
+			break;
+		case MessageType::TRIGGER:
+			editConvertOptionsCommandCommand(menu, convertOptions, dstCommands, triggerCommands);
+			break;
+		case MessageType::UP_DOWN:
+			editConvertOptionsCommandCommand(menu, convertOptions, dstCommands, upDownCommands);
+			break;
+		case MessageType::OPEN_CLOSE:
+			editConvertOptionsCommandCommand(menu, convertOptions, dstCommands, openCloseCommands);
+			break;
+	}
+}
+
+static void editConvertOptions(Menu &menu, ConvertOptions &convertOptions, MessageType dstType, MessageType srcType)
+{
+	switch (dstType & MessageType::TYPE_MASK) {
+		case MessageType::OFF_ON:
+			editConvertOptionsCommand(menu, convertOptions, onOffCommands, srcType);
+			break;
+		case MessageType::OFF_ON_TOGGLE:
+			editConvertOptionsCommand(menu, convertOptions, onOffToggleCommands, srcType);
+			break;
+		case MessageType::TRIGGER:
+			editConvertOptionsCommand(menu, convertOptions, triggerCommands, srcType);
+			break;
+		case MessageType::UP_DOWN:
+			editConvertOptionsCommand(menu, convertOptions, upDownCommands, srcType);
+			break;
+		case MessageType::OPEN_CLOSE:
+			editConvertOptionsCommand(menu, convertOptions, openCloseCommands, srcType);
+			break;
+	}
+}
+
+AwaitableCoroutine RoomControl::editFunctionConnection(ConnectionIterator &it, Connection &connection,
+	PlugInfo const &info, bool add)
 {
 	// menu loop
 	Menu menu(this->swapChain);
@@ -3398,102 +3277,13 @@ AwaitableCoroutine RoomControl::editFunctionPlug(ConnectionIterator &it, Connect
 		auto *device = getInterface(connection).getDeviceById(connection.deviceId);
 		if (device != nullptr) {
 			auto endpoints = device->getEndpoints();
-			auto endpointType = endpoints[connection.endpointIndex];
+			auto messageType = endpoints[connection.endpointIndex];
 
-			if (info.isInput()) {
-				switch (endpointType) {
-					case EndpointType::ON_OFF_IN:
-						editConvertOptions(menu, connection.convertOptions, endpointType, info, onOffCommands);
-						break;
-					case EndpointType::TRIGGER_IN:
-						editConvertOptions(menu, connection.convertOptions, endpointType, info, triggerCommands);
-						break;
-					case EndpointType::UP_DOWN_IN:
-						editConvertOptions(menu, connection.convertOptions, endpointType, info, upDownCommands);
-						break;
-						/*
-						switch (info.type) {
-							case MessageType::COMMAND:
-							case MessageType::INDEXED_COMMAND:
-								for (int i = 0; i < 3; ++i) {
-									int supportedFlags = flag(Command::OFF) | flag(Command::ON) | flag(Command::TOGGLE) | 1 << 7;
-									auto stream = menu.stream();
-									stream << upDownCommands[i] << " -> ";
-
-									int offset = i * 3;
-									int command = (connection.convertOptions.i32 >> offset) & 7;
-									bool editCommand = menu.getEdit(1) == 1;
-									while (editCommand && delta != 0) {
-										if (delta > 0) {
-											command = (command + 1) & 7;
-											if ((supportedFlags & (1 << command)) != 0)
-												--delta;
-										} else {
-											command = (command - 1) & 7;
-											if ((supportedFlags & (1 << command)) != 0)
-												++delta;
-										}
-									}
-									connection.convertOptions.i32 = (connection.convertOptions.i32 & ~(7 << offset))
-										| command << offset;
-
-									String c;
-									switch (command) {
-										case 0:
-											c = "Off";
-											break;
-										case 1:
-											c = "On";
-											break;
-										case 2:
-											c = "Toggle";
-											break;
-										case 3:
-											c = "Up";
-											break;
-										case 4:
-											c = "Down";
-											break;
-										case 5:
-											c = "Release";
-											break;
-										default:
-											c = "(discard)";
-									}
-									stream << underline(c, editCommand);
-									menu.entry();
-								}
-								break;
-							//case MessageType::SET_TEMPERATURE:
-							//	return 1;
-							default:
-								;
-						}*/
-						break;
-					case EndpointType::TEMPERATURE_IN:
-						//return dstType == MessageType::TEMPERATURE ? 1 : 0;
-						break;
-					default:
-						;
-				}
-			}
+			if (info.isInput())
+				editConvertOptions(menu, connection.convertOptions, info.messageType, messageType);
+			else
+				editConvertOptions(menu, connection.convertOptions, messageType, info.messageType);
 			menu.line();
-
-
-			/*
-			int modeCount = isCompatible(info, endpoints[plug.endpointIndex]);
-			if (modeCount > 1) {
-				// edit mode
-				bool editMode = menu.getEdit(1) == 1;
-				if (editMode)
-					plug.setMode((plug.getMode() + modeCount * 256 + delta) % modeCount);
-
-				// mode
-				int mode = plug.getMode();
-				static String const modes[4] = {"Default", "Inverse Default", "Alternate", "Inverse Alternate"};
-				menu.stream() << "Mode: " << underline(modes[mode], editMode);
-				menu.entry();
-			}*/
 		}
 
 		if (add) {
@@ -3563,18 +3353,22 @@ AwaitableCoroutine RoomControl::selectFunctionEndpoint(Interface::Device &device
 		// list all compatible endpoints of device
 		auto endpoints = device.getEndpoints();
 		for (int i = 0; i < endpoints.count(); ++i) {
-			auto endpointType = endpoints[i];
-			if (isCompatible(info, endpointType) != 0) {
+			auto messageType = endpoints[i];
+			if (isCompatible(info, messageType) != 0) {
 				// endpoint is compatible
-				String endpointName = getTypeName(endpointType);
-				menu.stream() << dec(i) << " (" << endpointName << ')';
+				String typeName = getTypeName(messageType);
+				menu.stream() << dec(i) << " (" << typeName << ')';
 				if (menu.entry()) {
 					// endpoint selected
 					connection.deviceId = device.getId();
 					connection.endpointIndex = i;
-
+					if (info.isInput())
+						connection.convertOptions = getDefaultConvertOptions(info.messageType, messageType);
+					else
+						connection.convertOptions = getDefaultConvertOptions(messageType, info.messageType);
+/*
 					// set default convert options
-					switch (endpointType) {
+					switch (messageType) {
 						case EndpointType::ON_OFF_IN:
 							connection.convertOptions.i32 =
 								selectCommand(info.flags, Command::OFF, Command::DOWN)
@@ -3594,7 +3388,7 @@ AwaitableCoroutine RoomControl::selectFunctionEndpoint(Interface::Device &device
 							break;
 						}
 					}
-
+*/
 					co_return;
 				}
 			}
@@ -3672,36 +3466,36 @@ RoomControl::FunctionFlash::FunctionFlash(FunctionFlash const &flash)
 }
 
 static int getSize(RoomControl::FunctionFlash::Type type) {
-	switch (type) {
-		case RoomControl::FunctionFlash::Type::SIMPLE_SWITCH:
-			return 0;
-		case RoomControl::FunctionFlash::Type::TIMEOUT_SWITCH:
-			return sizeof(RoomControl::TimeoutSwitchConfig);
-		case RoomControl::FunctionFlash::Type::TIMED_BLIND:
-			return sizeof(RoomControl::TimedBlindConfig);
-	}
-	assert(false);
-	return 0;
+	return getFunctionInfo(type).configSize;
 }
 
 void RoomControl::FunctionFlash::setType(Type type) {
 	int oldSize = (getSize(this->type) + 3) / 4;
 	int newSize = (getSize(type) + 3) / 4;
+	bool keepConnections = getFunctionInfo(this->type).typeClass == getFunctionInfo(type).typeClass;
 	this->type = type;
 
-	// resize config
-	int d = newSize - oldSize;
-	if (d > 0)
-		array::insert(this->bufferSize + d - this->configOffset, this->buffer + this->configOffset, d);
-	else if (d < 0)
-		array::erase(this->bufferSize - this->configOffset, this->buffer + this->configOffset, -d);
+
+	if (keepConnections) {
+		// resize config and keep connections
+		int d = newSize - oldSize;
+		if (d > 0)
+			array::insert(this->bufferSize + d - this->configOffset, this->buffer + this->configOffset, d);
+		else if (d < 0)
+			array::erase(this->bufferSize - this->configOffset, this->buffer + this->configOffset, -d);
+
+		// adjust offsets
+		this->connectionsOffset += d;
+		this->bufferSize += d;
+	} else {
+		// clear connections
+		this->connectionCount = 0;
+		this->connectionsOffset = this->configOffset + newSize;
+		this->bufferSize = this->connectionsOffset;
+	}
 
 	// clear config
 	array::fill(newSize, this->buffer + this->configOffset, 0);
-
-	// adjust offsets
-	this->connectionsOffset += d;
-	this->bufferSize += d;
 }
 
 void RoomControl::FunctionFlash::setName(String name) {
@@ -3717,6 +3511,8 @@ RoomControl::Function *RoomControl::FunctionFlash::allocate() const {
 			return new TimeoutSwitch(flash);
 		case Type::TIMED_BLIND:
 			return new TimedBlind(flash);
+		case Type::HEATING_CONTROL:
+			return new HeatingControl(flash);
 	}
 	assert(false);
 	return nullptr;
@@ -3785,7 +3581,7 @@ Coroutine RoomControl::TimeoutSwitch::start(RoomControl &roomControl) {
 	// connect inputs and outputs
 	int outputCount = roomControl.connectFunction(**this, switchPlugs, subscribers, barrier, publishers, states);
 
-	auto duration = (*this)->getConfig<TimeoutSwitchConfig>().duration;
+	auto duration = (*this)->getConfig<Config>().duration;
 	//SystemTime time;
 	//uint32_t duration;
 
@@ -3867,10 +3663,10 @@ Coroutine RoomControl::TimedBlind::start(RoomControl &roomControl) {
 	int outputCount = roomControl.connectFunction(**this, blindPlugs, subscribers, barrier, publishers, states);
 
 	// rocker timeout
-	SystemDuration const holdTime = ((*this)->getConfig<TimedBlindConfig>().holdTime * 1s) / 100;
+	SystemDuration const holdTime = ((*this)->getConfig<Config>().holdTime * 1s) / 100;
 
 	// position
-	SystemDuration const maxPosition = ((*this)->getConfig<TimedBlindConfig>().runTime * 1s) / 100;
+	SystemDuration const maxPosition = ((*this)->getConfig<Config>().runTime * 1s) / 100;
 	SystemDuration position = maxPosition / 2;
 	SystemDuration targetPosition = 0s;
 	SystemTime startTime;
@@ -3881,7 +3677,7 @@ Coroutine RoomControl::TimedBlind::start(RoomControl &roomControl) {
 		// wait for message
 		uint8_t inputIndex;
 		union {
-			Command command;
+			uint8_t command;
 			FloatWithFlag level;
 		} message;
 		if (state == 0) {
@@ -3910,9 +3706,9 @@ Coroutine RoomControl::TimedBlind::start(RoomControl &roomControl) {
 		}
 
 		// process message
-		if (inputIndex == 0) {
-			// up/down
-			if (message.command == Command::RELEASE) {
+		if (inputIndex <= 1) {
+			// up/down or trigger
+			if (message.command == 0) {
 				// released: stop if timeout elapsed
 				if (Timer::now() > startTime + holdTime)
 					targetPosition = position;
@@ -3920,22 +3716,22 @@ Coroutine RoomControl::TimedBlind::start(RoomControl &roomControl) {
 				// up or down pressed
 				if (state == 0) {
 					// start if currently stopped
-					if (message.command == Command::UP) {
-						// up
-						targetPosition = 0s;
-					} else if (message.command == Command::DOWN) {
-						// down
-						targetPosition = maxPosition;
-					} else {
+					if (inputIndex == 1) {
 						// trigger
 						targetPosition = ((up || (targetPosition == 0s)) && targetPosition < maxPosition) ? maxPosition : 0s;
+					} else if (message.command == 1) {
+						// up
+						targetPosition = 0s;
+					} else {
+						// down
+						targetPosition = maxPosition;
 					}
 				} else {
 					// stop if currently moving
 					targetPosition = position;
 				}
 			}
-		} else if (inputIndex == 1) {
+		} else if (inputIndex == 2) {
 			// position
 			targetPosition = maxPosition * message.level;
 		}

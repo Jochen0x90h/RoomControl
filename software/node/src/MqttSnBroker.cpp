@@ -343,7 +343,7 @@ static bool writeMessage(MessageWriter &w, MessageType srcType, void const *srcM
 	static char const upDown[] = {'#', '+', '-'};
 
 	switch (srcType) {
-	case MessageType::ON_OFF:
+/*	case MessageType::ON_OFF:
 		w << onOff[src.onOff];
 		break;
 	case MessageType::ON_OFF2:
@@ -360,7 +360,7 @@ static bool writeMessage(MessageWriter &w, MessageType srcType, void const *srcM
 	case MessageType::UP_DOWN2:
 		// invert up/down (0, 1, 2 -> 0, 2, 1)
 		w << upDown[(src.upDown << 1) | (src.upDown >> 1)];
-		break;
+		break;*/
 	case MessageType::LEVEL:
 	case MessageType::MOVE_TO_LEVEL:
 		{
@@ -417,7 +417,7 @@ static bool readMessage(MessageType dstType, void *dstMessage, MessageReader r) 
 	switch (dstType) {
 	case MessageType::UNKNOWN:
 		return false;
-
+/*
 	case MessageType::ON_OFF:
 		{
 			int v = find(r.string(), onOff);
@@ -463,7 +463,7 @@ static bool readMessage(MessageType dstType, void *dstMessage, MessageReader r) 
 			dst.upDown = (v << 1) | (v >> 1);
 		}
 		break;
-
+*/
 	case MessageType::LEVEL:
 	case MessageType::MOVE_TO_LEVEL:
 		{
@@ -609,7 +609,7 @@ Coroutine MqttSnBroker::publish() {
 			// check if publisher wants to publish
 			if (publisher.dirty) {
 				publisher.dirty = false;
-
+/*
 				// forward to subscribers
 				for (auto &subscriber : this->subscribers) {
 					if (subscriber.index == publisher.index) {
@@ -622,7 +622,7 @@ Coroutine MqttSnBroker::publish() {
 						});
 					}
 				}
-
+*/
 				this->currentPublisher = &publisher;
 				this->dirtyFlags.set();
 				break;

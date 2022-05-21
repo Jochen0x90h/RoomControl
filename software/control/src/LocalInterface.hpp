@@ -34,7 +34,7 @@ protected:
 		uint8_t getId() const override;
 		String getName() const override;
 		void setName(String name) override;
-		Array<EndpointType const> getEndpoints() const override;
+		Array<MessageType const> getEndpoints() const override;
 		void addPublisher(uint8_t endpointIndex, Publisher &publisher) override;
 		void addSubscriber(uint8_t endpointIndex, Subscriber &subscriber) override;
 

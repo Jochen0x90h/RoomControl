@@ -840,24 +840,17 @@ public:
 
 	// plug info (describes an input/output of a function)
 	struct PlugInfo {
-		enum Direction : uint8_t {
-			INPUT = 0,
-			OUTPUT = 1,
-		};
-
 		// name of plug
 		String name;
 
-		// true: input, false: output
-		Direction direction;
-
 		// message type that is expected/sent by the input/output
-		MessageType type;
+		MessageType messageType;
 
+		// flags: 1: indexed input
 		uint8_t flags;
 
-		bool isInput() const {return this->direction == INPUT;}
-		bool isOutput() const {return this->direction == OUTPUT;}
+		bool isInput() const {return (this->messageType & MessageType::DIRECTION_MASK) == MessageType::IN;}
+		bool isOutput() const {return (this->messageType & MessageType::DIRECTION_MASK) == MessageType::OUT;}
 	};
 
 	// maximum number of inputs/outputs of a function
@@ -958,24 +951,24 @@ public:
 		static constexpr int BUFFER_SIZE = 1024;
 		
 		enum class Type : uint8_t {
-			UNKNOWN,
-
 			// simple on/off switch
-			SIMPLE_SWITCH,
+			SIMPLE_SWITCH = 1,
 
 			// switch that turns off after a configured time
-			TIMEOUT_SWITCH,
-
-			//DELAYED_SWITCH,
+			TIMEOUT_SWITCH = 2,
 
 			// blind with known position using timing
-			TIMED_BLIND,
+			TIMED_BLIND = 10,
 			
-			HEATING_CONTROL,
-
-			TYPE_COUNT
+			HEATING_CONTROL = 20,
 		};
-		
+
+		enum class TypeClass : uint8_t {
+			SWITCH = 1,
+			BLIND = 2,
+			HEATING_CONTROL = 3,
+		};
+
 		// function type
 		Type type = Type::SIMPLE_SWITCH;
 	
@@ -1066,13 +1059,13 @@ public:
 
 
 	// timeout switch
-	struct TimeoutSwitchConfig {
-		// timeout duration in 1/100 s
-		uint32_t duration;
-	};
-
 	class TimeoutSwitch : public Function {
 	public:
+		struct Config {
+			// timeout duration in 1/100 s
+			uint32_t duration;
+		};
+
 		explicit TimeoutSwitch(FunctionFlash const &flash) : Function(flash) {}
 		~TimeoutSwitch() override;
 
@@ -1081,16 +1074,16 @@ public:
 
 
 	// timed blind
-	struct TimedBlindConfig {
-		// rocker hold time after which blind stops after release (in 1/100s)
-		uint16_t holdTime;
-
-		// blind run time from fully open to fully closed (in 1/100s)
-		uint16_t runTime;
-	};
-
 	class TimedBlind : public Function {
 	public:
+		struct Config {
+			// rocker hold time after which blind stops after release (in 1/100s)
+			uint16_t holdTime;
+
+			// blind run time from fully open to fully closed (in 1/100s)
+			uint16_t runTime;
+		};
+
 		explicit TimedBlind(FunctionFlash const &flash) : Function(flash) {}
 		~TimedBlind() override;
 
@@ -1098,13 +1091,12 @@ public:
 	};
 
 
-	// heating regulator
-	struct HeatingControlConfig {
-
-	};
-
 	class HeatingControl : public Function {
 	public:
+		// heating regulator
+		struct Config {
+		};
+
 		explicit HeatingControl(FunctionFlash const &flash) : Function(flash) {}
 		~HeatingControl() override;
 
@@ -1133,7 +1125,7 @@ public:
 	Flt displayTemperature(float kelvin);
 	String getTemperatureUnit();
 
-	void editMessage(Menu::Stream &stream, Interface::EndpointType endpointType,
+	void editMessage(Menu::Stream &stream, MessageType messageType,
 		Message &message, bool editMessage1, bool editMessage2, int delta);
 
 
@@ -1157,7 +1149,7 @@ public:
 	[[nodiscard]] AwaitableCoroutine functionsMenu();
 	[[nodiscard]] AwaitableCoroutine functionMenu(int index, FunctionFlash &flash);
 	[[nodiscard]] AwaitableCoroutine measureRunTime(Interface::Device &device, uint8_t endpointIndex, uint16_t &measureRunTime);
-	[[nodiscard]] AwaitableCoroutine editFunctionPlug(ConnectionIterator &it, Connection &plug, PlugInfo const &info, bool add);
+	[[nodiscard]] AwaitableCoroutine editFunctionConnection(ConnectionIterator &it, Connection &plug, PlugInfo const &info, bool add);
 	[[nodiscard]] AwaitableCoroutine selectFunctionDevice(Connection &plug, PlugInfo const &info);
 	[[nodiscard]] AwaitableCoroutine selectFunctionEndpoint(Interface::Device &device, Connection &plug, PlugInfo const &info);
 };

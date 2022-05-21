@@ -16,26 +16,41 @@ extern AesKey const defaultAesKey;
  * Type of device endpoint such as button, relay or temperature sensor
  */
 enum class EndpointType : uint8_t {
-	// if a device contains multiple sub-devices, a separator can be used to structure the endpoints
-	//SEPARATOR = 0,
-	
-	// discrete types
+	TYPE_MASK = 0x3f,
+	DIRECTION_MASK = 0xc0,
+
+	// direction relative to bus master, i.e. IN is host input and device output
+	IN = 0x80,
+	OUT = 0x40,
+
+	// endpoint types
 	// --------------
-	
-	// on/off switch with two stable states and toggle command (0: off, 1: on, 2: toggle)
-	ON_OFF = 0x01,
-	ON_OFF_IN = 0x81,
-	ON_OFF_OUT = 0x01,
+	UNKNOWN = 0,
 
-	// trigger (button, motion detector), returns to inactive state (0: inactive, 1: activate)
-	TRIGGER = 0x02,
-	TRIGGER_IN = 0x82,
-	TRIGGER_OUT = 0x02,
+	// off/on switch with two stable states (0: off, 1: on)
+	OFF_ON = 0x01,
+	OFF_ON_IN = OFF_ON | IN,
+	OFF_ON_OUT = OFF_ON | OUT,
 
-	// up/down (rocker, blind), returns to inactive state when not pressed (0: inactive, 1: up, 2: down)
-	UP_DOWN = 0x03,
-	UP_DOWN_IN = 0x83,
-	UP_DOWN_OUT = 0x03,
+	// off/on switch with two stable states and toggle command (0: off, 1: on, 2: toggle)
+	OFF_ON_TOGGLE = 0x02,
+	OFF_ON_TOGGLE_IN = OFF_ON_TOGGLE | IN,
+	OFF_ON_TOGGLE_OUT = OFF_ON_TOGGLE | OUT,
+
+	// trigger (button, motion detector), returns to inactive state when released (0: release, 1: trigger)
+	TRIGGER = 0x03,
+	TRIGGER_IN = TRIGGER | IN,
+	TRIGGER_OUT = TRIGGER | OUT,
+
+	// up/down (rocker, blind), returns to inactive state when released (0: release, 1: up, 2: down)
+	UP_DOWN = 0x04,
+	UP_DOWN_IN = UP_DOWN | IN,
+	UP_DOWN_OUT = UP_DOWN | OUT,
+
+	// open/close (window) (0: open, 1: close)
+	OPEN_CLOSE = 0x05,
+	OPEN_CLOSE_IN = OPEN_CLOSE | IN,
+	OPEN_CLOSE_OUT = OPEN_CLOSE | OUT,
 
 
 	// level, color etc.
@@ -43,12 +58,16 @@ enum class EndpointType : uint8_t {
 	
 	// level in percent (brightness of a light bulb, position of blind), optionally with duration/speed
 	LEVEL = 0x10,
-	LEVEL_IN = 0x90,
-	LEVEL_OUT = 0x10,
+	LEVEL_IN = LEVEL | IN,
+	LEVEL_OUT = LEVEL | OUT,
+
+	MOVE_TO_LEVEL = 0x11,
+	MOVE_TO_LEVEL_OUT = MOVE_TO_LEVEL | OUT,
 
 	// color
-	COLOR_IN = 0x91,
-	COLOR_OUT = 0x11,
+	COLOR = 0x12,
+	COLOR_IN = COLOR | IN,
+	COLOR_OUT = COLOR | OUT,
 	
 
 	// environment
@@ -56,24 +75,29 @@ enum class EndpointType : uint8_t {
 	
 	// temperature (1/20 Kelvin)
 	TEMPERATURE = 0x20,
-	TEMPERATURE_IN = 0xa0,
-	TEMPERATURE_OUT = 0x20,
+	TEMPERATURE_IN = TEMPERATURE | IN,
+	TEMPERATURE_OUT = TEMPERATURE | OUT,
 
-	// air pressure (hectopascal)
-	AIR_PRESSURE = 0x21,
-	AIR_PRESSURE_IN = 0xa1,
+	// set temperature (absolute/relative)
+	SET_TEMPERATURE = 0x21,
+	SET_TEMPERATURE_IN = SET_TEMPERATURE | IN,
+	SET_TEMPERATURE_OUT = SET_TEMPERATURE | OUT,
+
+	// pressure (pascal)
+	PRESSURE = 0x22,
+	PRESSURE_IN = PRESSURE | IN,
 
 	// air humidity (percent)
-	AIR_HUMIDITY = 0x22,
-	AIR_HUMIDITY_IN = 0xa2,
+	AIR_HUMIDITY = 0x23,
+	AIR_HUMIDITY_IN = AIR_HUMIDITY | IN,
 
 	// air volatile organic components
-	AIR_VOC = 0x23,
-	AIR_VOC_IN = 0xa3,
+	AIR_VOC = 0x24,
+	AIR_VOC_IN = AIR_VOC | IN,
 
 	// illuminance (lux, https://en.wikipedia.org/wiki/Lux)
-	ILLUMINANCE = 0x24,
-	ILLUMINANCE_IN = 0xa4,
+	ILLUMINANCE = 0x25,
+	ILLUMINANCE_IN = ILLUMINANCE | IN,
 
 	
 	// electrical energy
@@ -98,14 +122,6 @@ enum class EndpointType : uint8_t {
 	// energy (W, mW)
 	POWER = 0x34,
 	POWER_IN = 0xb4,
-
-	
-	TYPE_MASK = 0x7f,
-
-	// direction relative to bus master, i.e. IN is host input and device output
-	IN = 0x80,
-	OUT = 0x00,
-	DIRECTION_MASK = 0x80
 };
 FLAGS_ENUM(EndpointType);
 

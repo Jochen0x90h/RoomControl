@@ -14,7 +14,7 @@
 class Interface {
 public:
 
-	using EndpointType = bus::EndpointType;
+	//using EndpointType = bus::EndpointType;
 	
 	/**
 	 * Destructor
@@ -51,10 +51,10 @@ public:
 		virtual void setName(String name) = 0;
 
 		/**
-		 * Get endpoints
-		 * @return endpoints
+		 * Get endpoints (message type for each endpoint)
+		 * @return array of endpoints
 		 */
-		virtual Array<EndpointType const> getEndpoints() const = 0;
+		virtual Array<MessageType const> getEndpoints() const = 0;
 
 		/**
 		 * Add a publisher to the device that sends messages to an endpoint. Gets inserted into a linked list

@@ -5,33 +5,24 @@
 #include <util.hpp>
 
 
-using EndpointType = AlarmInterface::EndpointType;
-
-
-static bool convertMessage(MessageType dstType, void *dstMessage, EndpointType srcType, Message const &src,
+static bool convertMessage(MessageType dstType, void *dstMessage, MessageType srcType, Message const &src,
 	ConvertOptions const &convertOptions)
 {
 	Message &dst = *reinterpret_cast<Message *>(dstMessage);
 
 	switch (srcType) {
-		case EndpointType::ON_OFF_IN:
-			return convertOnOffIn(dstType, dst, src.onOff, convertOptions);
-		case EndpointType::TRIGGER_IN:
-			return convertTriggerIn(dstType, dst, src.trigger, convertOptions);
-		case EndpointType::UP_DOWN_IN:
-			return convertUpDownIn(dstType, dst, src.upDown, convertOptions);
-		case EndpointType::TEMPERATURE_IN:
-			if (dstType != MessageType::TEMPERATURE)
-				return false; // conversion failed
-			dst.temperature = src.temperature;
-			break;
+		case MessageType::OFF_ON_IN:
+		case MessageType::OFF_ON_TOGGLE_IN:
+		case MessageType::TRIGGER_IN:
+		case MessageType::UP_DOWN_IN:
+		case MessageType::OPEN_CLOSE_IN:
+			return convertCommandIn(dstType, dst, srcType, src.command, convertOptions);
+		case MessageType::TEMPERATURE_IN:
+			return convertTemperatureIn(dstType, dst, src.temperature, convertOptions);
 		default:
 			// conversion failed
 			return false;
 	}
-
-	// conversion successful
-	return true;
 }
 
 
@@ -105,10 +96,9 @@ void AlarmInterface::test(int index, AlarmFlash const &flash) {
 			p.subscriptionIndex = subscriber.subscriptionIndex;
 
 			// convert to target unit and type and resume coroutine if conversion was successful
-			//MessageType type = flash.messageTypes[subscriber.index];
-			EndpointType type = flash.endpoints[subscriber.index];
+			MessageType srcType = flash.endpoints[subscriber.index];
 			auto &message = flash.messages[subscriber.index];
-			return convertMessage(subscriber.messageType, p.message, type, message, subscriber.convertOptions);
+			return convertMessage(subscriber.messageType, p.message, srcType, message, subscriber.convertOptions);
 		});
 	}
 }
@@ -136,7 +126,7 @@ Coroutine AlarmInterface::tick() {
 
 						// convert to target unit and type and resume coroutine if conversion was successful
 						//MessageType type = flash.messageTypes[subscriber.index];
-						EndpointType type = flash.endpoints[subscriber.index];
+						MessageType type = flash.endpoints[subscriber.index];
 						auto &message = flash.messages[subscriber.index];
 						return convertMessage(subscriber.messageType, p.message, type, message,
 							subscriber.convertOptions);
@@ -185,7 +175,7 @@ void AlarmInterface::Alarm::setName(String name) {
 
 }
 
-Array<EndpointType const> AlarmInterface::Alarm::getEndpoints() const {
+Array<MessageType const> AlarmInterface::Alarm::getEndpoints() const {
 	auto &flash = **this;
 	return {flash.endpointCount, flash.endpoints};
 }

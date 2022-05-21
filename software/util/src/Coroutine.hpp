@@ -249,8 +249,8 @@ public:
 	}
 	
 	/**
-	 * Resume first waiting coroutine when the predicate is true (and remove it from the list)
-	 * @param predicate boolean predicate function for the list elements
+	 * Remove and resume first waiting coroutine when the predicate is true
+	 * @param predicate boolean predicate function for the first list element
 	 * @return true when list was not empty
 	 */
 	template <typename P>

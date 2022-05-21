@@ -17,7 +17,10 @@ struct Publisher : public LinkedListNode<Publisher> {
 
 	// message (length is defined by messageType)
 	void const *message;
-	
+
+	// message convert options, depend on endpoint and message types
+	ConvertOptions convertOptions;
+
 	// event to notify the interface that the dirty flag was set (set and owned by the interface or broker)
 	Event *event = nullptr;
 	

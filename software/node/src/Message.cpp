@@ -1,6 +1,6 @@
 #include "Message.hpp"
 
-
+/*
 bool convert(MessageType dstType, void *dstMessage, MessageType srcType, void const *srcMessage) {
 	Message &dst = *reinterpret_cast<Message *>(dstMessage);
 	Message const &src = *reinterpret_cast<Message const *>(srcMessage);
@@ -142,7 +142,7 @@ bool convert(MessageType dstType, void *dstMessage, MessageType srcType, void co
 					return false;
 			}
 			break;
-	/*
+	/ *
 		case MessageType::CELSIUS:
 			switch (srcType) {
 			case MessageType::CELSIUS:
@@ -171,7 +171,7 @@ bool convert(MessageType dstType, void *dstMessage, MessageType srcType, void co
 				return false;
 			}
 			break;
-	*/
+	* /
 		case MessageType::PRESSURE:
 			switch (srcType) {
 				case MessageType::PRESSURE:
@@ -209,250 +209,93 @@ bool convert(MessageType dstType, void *dstMessage, MessageType srcType, void co
 	// conversion successful
 	return true;
 }
+*/
 
-/*
-bool convertOnOffIn(MessageType dstType, Message &dst, uint8_t src) {
-	if (src > 2)
-		return false;
-
+bool isCompatibleIn(MessageType dstType, MessageType srcType) {
 	switch (dstType) {
-		case MessageType::ON_OFF1:
-			// identity
-			dst.onOff = src;
-			break;
-		case MessageType::ON_OFF2:
-			// inverse (0, 1, 2 -> 1, 0, 2)
-			dst.onOff = src ^ 1 ^ (src >> 1);
-			break;
-		case MessageType::ON_OFF3:
-			// on -> toggle, toggle -> on (1, 2 -> 2, 1)
-			if (src == 0)
-				return false; // conversion failed
-			dst.onOff = 3 - src;
-			break;
-		case MessageType::ON_OFF4:
-			// off -> toggle, toggle -> off (0, 2 -> 2, 0)
-			if (src == 1)
-				return false; // conversion failed
-			dst.onOff = 2 - src;
-			break;
-		case MessageType::TRIGGER1:
-			// off -> inactive, on -> activate, toggle -> activate (0, 1, 2 -> 0, 1, 1)
-			dst.onOff = src == 0 ? 0 : 1;
-			break;
-		case MessageType::TRIGGER2:
-			// off -> activate, on -> inactive, toggle -> activate (0, 1, 2 -> 1, 0, 1)
-			dst.onOff = src == 0 ? 1 : src - 1;
-			break;
-		case MessageType::UP_DOWN1:
-			// off -> inactive, on -> up, toggle -> up (0, 1, 2 -> 0, 1, 1)
-			dst.onOff = src == 0 ? 0 : 1;
-			break;
-		case MessageType::UP_DOWN2:
-			// off -> inactive, on -> down, toggle -> down (0, 1, 2 -> 0, 2, 2)
-			dst.onOff = src == 0 ? 0 : 2;
-			break;
+		case MessageType::OFF_ON_IN:
+		case MessageType::OFF_ON_TOGGLE_IN:
+		case MessageType::TRIGGER_IN:
+		case MessageType::UP_DOWN_IN:
+		case MessageType::OPEN_CLOSE_IN:
+			switch (srcType) {
+				case MessageType::OFF_ON_IN:
+				case MessageType::OFF_ON_TOGGLE_IN:
+				case MessageType::TRIGGER_IN:
+				case MessageType::UP_DOWN_IN:
+				case MessageType::OPEN_CLOSE_IN:
+					return true;
+				default:
+					return false;
+			}
+		case MessageType::SET_TEMPERATURE_IN:
+			switch (srcType) {
+				case MessageType::TRIGGER_IN:
+				case MessageType::UP_DOWN_IN:
+				case MessageType::OPEN_CLOSE_IN:
+				case MessageType::SET_TEMPERATURE_IN:
+					return true;
+				default:
+					return false;
+			}
 		default:
-			// conversion failed
 			return false;
 	}
-
-	// conversion successful
-	return true;
 }
-*/
-bool convertOnOffIn(MessageType dstType, Message &dst, uint8_t src, ConvertOptions const &convertOptions) {
-	if (src > 2)
+
+bool convertCommandIn(MessageType dstType, Message &dst, MessageType srcType, uint8_t src,
+	ConvertOptions const &convertOptions)
+{
+	if (src >= 4)
 		return false;
 
 	switch (dstType) {
-		case MessageType::INDEXED_COMMAND:
-			dst.indexedCommand.index = convertOptions.u32 >> 24;
-			// fall through
-		case MessageType::COMMAND: {
+		case MessageType::OFF_ON_IN:
+		case MessageType::OFF_ON_TOGGLE_IN:
+		case MessageType::TRIGGER_IN:
+		case MessageType::UP_DOWN_IN:
+		case MessageType::OPEN_CLOSE_IN: {
 			int c = (convertOptions.i32 >> src * 3) & 7;
-			if (c >= 6)
+			if (c >= 4)
 				return false; // conversion failed
-			dst.command = Command(c);
+			dst.indexedCommand.command = c;
+			int i = convertOptions.u32 >> 24;
+			if (i != 255)
+				dst.indexedCommand.index = i;
 			break;
 		}
-		default:
-			// conversion failed
-			return false;
-	}
-
-	// conversion successful
-	return true;
-}
-/*
-bool convertTriggerIn(MessageType dstType, Message &dst, uint8_t src) {
-	if (src > 1)
-		return false;
-
-	switch (dstType) {
-		case MessageType::ON_OFF1:
-		case MessageType::ON_OFF2:
-			// activate -> toggle (1 -> 2)
-			if (src == 0)
-				return false; // conversion failed
-			dst.onOff = 2;
-			break;
-		case MessageType::ON_OFF3:
-			// activate -> on (1 -> 1)
-			if (src == 0)
-				return false; // conversion failed
-			dst.onOff = 1;
-			break;
-		case MessageType::ON_OFF4:
-			// activate -> off (1 -> 0)
-			if (src == 0)
-				return false; // conversion failed
-			dst.onOff = 0;
-			break;
-		case MessageType::TRIGGER1:
-		case MessageType::TRIGGER2:
-			// identity
-			dst.trigger = src;
-			break;
-		case MessageType::UP_DOWN1:
-			// inactive -> inactive, activate -> up (0, 1 -> 0, 1)
-			dst.upDown = src;
-			break;
-		case MessageType::UP_DOWN2:
-			// inactive -> inactive, activate -> down (0, 1 -> 0, 2)
-			dst.upDown = src << 1;
-			break;
-		default:
-			// conversion failed
-			return false;
-	}
-
-	// conversion successful
-	return true;
-}
-*/
-bool convertTriggerIn(MessageType dstType, Message &dst, uint8_t src, ConvertOptions const &convertOptions) {
-	if (src > 1)
-		return false;
-
-	switch (dstType) {
-		case MessageType::INDEXED_COMMAND:
-			dst.indexedCommand.index = convertOptions.u32 >> 24;
-			// fall through
-		case MessageType::COMMAND: {
-			int c = (convertOptions.i32 >> src * 3) & 7;
-			if (c >= 6)
-				return false; // conversion failed
-			dst.command = Command(c);
-			break;
-		}
-		case MessageType::SET_TEMPERATURE: {
-			if (src == 0)
-				return false; // conversion failed
-			dst.setTemperature = convertOptions.ff;
-			break;
-		}
-		default:
-			// conversion failed
-			return false;
-	}
-
-	// conversion successful
-	return true;
-}
-/*
-bool convertUpDownIn(MessageType dstType, Message &dst, uint8_t src) {
-	if (src > 2)
-		return false;
-
-	switch (dstType) {
-		case MessageType::ON_OFF1:
-			// up -> on, down -> off (1, 2 -> 1, 0)
-			if (src == 0)
-				return false; // conversion failed
-			dst.onOff = 2 - src;
-			break;
-		case MessageType::ON_OFF2:
-			// up -> off, down -> on (1, 2 -> 0, 1)
-			if (src == 0)
-				return false; // conversion failed
-			dst.onOff = src - 1;
-			break;
-		case MessageType::ON_OFF3:
-			// up -> toggle (1 -> 2)
-			if (src != 1)
-				return false; // conversion failed
-			dst.onOff = 2;
-			break;
-		case MessageType::ON_OFF4:
-			// down -> toggle (2 -> 2)
-			if (src != 2)
-				return false; // conversion failed
-			dst.onOff = 2;
-			break;
-		case MessageType::TRIGGER1:
-			// inactive -> inactive, up -> activate (0, 1 -> 0, 1)
-			if (src == 2)
-				return false; // conversion failed
-			dst.trigger = src;
-			break;
-		case MessageType::TRIGGER2:
-			// inactive -> inactive, down -> activate (0, 2 -> 0, 1)
-			if (src == 1)
-				return false; // conversion failed
-			dst.trigger = src >> 1;
-			break;
-		case MessageType::UP_DOWN1:
-			// identity
-			dst.upDown = src;
-			break;
-		case MessageType::UP_DOWN2:
-			// inverse (0, 1, 2 -> 0, 2, 1)
-			dst.upDown = ((src & 1) << 1) | (src >> 1);
-			break;
-		default:
-			// conversion failed
-			return false;
-	}
-
-	// conversion successful
-	return true;
-}
-*/
-bool convertUpDownIn(MessageType dstType, Message &dst, uint8_t src, ConvertOptions const &convertOptions) {
-	if (src > 2)
-		return false;
-
-	switch (dstType) {
-		case MessageType::INDEXED_COMMAND:
-			dst.indexedCommand.index = convertOptions.u32 >> 24;
-			// fall through
-		case MessageType::COMMAND: {
-			int ss = (convertOptions.i32 >> src * 3) & 7;
-			if (ss >= 6)
-				return false; // conversion failed
-			dst.command = Command(ss);
-			break;
-		}
-		case MessageType::SET_TEMPERATURE: {
-			if (src == 0)
-				return false; // conversion failed
-			if (!convertOptions.ff.getFlag()) {
-				// absolute
-				if (!convertOptions.ff.isNegative()) {
-					// positive: Set on up
-					if (src == 2)
+		case MessageType::SET_TEMPERATURE_IN: {
+			switch (srcType) {
+				case MessageType::TRIGGER_IN:
+					if (src == 0)
 						return false; // conversion failed
 					dst.setTemperature = convertOptions.ff;
-				} else {
-					// negative: Set on down
-					if (src == 1)
+					break;
+				case MessageType::UP_DOWN_IN:
+				case MessageType::OPEN_CLOSE_IN:
+					if (src == 0)
 						return false; // conversion failed
-					dst.setTemperature = -convertOptions.ff;
-				}
-			} else {
-				// relative
-				dst.setTemperature = src == 1 ? convertOptions.ff : -convertOptions.ff;
+					if (!convertOptions.ff.getFlag()) {
+						// absolute
+						if (!convertOptions.ff.isNegative()) {
+							// positive: Set on up/trigger
+							if (src == 2)
+								return false; // conversion failed
+							dst.setTemperature = convertOptions.ff;
+						} else {
+							// negative: Set on down/trigger
+							if (src == 1)
+								return false; // conversion failed
+							dst.setTemperature = -convertOptions.ff;
+						}
+					} else {
+						// relative: Up/trigger are positive, down is negative
+						dst.setTemperature = src == 2 ? -convertOptions.ff : convertOptions.ff;
+					}
+					break;
+				default:
+					// conversion failed
+					return false;
 			}
 			break;
 		}
@@ -465,32 +308,10 @@ bool convertUpDownIn(MessageType dstType, Message &dst, uint8_t src, ConvertOpti
 	return true;
 }
 
-bool convertOnOffOut(uint8_t &dst, MessageType srcType, Message const &src) {
-	switch (srcType) {
-		case MessageType::ON_OFF1:
-			dst = src.onOff;
-			break;
-		case MessageType::ON_OFF2:
-			// invert on/off (0, 1, 2 -> 1, 0, 2)
-			dst = src.onOff ^ 1 ^ (src.onOff >> 1);
-			break;
-		case MessageType::TRIGGER1:
-			// trigger (e.g.button) toggles on/off
-			if (src.trigger == 0)
-				return false;
-			dst = 2;
-			break;
-		case MessageType::UP_DOWN1:
-			// use state of up contact (0, 1 -> 0, 1)
-			if (src.upDown >= 2)
-				return false;
-			dst = src.upDown;
-			break;
-		case MessageType::UP_DOWN2:
-			// use state of down contact (0, 2 -> 0, 1)
-			if ((src.upDown & ~2) != 0)
-				return false;
-			dst = src.upDown >> 1;
+bool convertTemperatureIn(MessageType dstType, Message &dst, float src, ConvertOptions const &convertOptions) {
+	switch (dstType) {
+		case MessageType::TEMPERATURE_IN:
+			dst.temperature = src;
 			break;
 		default:
 			// conversion failed
@@ -501,34 +322,10 @@ bool convertOnOffOut(uint8_t &dst, MessageType srcType, Message const &src) {
 	return true;
 }
 
-bool convertTriggerOut(uint8_t &dst, MessageType srcType, Message const &src) {
-	switch (srcType) {
-		case MessageType::ON_OFF1:
-			// off -> activate (0 -> 1)
-			if (src.onOff != 0)
-				return false; // conversion failed
-			dst = 1;
-			break;
-		case MessageType::ON_OFF2:
-			// on -> activate (1 -> 1)
-			if (src.onOff != 1)
-				return false; // conversion failed
-			dst = 1;
-			break;
-		case MessageType::TRIGGER1:
-			dst = src.trigger;
-			break;
-		case MessageType::UP_DOWN1:
-			// use up as trigger (0, 1 -> 0, 1)
-			if (src.upDown >= 2)
-				return false; // conversion failed
-			dst = src.upDown;
-			break;
-		case MessageType::UP_DOWN2:
-			// use down as trigger (0, 2 -> 0, 1)
-			if ((src.upDown & ~2) != 0)
-				return false; // conversion failed
-			dst = src.upDown >> 1;
+bool convertPressureIn(MessageType dstType, Message &dst, float src, ConvertOptions const &convertOptions) {
+	switch (dstType) {
+		case MessageType::PRESSURE_IN:
+			dst.pressure = src;
 			break;
 		default:
 			// conversion failed
@@ -539,34 +336,11 @@ bool convertTriggerOut(uint8_t &dst, MessageType srcType, Message const &src) {
 	return true;
 }
 
-bool convertUpDownOut(uint8_t &dst, MessageType srcType, Message const &src) {
-	switch (srcType) {
-		case MessageType::ON_OFF1:
-			// off -> up, on -> down (0 -> 1, 1 -> 2)
-			if (src.onOff >= 2)
-				return false; // conversion failed
-			dst = src.onOff + 1;
+bool convertAirHumidityIn(MessageType dstType, Message &dst, float src, ConvertOptions const &convertOptions) {
+	switch (dstType) {
+		case MessageType::AIR_HUMIDITY_IN:
+			dst.airHumidity = src;
 			break;
-		case MessageType::ON_OFF2:
-			// off -> down, on -> up (0 -> 2, 1 -> 1)
-			if (src.onOff >= 2)
-				return false; // conversion failed
-			dst = 2 - src.onOff;
-			break;
-		case MessageType::TRIGGER1:
-			// use press as up (0, 1 -> 0, 1)
-			dst = src.trigger;
-			break;
-		case MessageType::TRIGGER2:
-			// use press as down (0, 1 -> 0, 2)
-			dst = src.trigger << 1;
-			break;
-		case MessageType::UP_DOWN1:
-			dst = src.upDown;
-			break;
-		case MessageType::UP_DOWN2:
-			// invert up/down (0, 1, 2 -> 0, 2, 1)
-			dst = ((src.upDown & 1) << 1) | (src.upDown >> 1);
 		default:
 			// conversion failed
 			return false;
@@ -574,4 +348,108 @@ bool convertUpDownOut(uint8_t &dst, MessageType srcType, Message const &src) {
 
 	// conversion successful
 	return true;
+}
+
+bool convertAirVocIn(MessageType dstType, Message &dst, float src, ConvertOptions const &convertOptions) {
+	switch (dstType) {
+		case MessageType::AIR_VOC_IN:
+			dst.airVoc = src;
+			break;
+		default:
+			// conversion failed
+			return false;
+	}
+
+	// conversion successful
+	return true;
+}
+
+bool isCompatibleOut(MessageType dstType, MessageType srcType) {
+	switch (srcType) {
+		case MessageType::OFF_ON_OUT:
+		case MessageType::OFF_ON_TOGGLE_OUT:
+		case MessageType::TRIGGER_OUT:
+		case MessageType::UP_DOWN_OUT:
+		case MessageType::OPEN_CLOSE_OUT:
+			switch (dstType) {
+				case MessageType::OFF_ON_OUT:
+				case MessageType::OFF_ON_TOGGLE_OUT:
+				case MessageType::TRIGGER_OUT:
+				case MessageType::UP_DOWN_OUT:
+				case MessageType::OPEN_CLOSE_OUT:
+					return true;
+				default:
+					return false;
+			}
+		default:
+			return false;
+	}
+}
+
+bool convertCommandOut(uint8_t &dst, MessageType srcType, Message const &src, ConvertOptions const &convertOptions) {
+	switch (srcType) {
+		case MessageType::OFF_ON_OUT:
+		case MessageType::OFF_ON_TOGGLE_OUT:
+		case MessageType::TRIGGER_OUT:
+		case MessageType::UP_DOWN_OUT:
+		case MessageType::OPEN_CLOSE_OUT: {
+			int c = (convertOptions.i32 >> int(src.command) * 3) & 7;
+			if (c >= 4)
+				return false; // conversion failed
+			dst = c;
+			break;
+		}
+		default:
+			// todo: convert any event to on/off using convertOptions
+			// conversion failed
+			return false;
+	}
+
+	// conversion successful
+	return true;
+}
+
+String getTypeName(MessageType messageType) {
+	switch (messageType & MessageType::TYPE_MASK) {
+		case MessageType::OFF_ON:
+			return "Off/On";
+		case MessageType::OFF_ON_TOGGLE:
+			return "Off/On/Toggle";
+		case MessageType::TRIGGER:
+			return "Trigger";
+		case MessageType::UP_DOWN:
+			return "Up/Down";
+		case MessageType::OPEN_CLOSE:
+			return "Open/Close";
+
+		case MessageType::LEVEL:
+			return "Level";
+		case MessageType::MOVE_TO_LEVEL:
+			return "Move to Level";
+
+		case MessageType::TEMPERATURE:
+			return "Temperature";
+		case MessageType::PRESSURE:
+			return "Pressure";
+		case MessageType::AIR_HUMIDITY:
+			return "Air Humidity";
+		case MessageType::AIR_VOC:
+			return "Air VOC";
+		case MessageType::ILLUMINANCE:
+			return "Illuminance";
+
+		case MessageType::VOLTAGE:
+			return "Voltage";
+		case MessageType::CURRENT:
+			return "Current";
+		case MessageType::BATTERY_LEVEL:
+			return "Battery Level";
+		case MessageType::ENERGY_COUNTER:
+			return "Energy Counter";
+		case MessageType::POWER:
+			return "Power";
+
+		default:
+			return "<unknown>";
+	}
 }

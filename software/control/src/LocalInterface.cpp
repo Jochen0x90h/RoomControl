@@ -4,8 +4,6 @@
 #include <util.hpp>
 
 
-using EndpointType = Interface::EndpointType;
-
 // device names
 constexpr String deviceNames[] = {
 	"Air Sensor",
@@ -23,34 +21,34 @@ constexpr int BME680_HUMIDITY_ENDPOINT = 2;
 constexpr int BME680_VOC_ENDPOINT = 3;
 
 // endpoint type arrays for getEndpoints()
-constexpr EndpointType bme680Endpoints[] = {
-	EndpointType::TEMPERATURE_IN,
-	EndpointType::AIR_PRESSURE_IN,
-	EndpointType::AIR_HUMIDITY_IN,
-	EndpointType::AIR_VOC_IN
+constexpr MessageType bme680Endpoints[] = {
+	MessageType::TEMPERATURE_IN,
+	MessageType::PRESSURE_IN,
+	MessageType::AIR_HUMIDITY_IN,
+	MessageType::AIR_VOC_IN
 };
-constexpr MessageType bme680MessageTypes[] = {
-	MessageType::TEMPERATURE, MessageType::PRESSURE, MessageType::AIR_HUMIDITY, MessageType::AIR_VOC
+//constexpr MessageType bme680MessageTypes[] = {
+//	MessageType::TEMPERATURE_IN, MessageType::AIR_PRESSURE_IN, MessageType::AIR_HUMIDITY_IN, MessageType::AIR_VOC_IN
+//};
+
+constexpr MessageType heatingEndpoints[] = {
+	MessageType::OFF_ON_TOGGLE_OUT
 };
 
-constexpr EndpointType heatingEndpoints[] = {
-	EndpointType::ON_OFF_OUT
+constexpr MessageType brightnessSensorEndpoints[] = {
+	MessageType::ILLUMINANCE_IN,
 };
 
-constexpr EndpointType brightnessSensorEndpoints[] = {
-	EndpointType::ILLUMINANCE_IN,
+constexpr MessageType motionDetectorEndpoints[] = {
+	MessageType::TRIGGER_IN,
 };
 
-constexpr EndpointType motionDetectorEndpoints[] = {
-	EndpointType::TRIGGER_IN,
+constexpr MessageType inEndpoints[] = {
+	MessageType::OFF_ON_IN, MessageType::OFF_ON_IN, MessageType::OFF_ON_IN, MessageType::OFF_ON_IN
 };
 
-constexpr EndpointType inEndpoints[] = {
-	EndpointType::ON_OFF_IN, EndpointType::ON_OFF_IN, EndpointType::ON_OFF_IN, EndpointType::ON_OFF_IN
-};
-
-constexpr EndpointType outEndpoints[] = {
-	EndpointType::ON_OFF_OUT, EndpointType::ON_OFF_OUT, EndpointType::ON_OFF_OUT, EndpointType::ON_OFF_OUT
+constexpr MessageType outEndpoints[] = {
+	MessageType::OFF_ON_OUT, MessageType::OFF_ON_OUT, MessageType::OFF_ON_OUT, MessageType::OFF_ON_OUT
 };
 
 
@@ -119,7 +117,7 @@ Coroutine LocalInterface::readAirSensor() {
 		for (auto &subscriber : device.subscribers) {
 			if (subscriber.index >= array::count(bme680Endpoints))
 				break;
-
+/*
 			// get value
 			FloatWithFlag value;
 			switch (subscriber.index) {
@@ -139,14 +137,31 @@ Coroutine LocalInterface::readAirSensor() {
 				value = airSensor.getGasResistance();
 				break;
 			}
-			
+*/
 			// publish to subscriber
-			subscriber.barrier->resumeFirst([&subscriber, value] (Subscriber::Parameters &p) {
+			subscriber.barrier->resumeFirst([&airSensor, &subscriber] (Subscriber::Parameters &p) {
 				p.subscriptionIndex = subscriber.subscriptionIndex;
-				
+				auto &dst = *reinterpret_cast<Message *>(p.message);
+				switch (subscriber.index) {
+					case BME680_TEMPERATURE_ENDPOINT:
+						// temperature in celsius
+						return convertTemperatureIn(subscriber.messageType, dst, airSensor.getTemperature(), subscriber.convertOptions);
+					case BME680_PRESSURE_ENDPOINT:
+						// air pressure in hectopascal
+						return convertPressureIn(subscriber.messageType, dst, airSensor.getPressure(), subscriber.convertOptions);
+					case BME680_HUMIDITY_ENDPOINT:
+						// air humidity in percent
+						return convertAirHumidityIn(subscriber.messageType, dst, airSensor.getHumidity(), subscriber.convertOptions);
+					case BME680_VOC_ENDPOINT:
+						// gas resistance in ohm
+						return convertAirVocIn(subscriber.messageType, dst, airSensor.getGasResistance(), subscriber.convertOptions);
+						break;
+				}
+				return false;
+/*
 				// convert to target unit and type and resume coroutine if conversion was successful
 				MessageType type = bme680MessageTypes[subscriber.index];
-				return convert(subscriber.messageType, p.message, type, &value);
+				return convert(subscriber.messageType, p.message, type, &value);*/
 			});
 		}
 		
@@ -183,7 +198,7 @@ Coroutine LocalInterface::publish() {
 						{
 							// convert to on/off
 							uint8_t message;
-							if (convertOnOffOut(message, publisher.messageType, src)) {
+							if (convertCommandOut(message, publisher.messageType, src, publisher.convertOptions)) {
 								// set output
 								if (message <= 1)
 									Output::set(OUTPUT_HEATING, message);
@@ -196,7 +211,7 @@ Coroutine LocalInterface::publish() {
 						{
 							// convert to on/off
 							uint8_t message;
-							if (convertOnOffOut(message, publisher.messageType, src)) {
+							if (convertCommandOut(message, publisher.messageType, src, publisher.convertOptions)) {
 								// set output
 								if (message <= 1)
 									Output::set(OUTPUT_EXT_INDEX + endpointIndex, message);
@@ -206,7 +221,7 @@ Coroutine LocalInterface::publish() {
 						}
 						break;
 					}
-
+/*
 					// forward to subscribers
 					for (auto &subscriber : device.subscribers) {
 						if (subscriber.index == endpointIndex) {
@@ -218,7 +233,7 @@ Coroutine LocalInterface::publish() {
 									publisher.messageType, publisher.message);
 							});
 						}
-					}
+					}*/
 				}
 			}
 		}
@@ -241,7 +256,7 @@ void LocalInterface::LocalDevice::setName(String name) {
 
 }
 
-Array<EndpointType const> LocalInterface::LocalDevice::getEndpoints() const {
+Array<MessageType const> LocalInterface::LocalDevice::getEndpoints() const {
 	switch (this->interfaceId) {
 		case BME680_ID:
 			return bme680Endpoints;
