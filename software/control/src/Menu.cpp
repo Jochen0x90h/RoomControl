@@ -15,6 +15,24 @@ void Menu::line() {
 	this->entryY += 1 + 4;
 }
 
+void Menu::beginSection() {
+	this->section = true;
+}
+
+void Menu::endSection() {
+	if (!this->section)
+		line();
+	this->section = false;
+}
+
+Menu::Stream Menu::stream() {
+	if (this->section) {
+		line();
+		this->section = false;
+	}
+	return {10, this->entryY + 2 - this->offsetY, this->bitmap};
+}
+
 void Menu::label() {
 	this->entryY += tahoma_8pt.height + 4;
 }
@@ -51,14 +69,16 @@ int Menu::getEdit(int editCount) {
 	if (this->selected == this->entryIndex) {
 		// cycle edit mode if activated
 		if (this->activated) {
-			if (this->edit < editCount)
+			//if (this->edit < editCount)
 				++this->edit;
-			else
-				this->edit = 0;
+			//else
+			//	this->edit = 0;
 				
 			// "consume" activation
 			this->activated = false;
 		}
+		if (this->edit > editCount)
+			this->edit = 0;
 		return this->edit;
 	}
 	return 0;

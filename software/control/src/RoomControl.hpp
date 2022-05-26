@@ -838,8 +838,8 @@ public:
 // Functions
 // ---------
 
-	// plug info (describes an input/output of a function)
-	struct PlugInfo {
+	// plug, describes an input/output of a function
+	struct Plug {
 		// name of plug
 		String name;
 
@@ -847,7 +847,7 @@ public:
 		MessageType messageType;
 
 		// flags: 1: indexed input
-		uint8_t flags;
+		//uint8_t flags;
 
 		bool isInput() const {return (this->messageType & MessageType::DIRECTION_MASK) == MessageType::IN;}
 		bool isOutput() const {return (this->messageType & MessageType::DIRECTION_MASK) == MessageType::OUT;}
@@ -924,10 +924,10 @@ public:
 		FunctionFlash &flash;
 
 		ConnectionIterator &operator ++() {
-			auto &plug = *reinterpret_cast<Connection *>(this->buffer);
+			auto &connection = *reinterpret_cast<Connection *>(this->buffer);
 			int size = sizeof(Connection);
-			if (plug.isMqtt())
-				size = offsetof(Connection, endpointIndex) + plug.deviceId;
+			if (connection.isMqtt())
+				size = offsetof(Connection, endpointIndex) + connection.deviceId;
 			this->buffer += (size + 3) / 4;
 			return *this;
 		}
@@ -935,8 +935,8 @@ public:
 			return *reinterpret_cast<Connection *>(this->buffer);
 		}
 		String getTopic() const {
-			Connection &plug = *reinterpret_cast<Connection *>(this->buffer);
-			return {plug.deviceId, reinterpret_cast<char *>(this->buffer) + offsetof(Connection, endpointIndex)};
+			auto &connection = *reinterpret_cast<Connection *>(this->buffer);
+			return {connection.deviceId, reinterpret_cast<char *>(this->buffer) + offsetof(Connection, endpointIndex)};
 		}
 		void setTopic(String topic);
 
@@ -981,7 +981,7 @@ public:
 		// number of connections to the device plugs (inputs and outputs)
 		uint8_t connectionCount = 0;
 
-		// offset of plugs in 32 bit units
+		// offset of connections in 32 bit units
 		uint8_t connectionsOffset = 0;
 
 		// buffer size in 32 bit units
@@ -1108,7 +1108,7 @@ public:
 
 	Coroutine testSwitch();
 
-	int connectFunction(RoomControl::FunctionFlash const &flash, Array<PlugInfo const> plugInfos,
+	int connectFunction(RoomControl::FunctionFlash const &flash, Array<Plug const> plugs,
 		Array<Subscriber, MAX_INPUT_COUNT> subscribers, Subscriber::Barrier &barrier,
 		Array<Publisher, MAX_OUTPUT_COUNT> publishers, Array<void const *> states);
 
@@ -1119,7 +1119,7 @@ public:
 // Menu Helpers
 // ------------
 
-	void printPlug(Menu::Stream &stream, Connection const &plug);
+	void printConnection(Menu::Stream &stream, Connection const &connection);
 
 	float stepTemperature(float value, int delta);
 	Flt displayTemperature(float kelvin);
@@ -1148,8 +1148,8 @@ public:
 	[[nodiscard]] AwaitableCoroutine messageGenerator(Interface::Device &device);
 	[[nodiscard]] AwaitableCoroutine functionsMenu();
 	[[nodiscard]] AwaitableCoroutine functionMenu(int index, FunctionFlash &flash);
-	[[nodiscard]] AwaitableCoroutine measureRunTime(Interface::Device &device, uint8_t endpointIndex, uint16_t &measureRunTime);
-	[[nodiscard]] AwaitableCoroutine editFunctionConnection(ConnectionIterator &it, Connection &plug, PlugInfo const &info, bool add);
-	[[nodiscard]] AwaitableCoroutine selectFunctionDevice(Connection &plug, PlugInfo const &info);
-	[[nodiscard]] AwaitableCoroutine selectFunctionEndpoint(Interface::Device &device, Connection &plug, PlugInfo const &info);
+	[[nodiscard]] AwaitableCoroutine measureRunTime(Interface::Device &device, Connection &connection, uint16_t &measureRunTime);
+	[[nodiscard]] AwaitableCoroutine editFunctionConnection(ConnectionIterator &it, Connection &connection, Plug const &plug, bool add);
+	[[nodiscard]] AwaitableCoroutine selectFunctionDevice(Connection &connection, Plug const &plug);
+	[[nodiscard]] AwaitableCoroutine selectFunctionEndpoint(Interface::Device &device, Connection &connection, Plug const &plug);
 };

@@ -21,16 +21,6 @@ optional<float> parseFloat(String str);
 
 /**
  * Convert a 32 bit unsigned integer to string
- * @param value value to convert
- * @param str string buffer to convert into
- * @param length length of string buffer
- * @param digitCount minimum number of digits to convert, pad smaller numbers with leading zeros
- * @return actual length of string
- */
-//int toString(int length, char *str, uint32_t value, int digitCount = 1);
-
-/**
- * Convert a 32 bit unsigned integer to string
  * @param buffer buffer in which conversion takes place
  * @param value value to convert
  * @param digitCount minimum number of digits to convert, pad smaller numbers with leading zeros
@@ -40,34 +30,12 @@ String toString(Array<char, 11> buffer, int32_t value, int digitCount = 1);
 
 /**
  * Convert a 64 bit unsigned integer to hex string
- * @param value value to convert
- * @param str string buffer to convert into
- * @param length length of string buffer
- * @param digitCount number of hex digits to convert
- * @return actual length of string
-*/
-//int hexToString(int length, char *str, uint64_t value, int digitCount);
-
-/**
- * Convert a 64 bit unsigned integer to hex string
  * @param buffer buffer in which conversion takes place
  * @param value value to convert
  * @param digitCount number of hex digits to convert
  * @return string containing the number, references the input buffer
  */
 String toHexString(Array<char, 16> buffer, uint64_t value, int digitCount);
-
-/**
- * Convert a float to string
- * @param value value to convert
- * @param str string buffer to convert into
- * @param length length of string buffer
- * @param digitCount minimum number of digits to convert before the decimal point
- * @param decimalCount minimum number of digits to convert after the decimal point, negative to keep trailing zeros
- * @return actual length of string
-*/
-//int toString(int length, char *str, float value, int digitCount, int decimalCount);
-
 
 /**
  * Convert a float to string

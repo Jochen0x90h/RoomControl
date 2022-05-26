@@ -211,245 +211,301 @@ bool convert(MessageType dstType, void *dstMessage, MessageType srcType, void co
 }
 */
 
-bool isCompatibleIn(MessageType dstType, MessageType srcType) {
-	switch (dstType) {
-		case MessageType::OFF_ON_IN:
-		case MessageType::OFF_ON_TOGGLE_IN:
-		case MessageType::TRIGGER_IN:
-		case MessageType::UP_DOWN_IN:
-		case MessageType::OPEN_CLOSE_IN:
-			switch (srcType) {
-				case MessageType::OFF_ON_IN:
-				case MessageType::OFF_ON_TOGGLE_IN:
-				case MessageType::TRIGGER_IN:
-				case MessageType::UP_DOWN_IN:
-				case MessageType::OPEN_CLOSE_IN:
-					return true;
-				default:
-					return false;
-			}
-		case MessageType::SET_TEMPERATURE_IN:
-			switch (srcType) {
-				case MessageType::TRIGGER_IN:
-				case MessageType::UP_DOWN_IN:
-				case MessageType::OPEN_CLOSE_IN:
-				case MessageType::SET_TEMPERATURE_IN:
-					return true;
-				default:
-					return false;
-			}
-		default:
-			return false;
+bool isCompatible(MessageType dstType, MessageType srcType) {
+	dstType = dstType & MessageType::TYPE_MASK;
+	srcType = srcType & MessageType::TYPE_MASK;
+
+	// same type is compatible
+	if (dstType == srcType)
+		return true;
+
+	// all switch commands are compatible
+	bool dstIsCommand = uint(dstType) - uint(MessageType::OFF_ON) < SWITCH_COMMAND_COUNT;
+	bool srcIsCommand = uint(srcType) - uint(MessageType::OFF_ON) < SWITCH_COMMAND_COUNT;
+	if (dstIsCommand && srcIsCommand)
+		return true;
+
+	// set command is compatible to move-to command
+	if (dstType == MessageType::SET_LEVEL && srcType == MessageType::MOVE_TO_LEVEL)
+		return true;
+
+	// switch command is compatible to set command (uses values in the convert options)
+	if (srcIsCommand) {
+		switch (dstType) {
+		case MessageType::SET_LEVEL:
+		case MessageType::MOVE_TO_LEVEL:
+		case MessageType::SET_AIR_TEMPERATURE:
+			return true;
+		default:;
+		}
 	}
+
+	// simple value is compatible to switch command (compares against values in the convert options)
+	if (dstIsCommand) {
+		switch (srcType) {
+		case MessageType::LEVEL:
+		case MessageType::AIR_TEMPERATURE:
+		case MessageType::AIR_HUMIDITY:
+		case MessageType::AIR_PRESSURE:
+		case MessageType::AIR_VOC:
+			return true;
+		default:;
+		}
+	}
+
+	return false;
 }
 
-bool convertCommandIn(MessageType dstType, Message &dst, MessageType srcType, uint8_t src,
-	ConvertOptions const &convertOptions)
-{
-	if (src >= 4)
+bool convertCommandIn(MessageType dstType, Message &dst, uint8_t src, ConvertOptions const &convertOptions) {
+	if (src >= 3)
 		return false;
 
 	switch (dstType) {
-		case MessageType::OFF_ON_IN:
-		case MessageType::OFF_ON_TOGGLE_IN:
-		case MessageType::TRIGGER_IN:
-		case MessageType::UP_DOWN_IN:
-		case MessageType::OPEN_CLOSE_IN: {
-			int c = (convertOptions.i32 >> src * 3) & 7;
-			if (c >= 4)
-				return false; // conversion failed
-			dst.indexedCommand.command = c;
-			int i = convertOptions.u32 >> 24;
-			if (i != 255)
-				dst.indexedCommand.index = i;
-			break;
+	case MessageType::OFF_ON_IN:
+	case MessageType::OFF_ON_TOGGLE_IN:
+	case MessageType::TRIGGER_IN:
+	case MessageType::UP_DOWN_IN:
+	case MessageType::OPEN_CLOSE_IN: {
+		// command -> command
+		int c = convertOptions.getCommand(src);
+		if (c >= 3)
+			return false; // conversion failed
+		dst.command = c;
+		break;
+	}
+	case MessageType::SET_LEVEL_IN:
+	case MessageType::MOVE_TO_LEVEL_IN:
+	case MessageType::SET_AIR_TEMPERATURE_IN:
+	case MessageType::SET_AIR_HUMIDITY_IN: {
+		// command -> set-value, use values in convertOptions
+		int c = convertOptions.getCommand(src);
+		if (c >= 3)
+			return false; // conversion failed
+		dst.command = c;
+		dst.transition = 0;
+		dst.value.f = convertOptions.value.f[src];
+		break;
+	}
+	default:
+		// conversion failed
+		return false;
+	}
+
+	// conversion successful
+	return true;
+}
+
+bool convertFloatValueIn(MessageType dstType, Message &dst, MessageType srcType, float src,
+	ConvertOptions const &convertOptions) {
+	switch (dstType) {
+	case MessageType::OFF_ON_IN:
+	case MessageType::OFF_ON_TOGGLE_IN:
+	case MessageType::TRIGGER_IN:
+	case MessageType::UP_DOWN_IN:
+	case MessageType::OPEN_CLOSE_IN: {
+		// value -> command, compare against threshold values
+		float upper = convertOptions.value.f[0];
+		float lower = convertOptions.value.f[1];
+		int compare = src > upper ? 0 : (src < lower ? 1 : 2);
+		int c = convertOptions.getCommand(compare);
+		if (c >= 3)
+			return false; // conversion failed
+		dst.command = c;
+		break;
+	}
+	case MessageType::LEVEL_IN:
+	case MessageType::AIR_TEMPERATURE_IN:
+	case MessageType::AIR_HUMIDITY_IN:
+	case MessageType::AIR_PRESSURE_IN:
+	case MessageType::AIR_VOC_IN:
+		if (dstType != srcType)
+			return false; // conversion failed
+		dst.value.f = src;
+		break;
+	default:
+		// conversion failed
+		return false;
+	}
+
+	// conversion successful
+	return true;
+}
+
+bool convertSetFloatValueIn(MessageType dstType, Message &dst, MessageType srcType, Message const &src,
+	ConvertOptions const &convertOptions) {
+	switch (dstType) {
+	case MessageType::SET_LEVEL_IN:
+	case MessageType::MOVE_TO_LEVEL_IN:
+	case MessageType::SET_AIR_TEMPERATURE_IN:
+		if (dstType == MessageType::MOVE_TO_LEVEL_IN && srcType == MessageType::SET_LEVEL_IN) {
+			dst.command = src.command;
+			dst.transition = 0;
+			dst.value.f = src.value.f;
+		} else if (dstType != srcType) {
+			return false; // conversion failed
+		} else {
+			dst.command = src.command;
+			dst.transition = src.transition;
+			dst.value.f = src.value.f;
 		}
-		case MessageType::SET_TEMPERATURE_IN: {
-			switch (srcType) {
-				case MessageType::TRIGGER_IN:
-					if (src == 0)
-						return false; // conversion failed
-					dst.setTemperature = convertOptions.ff;
-					break;
-				case MessageType::UP_DOWN_IN:
-				case MessageType::OPEN_CLOSE_IN:
-					if (src == 0)
-						return false; // conversion failed
-					if (!convertOptions.ff.getFlag()) {
-						// absolute
-						if (!convertOptions.ff.isNegative()) {
-							// positive: Set on up/trigger
-							if (src == 2)
-								return false; // conversion failed
-							dst.setTemperature = convertOptions.ff;
-						} else {
-							// negative: Set on down/trigger
-							if (src == 1)
-								return false; // conversion failed
-							dst.setTemperature = -convertOptions.ff;
-						}
-					} else {
-						// relative: Up/trigger are positive, down is negative
-						dst.setTemperature = src == 2 ? -convertOptions.ff : convertOptions.ff;
-					}
-					break;
-				default:
-					// conversion failed
-					return false;
-			}
-			break;
-		}
-		default:
-			// conversion failed
-			return false;
+		break;
+	default:
+		// conversion failed
+		return false;
 	}
 
 	// conversion successful
 	return true;
-}
-
-bool convertTemperatureIn(MessageType dstType, Message &dst, float src, ConvertOptions const &convertOptions) {
-	switch (dstType) {
-		case MessageType::TEMPERATURE_IN:
-			dst.temperature = src;
-			break;
-		default:
-			// conversion failed
-			return false;
-	}
-
-	// conversion successful
-	return true;
-}
-
-bool convertPressureIn(MessageType dstType, Message &dst, float src, ConvertOptions const &convertOptions) {
-	switch (dstType) {
-		case MessageType::PRESSURE_IN:
-			dst.pressure = src;
-			break;
-		default:
-			// conversion failed
-			return false;
-	}
-
-	// conversion successful
-	return true;
-}
-
-bool convertAirHumidityIn(MessageType dstType, Message &dst, float src, ConvertOptions const &convertOptions) {
-	switch (dstType) {
-		case MessageType::AIR_HUMIDITY_IN:
-			dst.airHumidity = src;
-			break;
-		default:
-			// conversion failed
-			return false;
-	}
-
-	// conversion successful
-	return true;
-}
-
-bool convertAirVocIn(MessageType dstType, Message &dst, float src, ConvertOptions const &convertOptions) {
-	switch (dstType) {
-		case MessageType::AIR_VOC_IN:
-			dst.airVoc = src;
-			break;
-		default:
-			// conversion failed
-			return false;
-	}
-
-	// conversion successful
-	return true;
-}
-
-bool isCompatibleOut(MessageType dstType, MessageType srcType) {
-	switch (srcType) {
-		case MessageType::OFF_ON_OUT:
-		case MessageType::OFF_ON_TOGGLE_OUT:
-		case MessageType::TRIGGER_OUT:
-		case MessageType::UP_DOWN_OUT:
-		case MessageType::OPEN_CLOSE_OUT:
-			switch (dstType) {
-				case MessageType::OFF_ON_OUT:
-				case MessageType::OFF_ON_TOGGLE_OUT:
-				case MessageType::TRIGGER_OUT:
-				case MessageType::UP_DOWN_OUT:
-				case MessageType::OPEN_CLOSE_OUT:
-					return true;
-				default:
-					return false;
-			}
-		default:
-			return false;
-	}
 }
 
 bool convertCommandOut(uint8_t &dst, MessageType srcType, Message const &src, ConvertOptions const &convertOptions) {
 	switch (srcType) {
-		case MessageType::OFF_ON_OUT:
-		case MessageType::OFF_ON_TOGGLE_OUT:
-		case MessageType::TRIGGER_OUT:
-		case MessageType::UP_DOWN_OUT:
-		case MessageType::OPEN_CLOSE_OUT: {
-			int c = (convertOptions.i32 >> int(src.command) * 3) & 7;
-			if (c >= 4)
-				return false; // conversion failed
-			dst = c;
-			break;
-		}
-		default:
-			// todo: convert any event to on/off using convertOptions
-			// conversion failed
-			return false;
+	case MessageType::OFF_ON_OUT:
+	case MessageType::OFF_ON_TOGGLE_OUT:
+	case MessageType::TRIGGER_OUT:
+	case MessageType::UP_DOWN_OUT:
+	case MessageType::OPEN_CLOSE_OUT: {
+		// command -> command
+		int c = convertOptions.getCommand(src.command);
+		if (c >= 3)
+			return false; // conversion failed
+		dst = c;
+		break;
+	}
+	case MessageType::LEVEL_OUT:
+	case MessageType::AIR_TEMPERATURE_OUT:
+	case MessageType::AIR_HUMIDITY_OUT:
+	case MessageType::AIR_PRESSURE_OUT:
+	case MessageType::AIR_VOC_OUT:
+	{
+		// value -> command, compare against threshold values
+		float upper = convertOptions.value.f[0];
+		float lower = convertOptions.value.f[1];
+		int compare = src.value.f > upper ? 0 : (src.value.f < lower ? 1 : 2);
+		int c = convertOptions.getCommand(compare);
+		if (c >= 3)
+			return false; // conversion failed
+		dst = c;
+		break;
+	}
+	default:
+		// conversion failed
+		return false;
 	}
 
 	// conversion successful
 	return true;
 }
 
+bool convertFloatValueOut(MessageType dstType, float &dst, MessageType srcType, Message const &src,
+	ConvertOptions const &convertOptions) {
+	switch (srcType) {
+	case MessageType::LEVEL_OUT:
+	case MessageType::AIR_TEMPERATURE_OUT:
+	case MessageType::AIR_HUMIDITY_OUT:
+	case MessageType::AIR_PRESSURE_OUT:
+	case MessageType::AIR_VOC_OUT:
+		if (dstType != srcType)
+			return false; // conversion failed
+		dst = src.value.f;
+		break;
+	default:
+		// conversion failed
+		return false;
+	}
+
+	// conversion successful
+	return true;
+}
+
+bool convertSetFloatValueOut(MessageType dstType, Message &dst, MessageType srcType, Message const &src,
+	ConvertOptions const &convertOptions) {
+	switch (srcType) {
+	case MessageType::OFF_ON_OUT:
+	case MessageType::OFF_ON_TOGGLE_OUT:
+	case MessageType::TRIGGER_OUT:
+	case MessageType::UP_DOWN_OUT:
+	case MessageType::OPEN_CLOSE_OUT: {
+		// command -> set value, use values in convertOptions
+		int c = convertOptions.getCommand(src.command);
+		if (c >= 3)
+			return false; // conversion failed
+		dst.command = c;
+		dst.transition = 0;
+		dst.value.f = convertOptions.value.f[min(c, 1)];
+		break;
+	}
+	case MessageType::SET_LEVEL_OUT:
+	case MessageType::MOVE_TO_LEVEL_OUT:
+	case MessageType::SET_AIR_TEMPERATURE_OUT:
+	case MessageType::SET_AIR_HUMIDITY_OUT:
+		if (dstType == MessageType::MOVE_TO_LEVEL_OUT && srcType == MessageType::SET_LEVEL_OUT) {
+			dst.command = src.command;
+			dst.transition = 0;
+			dst.value.f = src.value.f;
+		} else if (dstType != srcType) {
+			return false; // conversion failed
+		} else {
+			dst.command = src.command;
+			dst.transition = src.transition;
+			dst.value.f = src.value.f;
+		}
+		break;
+	default:
+		// conversion failed
+		return false;
+	}
+
+	// conversion successful
+	return true;
+}
+
+
 String getTypeName(MessageType messageType) {
 	switch (messageType & MessageType::TYPE_MASK) {
-		case MessageType::OFF_ON:
-			return "Off/On";
-		case MessageType::OFF_ON_TOGGLE:
-			return "Off/On/Toggle";
-		case MessageType::TRIGGER:
-			return "Trigger";
-		case MessageType::UP_DOWN:
-			return "Up/Down";
-		case MessageType::OPEN_CLOSE:
-			return "Open/Close";
+	case MessageType::OFF_ON:
+		return "Off/On";
+	case MessageType::OFF_ON_TOGGLE:
+		return "Off/On/Toggle";
+	case MessageType::TRIGGER:
+		return "Trigger";
+	case MessageType::UP_DOWN:
+		return "Up/Down";
+	case MessageType::OPEN_CLOSE:
+		return "Open/Close";
 
-		case MessageType::LEVEL:
-			return "Level";
-		case MessageType::MOVE_TO_LEVEL:
-			return "Move to Level";
+	case MessageType::LEVEL:
+		return "Level";
+	case MessageType::SET_LEVEL:
+		return "Set Level";
+	case MessageType::MOVE_TO_LEVEL:
+		return "Move to Level";
 
-		case MessageType::TEMPERATURE:
-			return "Temperature";
-		case MessageType::PRESSURE:
-			return "Pressure";
-		case MessageType::AIR_HUMIDITY:
-			return "Air Humidity";
-		case MessageType::AIR_VOC:
-			return "Air VOC";
-		case MessageType::ILLUMINANCE:
-			return "Illuminance";
+	case MessageType::AIR_TEMPERATURE:
+		return "Air Temperature";
+	case MessageType::SET_AIR_TEMPERATURE:
+		return "Set Air Temperature";
+	case MessageType::AIR_PRESSURE:
+		return "Air Pressure";
+	case MessageType::AIR_HUMIDITY:
+		return "Air Humidity";
+	case MessageType::AIR_VOC:
+		return "Air VOC";
+	case MessageType::ILLUMINANCE:
+		return "Illuminance";
 
-		case MessageType::VOLTAGE:
-			return "Voltage";
-		case MessageType::CURRENT:
-			return "Current";
-		case MessageType::BATTERY_LEVEL:
-			return "Battery Level";
-		case MessageType::ENERGY_COUNTER:
-			return "Energy Counter";
-		case MessageType::POWER:
-			return "Power";
+	case MessageType::VOLTAGE:
+		return "Voltage";
+	case MessageType::CURRENT:
+		return "Current";
+	case MessageType::BATTERY_LEVEL:
+		return "Battery Level";
+	case MessageType::ENERGY_COUNTER:
+		return "Energy Counter";
+	case MessageType::POWER:
+		return "Power";
 
-		default:
-			return "<unknown>";
+	default:
+		return "<unknown>";
 	}
 }

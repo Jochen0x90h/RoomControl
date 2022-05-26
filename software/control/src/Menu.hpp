@@ -16,6 +16,8 @@ public:
 	 * Add a divider line to the menu
 	 */
 	void line();
+	void beginSection();
+	void endSection();
 
 	struct Stream {
 		int x;
@@ -74,9 +76,7 @@ public:
 		}
 	};
 
-	Stream stream() {
-		return {10, this->entryY + 2 - this->offsetY, this->bitmap};
-	}
+	Stream stream();
 
 	/**
 	 * Add a label to the menu that can not be selected
@@ -145,6 +145,8 @@ protected:
 
 	int8_t delta = 0;
 	bool activated = false;
+
+	bool section = false;
 
 	// index of selected menu entry
 	uint16_t selected = 0;

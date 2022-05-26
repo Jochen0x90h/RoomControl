@@ -47,7 +47,7 @@ const EndpointType endpoints2[] = {
 	ROCKER, BUTTON, BLIND, ROCKER, BUTTON, BLIND, LIGHT, LIGHT,
 };
 const EndpointType endpoints3a[] = {
-	EndpointType::TEMPERATURE_IN
+	EndpointType::AIR_TEMPERATURE_IN
 };
 
 
@@ -154,7 +154,7 @@ void handle(Gui &gui) {
 								// 0: inactive, 1: up, 2: down
 								state = (state & ~3) | r.u8();
 								break;
-							case EndpointType::TEMPERATURE_OUT:
+							case EndpointType::AIR_TEMPERATURE_OUT:
 								state = r.u16L();
 								break;
 							default:
@@ -293,7 +293,7 @@ void handle(Gui &gui) {
 						break;
 					}
 
-					case EndpointType::TEMPERATURE_IN: {
+					case EndpointType::AIR_TEMPERATURE_IN: {
 						// temperature sensor
 						auto temperature = gui.temperatureSensor(id++);
 						if (temperature) {

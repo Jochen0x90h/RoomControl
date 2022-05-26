@@ -11,17 +11,19 @@ static bool convertMessage(MessageType dstType, void *dstMessage, MessageType sr
 	Message &dst = *reinterpret_cast<Message *>(dstMessage);
 
 	switch (srcType) {
-		case MessageType::OFF_ON_IN:
-		case MessageType::OFF_ON_TOGGLE_IN:
-		case MessageType::TRIGGER_IN:
-		case MessageType::UP_DOWN_IN:
-		case MessageType::OPEN_CLOSE_IN:
-			return convertCommandIn(dstType, dst, srcType, src.command, convertOptions);
-		case MessageType::TEMPERATURE_IN:
-			return convertTemperatureIn(dstType, dst, src.temperature, convertOptions);
-		default:
-			// conversion failed
-			return false;
+	case MessageType::OFF_ON_IN:
+	case MessageType::OFF_ON_TOGGLE_IN:
+	case MessageType::TRIGGER_IN:
+	case MessageType::UP_DOWN_IN:
+	case MessageType::OPEN_CLOSE_IN:
+		return convertCommandIn(dstType, dst, src.command, convertOptions);
+	case MessageType::SET_LEVEL_IN:
+	case MessageType::SET_AIR_TEMPERATURE_IN:
+	case MessageType::SET_AIR_HUMIDITY_IN:
+		return convertSetFloatValueIn(dstType, dst, srcType, src, convertOptions);
+	default:
+		// conversion failed
+		return false;
 	}
 }
 
@@ -93,7 +95,7 @@ void AlarmInterface::test(int index, AlarmFlash const &flash) {
 
 		// publish to subscriber
 		subscriber.barrier->resumeFirst([&subscriber, &flash] (Subscriber::Parameters &p) {
-			p.subscriptionIndex = subscriber.subscriptionIndex;
+			p.source = subscriber.source;
 
 			// convert to target unit and type and resume coroutine if conversion was successful
 			MessageType srcType = flash.endpoints[subscriber.index];
@@ -122,7 +124,7 @@ Coroutine AlarmInterface::tick() {
 
 					// publish to subscriber
 					subscriber.barrier->resumeFirst([&subscriber, &flash] (Subscriber::Parameters &p) {
-						p.subscriptionIndex = subscriber.subscriptionIndex;
+						p.source = subscriber.source;
 
 						// convert to target unit and type and resume coroutine if conversion was successful
 						//MessageType type = flash.messageTypes[subscriber.index];
@@ -144,7 +146,8 @@ AlarmInterface::AlarmFlash::AlarmFlash(AlarmFlash const &flash) :
 {
 	array::copy(this->endpoints, flash.endpoints);
 	for (int i = 0; i < flash.endpointCount; ++i) {
-		array::copy(this->messages[i].data, flash.messages[i].data);
+		this->messages[i] = flash.messages[i];
+		//array::copy(this->messages[i].data, flash.messages[i].data);
 	}
 }
 

@@ -567,7 +567,25 @@ bool writeZclClusterSpecific(RadioInterface::PacketWriter &w, uint8_t zclCounter
 	switch (info.cluster) {
 	case zb::ZclCluster::ON_OFF:
 		return convertCommandOut(w.u8(), srcType, src, publisher.convertOptions);
-	case zb::ZclCluster::LEVEL_CONTROL:
+	case zb::ZclCluster::LEVEL_CONTROL: {
+		Message level;
+		if (!convertSetFloatValueOut(MessageType::MOVE_TO_LEVEL_OUT, level, srcType, src, publisher.convertOptions))
+			return false; // conversion failed
+		if (level.command == 0) {
+			// set level
+			w.e8(zb::ZclLevelControlCommand::MOVE_TO_LEVEL_WITH_ON_OFF);
+		} else {
+			// increase/decrease level
+			w.e8(zb::ZclLevelControlCommand::STEP_WITH_ON_OFF);
+			w.u8(level.command == 1 ? 0x00 : 0x01);
+		}
+		w.u8(clamp(int(level.value.f * 254.0f + 0.5f), 0, 254));
+
+		// transition time in 1/10s
+		w.u16L(min(int(level.transition), 65534));
+		break;
+	}
+/*
 		switch (srcType) {
 		case MessageType::LEVEL:
 		case MessageType::MOVE_TO_LEVEL:
@@ -591,7 +609,7 @@ bool writeZclClusterSpecific(RadioInterface::PacketWriter &w, uint8_t zclCounter
 			// conversion failed
 			return false;
 		}
-		break;
+		break;*/
 	default:
 		// conversion failed
 		return false;
@@ -772,36 +790,55 @@ static bool handleZclClusterSpecific(MessageType dstType, void *dstMessage, Endp
 
 	Message &dst = *reinterpret_cast<Message *>(dstMessage);
 	switch (info.cluster) {
-		case zb::ZclCluster::ON_OFF:
-			return convertCommandIn(dstType, dst, MessageType::OFF_ON_TOGGLE_IN, command, convertOptions);
-		case zb::ZclCluster::LEVEL_CONTROL:
-			if (dstType != MessageType::MOVE_TO_LEVEL)
-				return false; // conversion failed
-			switch (zb::ZclLevelControlCommand(command)) {
-				case zb::ZclLevelControlCommand::MOVE_TO_LEVEL:
-				case zb::ZclLevelControlCommand::MOVE_TO_LEVEL_WITH_ON_OFF: {
-					uint8_t level = r.u8();
-					uint16_t transitionTime = r.u16L();
+	case zb::ZclCluster::ON_OFF:
+		return convertCommandIn(dstType, dst, command, convertOptions);
+	case zb::ZclCluster::LEVEL_CONTROL: {
+		Message level;
+		level.command = 0;
+		switch (zb::ZclLevelControlCommand(command)) {
+		case zb::ZclLevelControlCommand::STEP:
+		case zb::ZclLevelControlCommand::STEP_WITH_ON_OFF:
+			level.command = r.u8() == 0 ? 1 : 2; // increase/decrease
+			// fall through
+		case zb::ZclLevelControlCommand::MOVE_TO_LEVEL:
+		case zb::ZclLevelControlCommand::MOVE_TO_LEVEL_WITH_ON_OFF: {
+			level.value.f = float(r.u8()) / 254.0f;
+			level.transition = r.u16L(); // transition time in 1/10 s
+			return convertSetFloatValueIn(dstType, dst, MessageType::MOVE_TO_LEVEL_IN, level, convertOptions);
+		}
+		default:
+			// conversion failed
+			return false;
+		}
+/*
+		if (dstType != MessageType::MOVE_TO_LEVEL)
+			return false; // conversion failed
+		switch (zb::ZclLevelControlCommand(command)) {
+		case zb::ZclLevelControlCommand::MOVE_TO_LEVEL:
+		case zb::ZclLevelControlCommand::MOVE_TO_LEVEL_WITH_ON_OFF: {
+			uint8_t level = r.u8();
+			uint16_t transitionTime = r.u16L();
 
-					dst.moveToLevel.level = float(level) / 254.0f;
-					dst.moveToLevel.move = float(transitionTime) / 10.0f;
-					break;
-				}
-				case zb::ZclLevelControlCommand::STEP:
-				case zb::ZclLevelControlCommand::STEP_WITH_ON_OFF: {
-					bool up = r.u8() == 0;
-					int diff = r.u8();
-					uint16_t transitionTime = r.u16L();
-
-					dst.moveToLevel.level.set(float(up ? diff : -diff) / 254.0f, true);
-					dst.moveToLevel.move = float(transitionTime) / 10.0f;
-					break;
-				}
-				default:
-					// conversion failed
-					return false;
-			}
+			dst.moveToLevel.level = float(level) / 254.0f;
+			dst.moveToLevel.move = float(transitionTime) / 10.0f;
 			break;
+		}
+		case zb::ZclLevelControlCommand::STEP:
+		case zb::ZclLevelControlCommand::STEP_WITH_ON_OFF: {
+			bool up = r.u8() == 0;
+			int diff = r.u8();
+			uint16_t transitionTime = r.u16L();
+
+			dst.moveToLevel.level.set(float(up ? diff : -diff) / 254.0f, true);
+			dst.moveToLevel.move = float(transitionTime) / 10.0f;
+			break;
+		}
+		default:
+			// conversion failed
+			return false;
+		}*/
+		break;
+	}
 		default:
 			// conversion failed
 			return false;
@@ -1571,7 +1608,7 @@ Terminal::out << ("Association Request Receive On When Idle: " + dec(receiveOnWh
 					if (dstEndpoint == zbEndpoint && cluster == endpointInfo.cluster) {
 						// trigger subscriber
 						subscriber.barrier->resumeFirst([&subscriber, &r, &endpointInfo] (Subscriber::Parameters &p) {
-							p.subscriptionIndex = subscriber.subscriptionIndex;
+							p.source = subscriber.source;
 
 							// convert from zbee command to message (note r is passed by value for multiple subscribers)
 							return handleZclClusterSpecific(subscriber.messageType, p.message, endpointInfo, r,
@@ -1800,9 +1837,10 @@ void RadioInterface::handleGp(uint8_t const *mac, PacketReader &r) {
 					// check if this is the right endpoint
 					if (subscriber.index == endpointIndex) {
 						subscriber.barrier->resumeFirst([&subscriber, message] (Subscriber::Parameters &p) {
-							p.subscriptionIndex = subscriber.subscriptionIndex;
+							p.source = subscriber.source;
+
 							auto &dst = *reinterpret_cast<Message *>(p.message);
-							return convertCommandIn(subscriber.messageType, dst, MessageType::UP_DOWN, message, subscriber.convertOptions);
+							return convertCommandIn(subscriber.messageType, dst, message, subscriber.convertOptions);
 						});
 					}
 				}

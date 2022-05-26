@@ -15,6 +15,8 @@ constexpr int max(int x, int y) {return x > y ? x : y;}
 constexpr int clamp(int x, int lo, int hi) {return x < lo ? lo : (x > hi ? hi : x);}
 constexpr float clamp(float x, float lo, float hi) {return x < lo ? lo : (x > hi ? hi : x);}
 
+constexpr int iround(float x) {return int(x + (x > 0.0f ? 0.5f : -0.5f));}
+
 
 // helper classes for distinguishing between fixed size array and c-string
 struct False {};

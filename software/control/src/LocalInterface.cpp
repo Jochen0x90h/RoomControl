@@ -16,20 +16,17 @@ constexpr String deviceNames[] = {
 
 // air sensor endpoints
 constexpr int BME680_TEMPERATURE_ENDPOINT = 0;
-constexpr int BME680_PRESSURE_ENDPOINT = 1;
-constexpr int BME680_HUMIDITY_ENDPOINT = 2;
+constexpr int BME680_HUMIDITY_ENDPOINT = 1;
+constexpr int BME680_PRESSURE_ENDPOINT = 2;
 constexpr int BME680_VOC_ENDPOINT = 3;
 
 // endpoint type arrays for getEndpoints()
 constexpr MessageType bme680Endpoints[] = {
-	MessageType::TEMPERATURE_IN,
-	MessageType::PRESSURE_IN,
+	MessageType::AIR_TEMPERATURE_IN,
 	MessageType::AIR_HUMIDITY_IN,
+	MessageType::AIR_PRESSURE_IN,
 	MessageType::AIR_VOC_IN
 };
-//constexpr MessageType bme680MessageTypes[] = {
-//	MessageType::TEMPERATURE_IN, MessageType::AIR_PRESSURE_IN, MessageType::AIR_HUMIDITY_IN, MessageType::AIR_VOC_IN
-//};
 
 constexpr MessageType heatingEndpoints[] = {
 	MessageType::OFF_ON_TOGGLE_OUT
@@ -117,51 +114,35 @@ Coroutine LocalInterface::readAirSensor() {
 		for (auto &subscriber : device.subscribers) {
 			if (subscriber.index >= array::count(bme680Endpoints))
 				break;
-/*
+
 			// get value
-			FloatWithFlag value;
+			float value;
 			switch (subscriber.index) {
 			case BME680_TEMPERATURE_ENDPOINT:
 				// get temperature in celsius
-				value = airSensor.getTemperature();
+				value = airSensor.getTemperature() + 273.15f;
+				break;
+			case BME680_HUMIDITY_ENDPOINT:
+				value = airSensor.getHumidity();
 				break;
 			case BME680_PRESSURE_ENDPOINT:
 				// get pressure in hectopascal
 				value = airSensor.getPressure();
-				break;
-			case BME680_HUMIDITY_ENDPOINT:
-				value = airSensor.getHumidity();
 				break;
 			case BME680_VOC_ENDPOINT:
 				// get gas resistance in ohm
 				value = airSensor.getGasResistance();
 				break;
 			}
-*/
+
 			// publish to subscriber
-			subscriber.barrier->resumeFirst([&airSensor, &subscriber] (Subscriber::Parameters &p) {
-				p.subscriptionIndex = subscriber.subscriptionIndex;
+			subscriber.barrier->resumeFirst([&subscriber, value] (Subscriber::Parameters &p) {
+				p.source = subscriber.source;
+
+				// convert to destination message type and resume coroutine if conversion was successful
 				auto &dst = *reinterpret_cast<Message *>(p.message);
-				switch (subscriber.index) {
-					case BME680_TEMPERATURE_ENDPOINT:
-						// temperature in celsius
-						return convertTemperatureIn(subscriber.messageType, dst, airSensor.getTemperature(), subscriber.convertOptions);
-					case BME680_PRESSURE_ENDPOINT:
-						// air pressure in hectopascal
-						return convertPressureIn(subscriber.messageType, dst, airSensor.getPressure(), subscriber.convertOptions);
-					case BME680_HUMIDITY_ENDPOINT:
-						// air humidity in percent
-						return convertAirHumidityIn(subscriber.messageType, dst, airSensor.getHumidity(), subscriber.convertOptions);
-					case BME680_VOC_ENDPOINT:
-						// gas resistance in ohm
-						return convertAirVocIn(subscriber.messageType, dst, airSensor.getGasResistance(), subscriber.convertOptions);
-						break;
-				}
-				return false;
-/*
-				// convert to target unit and type and resume coroutine if conversion was successful
-				MessageType type = bme680MessageTypes[subscriber.index];
-				return convert(subscriber.messageType, p.message, type, &value);*/
+				MessageType srcType = bme680Endpoints[subscriber.index];
+				return convertFloatValueIn(subscriber.messageType, dst, srcType, value, subscriber.convertOptions);
 			});
 		}
 		

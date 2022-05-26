@@ -67,11 +67,16 @@ static bool readMessage(MessageType dstType, void *dstMessage, MessageType srcTy
 		case MessageType::TRIGGER_IN:
 		case MessageType::UP_DOWN_IN:
 		case MessageType::OPEN_CLOSE_IN:
-			return convertCommandIn(dstType, dst, srcType, r.u8(), convertOptions);
-		case MessageType::TEMPERATURE_IN: {
+			return convertCommandIn(dstType, dst, r.u8(), convertOptions);
+		case MessageType::LEVEL_IN: {
+			// convert level from 0 - 255 to 0.0 - 1.0
+			float level = float(r.u8()) / 255.0f;
+			return convertFloatValueIn(dstType, dst, srcType, level, convertOptions);
+		}
+		case MessageType::AIR_TEMPERATURE_IN: {
 			// convert temperature from 1/20 Kelvin to Kelvin
 			float temperature = float(r.u16L()) * 0.05f;
-			return convertTemperatureIn(dstType, dst, temperature, convertOptions);
+			return convertFloatValueIn(dstType, dst, srcType, temperature, convertOptions);
 		}
 		default:
 			// conversion failed
@@ -243,7 +248,7 @@ Coroutine BusInterface::receive() {
 						if (subscriber.index == endpointIndex) {
 							MessageType srcType = flash.endpoints[endpointIndex];
 							subscriber.barrier->resumeFirst([&subscriber, &r, srcType](Subscriber::Parameters &p) {
-								p.subscriptionIndex = subscriber.subscriptionIndex;
+								p.source = subscriber.source;
 
 								// read message (note r is passed by value for multiple subscribers)
 								return readMessage(subscriber.messageType, p.message, srcType, r,
@@ -269,8 +274,29 @@ static bool writeMessage(MessageWriter &w, MessageType dstType, Publisher &publi
 		case MessageType::UP_DOWN_OUT:
 		case MessageType::OPEN_CLOSE_OUT:
 			return convertCommandOut(w.u8(), srcType, src, publisher.convertOptions);
-		case MessageType::LEVEL_OUT:
-		case MessageType::MOVE_TO_LEVEL_OUT:
+		case MessageType::LEVEL_OUT: {
+			float level;
+			if (!convertFloatValueOut(dstType, level, srcType, src, publisher.convertOptions))
+				return false; // conversion failed
+			w.u8(clamp(int(level * 255.0f + 0.5f), 0, 255));
+			break;
+		}
+		case MessageType::SET_LEVEL_OUT:
+		case MessageType::MOVE_TO_LEVEL_OUT: {
+			Message level;
+			if (!convertSetFloatValueOut(dstType, level, srcType, src, publisher.convertOptions))
+				return false; // conversion failed
+
+			w.e8<bus::LevelControlCommand>(bus::LevelControlCommand(level.command));
+			w.u8(clamp(int(level.value.f * 255.0f + 0.5f), 0, 255));
+
+			if (dstType == MessageType::MOVE_TO_LEVEL_OUT) {
+				// duration in 1/10s
+				w.u16L(level.transition);
+			}
+			break;
+		}
+/*
 			switch (srcType) {
 				case MessageType::LEVEL_OUT:
 				case MessageType::MOVE_TO_LEVEL_OUT: {
@@ -299,9 +325,23 @@ static bool writeMessage(MessageWriter &w, MessageType dstType, Publisher &publi
 					return false;
 			}
 			break;
+*/
+		case MessageType::AIR_TEMPERATURE_OUT: {
+			float temperature;
+			if (!convertFloatValueOut(dstType, temperature, srcType, src, publisher.convertOptions))
+				return false; // conversion failed
+			w.u16L(clamp(int(temperature * 20.0f + 0.5f), 0, 65535));
+			break;
+		}
+		case MessageType::SET_AIR_TEMPERATURE_OUT: {
+			Message temperature;
+			if (!convertSetFloatValueOut(dstType, temperature, srcType, src, publisher.convertOptions))
+				return false; // conversion failed
 
-		//case EndpointType::TEMPERATURE:
-		//	break;
+			w.e8<bus::LevelControlCommand>(bus::LevelControlCommand(temperature.command));
+			w.u16L(clamp(int(temperature.value.f * 20.0f + 0.5f), 0, 65535));
+			break;
+		}
 
 		default:
 			// conversion failed

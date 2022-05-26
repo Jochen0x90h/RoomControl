@@ -270,7 +270,7 @@ String toString(Array<char, 21> buffer, float value, int digitCount, int decimal
 		}
 	}
 
-	// convert decimal part into buffer
+	// convert fractional part into buffer
 	if (decimalCount > 0) {
 		*end = '.';
 		end += 1 + decimalCount;

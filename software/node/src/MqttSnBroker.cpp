@@ -360,7 +360,7 @@ static bool writeMessage(MessageWriter &w, MessageType srcType, void const *srcM
 	case MessageType::UP_DOWN2:
 		// invert up/down (0, 1, 2 -> 0, 2, 1)
 		w << upDown[(src.upDown << 1) | (src.upDown >> 1)];
-		break;*/
+		break;
 	case MessageType::LEVEL:
 	case MessageType::MOVE_TO_LEVEL:
 		{
@@ -379,7 +379,7 @@ static bool writeMessage(MessageWriter &w, MessageType srcType, void const *srcM
 				w << 's';
 			}
 		}
-		break;
+		break;*/
 	default:
 		// conversion failed
 		return false;
@@ -463,7 +463,7 @@ static bool readMessage(MessageType dstType, void *dstMessage, MessageReader r) 
 			dst.upDown = (v << 1) | (v >> 1);
 		}
 		break;
-*/
+
 	case MessageType::LEVEL:
 	case MessageType::MOVE_TO_LEVEL:
 		{
@@ -494,7 +494,7 @@ static bool readMessage(MessageType dstType, void *dstMessage, MessageReader r) 
 			}
 		}
 		break;
-
+*/
 	default:
 		// conversion failed
 		return false;
@@ -919,7 +919,7 @@ Coroutine MqttSnBroker::receive() {
 				// check if this is the right topic
 				if (subscriber.index == topicIndex) {
 					subscriber.barrier->resumeFirst([&subscriber, &r] (Subscriber::Parameters &p) {
-						p.subscriptionIndex = subscriber.subscriptionIndex;
+						p.source = subscriber.source;
 
 						// read message (note r is passed by value for multiple subscribers)
 						return readMessage(subscriber.messageType, p.message, r);

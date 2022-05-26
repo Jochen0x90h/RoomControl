@@ -56,48 +56,79 @@ enum class EndpointType : uint8_t {
 	// level, color etc.
 	// -----------------
 	
-	// level in percent (brightness of a light bulb, position of blind), optionally with duration/speed
+	// measured level (percent) level in percent (e.g position of blind)
 	LEVEL = 0x10,
 	LEVEL_IN = LEVEL | IN,
 	LEVEL_OUT = LEVEL | OUT,
 
-	MOVE_TO_LEVEL = 0x11,
+	// set level (e.g. brightness of a light bulb)
+	SET_LEVEL = 0x11,
+	SET_LEVEL_IN = SET_LEVEL | IN,
+	SET_LEVEL_OUT = SET_LEVEL | OUT,
+
+	// set level with duration (e.g. brightness of a light bulb)
+	MOVE_TO_LEVEL = 0x12,
+	MOVE_TO_LEVEL_IN = MOVE_TO_LEVEL | IN,
 	MOVE_TO_LEVEL_OUT = MOVE_TO_LEVEL | OUT,
 
 	// color
-	COLOR = 0x12,
+	COLOR = 0x13,
 	COLOR_IN = COLOR | IN,
 	COLOR_OUT = COLOR | OUT,
-	
+
+	// set color
+	SET_COLOR = 0x14,
+	SET_COLOR_IN = SET_COLOR | IN,
+	SET_COLOR_OUT = SET_COLOR | OUT,
+
+	// color temperature
+	COLOR_TEMPERATURE = 0x16,
+	COLOR_TEMPERATURE_IN = COLOR | IN,
+	COLOR_TEMPERATURE_OUT = COLOR | OUT,
+
+	// set color temperature
+	SET_COLOR_TEMPERATURE = 0x17,
+	SET_COLOR_TEMPERATURE_IN = SET_COLOR | IN,
+	SET_COLOR_TEMPERATURE_OUT = SET_COLOR | OUT,
+
 
 	// environment
 	// -----------
 	
-	// temperature (1/20 Kelvin)
-	TEMPERATURE = 0x20,
-	TEMPERATURE_IN = TEMPERATURE | IN,
-	TEMPERATURE_OUT = TEMPERATURE | OUT,
+	// measured air temperature (1/20 Kelvin, displayed in Celsius or Fahrenheit dependent on user setting)
+	AIR_TEMPERATURE = 0x20,
+	AIR_TEMPERATURE_IN = AIR_TEMPERATURE | IN,
+	AIR_TEMPERATURE_OUT = AIR_TEMPERATURE | OUT,
 
 	// set temperature (absolute/relative)
-	SET_TEMPERATURE = 0x21,
-	SET_TEMPERATURE_IN = SET_TEMPERATURE | IN,
-	SET_TEMPERATURE_OUT = SET_TEMPERATURE | OUT,
-
-	// pressure (pascal)
-	PRESSURE = 0x22,
-	PRESSURE_IN = PRESSURE | IN,
+	SET_AIR_TEMPERATURE = 0x21,
+	SET_AIR_TEMPERATURE_IN = SET_AIR_TEMPERATURE | IN,
+	SET_AIR_TEMPERATURE_OUT = SET_AIR_TEMPERATURE | OUT,
 
 	// air humidity (percent)
-	AIR_HUMIDITY = 0x23,
+	AIR_HUMIDITY = 0x22,
 	AIR_HUMIDITY_IN = AIR_HUMIDITY | IN,
+	AIR_HUMIDITY_OUT = AIR_HUMIDITY | OUT,
+
+	// set air humidity (percent)
+	SET_AIR_HUMIDITY = 0x23,
+	SET_AIR_HUMIDITY_IN = SET_AIR_HUMIDITY | IN,
+	SET_AIR_HUMIDITY_OUT = SET_AIR_HUMIDITY | OUT,
+
+	// air pressure (Pascal, displayed in hectopascal, kilopascal or megapascal dependent on user setting)
+	AIR_PRESSURE = 0x24,
+	AIR_PRESSURE_IN = AIR_PRESSURE | IN,
+	AIR_PRESSURE_OUT = AIR_PRESSURE | OUT,
 
 	// air volatile organic components
-	AIR_VOC = 0x24,
+	AIR_VOC = 0x25,
 	AIR_VOC_IN = AIR_VOC | IN,
+	AIR_VOC_OUT = AIR_VOC | OUT,
 
 	// illuminance (lux, https://en.wikipedia.org/wiki/Lux)
-	ILLUMINANCE = 0x25,
+	ILLUMINANCE = 0x26,
 	ILLUMINANCE_IN = ILLUMINANCE | IN,
+	ILLUMINANCE_OUT = ILLUMINANCE | OUT,
 
 	
 	// electrical energy

@@ -82,9 +82,23 @@ S &operator <<(S &&s, Flt flt) {
 	return s << toString(buffer, flt.value, flt.digitCount, flt.decimalCount);
 }
 
+/**
+ * Create a float value wrapper with parameters for printing
+ * @param value value
+ * @param decimalCount minimum number of digits to convert after the decimal point, negative to keep trailing zeros
+ * @return float value wrapper
+ */
 constexpr Flt flt(float value, int decimalCount = 3) {
 	return {value, 1, decimalCount};
 }
+
+/**
+ * Create a float value wrapper with parameters for printing
+ * @param value value
+ * @param digitCount minimum number of digits to convert before the decimal point
+ * @param decimalCount minimum number of digits to convert after the decimal point, negative to keep trailing zeros
+ * @return float value wrapper
+ */
 constexpr Flt flt(float value, int digitCount, int decimalCount) {
 	return {value, digitCount, decimalCount};
 }
