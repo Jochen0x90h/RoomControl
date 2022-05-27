@@ -1,12 +1,13 @@
 #pragma once
 
-#include "Storage.hpp"
+#include <Storage.hpp>
 #include <Network.hpp>
 #include <crypt.hpp>
 #include <String.hpp>
 
 
 class Configuration;
+
 
 /**
  * Global configuration
@@ -62,14 +63,13 @@ struct ConfigurationFlash {
 	/**
 	 * Allocate configuration
 	 */
-	Configuration *allocate() const;
+	[[nodiscard]] Configuration *allocate() const;
 };
 
 class Configuration : public Storage::Element<ConfigurationFlash> {
 public:
 
 	Configuration(ConfigurationFlash const &flash) : Storage::Element<ConfigurationFlash>(flash) {}
-
 };
 
 inline Configuration *ConfigurationFlash::allocate() const {return new Configuration(*this);}

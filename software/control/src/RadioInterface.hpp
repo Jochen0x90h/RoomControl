@@ -34,8 +34,13 @@ public:
 
 	~RadioInterface() override;
 
-	// start the interface
-	Coroutine start(uint16_t panId, DataBuffer<16> const &key, AesKey const &aesKey);
+	/**
+	 * Set configuration. Interface starts on first call of this method
+	 * @param panId id of pan to use
+	 * @param key network key
+	 * @param aesKey network key prepared for aes encryption
+	 */
+	void setConfiguration(uint16_t panId, DataBuffer<16> const &key, AesKey const &aesKey);
 
 	void setCommissioning(bool enabled) override;
 
@@ -44,6 +49,9 @@ public:
 	Device *getDeviceById(uint8_t id) override;
 
 private:
+
+	// start the interface
+	Coroutine start();
 
 	// counters
 	uint8_t macCounter = 0;
@@ -56,7 +64,7 @@ private:
 
 	// configuration
 	uint16_t panId;
-	DataBuffer<16> const *key;
+	DataBuffer<16> const *key = nullptr;
 	AesKey const *aesKey;
 
 	// self-powered devices

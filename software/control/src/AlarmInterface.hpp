@@ -30,9 +30,9 @@ public:
 		uint8_t interfaceId;
 
 		// endpoints that send messages when the alarm goes off
-		uint8_t endpointCount = 0;
-		MessageType endpoints[MAX_ENDPOINT_COUNT];
-		Message messages[MAX_ENDPOINT_COUNT];
+		uint8_t endpointCount = 1;
+		//MessageType endpoints[MAX_ENDPOINT_COUNT];
+		//Message messages[MAX_ENDPOINT_COUNT];
 
 		// note: messages must be the last member because of variable size allocation
 
@@ -77,14 +77,14 @@ public:
 	 * @param index index of alarm
 	 * @return number of subscribers
 	 */
-	int getSubscriberCount(int index);
+	int getSubscriberCount(int index, int endpointCount, uint8_t command);
 
 	/**
 	 * Test an alarm by publishing its messages using given configuration
 	 * @param index index of alarm
 	 * @param flash flash configuration of alarm
 	 */
-	void test(int index, AlarmFlash const &flash);
+	void test(int index, int endpointCount, uint8_t command);
 
 protected:
 	class Alarm : public Storage::Element<AlarmFlash>, public Device {

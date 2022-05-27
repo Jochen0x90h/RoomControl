@@ -2,9 +2,9 @@
 
 #include "Interface.hpp"
 #include "Storage.hpp"
-#include <Configuration.hpp>
 #include <MessageReader.hpp>
 #include <MessageWriter.hpp>
+#include <State.hpp>
 #include <appConfig.hpp>
 
 
@@ -24,8 +24,12 @@ public:
 
 	~BusInterface() override;
 
-	// start the interface
-	Coroutine start(DataBuffer<16> const &key, AesKey const &aesKey);
+	/**
+	 * Set configuration. Interface starts on first call of this method
+	 * @param key network key
+	 * @param aesKey network key prepared for aes encryption
+	 */
+	void setConfiguration(DataBuffer<16> const &key, AesKey const &aesKey);
 
 	void setCommissioning(bool enabled) override;
 
@@ -35,11 +39,14 @@ public:
 
 private:
 
+	// start the interface
+	Coroutine start();
+
 	// counters
 	PersistentState<uint32_t> securityCounter;
 
 	// configuration
-	DataBuffer<16> const *key;
+	DataBuffer<16> const *key = nullptr;
 	AesKey const *aesKey;
 
 

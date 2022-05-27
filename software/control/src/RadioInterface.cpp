@@ -106,31 +106,17 @@ RadioInterface::RadioInterface(PersistentStateManager &stateManager)
 		device.interface = this;
 }
 
-Coroutine RadioInterface::start(uint16_t panId, DataBuffer<16> const &key, AesKey const &aesKey) {
+void RadioInterface::setConfiguration(uint16_t panId, DataBuffer<16> const &key, AesKey const &aesKey) {
+	bool first = this->key == nullptr;
 	this->panId = panId;
 	this->key = &key;
 	this->aesKey = &aesKey;
 
-	// restore security counter
-	co_await this->securityCounter.restore();
-
 	// set pan id of coordinator
 	Radio::setPan(RADIO_ZBEE, panId);
 
-	// set short address of coordinator
-	Radio::setShortAddress(RADIO_ZBEE, 0x0000);
-
-	// filter packets with the coordinator as destination (and broadcast pan/address)
-	Radio::setFlags(RADIO_ZBEE, Radio::ContextFlags::PASS_DEST_SHORT | Radio::ContextFlags::PASS_DEST_LONG
-		| Radio::ContextFlags::HANDLE_ACK);
-
-	// start coroutines
-	broadcast();
-	sendBeacon();
-	for (int i = 0; i < PUBLISH_COUNT; ++i)
-		publish();
-	for (int i = 0; i < RECEIVE_COUNT; ++i)
-		receive();
+	if (first)
+		start();
 }
 
 RadioInterface::~RadioInterface() {
@@ -171,6 +157,26 @@ Interface::Device *RadioInterface::getDeviceById(uint8_t id) {
 			return &device;
 	}
 	return nullptr;
+}
+
+Coroutine RadioInterface::start() {
+	// restore security counter
+	co_await this->securityCounter.restore();
+
+	// set short address of coordinator
+	Radio::setShortAddress(RADIO_ZBEE, 0x0000);
+
+	// filter packets with the coordinator as destination (and broadcast pan/address)
+	Radio::setFlags(RADIO_ZBEE, Radio::ContextFlags::PASS_DEST_SHORT | Radio::ContextFlags::PASS_DEST_LONG
+		| Radio::ContextFlags::HANDLE_ACK);
+
+	// start coroutines
+	broadcast();
+	sendBeacon();
+	for (int i = 0; i < PUBLISH_COUNT; ++i)
+		publish();
+	for (int i = 0; i < RECEIVE_COUNT; ++i)
+		receive();
 }
 
 RadioInterface::ZbDevice *RadioInterface::findZbDevice(uint16_t address) {

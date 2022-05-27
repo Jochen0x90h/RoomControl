@@ -245,7 +245,6 @@ endif()
 
 # base code for nodes (control and gateway)
 set(NODE
-	node/src/Configuration.hpp
 	node/src/Message.cpp
 	node/src/Message.hpp
 	node/src/MqttSnClient.cpp
@@ -270,6 +269,7 @@ set(CONTROL
 	control/src/BME680.hpp
 	control/src/BusInterface.cpp
 	control/src/BusInterface.hpp
+	control/src/Configuration.hpp
 	control/src/Interface.cpp
 	control/src/Interface.hpp
 	control/src/LocalInterface.cpp

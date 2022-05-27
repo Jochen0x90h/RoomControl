@@ -2,7 +2,6 @@
 
 #include <bus.hpp>
 #include <Publisher.hpp>
-#include <State.hpp>
 #include <Subscriber.hpp>
 #include <Array.hpp>
 #include <Coroutine.hpp>

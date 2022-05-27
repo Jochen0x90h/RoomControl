@@ -124,7 +124,7 @@ RoomControl::RoomControl()
 	: storage(0, FLASH_PAGE_COUNT, configurations, busInterface.devices, radioInterface.gpDevices,
 		radioInterface.zbDevices, alarmInterface.alarms, functions)
 	, stateManager()
-	, houseTopicId(), roomTopicId()
+	//, houseTopicId(), roomTopicId()
 	, busInterface(stateManager)
 	, radioInterface(stateManager)
 {
@@ -156,11 +156,7 @@ RoomControl::RoomControl()
 		// write to flash
 		configurations.write(0, new Configuration(configuration));
 	}
-	auto &configuration = *configurations[0];
-	
-	this->busInterface.start(configuration.key, configuration.aesKey);
-	this->radioInterface.start(configuration.zbeePanId, configuration.key, configuration.aesKey);
-	
+
 	applyConfiguration();
 
 	// start coroutines
@@ -176,8 +172,9 @@ RoomControl::~RoomControl() {
 
 void RoomControl::applyConfiguration() {
 	auto const &configuration = *this->configurations[0];
+	this->busInterface.setConfiguration(configuration.key, configuration.aesKey);
 	Radio::setLongAddress(configuration.ieeeLongAddress);
-	//radio::setPan(RADIO_ZBEE, configuration.zbeePanId);
+	this->radioInterface.setConfiguration(configuration.zbeePanId, configuration.key, configuration.aesKey);
 }
 
 
@@ -2606,8 +2603,8 @@ AwaitableCoroutine RoomControl::alarmMenu(AlarmInterface &alarms, int index, Ala
 	while (true) {
 		if (menu.entry("Time"))
 			co_await alarmTimeMenu(flash.time);
-		if (menu.entry("Actions"))
-			co_await alarmActionsMenu(flash);
+		//if (menu.entry("Actions"))
+		//	co_await alarmActionsMenu(flash);
 
 		if (index < alarms.getDeviceCount()) {
 			auto &device = alarms.getDeviceByIndex(index);
@@ -2616,10 +2613,13 @@ AwaitableCoroutine RoomControl::alarmMenu(AlarmInterface &alarms, int index, Ala
 				co_await messageLogger(device);
 
 			// test alarm
-			menu.stream() << "Test (-> " << dec(alarms.getSubscriberCount(index)) << ')';
-			if (menu.entry()) {
-				alarms.test(index, flash);
-			}
+			menu.stream() << "Test Trigger (-> " << dec(alarms.getSubscriberCount(index, 1, 1)) << ')';
+			if (menu.entry())
+				alarms.test(index, 1, 1);
+			menu.stream() << "Test Release (-> " << dec(alarms.getSubscriberCount(index, 1, 0)) << ')';
+			if (menu.entry())
+				alarms.test(index, 1, 0);
+
 
 			if (menu.entry("Delete")) {
 				// delete alarm
@@ -2674,7 +2674,7 @@ AwaitableCoroutine RoomControl::alarmTimeMenu(AlarmTime &time) {
 		co_await menu.show();
 	}
 }
-
+/*
 AwaitableCoroutine RoomControl::alarmActionsMenu(AlarmInterface::AlarmFlash &flash) {
 	Menu menu(this->swapChain);
 	while (true) {
@@ -2727,7 +2727,7 @@ AwaitableCoroutine RoomControl::alarmActionsMenu(AlarmInterface::AlarmFlash &fla
 		co_await menu.show();
 	}
 }
-
+*/
 AwaitableCoroutine RoomControl::endpointsMenu(Interface::Device &device) {
 	Menu menu(this->swapChain);
 	while (true) {
@@ -3934,7 +3934,11 @@ Coroutine RoomControl::TimedBlind::start(RoomControl &roomControl) {
 	SystemDuration position = maxPosition / 2;
 	SystemDuration targetPosition = 0s;
 	SystemTime startTime;
+	SystemTime lastTime;
 	bool up = false;
+
+	Terminal::out << "holdTime " << dec((*this)->getConfig<Config>().holdTime) << '\n';
+	Terminal::out << "runTime " << dec(maxPosition.value) << '\n';
 
 	// no references to flash allowed beyond this point as flash may be reallocated
 	while (true) {
@@ -3951,9 +3955,14 @@ Coroutine RoomControl::TimedBlind::start(RoomControl &roomControl) {
 
 			// wait for event or timeout with a maximum to regularly report the current position
 			int s = co_await select(barrier.wait(source, &message), Timer::sleep(min(up ? -d : d, 200ms)));
+			Terminal::out << "s " << dec(s) << ' ' << dec(source.plugIndex) << '\n';
+
+			// get time since last time
+			auto time = Timer::now();
+			d = time - lastTime;
+			lastTime = time;
 
 			// update position
-			d = Timer::now() - startTime;
 			if (up) {
 				position -= d;
 				if (position <= targetPosition)
@@ -4019,10 +4028,12 @@ Coroutine RoomControl::TimedBlind::start(RoomControl &roomControl) {
 
 		// check if target position already reached
 		if (position == targetPosition) {
+			// stop
 			state = 0;
-		} else {
+		} else if (state == 0) {
+			// start
 			state = (up = targetPosition < position) ? 1 : 2;
-			startTime = Timer::now();
+			lastTime = startTime = Timer::now();
 		}
 
 		// update output position

@@ -14,7 +14,8 @@ constexpr int micLength = 4;
 // BusInterface
 
 BusInterface::BusInterface(PersistentStateManager &stateManager)
-	: securityCounter(stateManager) {
+	: securityCounter(stateManager)
+{
 	// set backpointers
 	for (auto &device: this->devices)
 		device.interface = this;
@@ -23,16 +24,12 @@ BusInterface::BusInterface(PersistentStateManager &stateManager)
 BusInterface::~BusInterface() {
 }
 
-Coroutine BusInterface::start(DataBuffer<16> const &key, AesKey const &aesKey) {
+void BusInterface::setConfiguration(DataBuffer<16> const &key, AesKey const &aesKey) {
+	bool first = this->key == nullptr;
 	this->key = &key;
 	this->aesKey = &aesKey;
-
-	// restore security counter
-	co_await this->securityCounter.restore();
-
-	// start coroutines
-	receive();
-	publish();
+	if (first)
+		start();
 }
 
 void BusInterface::setCommissioning(bool enabled) {
@@ -54,6 +51,15 @@ Interface::Device *BusInterface::getDeviceById(uint8_t id) {
 			return &device;
 	}
 	return nullptr;
+}
+
+Coroutine BusInterface::start() {
+	// restore security counter
+	co_await this->securityCounter.restore();
+
+	// start coroutines
+	receive();
+	publish();
 }
 
 static bool readMessage(MessageType dstType, void *dstMessage, MessageType srcType, MessageReader r,
@@ -94,10 +100,10 @@ Coroutine BusInterface::receive() {
 		int receiveLength = maxMessageLength;
 		co_await BusMaster::receive(receiveLength, receiveMessage);
 
-		for (int i = 0; i < receiveLength; ++i)
-			Terminal::out << hex(receiveMessage[i]) << ' ';
-		Terminal::out << '\n';
-
+		// debug print received message
+		//for (int i = 0; i < receiveLength; ++i)
+		//	Terminal::out << hex(receiveMessage[i]) << ' ';
+		//Terminal::out << '\n';
 
 		bus::MessageReader r(receiveLength, receiveMessage);
 
@@ -222,24 +228,29 @@ Coroutine BusInterface::receive() {
 			}
 		} else {
 			// data message
+
+			// get address
 			uint8_t address = a1 - 1 + r.arbiter() * 8;
 
-			// get security counter
-			uint32_t securityCounter = r.u32L();
-
-			// set start of encrypted message
-			r.setMessage();
-
-			// decrypt
-			Nonce nonce(address, securityCounter);
-			if (!r.decrypt(micLength, nonce, *this->aesKey)) {
-				Terminal::out << "bus: decrypt failed!\n";
-				continue;
-			}
-
+			// search device with address
 			for (auto &device: this->devices) {
 				auto const &flash = *device;
 				if (flash.address == address) {
+					// get security counter
+					uint32_t securityCounter = r.u32L();
+					Terminal::out << "device " << dec(address) << " security counter " << hex(securityCounter) << '\n';
+
+					// set start of encrypted message
+					r.setMessage();
+
+					// decrypt
+					Nonce nonce(address, securityCounter);
+					if (!r.decrypt(micLength, nonce, *this->aesKey)) {
+						Terminal::out << "bus: decrypt failed!\n";
+						break;
+					}
+
+					// get endpoint index
 					uint8_t endpointIndex = r.u8();
 
 					// publish to subscribers

@@ -54,9 +54,9 @@ class Project(ConanFile):
 
     def requirements(self):
         if self.options.family == "emu":
-            self.requires("boost/1.78.0")
-            self.requires("glfw/3.3.6")
-            self.requires("libusb/1.0.24")
+            self.requires("boost/1.79.0")
+            self.requires("glfw/3.3.7")
+            self.requires("libusb/1.0.26")
             self.requires("gtest/1.11.0")
 
     keep_imports = True

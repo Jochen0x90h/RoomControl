@@ -27,7 +27,7 @@ struct Device {
 	Array<EndpointType const> endpoints[2];
 	Flash flash;
 	uint8_t commissioning;
-	uint16_t securityCounter;
+	uint32_t securityCounter;
 	int states[16];
 };
 
@@ -105,8 +105,11 @@ void handle(Gui &gui) {
 						// set key
 						setKey(device.flash.aesKey, r.data<16>());
 
+						// reset security counter
+						device.securityCounter = 0;
+
 						// write to file
-						device.flash.commissioning = device.commissioning;//ed = true;
+						device.flash.commissioning = device.commissioning;
 						BusMaster::file.seekg(offset);
 						BusMaster::file.write(reinterpret_cast<char *>(&device.flash), sizeof(Device::Flash));
 						BusMaster::file.flush();
@@ -187,7 +190,7 @@ void handle(Gui &gui) {
 
 		uint8_t sendData[64];
 
-		// commissioning can be triggered by a small commissioning button
+		// commissioning can be triggered by a small commissioning button in the user interface
 		auto value = gui.button(id++, 0.2f);
 		if (value && *value == 1) {
 			device.commissioning = device.flash.commissioning == 1 ? 2 : 1;
@@ -205,14 +208,13 @@ void handle(Gui &gui) {
 			// list of endpoints
 			w.data(device.endpoints[device.commissioning - 1]);
 
-			// only add message integrity code (mic) using default key, message stays unencrypted
+			// add message integrity code (mic) using default key, message stays unencrypted
 			w.setMessage();
 			Nonce nonce(device.id, 0);
 			w.encrypt(micLength, nonce, bus::defaultAesKey);
 
-			// send
+			// send to bus master (resume coroutine waiting to receive from device)
 			int sendLength = w.getLength();
-
 			BusMaster::receiveWaitlist.resumeFirst([sendLength, sendData](ReceiveParameters &p) {
 				int length = min(*p.receiveLength, sendLength);
 				array::copy(length, p.receiveData, sendData);
@@ -222,7 +224,7 @@ void handle(Gui &gui) {
 		}
 
 		// iterate over endpoints
-		if (device.flash.commissioning != 0) {
+ 		if (device.flash.commissioning != 0) {
 			auto endpoints = device.endpoints[device.flash.commissioning - 1];
 			for (int endpointIndex = 0; endpointIndex < endpoints.count(); ++endpointIndex) {
 				EndpointType endpointType = endpoints[endpointIndex];
@@ -318,8 +320,8 @@ void handle(Gui &gui) {
 					// increment security counter
 					++device.securityCounter;
 
+					// send to bus master (resume coroutine waiting to receive from device)
 					int sendLength = w.getLength();
-
 					BusMaster::receiveWaitlist.resumeFirst([sendLength, sendData](ReceiveParameters &p) {
 						int length = min(*p.receiveLength, sendLength);
 						array::copy(length, p.receiveData, sendData);
@@ -346,6 +348,8 @@ void init() {
 	for (Device &device : BusMaster::devices) {
 		BusMaster::file.read(reinterpret_cast<char *>(&device.flash), sizeof(Device::Flash));
 	}
+
+	// read additional dummy byte to detect if the file is too large
 	char dummy;
 	BusMaster::file.read(&dummy, 1);
 	BusMaster::file.clear();
@@ -356,10 +360,12 @@ void init() {
 	if (size != array::count(BusMaster::devices) * sizeof(Device::Flash)) {
 		// no: create new file
 		BusMaster::file.open(fileName, std::fstream::trunc | std::fstream::in | std::fstream::out | std::fstream::binary);
-		for (Device &device : BusMaster::devices)
+		for (Device &device : BusMaster::devices) {
 			device.flash.commissioning = 0;
+			BusMaster::file.write(reinterpret_cast<char *>(&device.flash), sizeof(Device::Flash));
+		}
 	} else {
-		// yes: open file again
+		// yes: open file again in in/out mode
 		BusMaster::file.open(fileName, std::fstream::in | std::fstream::out | std::fstream::binary);
 	}
 }

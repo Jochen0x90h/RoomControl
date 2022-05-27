@@ -804,7 +804,9 @@ public:
 // Storage
 // -------
 
+	// manager for flash storage
 	Storage storage;
+
 	PersistentStateManager stateManager;
 	
 
@@ -817,13 +819,13 @@ public:
 	Storage::Array<Configuration> configurations;
 
 	// network key
-	AesKey networkKey;
+	//AesKey networkKey;
 
 	// topic id for list of rooms in house (topic: enum)
-	uint16_t houseTopicId;
+	//uint16_t houseTopicId;
 
 	// topic id for list of devices in room (topic: enum/<room>)
-	uint16_t roomTopicId;
+	//uint16_t roomTopicId;
 
 
 // Interfaces
@@ -1142,7 +1144,7 @@ public:
 	[[nodiscard]] AwaitableCoroutine alarmsMenu(AlarmInterface &alarms);
 	[[nodiscard]] AwaitableCoroutine alarmMenu(AlarmInterface &alarms, int index, AlarmInterface::AlarmFlash &flash);
 	[[nodiscard]] AwaitableCoroutine alarmTimeMenu(AlarmTime &time);
-	[[nodiscard]] AwaitableCoroutine alarmActionsMenu(AlarmInterface::AlarmFlash &flash);
+	//[[nodiscard]] AwaitableCoroutine alarmActionsMenu(AlarmInterface::AlarmFlash &flash);
 	[[nodiscard]] AwaitableCoroutine endpointsMenu(Interface::Device &device);
 	[[nodiscard]] AwaitableCoroutine messageLogger(Interface::Device &device);
 	[[nodiscard]] AwaitableCoroutine messageGenerator(Interface::Device &device);
