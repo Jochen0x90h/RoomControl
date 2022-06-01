@@ -1108,11 +1108,11 @@ public:
 
 	Interface &getInterface(Connection const &connection);
 
-	Coroutine testSwitch();
+	//Coroutine testSwitch();
 
 	int connectFunction(RoomControl::FunctionFlash const &flash, Array<Plug const> plugs,
-		Array<Subscriber, MAX_INPUT_COUNT> subscribers, Subscriber::Barrier &barrier,
-		Array<Publisher, MAX_OUTPUT_COUNT> publishers, Array<void const *> states);
+		Array<Subscriber, MAX_INPUT_COUNT> subscribers, PublishInfo::Barrier &barrier,
+		Array<Publisher, MAX_OUTPUT_COUNT> publishers);
 
 	// list of functions
 	Storage::Array<Function> functions;
@@ -1150,8 +1150,8 @@ public:
 	[[nodiscard]] AwaitableCoroutine messageGenerator(Interface::Device &device);
 	[[nodiscard]] AwaitableCoroutine functionsMenu();
 	[[nodiscard]] AwaitableCoroutine functionMenu(int index, FunctionFlash &flash);
-	[[nodiscard]] AwaitableCoroutine measureRunTime(Interface::Device &device, Connection &connection, uint16_t &measureRunTime);
-	[[nodiscard]] AwaitableCoroutine editFunctionConnection(ConnectionIterator &it, Connection &connection, Plug const &plug, bool add);
+	[[nodiscard]] AwaitableCoroutine measureRunTime(Interface::Device &device, Connection const &connection, uint16_t &measureRunTime);
+	[[nodiscard]] AwaitableCoroutine editFunctionConnection(ConnectionIterator &it, Plug const &plug, Connection connection, bool add);
 	[[nodiscard]] AwaitableCoroutine selectFunctionDevice(Connection &connection, Plug const &plug);
 	[[nodiscard]] AwaitableCoroutine selectFunctionEndpoint(Interface::Device &device, Connection &connection, Plug const &plug);
 };

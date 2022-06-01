@@ -96,8 +96,8 @@ protected:
 		String getName() const override;
 		void setName(String name) override;
 		Array<MessageType const> getEndpoints() const override;
-		void addPublisher(uint8_t endpointIndex, Publisher &publisher) override;
-		void addSubscriber(uint8_t endpointIndex, Subscriber &subscriber) override;
+		void subscribe(uint8_t endpointIndex, Subscriber &subscriber) override;
+		PublishInfo getPublishInfo(uint8_t endpointIndex) override;
 
 		// back pointer to interface
 		AlarmInterface *interface;

@@ -6,7 +6,7 @@
 
 
 static MessageType const endpoints[4] = {
-	MessageType::TRIGGER_IN, MessageType::TRIGGER_IN, MessageType::TRIGGER_IN, MessageType::TRIGGER_IN
+	MessageType::TRIGGER_OUT, MessageType::TRIGGER_OUT, MessageType::TRIGGER_OUT, MessageType::TRIGGER_OUT
 };
 static_assert(array::count(endpoints) >= AlarmInterface::AlarmFlash::MAX_ENDPOINT_COUNT);
 
@@ -90,15 +90,14 @@ int AlarmInterface::getSubscriberCount(int index, int endpointCount, uint8_t com
 	assert(index >= 0 && index < this->alarms.count());
 	int count = 0;
 	for (auto &subscriber : this->alarms[index].subscribers) {
-		if (subscriber.index >= endpointCount)
+		if (subscriber.source.device.endpointIndex >= endpointCount)
 			continue;
 
 		Message dst;
-		if (convertCommandIn(subscriber.messageType, dst, command, subscriber.convertOptions))
+		if (convertCommand(subscriber.destination.type, dst, command, subscriber.convertOptions))
 			++count;
 	}
 	return count;
-	//return this->alarms[index].subscribers.count();
 }
 
 void AlarmInterface::test(int index, int endpointCount, uint8_t command) {
@@ -106,16 +105,16 @@ void AlarmInterface::test(int index, int endpointCount, uint8_t command) {
 	auto &alarm = this->alarms[index];
 
 	for (auto &subscriber: alarm.subscribers) {
-		if (subscriber.index >= endpointCount)
+		if (subscriber.source.device.endpointIndex >= endpointCount)
 			continue;
 
 		// publish to subscriber
-		subscriber.barrier->resumeFirst([&subscriber, command] (Subscriber::Parameters &p) {
-			p.source = subscriber.source;
+		subscriber.barrier->resumeFirst([&subscriber, command] (PublishInfo::Parameters &p) {
+			p.info = subscriber.destination;
 
 			// convert to target unit and type and resume coroutine if conversion was successful
 			auto &dst = *reinterpret_cast<Message *>(p.message);
-			return convertCommandIn(subscriber.messageType, dst, command, subscriber.convertOptions);
+			return convertCommand(subscriber.destination.type, dst, command, subscriber.convertOptions);
 			//MessageType srcType = flash.endpoints[subscriber.index];
 			//auto &src = flash.messages[subscriber.index];
 			//return convertMessage(subscriber.messageType, p.message, srcType, src, subscriber.convertOptions);
@@ -137,17 +136,17 @@ Coroutine AlarmInterface::tick() {
 				// alarm goes off: publish to subscribers of alarm
 				for (auto &subscriber: alarm.subscribers) {
 					auto const &flash = *alarm;
-					if (subscriber.index >= flash.endpointCount)
+					if (subscriber.source.device.endpointIndex >= flash.endpointCount)
 						break;
 
 					// publish to subscriber
-					subscriber.barrier->resumeFirst([&subscriber, &flash] (Subscriber::Parameters &p) {
-						p.source = subscriber.source;
+					subscriber.barrier->resumeFirst([&subscriber, &flash] (PublishInfo::Parameters &p) {
+						p.info = subscriber.destination;
 
 						// convert to target unit and type and resume coroutine if conversion was successful
 						auto &dst = *reinterpret_cast<Message *>(p.message);
 						uint8_t src = 1;
-						return convertCommandIn(subscriber.messageType, dst, src, subscriber.convertOptions);
+						return convertCommand(subscriber.destination.type, dst, src, subscriber.convertOptions);
 						//MessageType type = flash.endpoints[subscriber.index];
 						//auto &message = flash.messages[subscriber.index];
 						//return convertMessage(subscriber.messageType, p.message, type, message,
@@ -164,10 +163,6 @@ Coroutine AlarmInterface::tick() {
 AlarmInterface::AlarmFlash::AlarmFlash(AlarmFlash const &flash) :
 	interfaceId(flash.interfaceId), time(flash.time), endpointCount(flash.endpointCount)
 {
-/*	array::copy(this->endpoints, flash.endpoints);
-	for (int i = 0; i < flash.endpointCount; ++i) {
-		this->messages[i] = flash.messages[i];
-	}*/
 }
 
 int AlarmInterface::AlarmFlash::size() const {
@@ -203,11 +198,12 @@ Array<MessageType const> AlarmInterface::Alarm::getEndpoints() const {
 	return {flash.endpointCount, endpoints};//flash.endpoints};
 }
 
-void AlarmInterface::Alarm::addPublisher(uint8_t endpointIndex, Publisher &publisher) {
+void AlarmInterface::Alarm::subscribe(uint8_t endpointIndex, Subscriber &subscriber) {
+	subscriber.remove();
+	subscriber.source.device.endpointIndex = endpointIndex;
+	this->subscribers.add(subscriber);
 }
 
-void AlarmInterface::Alarm::addSubscriber(uint8_t endpointIndex, Subscriber &subscriber) {
-	subscriber.remove();
-	subscriber.index = endpointIndex;
-	this->subscribers.add(subscriber);
+PublishInfo AlarmInterface::Alarm::getPublishInfo(uint8_t endpointIndex) {
+	return {};
 }

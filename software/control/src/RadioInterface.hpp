@@ -21,8 +21,8 @@ public:
 	static constexpr int MAX_DEVICE_COUNT = 64;
 
 	// number of coroutines for receiving and publishing
-	static constexpr int PUBLISH_COUNT = 4;
 	static constexpr int RECEIVE_COUNT = 4;
+	static constexpr int PUBLISH_COUNT = 4;
 
 
 	/**
@@ -115,8 +115,8 @@ private:
 		String getName() const override;
 		void setName(String name) override;
 		Array<MessageType const> getEndpoints() const override;
-		void addPublisher(uint8_t endpointIndex, Publisher &publisher) override;
-		void addSubscriber(uint8_t endpointIndex, Subscriber &subscriber) override;
+		void subscribe(uint8_t endpointIndex, Subscriber &subscriber) override;
+		PublishInfo getPublishInfo(uint8_t endpointIndex) override;
 
 		// back pointer to interface
 		RadioInterface *interface;
@@ -183,8 +183,8 @@ private:
 		String getName() const override;
 		void setName(String name) override;
 		Array<MessageType const> getEndpoints() const override;
-		void addPublisher(uint8_t endpointIndex, Publisher &publisher) override;
-		void addSubscriber(uint8_t endpointIndex, Subscriber &subscriber) override;
+		void subscribe(uint8_t endpointIndex, Subscriber &subscriber) override;
+		PublishInfo getPublishInfo(uint8_t endpointIndex) override;
 
 		// back pointer to interface
 		RadioInterface *interface = nullptr;
@@ -234,9 +234,6 @@ private:
 
 		// list of subscribers
 		SubscriberList subscribers;
-
-		// list of publishers
-		PublisherList publishers;
 
 		// barrier for waiting until a route is available
 		Barrier<> routeBarrier;
@@ -428,5 +425,6 @@ private:
 	ZbDevice *tempDevice;
 
 
-	Event publishEvent;
+	//Event publishEvent;
+	PublishInfo::Barrier publishBarrier;
 };

@@ -28,15 +28,8 @@ struct MessageReader {
 		return value;
 	}
 
-	uint8_t peekU8() {
+	uint8_t peekU8() const {
 		return this->current[0];
-	}
-
-	bool testU8(uint8_t ch) {
-		bool result = this->current[0] == ch;
-		if (result)
-			++this->current;
-		return result;
 	}
 
 	template <typename T>

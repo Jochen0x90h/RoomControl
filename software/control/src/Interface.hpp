@@ -13,8 +13,6 @@
 class Interface {
 public:
 
-	//using EndpointType = bus::EndpointType;
-	
 	/**
 	 * Destructor
 	 */
@@ -56,18 +54,18 @@ public:
 		virtual Array<MessageType const> getEndpoints() const = 0;
 
 		/**
-		 * Add a publisher to the device that sends messages to an endpoint. Gets inserted into a linked list
+		 * Subscribe to receive messages messages from an endpoint
 		 * @param endpointIndex endpoint index
-		 * @param publisher publisher to insert
+		 * @param subscriber subscriber to insert, gets internally inserted into a linked list
 		 */
-		virtual void addPublisher(uint8_t endpointIndex, Publisher &publisher) = 0;
+		virtual void subscribe(uint8_t endpointIndex, Subscriber &subscriber) = 0;
 
 		/**
-		 * Add a subscriber to the device that receives messages from an endpoint. Gets inserted into a linked list
-		 * @param endpointIndex endpoint index
-		 * @param publisher subscriber to insert
+		 * Get publish info used to publish a message to an endpoint
+		 * @param endpointIndex
+		 * @return publish info
 		 */
-		virtual void addSubscriber(uint8_t endpointIndex, Subscriber &subscriber) = 0;
+		virtual PublishInfo getPublishInfo(uint8_t endpointIndex) = 0;
 	};
 
 	/**

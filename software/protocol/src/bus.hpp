@@ -19,7 +19,7 @@ enum class EndpointType : uint8_t {
 	TYPE_MASK = 0x3f,
 	DIRECTION_MASK = 0xc0,
 
-	// direction relative to bus master, i.e. IN is host input and device output
+	// direction relative to device, i.e. IN is device input, OUT is device output (can be subscribed to)
 	IN = 0x80,
 	OUT = 0x40,
 
@@ -136,23 +136,28 @@ enum class EndpointType : uint8_t {
 	
 	// voltage (V, mV)
 	VOLTAGE = 0x30,
-	VOLTAGE_IN = 0xb0,
-	
+	VOLTAGE_IN = VOLTAGE | IN,
+	VOLTAGE_OUT = VOLTAGE | OUT,
+
 	// current (A, mA)
 	CURRENT = 0x31,
-	CURRENT_IN = 0xb1,
+	CURRENT_IN = CURRENT | IN,
+	CURRENT_OUT = CURRENT | OUT,
 
 	// battery level (percent)
 	BATTERY_LEVEL = 0x32,
-	BATTERY_LEVEL_IN = 0xb2,
-	
+	BATTERY_LEVEL_IN = BATTERY_LEVEL | IN,
+	BATTERY_LEVEL_OUT = BATTERY_LEVEL | OUT,
+
 	// energy counter (kWh, Wh)
 	ENERGY_COUNTER = 0x33,
-	ENERGY_COUNTER_IN = 0xb3,
-	
+	ENERGY_COUNTER_IN = ENERGY_COUNTER | IN,
+	ENERGY_COUNTER_OUT = ENERGY_COUNTER | OUT,
+
 	// energy (W, mW)
 	POWER = 0x34,
-	POWER_IN = 0xb4,
+	POWER_IN = POWER | IN,
+	POWER_OUT = POWER | OUT,
 };
 FLAGS_ENUM(EndpointType);
 

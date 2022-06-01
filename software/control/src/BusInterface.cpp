@@ -59,7 +59,8 @@ Coroutine BusInterface::start() {
 
 	// start coroutines
 	receive();
-	publish();
+	for (int i = 0; i < PUBLISH_COUNT; ++i)
+		publish();
 }
 
 static bool readMessage(MessageType dstType, void *dstMessage, MessageType srcType, MessageReader r,
@@ -68,21 +69,21 @@ static bool readMessage(MessageType dstType, void *dstMessage, MessageType srcTy
 	Message &dst = *reinterpret_cast<Message *>(dstMessage);
 
 	switch (srcType) {
-		case MessageType::OFF_ON_IN:
-		case MessageType::OFF_ON_TOGGLE_IN:
-		case MessageType::TRIGGER_IN:
-		case MessageType::UP_DOWN_IN:
-		case MessageType::OPEN_CLOSE_IN:
-			return convertCommandIn(dstType, dst, r.u8(), convertOptions);
-		case MessageType::LEVEL_IN: {
+		case MessageType::OFF_ON_OUT:
+		case MessageType::OFF_ON_TOGGLE_OUT:
+		case MessageType::TRIGGER_OUT:
+		case MessageType::UP_DOWN_OUT:
+		case MessageType::OPEN_CLOSE_OUT:
+			return convertCommand(dstType, dst, r.u8(), convertOptions);
+		case MessageType::LEVEL_OUT: {
 			// convert level from 0 - 255 to 0.0 - 1.0
 			float level = float(r.u8()) / 255.0f;
-			return convertFloatValueIn(dstType, dst, srcType, level, convertOptions);
+			return convertFloatValue(dstType, dst, srcType, level, convertOptions);
 		}
-		case MessageType::AIR_TEMPERATURE_IN: {
+		case MessageType::AIR_TEMPERATURE_OUT: {
 			// convert temperature from 1/20 Kelvin to Kelvin
 			float temperature = float(r.u16L()) * 0.05f;
-			return convertFloatValueIn(dstType, dst, srcType, temperature, convertOptions);
+			return convertFloatValue(dstType, dst, srcType, temperature, convertOptions);
 		}
 		default:
 			// conversion failed
@@ -131,6 +132,7 @@ Coroutine BusInterface::receive() {
 			flash.deviceId = deviceId;
 			flash.interfaceId = allocateInterfaceId(this->devices);
 
+			// check if a device with deviceId already exists and if yes, reuse the interfaceId
 			int index = this->devices.count();
 			for (int i = 0; i < this->devices.count(); ++i) {
 				auto &device = this->devices[i];
@@ -142,7 +144,6 @@ Coroutine BusInterface::receive() {
 			}
 			flash.address = flash.interfaceId - 1;
 
-
 			// get endpoints
 			flash.endpointCount = r.getRemaining();
 			array::copy(flash.endpointCount, flash.endpoints, r.current);
@@ -151,36 +152,8 @@ Coroutine BusInterface::receive() {
 			constexpr int commissionLength =
 				1 + 1 + 4 + 1 + 16 + micLength; // command prefix, arbitration, device id, address, key, mic
 			uint8_t sendMessage[commissionLength];
-/*
-			// check if device already exists and set flag for each used address to find a free address
-			array::fill(9, sendMessage, 0);
-			int plugIndex = this->devices.count();
-			for (int i = 0; i < this->devices.count(); ++i) {
-				if (this->devices[i]->deviceId == deviceId)
-					plugIndex = i;
-				else
-					sendMessage[i >> 3] |= 1 << (i & 7);
-			}
-
-			// find free address
-			int j;
-			for (j = 0; j < 9; ++j) {
-				uint8_t f = sendMessage[j];
-				if (f != 0xff) {
-					for (int i = 0; i < 8; ++i) {
-						if ((f & (1 << (i & 7))) == 0) {
-							flash.address = j * 8 + i;
-							break;
-						}
-					}
-					break;
-				}
-			}
 
 			// continue if no free address found
-			if (j == 9)
-				continue;
-*/
 			if (flash.address >= 8 * 9)
 				continue;
 			Terminal::out << "bus device " << hex(deviceId) << ": assigned address " << dec(flash.address) << '\n';
@@ -256,13 +229,13 @@ Coroutine BusInterface::receive() {
 					// publish to subscribers
 					for (auto &subscriber: device.subscribers) {
 						// check if this is the right endpoint
-						if (subscriber.index == endpointIndex) {
+						if (subscriber.source.device.endpointIndex == endpointIndex) {
 							MessageType srcType = flash.endpoints[endpointIndex];
-							subscriber.barrier->resumeFirst([&subscriber, &r, srcType](Subscriber::Parameters &p) {
-								p.source = subscriber.source;
+							subscriber.barrier->resumeFirst([&subscriber, &r, srcType](PublishInfo::Parameters &p) {
+								p.info = subscriber.destination;
 
 								// read message (note r is passed by value for multiple subscribers)
-								return readMessage(subscriber.messageType, p.message, srcType, r,
+								return readMessage(subscriber.destination.type, p.message, srcType, r,
 									subscriber.convertOptions);
 							});
 						}
@@ -274,92 +247,42 @@ Coroutine BusInterface::receive() {
 	}
 }
 
-static bool writeMessage(MessageWriter &w, MessageType dstType, Publisher &publisher) {
-	auto srcType = publisher.messageType;
-	Message const &src = *reinterpret_cast<Message const *>(publisher.message);
+static bool writeMessage(MessageWriter &w, MessageType messageType, Message &message) {
+	switch (messageType) {
+	case MessageType::OFF_ON_IN:
+	case MessageType::OFF_ON_TOGGLE_IN:
+	case MessageType::TRIGGER_IN:
+	case MessageType::UP_DOWN_IN:
+	case MessageType::OPEN_CLOSE_IN:
+		w.u8(message.command);
+		break;
+	case MessageType::LEVEL_IN:
+		w.u8(clamp(int(message.value.f * 255.0f + 0.5f), 0, 255));
+		break;
+	case MessageType::SET_LEVEL_IN:
+	case MessageType::MOVE_TO_LEVEL_IN:
+		w.e8<bus::LevelControlCommand>(bus::LevelControlCommand(message.command));
+		w.u8(clamp(int(message.value.f * 255.0f + 0.5f), 0, 255));
 
-	switch (dstType) {
-		case MessageType::OFF_ON_OUT:
-		case MessageType::OFF_ON_TOGGLE_OUT:
-		case MessageType::TRIGGER_OUT:
-		case MessageType::UP_DOWN_OUT:
-		case MessageType::OPEN_CLOSE_OUT:
-			return convertCommandOut(w.u8(), srcType, src, publisher.convertOptions);
-		case MessageType::LEVEL_OUT: {
-			float level;
-			if (!convertFloatValueOut(dstType, level, srcType, src, publisher.convertOptions))
-				return false; // conversion failed
-			w.u8(clamp(int(level * 255.0f + 0.5f), 0, 255));
-			break;
+		if (messageType == MessageType::MOVE_TO_LEVEL_IN) {
+			// duration in 1/10s
+			w.u16L(message.transition);
+
+			// speed in 1 / 5000s
+			//w.u16L(clamp(int(src.moveToLevel.move * 5000.0f), 0, 65535));
 		}
-		case MessageType::SET_LEVEL_OUT:
-		case MessageType::MOVE_TO_LEVEL_OUT: {
-			Message level;
-			if (!convertSetFloatValueOut(dstType, level, srcType, src, publisher.convertOptions))
-				return false; // conversion failed
-
-			w.e8<bus::LevelControlCommand>(bus::LevelControlCommand(level.command));
-			w.u8(clamp(int(level.value.f * 255.0f + 0.5f), 0, 255));
-
-			if (dstType == MessageType::MOVE_TO_LEVEL_OUT) {
-				// duration in 1/10s
-				w.u16L(level.transition);
-			}
-			break;
-		}
-/*
-			switch (srcType) {
-				case MessageType::LEVEL_OUT:
-				case MessageType::MOVE_TO_LEVEL_OUT: {
-					bus::LevelControlCommand command = !src.level.getFlag() ? bus::LevelControlCommand::SET
-						: (src.level.isPositive() ? bus::LevelControlCommand::INCREASE : bus::LevelControlCommand::DECREASE);
-					uint8_t value = clamp(abs(int(src.level * 256.0f)), 0, 255);
-
-					if (dstType == MessageType::LEVEL_OUT || srcType == MessageType::LEVEL_OUT) {
-						w.e8<bus::LevelControlCommand>(command);
-						w.u8(value);
-					} else {
-						if (!src.moveToLevel.move.getFlag()) {
-							w.e8<bus::LevelControlCommand>(command | bus::LevelControlCommand::DURATION);
-							w.u8(value);
-							w.u16L(clamp(int(src.moveToLevel.move * 10.0f), 0, 65535)); // 1/10 s
-						} else {
-							w.e8<bus::LevelControlCommand>(command | bus::LevelControlCommand::SPEED);
-							w.u8(value);
-							w.u16L(clamp(int(src.moveToLevel.move * 5000.0f), 0, 65535)); // 1 / 5000s
-						}
-					}
-					break;
-				}
-				default:
-					// conversion failed
-					return false;
-			}
-			break;
-*/
-		case MessageType::AIR_TEMPERATURE_OUT: {
-			float temperature;
-			if (!convertFloatValueOut(dstType, temperature, srcType, src, publisher.convertOptions))
-				return false; // conversion failed
-			w.u16L(clamp(int(temperature * 20.0f + 0.5f), 0, 65535));
-			break;
-		}
-		case MessageType::SET_AIR_TEMPERATURE_OUT: {
-			Message temperature;
-			if (!convertSetFloatValueOut(dstType, temperature, srcType, src, publisher.convertOptions))
-				return false; // conversion failed
-
-			w.e8<bus::LevelControlCommand>(bus::LevelControlCommand(temperature.command));
-			w.u16L(clamp(int(temperature.value.f * 20.0f + 0.5f), 0, 65535));
-			break;
-		}
-
-		default:
-			// conversion failed
-			return false;
+		break;
+	case MessageType::AIR_TEMPERATURE_IN:
+		w.u16L(clamp(int(message.value.f * 20.0f + 0.5f), 0, 65535));
+		break;
+	case MessageType::SET_AIR_TEMPERATURE_IN:
+		w.e8<bus::LevelControlCommand>(bus::LevelControlCommand(message.command));
+		w.u16L(clamp(int(message.value.f * 20.0f + 0.5f), 0, 65535));
+		break;
+	default:
+		// not supported
+		return false;
 	}
-
-	// conversion successful
 	return true;
 }
 
@@ -367,84 +290,83 @@ Coroutine BusInterface::publish() {
 	uint8_t outMessage[maxMessageLength];
 	uint8_t inMessage[maxMessageLength];
 	while (true) {
-		// wait until something was published
-		co_await this->publishEvent.wait();
+		// wait for message
+		MessageInfo info;
+		Message message;
+		co_await this->publishBarrier.wait(info, &message);
 
-		// clear immediately as we have only one instance of this coroutine
-		this->publishEvent.clear();
-
-		// iterate over devices
+		// find destination device
 		for (auto &device: this->devices) {
-			// iterate over publishers
-			for (auto &publisher: device.publishers) {
-				// check if publisher wants to publish
-				if (publisher.dirty) {
-					publisher.dirty = false;
+			if (device->interfaceId != info.device.id)
+				continue;
 
-					// get endpoint info
-					uint8_t endpointIndex = publisher.index;
-					MessageType messageType = device->endpoints[endpointIndex];
+			// get endpoint info
+			uint8_t endpointIndex = info.device.endpointIndex;
+			if (endpointIndex >= device->endpointCount)
+				break;
+			MessageType messageType = device->endpoints[endpointIndex];
 
-					if ((messageType & MessageType::DIRECTION_MASK) == MessageType::OUT) {
-						// send data message to node
-						int sendLength;
-						{
-							DeviceFlash const &flash = *device;
+			// check if it is an output
+			if (isInput(messageType)) {
+				// send data message to node
+				int sendLength;
+				{
+					DeviceFlash const &flash = *device;
 
-							bus::MessageWriter w(outMessage);
+					bus::MessageWriter w(outMessage);
 
-							// set start of header
-							w.setHeader();
+					// set start of header
+					w.setHeader();
 
-							// encoded address
-							w.arbiter((flash.address & 7) + 1);
-							w.arbiter(flash.address >> 3);
+					// encoded address
+					w.arbiter((flash.address & 7) + 1);
+					w.arbiter(flash.address >> 3);
 
-							// security counter
-							w.u32L(this->securityCounter);
+					// security counter
+					w.u32L(this->securityCounter);
 
-							// set start of message
-							w.setMessage();
+					// set start of message
+					w.setMessage();
 
-							// endpoint index
-							w.u8(endpointIndex);
+					// endpoint index
+					w.u8(endpointIndex);
 
-							// message data
-							if (!writeMessage(w, messageType, publisher))
-								break;
+					// message data
+					if (!writeMessage(w, messageType, message))
+						break;
 
-							// encrypt
-							Nonce nonce(flash.address, this->securityCounter);
-							w.encrypt(micLength, nonce, *this->aesKey);
+					// encrypt
+					Nonce nonce(flash.address, this->securityCounter);
+					w.encrypt(micLength, nonce, *this->aesKey);
 
-							//bool ok = decrypt(message, nonce, header, headerLength, message, payloadLength, micLength, this->configuration->networkAesKey);
+					//bool ok = decrypt(message, nonce, header, headerLength, message, payloadLength, micLength, this->configuration->networkAesKey);
 
-							// increment security counter
-							++this->securityCounter;
+					// increment security counter
+					++this->securityCounter;
 
-							sendLength = w.getLength();
-						}
-						co_await BusMaster::send(sendLength, outMessage);
-					}
-/*
-					// forward to subscribers
-					for (auto &subscriber: device.subscribers) {
-						if (subscriber.index == publisher.index) {
-							subscriber.barrier->resumeAll([&subscriber, &publisher](Subscriber::Parameters &p) {
-								p.subscriptionIndex = subscriber.subscriptionIndex;
-
-								// convert to target unit and type and resume coroutine if conversion was successful
-								return convert(subscriber.messageType, p.message,
-									publisher.messageType, publisher.message);
-							});
-						}
-					}*/
+					sendLength = w.getLength();
 				}
+				co_await BusMaster::send(sendLength, outMessage);
 			}
+
+			/*
+			// forward to subscribers
+			for (auto &subscriber: device.subscribers) {
+				if (subscriber.index == publisher.index) {
+					subscriber.barrier->resumeAll([&subscriber, &publisher](Subscriber::Parameters &p) {
+						p.subscriptionIndex = subscriber.subscriptionIndex;
+
+						// convert to target unit and type and resume coroutine if conversion was successful
+						return convert(subscriber.messageType, p.message,
+							publisher.messageType, publisher.message);
+					});
+				}
+			}*/
+
+			break;
 		}
 	}
 }
-
 
 // BusInterface::DeviceFlash
 
@@ -460,8 +382,6 @@ BusInterface::BusDevice *BusInterface::DeviceFlash::allocate() const {
 // BusInterface::BusDevice
 
 BusInterface::BusDevice::~BusDevice() {
-	for (auto &publisher : this->publishers)
-		publisher.event = nullptr;
 }
 
 uint8_t BusInterface::BusDevice::getId() const {
@@ -482,15 +402,16 @@ Array<MessageType const> BusInterface::BusDevice::getEndpoints() const {
 	return {flash.endpointCount, flash.endpoints};
 }
 
-void BusInterface::BusDevice::addPublisher(uint8_t endpointIndex, Publisher &publisher) {
-	publisher.remove();
-	publisher.index = endpointIndex;
-	publisher.event = &this->interface->publishEvent;
-	this->publishers.add(publisher);
+void BusInterface::BusDevice::subscribe(uint8_t endpointIndex, Subscriber &subscriber) {
+	subscriber.remove();
+	subscriber.source.device.endpointIndex = endpointIndex;
+	this->subscribers.add(subscriber);
 }
 
-void BusInterface::BusDevice::addSubscriber(uint8_t endpointIndex, Subscriber &subscriber) {
-	subscriber.remove();
-	subscriber.index = endpointIndex;
-	this->subscribers.add(subscriber);
+PublishInfo BusInterface::BusDevice::getPublishInfo(uint8_t endpointIndex) {
+	auto &flash = **this;
+	if (endpointIndex >= flash.endpointCount)
+		return {};
+	return {{.type = flash.endpoints[endpointIndex], .device = {flash.interfaceId, endpointIndex}},
+		&this->interface->publishBarrier};
 }

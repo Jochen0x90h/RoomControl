@@ -18,12 +18,6 @@ struct MessageWriter {
 		++this->current;
 	}
 
-	uint8_t &u8() {
-		uint8_t &value = this->current[0];
-		++this->current;
-		return value;
-	}
-
 	template <typename T>
 	void e8(T value) {
 		static_assert(std::is_same<typename std::underlying_type<T>::type, uint8_t>::value);

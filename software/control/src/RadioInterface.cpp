@@ -61,7 +61,7 @@ struct EndpointInfo {
 EndpointInfo const endpointInfos[] {
 	// battery percentage 0-100% in 0.5% steps, i.e. value is 0-200
 	{
-		MessageType::BATTERY_LEVEL_IN,
+		MessageType::BATTERY_LEVEL_OUT,
 		Role::SERVER,
 		zb::ZclCluster::POWER_CONFIGURATION,
 		Mode::ATTRIBUTE,
@@ -70,7 +70,7 @@ EndpointInfo const endpointInfos[] {
 
 	// wall switch (sends on/off commands, needs binding)
 	{
-		MessageType::OFF_ON_TOGGLE_IN,
+		MessageType::OFF_ON_TOGGLE_OUT,
 		Role::CLIENT,
 		zb::ZclCluster::ON_OFF,
 		Mode::COMMAND
@@ -78,7 +78,7 @@ EndpointInfo const endpointInfos[] {
 
 	// power on/off, e.g. light bulb, switchable socket (receives on/off commands)
 	{
-		MessageType::OFF_ON_TOGGLE_OUT,
+		MessageType::OFF_ON_TOGGLE_IN,
 		Role::SERVER,
 		zb::ZclCluster::ON_OFF,
 		Mode::COMMAND
@@ -86,7 +86,7 @@ EndpointInfo const endpointInfos[] {
 
 	// level, e.g. brightness of light bulb
 	{
-		MessageType::MOVE_TO_LEVEL_OUT,
+		MessageType::MOVE_TO_LEVEL_IN,
 		Role::SERVER,
 		zb::ZclCluster::LEVEL_CONTROL,
 		Mode::COMMAND
@@ -560,35 +560,37 @@ void RadioInterface::writeApsAckZcl(PacketWriter &w, uint8_t destinationEndpoint
 
 
 bool writeZclClusterSpecific(RadioInterface::PacketWriter &w, uint8_t zclCounter, EndpointInfo const &info,
-	Publisher &publisher)
+	MessageType messageType, Message &message)
 {
 	// zbee cluster library frame
 	w.e8(zb::ZclFrameControl::TYPE_CLUSTER_SPECIFIC
 		| zb::ZclFrameControl::DIRECTION_CLIENT_TO_SERVER);
 	w.u8(zclCounter);
 
-	MessageType srcType = publisher.messageType;
-	auto &src = *reinterpret_cast<Message const *>(publisher.message);
+	//MessageType srcType = publisher.messageType;
+	//auto &src = *reinterpret_cast<Message const *>(publisher.message);
 
 	switch (info.cluster) {
 	case zb::ZclCluster::ON_OFF:
-		return convertCommandOut(w.u8(), srcType, src, publisher.convertOptions);
+		w.u8(message.command);
+		break;
+		//return convertCommandOut(w.u8(), srcType, src, publisher.convertOptions);
 	case zb::ZclCluster::LEVEL_CONTROL: {
-		Message level;
-		if (!convertSetFloatValueOut(MessageType::MOVE_TO_LEVEL_OUT, level, srcType, src, publisher.convertOptions))
-			return false; // conversion failed
-		if (level.command == 0) {
+		//Message level;
+		//if (!convertSetFloatValueOut(MessageType::MOVE_TO_LEVEL_OUT, level, srcType, src, publisher.convertOptions))
+		//	return false; // conversion failed
+		if (message.command == 0) {
 			// set level
 			w.e8(zb::ZclLevelControlCommand::MOVE_TO_LEVEL_WITH_ON_OFF);
 		} else {
 			// increase/decrease level
 			w.e8(zb::ZclLevelControlCommand::STEP_WITH_ON_OFF);
-			w.u8(level.command == 1 ? 0x00 : 0x01);
+			w.u8(message.command == 1 ? 0x00 : 0x01);
 		}
-		w.u8(clamp(int(level.value.f * 254.0f + 0.5f), 0, 254));
+		w.u8(clamp(int(message.value.f * 254.0f + 0.5f), 0, 254));
 
 		// transition time in 1/10s
-		w.u16L(min(int(level.transition), 65534));
+		w.u16L(min(int(message.transition), 65534));
 		break;
 	}
 /*
@@ -617,11 +619,9 @@ bool writeZclClusterSpecific(RadioInterface::PacketWriter &w, uint8_t zclCounter
 		}
 		break;*/
 	default:
-		// conversion failed
+		// not supported
 		return false;
 	}
-
-	// conversion successful
 	return true;
 }
 
@@ -797,7 +797,7 @@ static bool handleZclClusterSpecific(MessageType dstType, void *dstMessage, Endp
 	Message &dst = *reinterpret_cast<Message *>(dstMessage);
 	switch (info.cluster) {
 	case zb::ZclCluster::ON_OFF:
-		return convertCommandIn(dstType, dst, command, convertOptions);
+		return convertCommand(dstType, dst, command, convertOptions);
 	case zb::ZclCluster::LEVEL_CONTROL: {
 		Message level;
 		level.command = 0;
@@ -810,7 +810,7 @@ static bool handleZclClusterSpecific(MessageType dstType, void *dstMessage, Endp
 		case zb::ZclLevelControlCommand::MOVE_TO_LEVEL_WITH_ON_OFF: {
 			level.value.f = float(r.u8()) / 254.0f;
 			level.transition = r.u16L(); // transition time in 1/10 s
-			return convertSetFloatValueIn(dstType, dst, MessageType::MOVE_TO_LEVEL_IN, level, convertOptions);
+			return convertSetFloatValue(dstType, dst, MessageType::MOVE_TO_LEVEL_OUT, level, convertOptions);
 		}
 		default:
 			// conversion failed
@@ -1606,18 +1606,21 @@ Terminal::out << ("Association Request Receive On When Idle: " + dec(receiveOnWh
 				auto commandPtr = r.current;
 				for (auto &subscriber : device.subscribers) {
 					// get endpoint info for subscribed endpoint
-					uint8_t const *p = device->getEndpointIndices() + subscriber.index;
+					uint8_t endpointIndex = subscriber.source.device.endpointIndex;
+					if (endpointIndex >= device->endpointCount)
+						continue;
+					uint8_t const *p = device->getEndpointIndices() + endpointIndex;
 					auto const &endpointInfo = endpointInfos[p[0]];
 					uint8_t zbEndpoint = p[1];
 
 					// check if this is the right endpoint
 					if (dstEndpoint == zbEndpoint && cluster == endpointInfo.cluster) {
 						// trigger subscriber
-						subscriber.barrier->resumeFirst([&subscriber, &r, &endpointInfo] (Subscriber::Parameters &p) {
-							p.source = subscriber.source;
+						subscriber.barrier->resumeFirst([&subscriber, &r, &endpointInfo] (PublishInfo::Parameters &p) {
+							p.info = subscriber.destination;
 
 							// convert from zbee command to message (note r is passed by value for multiple subscribers)
-							return handleZclClusterSpecific(subscriber.messageType, p.message, endpointInfo, r,
+							return handleZclClusterSpecific(subscriber.destination.type, p.message, endpointInfo, r,
 								subscriber.convertOptions);
 						});
 
@@ -1745,8 +1748,8 @@ void RadioInterface::handleGp(uint8_t const *mac, PacketReader &r) {
 			}
 
 			// todo: check if security counter is greater than last security counter
-			//if (securityCounter <= device.securityCounter)
-			//	return;
+			if (securityCounter == device.securityCounter)
+				return;
 			device.securityCounter = securityCounter;
 
 			// check message integrity code or decrypt message, depending on security level
@@ -1837,18 +1840,16 @@ void RadioInterface::handleGp(uint8_t const *mac, PacketReader &r) {
 				}
 			}
 
-			if (endpointIndex != -1) {
-				// publish to subscribers
-				for (auto &subscriber : device.subscribers) {
-					// check if this is the right endpoint
-					if (subscriber.index == endpointIndex) {
-						subscriber.barrier->resumeFirst([&subscriber, message] (Subscriber::Parameters &p) {
-							p.source = subscriber.source;
+			// publish to subscribers
+			for (auto &subscriber : device.subscribers) {
+				// check if this is the right endpoint
+				if (subscriber.source.device.endpointIndex == endpointIndex) {
+					subscriber.barrier->resumeFirst([&subscriber, message] (PublishInfo::Parameters &p) {
+						p.info = subscriber.destination;
 
-							auto &dst = *reinterpret_cast<Message *>(p.message);
-							return convertCommandIn(subscriber.messageType, dst, message, subscriber.convertOptions);
-						});
-					}
+						auto &dst = *reinterpret_cast<Message *>(p.message);
+						return convertCommand(subscriber.destination.type, dst, message, subscriber.convertOptions);
+					});
 				}
 			}
 			break;
@@ -1875,16 +1876,16 @@ void RadioInterface::handleGpCommission(uint32_t deviceId, PacketReader& r) {
 	switch (flash.deviceType) {
 	case 0x02:
 		// switch, PTM215Z ("friends of hue")
-		flash.endpoints[0] = MessageType ::UP_DOWN_IN;
-		flash.endpoints[1] = MessageType::UP_DOWN_IN;
-		flash.endpoints[2] = MessageType::UP_DOWN_IN;
+		flash.endpoints[0] = MessageType ::UP_DOWN_OUT;
+		flash.endpoints[1] = MessageType::UP_DOWN_OUT;
+		flash.endpoints[2] = MessageType::UP_DOWN_OUT;
 		flash.endpointCount = 3;
 		break;
 	case 0x07:
 		// generic switch, PTM216Z
-		flash.endpoints[0] = MessageType::UP_DOWN_IN;
-		flash.endpoints[1] = MessageType::UP_DOWN_IN;
-		flash.endpoints[2] = MessageType::UP_DOWN_IN;
+		flash.endpoints[0] = MessageType::UP_DOWN_OUT;
+		flash.endpoints[1] = MessageType::UP_DOWN_OUT;
+		flash.endpoints[2] = MessageType::UP_DOWN_OUT;
 		flash.endpointCount = 3;
 		break;
 	default:
@@ -2247,7 +2248,7 @@ Terminal::out << ("Endpoint Descriptor " + dec(endpoint) + " Status " + dec(stat
 	// check some endpoints if they are available, e.g. battery percentage
 	for (int i = 0; i < endpointCount; ++i) {
 		auto messageType = MessageType(flash.endpoints[i]);
-		if (messageType == MessageType::BATTERY_LEVEL_IN) {
+		if (messageType == MessageType::BATTERY_LEVEL_OUT) {
 			uint8_t index = flash.endpoints[ZbDeviceFlash::MAX_ENDPOINT_COUNT + i * 2];
 			auto const &info = endpointInfos[index];
 			uint8_t endpoint = flash.endpoints[ZbDeviceFlash::MAX_ENDPOINT_COUNT + i * 2 + 1];
@@ -2386,9 +2387,6 @@ Terminal::out << ("endpoint info " + dec(flash.endpoints[ZbDeviceFlash::MAX_ENDP
 		flash.endpoints[endpointCount + i] = flash.endpoints[ZbDeviceFlash::MAX_ENDPOINT_COUNT + i];
 	}
 
-	// start a publisher coroutine for this device
-	//device->publisher = publisher(*device);
-
 	// check if the device already exists
 	int index = this->zbDevices.count();
 	for (int i = 0; i < this->zbDevices.count(); ++i) {
@@ -2410,156 +2408,149 @@ Terminal::out << ("endpoint info " + dec(flash.endpoints[ZbDeviceFlash::MAX_ENDP
 Coroutine RadioInterface::publish() {
 	uint8_t packet[64];
 	while (true) {
-		// wait until something was published
-		co_await this->publishEvent.wait();
+		// wait for message
+		MessageInfo info;
+		Message message;
+		co_await this->publishBarrier.wait(info, &message);
 
-		// iterate over devices
-		bool dirty = false;
-		for (auto &device : this->zbDevices) {
-			// iterate over publishers
-			for (auto &publisher : device.publishers) {
-				// check if publisher wants to publish
-				if (publisher.dirty) {
-					publisher.dirty = false;
-					dirty = true;
+		// find destination device
+		for (auto &device: this->zbDevices) {
+			if (device->interfaceId != info.device.id)
+				continue;
 
-					// get endpoint info
-					uint8_t endpointIndex = publisher.index;
-					MessageType messageType = MessageType(device->endpoints[endpointIndex]);
-					uint8_t const *p = device->getEndpointIndices() + endpointIndex;
-					EndpointInfo const &endpointInfo = endpointInfos[p[0]];
-					uint8_t zbEndpointIndex = p[1];
+			// get endpoint info
+			uint8_t endpointIndex = info.device.endpointIndex;
+			if (endpointIndex >= device->endpointCount)
+				break;
+			MessageType messageType = MessageType(device->endpoints[endpointIndex]);
+			uint8_t const *p = device->getEndpointIndices() + endpointIndex;
+			EndpointInfo const &endpointInfo = endpointInfos[p[0]];
+			uint8_t zbEndpointIndex = p[1];
 
-					if ((messageType & MessageType::OUT) == MessageType::OUT) {
+			// check if it is an output
+			if (isInput(messageType)) {
+				// request the route if necessary
+				for (int retry = 0; retry < MAX_RETRY; ++retry) {
+					if (device.routerAddress != 0xffff)
+						break;
 
-						// request the route if necessary
-						for (int retry = 0; retry < MAX_RETRY; ++retry) {
-							if (device.routerAddress != 0xffff)
+					// reset cost of route
+					device.cost = 255;
+
+					// build packet
+					{
+						PacketWriter w(packet);
+						auto const &flash = *device;
+
+						// route request command
+						writeNwkBroadcastCommand(w, zb::NwkCommand::ROUTE_REQUEST);
+						w.e8(zb::NwkCommandRouteRequestOptions::DISCOVERY_SINGLE
+							| zb::NwkCommandRouteRequestOptions::EXTENDED_DESTINATION);
+
+						// route id
+						w.u8(this->routeCounter++);
+
+						// destination
+						w.u16L(flash.shortAddress);
+
+						// path cost
+						w.u8(0);
+
+						// extended destination
+						w.u64L(flash.longAddress);
+
+						writeFooter(w, Radio::SendFlags::NONE);
+					}
+
+					// send packet
+					uint8_t sendResult;
+					co_await Radio::send(RADIO_ZBEE, packet, sendResult);
+					if (sendResult == 0)
+						continue;
+
+					// wait for first route reply or timeout (more route replies with lower cost may arrive later)
+					co_await select(device.routeBarrier.wait(), Timer::sleep(timeout));
+
+					Terminal::out << "Router for " << hex(device->shortAddress) << ": " << hex(device.routerAddress)
+						<< '\n';
+				}
+
+				// fail if route remains unknown
+				if (device.routerAddress == 0xffff) {
+					// todo: set device to failed state and notify failure
+					continue;
+				}
+
+				// try to send
+				uint8_t zclCounter = this->zclCounter++;
+				for (int retry = 0; retry <= MAX_RETRY; ++retry) {
+					// build packet
+					{
+						PacketWriter w(packet);
+						auto const &flash = *device;
+
+						// nwk data
+						writeNwkData(w, device);
+
+						// aps data
+						writeApsDataZcl(w, zbEndpointIndex, endpointInfo.cluster, zb::ZclProfile::HOME_AUTOMATION,
+							zbEndpointIndex);
+
+						if (endpointInfo.mode == Mode::COMMAND) {
+							// send command
+
+							// zcl cluster specific
+							//if (!writeZclClusterSpecific(w, zclCounter, endpointInfo, publisher)) {
+							if (!writeZclClusterSpecific(w, zclCounter, endpointInfo, messageType, message))
 								break;
+						} else {
+							// send attribute request
 
-							// reset cost of route
-							device.cost = 255;
-
-							// build packet
-							{
-								PacketWriter w(packet);
-								auto const &flash = *device;
-
-								// route request command
-								writeNwkBroadcastCommand(w, zb::NwkCommand::ROUTE_REQUEST);
-								w.e8(zb::NwkCommandRouteRequestOptions::DISCOVERY_SINGLE
-									| zb::NwkCommandRouteRequestOptions::EXTENDED_DESTINATION);
-
-								// route id
-								w.u8(this->routeCounter++);
-
-								// destination
-								w.u16L(flash.shortAddress);
-
-								// path cost
-								w.u8(0);
-
-								// extended destination
-								w.u64L(flash.longAddress);
-
-								writeFooter(w, Radio::SendFlags::NONE);
-							}
-
-							// send packet
-							uint8_t sendResult;
-							co_await Radio::send(RADIO_ZBEE, packet, sendResult);
-							if (sendResult == 0)
-								continue;
-
-							// wait for first route reply or timeout (more route replies with lower cost may arrive later)
-							co_await select(device.routeBarrier.wait(), Timer::sleep(timeout));
-
-				Terminal::out << "Router for " << hex(device->shortAddress) << ": " << hex(device.routerAddress) << '\n';
 						}
 
-						// fail if route remains unknown
-						if (device.routerAddress == 0xffff) {
-							// todo: set device to failed state and notify failure
-							continue;
-						}
+						writeFooter(w, Radio::SendFlags::NONE);
+					}
 
-						// try to send
-						uint8_t zclCounter = this->zclCounter++;
-						for (int retry = 0; retry <= MAX_RETRY; ++retry) {
-							// build packet
-							{
-								PacketWriter w(packet);
-								auto const &flash = *device;
+					// send packet
+					uint8_t sendResult;
+					co_await Radio::send(RADIO_ZBEE, packet, sendResult);
+					if (sendResult != 0) {
+						// wait for a response from the device
+						uint16_t length;
+						int r = co_await select(device.zclResponseBarrier.wait(zbEndpointIndex,
+							endpointInfo.cluster, zb::ZclProfile::HOME_AUTOMATION, zbEndpointIndex, zclCounter,
+							zb::ZclCommand::DEFAULT_RESPONSE, length, packet), Timer::sleep(timeout));
 
-								// nwk data
-								writeNwkData(w, device);
+						// check if response was received
+						if (r == 1) {
+							MessageReader r(length, packet);
+							uint8_t responseToCommand = r.u8();
+							uint8_t status = r.u8();
 
-								// aps data
-								writeApsDataZcl(w, zbEndpointIndex, endpointInfo.cluster, zb::ZclProfile::HOME_AUTOMATION,
-									zbEndpointIndex);
+							// todo: check status (0 = ok)
 
-								if (endpointInfo.mode == Mode::COMMAND) {
-									// send command
-
-									// zcl cluster specific (conversion may fail)
-									if (!writeZclClusterSpecific(w, zclCounter, endpointInfo, publisher))
-									{
-										break;
-									}
-								} else {
-									// send attribute request
-
-								}
-
-								writeFooter(w, Radio::SendFlags::NONE);
-							}
-
-							// send packet
-							uint8_t sendResult;
-							co_await Radio::send(RADIO_ZBEE, packet, sendResult);
-							if (sendResult != 0) {
-								// wait for a response from the device
-								uint16_t length;
-								int r = co_await select(device.zclResponseBarrier.wait(zbEndpointIndex,
-									endpointInfo.cluster, zb::ZclProfile::HOME_AUTOMATION, zbEndpointIndex, zclCounter,
-									zb::ZclCommand::DEFAULT_RESPONSE, length, packet), Timer::sleep(timeout));
-
-								// check if response was received
-								if (r == 1) {
-									MessageReader r(length, packet);
-									uint8_t responseToCommand = r.u8();
-									uint8_t status = r.u8();
-
-									// todo: check status (0 = ok)
-
-									break;
-								}
-							}
+							break;
 						}
 					}
-/*
-					// forward to subscribers
-					for (auto &subscriber : device.subscribers) {
-						if (subscriber.index == publisher.index) {
-							subscriber.barrier->resumeAll([&subscriber, &publisher] (Subscriber::Parameters &p) {
-								p.subscriptionIndex = subscriber.subscriptionIndex;
-
-								// convert to target unit and type and resume coroutine if conversion was successful
-								return convert(subscriber.messageType, p.message,
-									publisher.messageType, publisher.message);
-							});
-						}
-					}*/
 				}
 			}
-		}
+			/*
+			// forward to subscribers
+			for (auto &subscriber : device.subscribers) {
+				if (subscriber.index == publisher.index) {
+					subscriber.barrier->resumeAll([&subscriber, &publisher] (Subscriber::Parameters &p) {
+						p.subscriptionIndex = subscriber.subscriptionIndex;
 
-		// clear event when no dirty publisher was found
-		if (!dirty)
-			this->publishEvent.clear();
+						// convert to target unit and type and resume coroutine if conversion was successful
+						return convert(subscriber.messageType, p.message,
+							publisher.messageType, publisher.message);
+					});
+				}
+			}*/
+
+		}
 	}
 }
-
 
 // RadioInterface::GpDeviceFlash
 
@@ -2594,13 +2585,18 @@ Array<MessageType const> RadioInterface::GpDevice::getEndpoints() const {
 	return {flash.endpointCount, flash.endpoints};
 }
 
-void RadioInterface::GpDevice::addPublisher(uint8_t endpointIndex, Publisher &publisher) {
+void RadioInterface::GpDevice::subscribe(uint8_t endpointIndex, Subscriber &subscriber) {
+	subscriber.remove();
+	subscriber.source.device.endpointIndex = endpointIndex;
+	this->subscribers.add(subscriber);
 }
 
-void RadioInterface::GpDevice::addSubscriber(uint8_t endpointIndex, Subscriber &subscriber) {
-	subscriber.remove();
-	subscriber.index = endpointIndex;
-	this->subscribers.add(subscriber);
+PublishInfo RadioInterface::GpDevice::getPublishInfo(uint8_t endpointIndex) {
+	auto &flash = **this;
+	if (endpointIndex >= flash.endpointCount)
+		return {};
+	return {{.type = flash.endpoints[endpointIndex], .device = {flash.interfaceId, endpointIndex}},
+		&this->interface->publishBarrier};
 }
 
 
@@ -2617,8 +2613,6 @@ RadioInterface::ZbDevice *RadioInterface::ZbDeviceFlash::allocate() const {
 // RadioInterface::ZbDevice
 
 RadioInterface::ZbDevice::~ZbDevice() {
-	for (auto &publisher : this->publishers)
-		publisher.event = nullptr;
 }
 
 uint8_t RadioInterface::ZbDevice::getId() const {
@@ -2639,15 +2633,17 @@ Array<MessageType const> RadioInterface::ZbDevice::getEndpoints() const {
 	return {flash.endpointCount, reinterpret_cast<MessageType const*>(flash.endpoints)};
 }
 
-void RadioInterface::ZbDevice::addPublisher(uint8_t endpointIndex, Publisher &publisher) {
-	publisher.remove();
-	publisher.index = endpointIndex;
-	publisher.event = &this->interface->publishEvent;
-	this->publishers.add(publisher);
+void RadioInterface::ZbDevice::subscribe(uint8_t endpointIndex, Subscriber &subscriber) {
+	subscriber.remove();
+	subscriber.source.device.endpointIndex = endpointIndex;
+	this->subscribers.add(subscriber);
 }
 
-void RadioInterface::ZbDevice::addSubscriber(uint8_t endpointIndex, Subscriber &subscriber) {
-	subscriber.remove();
-	subscriber.index = endpointIndex;
-	this->subscribers.add(subscriber);
+PublishInfo RadioInterface::ZbDevice::getPublishInfo(uint8_t endpointIndex) {
+	auto &flash = **this;
+	if (endpointIndex >= flash.endpointCount)
+		return {};
+	auto endpoints = reinterpret_cast<MessageType const*>(flash.endpoints);
+	return {{.type = endpoints[endpointIndex], .device = {flash.interfaceId, endpointIndex}},
+		&this->interface->publishBarrier};
 }

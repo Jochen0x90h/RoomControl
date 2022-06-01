@@ -31,11 +31,11 @@ struct Device {
 	int states[16];
 };
 
-constexpr auto SWITCH = EndpointType::OFF_ON_IN;
-constexpr auto BUTTON = EndpointType::TRIGGER_IN;
-constexpr auto ROCKER = EndpointType::UP_DOWN_IN;
-constexpr auto LIGHT = EndpointType::OFF_ON_TOGGLE_OUT;
-constexpr auto BLIND = EndpointType::UP_DOWN_OUT;
+constexpr auto SWITCH = EndpointType::OFF_ON_OUT;
+constexpr auto BUTTON = EndpointType::TRIGGER_OUT;
+constexpr auto ROCKER = EndpointType::UP_DOWN_OUT;
+constexpr auto LIGHT = EndpointType::OFF_ON_TOGGLE_IN;
+constexpr auto BLIND = EndpointType::UP_DOWN_IN;
 
 const EndpointType endpoints1a[] = {
 	ROCKER, ROCKER, LIGHT, LIGHT, LIGHT,
@@ -47,7 +47,7 @@ const EndpointType endpoints2[] = {
 	ROCKER, BUTTON, BLIND, ROCKER, BUTTON, BLIND, LIGHT, LIGHT,
 };
 const EndpointType endpoints3a[] = {
-	EndpointType::AIR_TEMPERATURE_IN
+	EndpointType::AIR_TEMPERATURE_OUT
 };
 
 
@@ -144,24 +144,25 @@ void handle(Gui &gui) {
 						int &state = device.states[endpointIndex];
 
 						switch (endpointType) {
-							case LIGHT: {
-								// 0: off, 1: on, 2: toggle
-								uint8_t s = r.u8();
-								if (s < 2)
-									state = s;
-								else if (s == 2)
-									state ^= 1;
-								break;
-							}
-							case BLIND:
-								// 0: inactive, 1: up, 2: down
-								state = (state & ~3) | r.u8();
-								break;
-							case EndpointType::AIR_TEMPERATURE_OUT:
-								state = r.u16L();
-								break;
-							default:
-								break;
+						case LIGHT: {
+							// 0: off, 1: on, 2: toggle
+							uint8_t s = r.u8();
+							if (s < 2)
+								state = s;
+							else if (s == 2)
+								state ^= 1;
+							break;
+						}
+						case BLIND: {
+							// 0: inactive, 1: up, 2: down
+							uint8_t s = r.u8();
+							state = (state & ~3) | s;
+							break;
+						}
+						case EndpointType::AIR_TEMPERATURE_IN:
+							state = r.u16L();
+							break;
+						default:;
 						}
 					}
 					break;
@@ -193,6 +194,7 @@ void handle(Gui &gui) {
 		// commissioning can be triggered by a small commissioning button in the user interface
 		auto value = gui.button(id++, 0.2f);
 		if (value && *value == 1) {
+			// commission device
 			device.commissioning = device.flash.commissioning == 1 ? 2 : 1;
 
 			// send enumerate message
@@ -223,7 +225,7 @@ void handle(Gui &gui) {
 			});
 		}
 
-		// iterate over endpoints
+		// add device endpoints to gui if device is commissioned
  		if (device.flash.commissioning != 0) {
 			auto endpoints = device.endpoints[device.flash.commissioning - 1];
 			for (int endpointIndex = 0; endpointIndex < endpoints.count(); ++endpointIndex) {
@@ -295,7 +297,7 @@ void handle(Gui &gui) {
 						break;
 					}
 
-					case EndpointType::AIR_TEMPERATURE_IN: {
+					case EndpointType::AIR_TEMPERATURE_OUT: {
 						// temperature sensor
 						auto temperature = gui.temperatureSensor(id++);
 						if (temperature) {

@@ -15,6 +15,9 @@ class BusInterface : public Interface {
 public:
 	static constexpr int MAX_DEVICE_COUNT = 64;
 
+	// number of coroutines for publishing
+	static constexpr int PUBLISH_COUNT = 4;
+
 	/**
 	 * Constructor
 	 * @param configuration global configuration
@@ -95,15 +98,14 @@ private:
 		String getName() const override;
 		void setName(String name) override;
 		Array<MessageType const> getEndpoints() const override;
-		void addPublisher(uint8_t endpointIndex, Publisher &publisher) override;
-		void addSubscriber(uint8_t endpointIndex, Subscriber &subscriber) override;
+		void subscribe(uint8_t endpointIndex, Subscriber &subscriber) override;
+		PublishInfo getPublishInfo(uint8_t endpointIndex) override;
 
 		// back pointer to interface
 		BusInterface *interface = nullptr;
 
 		// subscribers and publishers
 		SubscriberList subscribers;
-		PublisherList publishers;
 	};
 
 public:
@@ -120,5 +122,5 @@ private:
 	// true for commissioning mode, joining of new devices is allowed
 	bool commissioning = false;
 
-	Event publishEvent;
+	PublishInfo::Barrier publishBarrier;
 };

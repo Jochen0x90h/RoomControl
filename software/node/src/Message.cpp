@@ -212,29 +212,26 @@ bool convert(MessageType dstType, void *dstMessage, MessageType srcType, void co
 */
 
 bool isCompatible(MessageType dstType, MessageType srcType) {
-	dstType = dstType & MessageType::TYPE_MASK;
-	srcType = srcType & MessageType::TYPE_MASK;
-
-	// same type is compatible
-	if (dstType == srcType)
+	// same type is compatible with IN and OUT exchanged
+	if (dstType == (srcType ^ (MessageType::OUT ^ MessageType::IN)))
 		return true;
 
 	// all switch commands are compatible
-	bool dstIsCommand = uint(dstType) - uint(MessageType::OFF_ON) < SWITCH_COMMAND_COUNT;
-	bool srcIsCommand = uint(srcType) - uint(MessageType::OFF_ON) < SWITCH_COMMAND_COUNT;
+	bool dstIsCommand = uint(dstType) - uint(MessageType::OFF_ON_IN) < SWITCH_COMMAND_COUNT;
+	bool srcIsCommand = uint(srcType) - uint(MessageType::OFF_ON_OUT) < SWITCH_COMMAND_COUNT;
 	if (dstIsCommand && srcIsCommand)
 		return true;
 
 	// set command is compatible to move-to command
-	if (dstType == MessageType::SET_LEVEL && srcType == MessageType::MOVE_TO_LEVEL)
+	if (dstType == MessageType::SET_LEVEL_IN && srcType == MessageType::MOVE_TO_LEVEL_OUT)
 		return true;
 
 	// switch command is compatible to set command (uses values in the convert options)
 	if (srcIsCommand) {
 		switch (dstType) {
-		case MessageType::SET_LEVEL:
-		case MessageType::MOVE_TO_LEVEL:
-		case MessageType::SET_AIR_TEMPERATURE:
+		case MessageType::SET_LEVEL_IN:
+		case MessageType::MOVE_TO_LEVEL_IN:
+		case MessageType::SET_AIR_TEMPERATURE_IN:
 			return true;
 		default:;
 		}
@@ -243,11 +240,11 @@ bool isCompatible(MessageType dstType, MessageType srcType) {
 	// simple value is compatible to switch command (compares against values in the convert options)
 	if (dstIsCommand) {
 		switch (srcType) {
-		case MessageType::LEVEL:
-		case MessageType::AIR_TEMPERATURE:
-		case MessageType::AIR_HUMIDITY:
-		case MessageType::AIR_PRESSURE:
-		case MessageType::AIR_VOC:
+		case MessageType::LEVEL_OUT:
+		case MessageType::AIR_TEMPERATURE_OUT:
+		case MessageType::AIR_HUMIDITY_OUT:
+		case MessageType::AIR_PRESSURE_OUT:
+		case MessageType::AIR_VOC_OUT:
 			return true;
 		default:;
 		}
@@ -256,7 +253,7 @@ bool isCompatible(MessageType dstType, MessageType srcType) {
 	return false;
 }
 
-bool convertCommandIn(MessageType dstType, Message &dst, uint8_t src, ConvertOptions const &convertOptions) {
+bool convertCommand(MessageType dstType, Message &dst, uint8_t src, ConvertOptions const &convertOptions) {
 	if (src >= 3)
 		return false;
 
@@ -295,8 +292,9 @@ bool convertCommandIn(MessageType dstType, Message &dst, uint8_t src, ConvertOpt
 	return true;
 }
 
-bool convertFloatValueIn(MessageType dstType, Message &dst, MessageType srcType, float src,
-	ConvertOptions const &convertOptions) {
+bool convertFloatValue(MessageType dstType, Message &dst, MessageType srcType, float src,
+	ConvertOptions const &convertOptions)
+{
 	switch (dstType) {
 	case MessageType::OFF_ON_IN:
 	case MessageType::OFF_ON_TOGGLE_IN:
@@ -318,7 +316,7 @@ bool convertFloatValueIn(MessageType dstType, Message &dst, MessageType srcType,
 	case MessageType::AIR_HUMIDITY_IN:
 	case MessageType::AIR_PRESSURE_IN:
 	case MessageType::AIR_VOC_IN:
-		if (dstType != srcType)
+		if (dstType != (srcType ^ (MessageType::OUT | MessageType::IN)))
 			return false; // conversion failed
 		dst.value.f = src;
 		break;
@@ -331,17 +329,17 @@ bool convertFloatValueIn(MessageType dstType, Message &dst, MessageType srcType,
 	return true;
 }
 
-bool convertSetFloatValueIn(MessageType dstType, Message &dst, MessageType srcType, Message const &src,
+bool convertSetFloatValue(MessageType dstType, Message &dst, MessageType srcType, Message const &src,
 	ConvertOptions const &convertOptions) {
 	switch (dstType) {
 	case MessageType::SET_LEVEL_IN:
 	case MessageType::MOVE_TO_LEVEL_IN:
 	case MessageType::SET_AIR_TEMPERATURE_IN:
-		if (dstType == MessageType::MOVE_TO_LEVEL_IN && srcType == MessageType::SET_LEVEL_IN) {
+		if (dstType == MessageType::MOVE_TO_LEVEL_IN && srcType == MessageType::SET_LEVEL_OUT) {
 			dst.command = src.command;
 			dst.transition = 0;
 			dst.value.f = src.value.f;
-		} else if (dstType != srcType) {
+		} else if (dstType != (srcType ^ (MessageType::OUT | MessageType::IN))) {
 			return false; // conversion failed
 		} else {
 			dst.command = src.command;
@@ -357,109 +355,6 @@ bool convertSetFloatValueIn(MessageType dstType, Message &dst, MessageType srcTy
 	// conversion successful
 	return true;
 }
-
-bool convertCommandOut(uint8_t &dst, MessageType srcType, Message const &src, ConvertOptions const &convertOptions) {
-	switch (srcType) {
-	case MessageType::OFF_ON_OUT:
-	case MessageType::OFF_ON_TOGGLE_OUT:
-	case MessageType::TRIGGER_OUT:
-	case MessageType::UP_DOWN_OUT:
-	case MessageType::OPEN_CLOSE_OUT: {
-		// command -> command
-		int c = convertOptions.getCommand(src.command);
-		if (c >= 3)
-			return false; // conversion failed
-		dst = c;
-		break;
-	}
-	case MessageType::LEVEL_OUT:
-	case MessageType::AIR_TEMPERATURE_OUT:
-	case MessageType::AIR_HUMIDITY_OUT:
-	case MessageType::AIR_PRESSURE_OUT:
-	case MessageType::AIR_VOC_OUT:
-	{
-		// value -> command, compare against threshold values
-		float upper = convertOptions.value.f[0];
-		float lower = convertOptions.value.f[1];
-		int compare = src.value.f > upper ? 0 : (src.value.f < lower ? 1 : 2);
-		int c = convertOptions.getCommand(compare);
-		if (c >= 3)
-			return false; // conversion failed
-		dst = c;
-		break;
-	}
-	default:
-		// conversion failed
-		return false;
-	}
-
-	// conversion successful
-	return true;
-}
-
-bool convertFloatValueOut(MessageType dstType, float &dst, MessageType srcType, Message const &src,
-	ConvertOptions const &convertOptions) {
-	switch (srcType) {
-	case MessageType::LEVEL_OUT:
-	case MessageType::AIR_TEMPERATURE_OUT:
-	case MessageType::AIR_HUMIDITY_OUT:
-	case MessageType::AIR_PRESSURE_OUT:
-	case MessageType::AIR_VOC_OUT:
-		if (dstType != srcType)
-			return false; // conversion failed
-		dst = src.value.f;
-		break;
-	default:
-		// conversion failed
-		return false;
-	}
-
-	// conversion successful
-	return true;
-}
-
-bool convertSetFloatValueOut(MessageType dstType, Message &dst, MessageType srcType, Message const &src,
-	ConvertOptions const &convertOptions) {
-	switch (srcType) {
-	case MessageType::OFF_ON_OUT:
-	case MessageType::OFF_ON_TOGGLE_OUT:
-	case MessageType::TRIGGER_OUT:
-	case MessageType::UP_DOWN_OUT:
-	case MessageType::OPEN_CLOSE_OUT: {
-		// command -> set value, use values in convertOptions
-		int c = convertOptions.getCommand(src.command);
-		if (c >= 3)
-			return false; // conversion failed
-		dst.command = c;
-		dst.transition = 0;
-		dst.value.f = convertOptions.value.f[min(c, 1)];
-		break;
-	}
-	case MessageType::SET_LEVEL_OUT:
-	case MessageType::MOVE_TO_LEVEL_OUT:
-	case MessageType::SET_AIR_TEMPERATURE_OUT:
-	case MessageType::SET_AIR_HUMIDITY_OUT:
-		if (dstType == MessageType::MOVE_TO_LEVEL_OUT && srcType == MessageType::SET_LEVEL_OUT) {
-			dst.command = src.command;
-			dst.transition = 0;
-			dst.value.f = src.value.f;
-		} else if (dstType != srcType) {
-			return false; // conversion failed
-		} else {
-			dst.command = src.command;
-			dst.transition = src.transition;
-			dst.value.f = src.value.f;
-		}
-		break;
-	default:
-		// conversion failed
-		return false;
-	}
-
-	// conversion successful
-	return true;
-}
-
 
 String getTypeName(MessageType messageType) {
 	switch (messageType & MessageType::TYPE_MASK) {

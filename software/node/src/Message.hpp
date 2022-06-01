@@ -35,6 +35,32 @@ struct Message {
 };
 
 
+// source or destination "address" of a message
+struct MessageInfo {
+	// message type
+	MessageType type = MessageType::UNKNOWN;
+
+	union {
+		// source or destination interface device
+		struct {
+			uint8_t id;
+			uint8_t endpointIndex;
+		} device;
+
+		// source or destination mqtt topic
+		struct {
+			uint16_t id;
+		} topic;
+
+		// source or destination function plug
+		struct {
+			uint8_t id;
+			uint8_t connectionIndex;
+		} plug;
+	};
+};
+
+
 struct ConvertOptions {
 	static constexpr int MAX_VALUE_COUNT = 3;
 
@@ -51,13 +77,9 @@ struct ConvertOptions {
 
 bool isCompatible(MessageType dstType, MessageType srcType);
 
-bool convertCommandIn(MessageType dstType, Message &dst, uint8_t src, ConvertOptions const &convertOptions);
-bool convertFloatValueIn(MessageType dstType, Message &dst, MessageType srcType, float src, ConvertOptions const &convertOptions);
-bool convertSetFloatValueIn(MessageType dstType, Message &dst, MessageType srcType, Message const &src, ConvertOptions const &convertOptions);
-
-bool convertCommandOut(uint8_t &dst, MessageType srcType, Message const &src, ConvertOptions const &convertOptions);
-bool convertFloatValueOut(MessageType dstType, float &dst, MessageType srcType, Message const &src, ConvertOptions const &convertOptions);
-bool convertSetFloatValueOut(MessageType dstType, Message &dst, MessageType srcType, Message const &src, ConvertOptions const &convertOptions);
+bool convertCommand(MessageType dstType, Message &dst, uint8_t src, ConvertOptions const &convertOptions);
+bool convertFloatValue(MessageType dstType, Message &dst, MessageType srcType, float src, ConvertOptions const &convertOptions);
+bool convertSetFloatValue(MessageType dstType, Message &dst, MessageType srcType, Message const &src, ConvertOptions const &convertOptions);
 
 // get name of message type
 String getTypeName(MessageType messageType);

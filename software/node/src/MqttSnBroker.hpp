@@ -77,18 +77,19 @@ public:
 
 
 	/**
-	 * Add a publisher to the device. Gets inserted into a linked list
-	 * @param deviceId device id
-	 * @param publisher publisher to insert
-	 */
-	void addPublisher(String topicName, Publisher &publisher);
-
-	/**
 	 * Add a subscriber to the device. Gets inserted into a linked list
 	 * @param deviceId device id
 	 * @param publisher subscriber to insert
 	 */
-	void addSubscriber(String topicName, Subscriber &subscriber);
+	void subscribe(String topicName, MessageType type, Subscriber &subscriber);
+
+	/**
+	 * Get publish info used to publish a message to an endpoint.
+	 * @param topicName
+	 * @param type
+	 * @return publish info
+	 */
+	PublishInfo getPublishInfo(String topicName, MessageType type);
 
 	
 	struct PacketReader : public MessageReader {
@@ -197,9 +198,9 @@ protected:
 		//uint8_t retainedAllocated;
 		//uint8_t retainedLength;
 
-		bool isRegisteredAtGateway() {return this->gatewayTopicId != 0;}
-		bool isSubscribedAtGateway() {return this->qosArray.get(0) != 3;}
-		bool isClientSubscribed() {
+		bool isRegisteredAtGateway() const {return this->gatewayTopicId != 0;}
+		bool isSubscribedAtGateway() const {return this->qosArray.get(0) != 3;}
+		bool isClientSubscribed() const {
 			if (this->subscribed)
 				return true;
 			for (int i = 1; i < MAX_CONNECTION_COUNT; ++i) {
@@ -227,8 +228,9 @@ protected:
 	SubscriberList subscribers;
 
 	// publishers
-	Event publishEvent;
-	PublisherList publishers;
+	//Event publishEvent;
+	//PublisherList publishers;
+	PublishInfo::Barrier publishBarrier;
 	Publisher *currentPublisher = nullptr;
 	BitField<MAX_CONNECTION_COUNT, 1> dirtyFlags;
 

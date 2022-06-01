@@ -43,31 +43,35 @@ struct Test {
 
 	// simple "function" that subscribes to a topic, processes the data and publishes it on another topic
 	Coroutine function() {
-		Message message;
-
-		Subscriber::Barrier barrier;
+		PublishInfo::Barrier barrier;
 		Subscriber subscriber;
-		subscriber.subscriptionIndex = 0;
-		subscriber.messageType = MessageType::ON_OFF;
+		subscriber.convertOptions.commands = 0 | (1 << 3) | -1 << 6;
+		subscriber.destination.type = MessageType::OFF_ON_IN;
+		subscriber.destination.plug.id = 0;
 		subscriber.barrier = &barrier;
-
-		Publisher publisher;
-		publisher.messageType = MessageType::ON_OFF;
-		publisher.message = &message;
 
 		Terminal::out << name << " subscribe to '" << inTopic << "'\n";
 		Terminal::out << name << " publish on '" << outTopic << "'\n";
-		this->broker.addSubscriber(inTopic, subscriber);
-		this->broker.addPublisher(outTopic, publisher);
+		this->broker.subscribe(inTopic, subscriber);
+		auto publishInfo = this->broker.getPublishInfo(outTopic, MessageType::OFF_ON_IN);
 
 		while (true) {
-			uint8_t subscriptionIndex;
-			co_await barrier.wait(subscriptionIndex, &message);
+			MessageInfo info;
+			Message message;
+			co_await barrier.wait(info, &message);
 
-			if (message.onOff < 2)
-				message.onOff = message.onOff ^ 1;
+			if (message.command < 2)
+				message.command = message.command ^ 1;
 
-			publisher.publish();
+			// publish
+			publishInfo.barrier->resumeFirst([&info, &message] (PublishInfo::Parameters &p) {
+				p.info = info;
+
+				// convert to destination message type and resume coroutine if conversion was successful
+				auto &dst = *reinterpret_cast<Message *>(p.message);
+				dst.command = message.command;
+				return true;
+			});
 		}
 	}
 };

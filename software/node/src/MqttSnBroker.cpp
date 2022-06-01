@@ -290,27 +290,7 @@ AwaitableCoroutine MqttSnBroker::keepAlive() {
 	}
 }
 
-void MqttSnBroker::addPublisher(String topicName, Publisher &publisher) {
-	int topicIndex = obtainTopicIndex(topicName);
-	if (topicIndex == -1) {
-		// error: topic list is full
-		return;
-	}
-
-	// remove the publisher in case this was called a 2nd time e.g. after reconnect to gateway
-	publisher.remove();
-	publisher.index = topicIndex;
-	publisher.event = &this->publishEvent;
-	this->publishers.add(publisher);
-
-	TopicInfo &topic = this->topics[topicIndex];
-
-	// wake up keepAlive() unless already registered at gateway
-	if (topic.gatewayTopicId == 0)
-		this->keepAliveEvent.set();
-}
-
-void MqttSnBroker::addSubscriber(String topicName, Subscriber &subscriber) {
+void MqttSnBroker::subscribe(String topicName, MessageType type, Subscriber &subscriber) {
 	int topicIndex = obtainTopicIndex(topicName);
 	if (topicIndex == -1) {
 		// error: topic list is full
@@ -319,7 +299,8 @@ void MqttSnBroker::addSubscriber(String topicName, Subscriber &subscriber) {
 
 	// remove the subscriber in case this was called a 2nd time e.g. after reconnect to gateway
 	subscriber.remove();
-	subscriber.index = topicIndex;
+	subscriber.source.type = type;
+	subscriber.source.topic.id = topicIndex + 1;
 	this->subscribers.add(subscriber);
 
 	TopicInfo &topic = this->topics[topicIndex];
@@ -330,6 +311,21 @@ void MqttSnBroker::addSubscriber(String topicName, Subscriber &subscriber) {
 		this->keepAliveEvent.set();
 }
 
+PublishInfo MqttSnBroker::getPublishInfo(String topicName, MessageType type) {
+	int topicIndex = obtainTopicIndex(topicName);
+	if (topicIndex == -1) {
+		// error: topic list is full
+		return {};
+	}
+
+	// wake up keepAlive() unless already registered at gateway
+	//if (topic.gatewayTopicId == 0)
+	//	this->keepAliveEvent.set();
+
+	return {.destination = {.type = type, .topic = {uint16_t(topicIndex + 1)}}, .barrier = &this->publishBarrier};
+}
+
+
 int MqttSnBroker::obtainTopicIndex(String name) {
 	if (name.isEmpty())
 		return -1;
@@ -338,48 +334,39 @@ int MqttSnBroker::obtainTopicIndex(String name) {
 
 static bool writeMessage(MessageWriter &w, MessageType srcType, void const *srcMessage) {
 	Message const &src = *reinterpret_cast<Message const *>(srcMessage);
-	static char const onOff[] = {'0', '1', '!'};
+	static char const offOn[] = {'0', '1', '!'};
 	static char const trigger[] = {'#', '!'};
 	static char const upDown[] = {'#', '+', '-'};
 
 	switch (srcType) {
-/*	case MessageType::ON_OFF:
-		w << onOff[src.onOff];
+	case MessageType::OFF_ON_IN:
+	case MessageType::OFF_ON_TOGGLE_IN:
+	case MessageType::OPEN_CLOSE_IN:
+		w << offOn[src.command];
 		break;
-	case MessageType::ON_OFF2:
-		// invert on/off (0, 1, 2 -> 1, 0, 2)
-		w << onOff[src.onOff ^ 1 ^ (src.onOff >> 1)];
+	case MessageType::TRIGGER_IN:
+		w << trigger[src.command];
 		break;
-	case MessageType::TRIGGER:
-	case MessageType::TRIGGER2:
-		w << trigger[src.trigger];
+	case MessageType::UP_DOWN_IN:
+		w << upDown[src.command];
 		break;
-	case MessageType::UP_DOWN:
-		w << upDown[src.upDown];
-		break;
-	case MessageType::UP_DOWN2:
-		// invert up/down (0, 1, 2 -> 0, 2, 1)
-		w << upDown[(src.upDown << 1) | (src.upDown >> 1)];
-		break;
-	case MessageType::LEVEL:
-	case MessageType::MOVE_TO_LEVEL:
-		{
-			// check if relative (increment, decrement)
-			if (src.level.getFlag())
-				w << '!';
-			w << flt(src.level, 1, 3);
+	case MessageType::SET_LEVEL_IN:
+	case MessageType::MOVE_TO_LEVEL_IN: {
+		// check if relative (increment, decrement)
+		float value = src.value.f;
+		if (src.command != 0)
+			w << '!';
+		if (src.command == 2)
+			value = -value;
+		w << flt(value, 1, 3);
 
-			if (srcType == MessageType::MOVE_TO_LEVEL) {
-				w << ' ';
-				w << flt(src.moveToLevel.move, 1, 3);
-				if (src.moveToLevel.move.getFlag()) {
-					// speed
-					w << '/';
-				}
-				w << 's';
-			}
+		if (srcType == MessageType::MOVE_TO_LEVEL_IN) {
+			w << ' ';
+			w << flt(float(src.transition) * 0.1f, 1, 3);
+			w << 's';
 		}
-		break;*/
+		break;
+	}
 	default:
 		// conversion failed
 		return false;
@@ -404,97 +391,99 @@ static int find(String message, Array<MessageValue const> messageValues) {
 
 static bool readMessage(MessageType dstType, void *dstMessage, MessageReader r) {
 	Message &dst = *reinterpret_cast<Message *>(dstMessage);
-	static MessageValue const onOff[] = {
+	static MessageValue const offOn[] = {
+		{"0", 0}, {"1", 1},
+		{"off", 0}, {"on", 1}};
+	static MessageValue const offOnToggle[] = {
 		{"0", 0}, {"1", 1}, {"!", 2},
 		{"off", 0}, {"on", 1}, {"toggle", 2}};
 	static MessageValue const trigger[] = {
 		{"#", 0}, {"!", 1},
-		{"inactive", 0}, {"active", 1}};
+		{"release", 0}, {"trigger", 1}};
 	static MessageValue const upDown[] = {
 		{"#", 0}, {"+", 1}, {"-", 2},
-		{"inactive", 0}, {"up", 1}, {"down", 2}};
+		{"release", 0}, {"up", 1}, {"down", 2}};
+	static MessageValue const openClose[] = {
+		{"0", 0}, {"1", 1},
+		{"open", 0}, {"close", 1}};
 
 	switch (dstType) {
 	case MessageType::UNKNOWN:
 		return false;
-/*
-	case MessageType::ON_OFF:
-		{
-			int v = find(r.string(), onOff);
-			if (v == -1)
-				return false; // conversion failed
-			dst.onOff = v;
-		}
+	case MessageType::OFF_ON_OUT: {
+		int v = find(r.string(), offOn);
+		if (v == -1)
+			return false; // conversion failed
+		dst.command = v;
 		break;
-	case MessageType::ON_OFF2:
-		{
-			int v = find(r.string(), onOff);
-			if (v == -1)
-				return false; // conversion failed
-			// invert on/off (0, 1, 2 -> 1, 0, 2)
-			dst.onOff = v ^ 1 ^ (v >> 1);
-		}
+	}
+	case MessageType::OFF_ON_TOGGLE_OUT: {
+		int v = find(r.string(), offOnToggle);
+		if (v == -1)
+			return false; // conversion failed
+		dst.command = v;
 		break;
-
-	case MessageType::TRIGGER:
-	case MessageType::TRIGGER2:
-		{
-			int v = find(r.string(), trigger);
-			if (v == -1)
-				return false; // conversion failed
-			dst.trigger = v;
-		}
+	}
+	case MessageType::TRIGGER_OUT: {
+		int v = find(r.string(), trigger);
+		if (v == -1)
+			return false; // conversion failed
+		dst.command = v;
 		break;
-
-	case MessageType::UP_DOWN:
-		{
-			int v = find(r.string(), upDown);
-			if (v == -1)
-				return false; // conversion failed
-			dst.upDown = v;
-		}
+	}
+	case MessageType::UP_DOWN_OUT: {
+		int v = find(r.string(), upDown);
+		if (v == -1)
+			return false; // conversion failed
+		dst.command = v;
 		break;
-	case MessageType::UP_DOWN2:
-		{
-			int v = find(r.string(), upDown);
-			if (v == -1)
-				return false; // conversion failed
-			// invert up/down (0, 1, 2 -> 0, 2, 1)
-			dst.upDown = (v << 1) | (v >> 1);
-		}
+	}
+	case MessageType::OPEN_CLOSE_OUT: {
+		int v = find(r.string(), openClose);
+		if (v == -1)
+			return false; // conversion failed
+		dst.command = v;
 		break;
-
-	case MessageType::LEVEL:
-	case MessageType::MOVE_TO_LEVEL:
-		{
-			// check if relative (increment, decrement)
-			bool relative = r.testU8('!');
-			String levelString = r.floatString();
-			if (levelString.isEmpty())
-				return false; // conversion failed
-			auto level = parseFloat(levelString);
-			if (!level)
-				return false; // conversion failed
-			dst.level.set(*level, relative);
-
-			if (dstType == MessageType::MOVE_TO_LEVEL) {
-				r.skipSpace();
-				String moveString = r.floatString();
-				if (moveString.isEmpty()) {
-					dst.moveToLevel.move = 0.0f;
-				} else {
-					auto move = parseFloat(moveString);
-					if (!move)
-						return false; // conversion failed
-					bool rate = r.testU8('/');
-					if (r.peekU8() != 's')
-						return false; // conversion failed
-					dst.moveToLevel.move.set(*move, rate);
-				}
+	}
+	case MessageType::SET_LEVEL_OUT:
+	case MessageType::MOVE_TO_LEVEL_OUT: {
+		// check if relative (increment, decrement)
+		bool relative = r.peekU8() == '!';
+		if (relative)
+			r.skip(1);
+		String levelString = r.floatString();
+		if (levelString.isEmpty())
+			return false; // conversion failed
+		auto level = parseFloat(levelString);
+		if (!level)
+			return false; // conversion failed
+		if (!relative) {
+			dst.command = 0;
+			dst.value.f = *level;
+		} else if (*level >= 0) {
+			dst.command = 1;
+			dst.value.f = *level;
+		} else {
+			dst.command = 2;
+			dst.value.f = -*level;
+		}
+		if (dstType == MessageType::MOVE_TO_LEVEL_OUT) {
+			r.skipSpace();
+			String moveString = r.floatString();
+			if (moveString.isEmpty()) {
+				// also accept SET_LEVEL
+				dst.transition = 0;
+			} else {
+				auto transition = parseFloat(moveString);
+				if (!transition)
+					return false; // conversion failed
+				if (r.u8() != 's')
+					return false; // conversion failed
+				dst.transition = clamp(int(*transition * 10.0f), 0, 65535);
 			}
 		}
 		break;
-*/
+	}
 	default:
 		// conversion failed
 		return false;
@@ -504,6 +493,123 @@ static bool readMessage(MessageType dstType, void *dstMessage, MessageReader r) 
 	return true;
 }
 
+Coroutine MqttSnBroker::publish() {
+	uint8_t messageData[MAX_MESSAGE_LENGTH];
+	while (true) {
+		auto &thisName = this->connections[0].name;
+
+		// wait for message
+		MessageInfo info;
+		Message message;
+		co_await this->publishBarrier.wait(info, &message);
+		uint16_t topicId = info.topic.id;
+		uint16_t topicIndex = topicId - 1;
+
+		auto flags = this->connectedFlags;
+
+		// iterate over connections
+		int connectionIndex;
+		while ((connectionIndex = flags.findFirstNonzero()) != -1) {
+			// clear flag for connection
+			this->dirtyFlags.set(connectionIndex, 0);
+
+			// get connection info
+			ConnectionInfo &connection = this->connections[connectionIndex];
+
+			// get topic info
+			TopicInfo &topic = this->topics[topicIndex];
+
+			// get quality of service (3: client is not subscribed)
+			int qos = connectionIndex == 0 ? QOS : topic.qosArray.get(connectionIndex);
+			if (qos != 3) {
+				// generate message id
+				uint16_t msgId = qos <= 0 ? 0 : getNextMsgId();
+
+				// message flags
+				auto flags = mqttsn::makeQos(qos);
+
+				// topic id
+				uint16_t topicId = connectionIndex == 0 ? topic.gatewayTopicId : topicId;
+
+				// send to gateway or client
+				for (int retry = 0; retry <= MAX_RETRY; ++retry) {
+					// send publish message
+					{
+						PacketWriter w(messageData);
+						w.e8(mqttsn::MessageType::PUBLISH);
+						w.e8(flags);
+						w.u16B(topicId);
+						w.u16B(msgId);
+						auto c = w.current;
+
+						// message data
+						if (!writeMessage(w, info.type, &message))
+							break;
+
+#ifdef DEBUG_PRINT
+						Terminal::out << (thisName + " publishes " + dec(w.current - c) + " bytes to ");
+						if (connectionIndex == 0)
+							Terminal::out << ("gateway");
+						else
+							Terminal::out << (connection.name);
+						Terminal::out << (" on topic '" + this->topics.get(topicIndex)->key + "' msgid " + dec(msgId) + '\n');
+#endif
+
+						co_await Network::send(NETWORK_MQTT, connection.endpoint, w.finish());
+					}
+
+					if (qos <= 0)
+						break;
+
+					// wait for acknowledge from other end of connection (client or gateway)
+					{
+						int length = array::count(messageData);
+						int s = co_await select(this->ackWaitlist.wait(uint8_t(connectionIndex),
+								mqttsn::MessageType::PUBACK, msgId, length, messageData),
+							Timer::sleep(RETRANSMISSION_TIME));
+
+						// check if still connected
+						if (!isConnected(connectionIndex))
+							break;
+
+						// check if we received a message
+						if (s == 1) {
+							MessageReader r(length, messageData);
+
+							// get topic id and return code
+							topicId = r.u16B();
+							r.skip(2); // msgId
+							auto returnCode = r.e8<mqttsn::ReturnCode>();
+
+							// check if successful
+							if (r.isValid() && returnCode == mqttsn::ReturnCode::ACCEPTED)
+								break;
+						}
+					}
+
+					// set duplicate flag and try again
+					flags |= mqttsn::Flags::DUP;
+				}
+			}
+		}
+
+/*
+		// forward to subscribers
+		for (auto &subscriber : this->subscribers) {
+			if (subscriber.index == publisher.index) {
+				subscriber.barrier->resumeAll([&subscriber, &publisher] (Subscriber::Parameters &p) {
+					p.subscriptionIndex = subscriber.subscriptionIndex;
+
+					// convert to target unit and type and resume coroutine if conversion was successful
+					return convert(subscriber.messageType, p.message,
+						publisher.messageType, publisher.message);
+				});
+			}
+		}
+*/
+	}
+}
+/*
 Coroutine MqttSnBroker::publish() {
 	uint8_t message[MAX_MESSAGE_LENGTH];
 	while (true) {
@@ -609,7 +715,7 @@ Coroutine MqttSnBroker::publish() {
 			// check if publisher wants to publish
 			if (publisher.dirty) {
 				publisher.dirty = false;
-/*
+/ *
 				// forward to subscribers
 				for (auto &subscriber : this->subscribers) {
 					if (subscriber.index == publisher.index) {
@@ -622,7 +728,7 @@ Coroutine MqttSnBroker::publish() {
 						});
 					}
 				}
-*/
+* /
 				this->currentPublisher = &publisher;
 				this->dirtyFlags.set();
 				break;
@@ -634,7 +740,7 @@ Coroutine MqttSnBroker::publish() {
 			this->publishEvent.clear();
 	}
 }
-
+*/
 Coroutine MqttSnBroker::receive() {
 	uint8_t message[MAX_MESSAGE_LENGTH];
 
@@ -917,12 +1023,12 @@ Coroutine MqttSnBroker::receive() {
 			// publish to subscribers
 			for (auto &subscriber : this->subscribers) {
 				// check if this is the right topic
-				if (subscriber.index == topicIndex) {
-					subscriber.barrier->resumeFirst([&subscriber, &r] (Subscriber::Parameters &p) {
-						p.source = subscriber.source;
+				if (subscriber.source.topic.id - 1 == topicIndex) {
+					subscriber.barrier->resumeFirst([&subscriber, &r] (PublishInfo::Parameters &p) {
+						p.info = subscriber.destination;
 
 						// read message (note r is passed by value for multiple subscribers)
-						return readMessage(subscriber.messageType, p.message, r);
+						return readMessage(subscriber.destination.type, p.message, r);
 					});
 				}
 			}
