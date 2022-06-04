@@ -2,7 +2,6 @@
 
 #include <String.hpp>
 #include <Coroutine.hpp>
-#include <boardConfig.hpp>
 
 
 namespace Network {
@@ -49,11 +48,17 @@ struct SendParameters {
 void init();
 
 /**
- * Set local port number
+ * Open a network connection on a local port
  * @param index context index (number of contexts defined by NETWORK_CONTEXT_COUNT in sysConfig.hpp)
  * @param port local port number
  */
-void setLocalPort(int index, uint16_t port);
+void open(int index, uint16_t port);
+
+/**
+ * Close a network connection
+ * @param index
+ */
+void close(int index);
 
 /**
  * Receive data

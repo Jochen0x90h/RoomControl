@@ -7,6 +7,7 @@
 #include <ieee.hpp>
 #include <zb.hpp>
 #include <gp.hpp>
+#include <pcap.hpp>
 #include <enum.hpp>
 #include <MessageReader.hpp>
 #include <StringBuffer.hpp>
@@ -26,25 +27,6 @@
 
 namespace fs = boost::filesystem;
 
-// header of pcap file
-struct PcapHeader {
-	uint32_t magic_number;   // magic number
-	uint16_t version_major;  // major version number
-	uint16_t version_minor;  // minor version number
-	int32_t thiszone;        // GMT to local correction
-	uint32_t sigfigs;        // accuracy of timestamps
-	uint32_t snaplen;        // max length of captured packets, in octets
-	uint32_t network;        // data link type
-};
-
-// header of one packet in a pcap file
-struct PcapPacket {
-	uint32_t ts_sec;         // timestamp seconds
-	uint32_t ts_usec;        // timestamp microseconds
-	uint32_t incl_len;       // number of octets of packet saved in file
-	uint32_t orig_len;       // actual length of packet
-	uint8_t data[140];
-};
 
 // default link key used by aps layer, prepared for aes encryption/decryption
 AesKey za09LinkAesKey;
@@ -952,9 +934,6 @@ int controlTransfer(libusb_device_handle *handle, Radio::Request request, uint16
 }
 
 int main(int argc, char const *argv[]) {
-	fs::path inputFile;
-	fs::path outputFile;
-
 	AesKey busDefaultAesKey;
 	//setKey(busDefaultAesKey, bus::defaultKey);
 	//printKey("busDefaultAesKey", busDefaultAesKey);
@@ -971,6 +950,8 @@ int main(int argc, char const *argv[]) {
 	setKey(za09KeyLoadAesKey, hashedKey);
 	//printKey("za09KeyLoadAesKey", za09KeyLoadAesKey);
 
+	fs::path inputFile;
+	fs::path outputFile;
 	bool haveKey = false;
 	int radioChannel = 15;
 	auto radioFlags = Radio::ContextFlags::PASS_ALL;
@@ -1070,8 +1051,8 @@ int main(int argc, char const *argv[]) {
 
 			//ret = libusb_set_interface_alt_setting(handle, 0, 0);
 
-			PcapHeader header;
-			PcapPacket packet;
+			pcap::Header header;
+			pcap::Packet<140> packet;
 			int length;
 
 			// reset the radio
@@ -1085,10 +1066,10 @@ int main(int argc, char const *argv[]) {
 			controlTransfer(handle, Radio::Request::SET_FLAGS, uint16_t(radioFlags), 0);
 
 			// open output pcap file
-			FILE *pcap = fopen(outputFile.string().c_str(), "wb");
+			FILE *file = fopen(outputFile.string().c_str(), "wb");
 
 			// write pcap header
-			if (pcap != nullptr) {
+			if (file != nullptr) {
 				Terminal::out << "capturing to " << str(outputFile.string().c_str()) << "\n";
 				header.magic_number = 0xa1b2c3d4;
 				header.version_major = 2;
@@ -1096,12 +1077,12 @@ int main(int argc, char const *argv[]) {
 				header.thiszone = 0;
 				header.sigfigs = 0;
 				header.snaplen = 128;
-				header.network = 0xC3;
-				fwrite(&header, sizeof(header), 1, pcap);
+				header.network = pcap::Network::IEEE802_15_4;
+				fwrite(&header, sizeof(header), 1, file);
 			}
 
 			// loop
-			Terminal::out << "waiting for ieee802.15.4 packets from device on channel " << dec(radioChannel) << " ...\n";
+			Terminal::out << "waiting for IEEE 802.15.4 packets from device on channel " << dec(radioChannel) << " ...\n";
 			//auto startTime = std::chrono::steady_clock::now();
 			uint32_t startTime = -1;
 			while (true) {
@@ -1124,15 +1105,15 @@ int main(int argc, char const *argv[]) {
 					// write to pcap file
 					//auto now = std::chrono::steady_clock::now();
 					//auto timestamp = std::chrono::duration_cast<std::chrono::microseconds>(now - startTime).count();
-					if (pcap != nullptr) {
-						packet.ts_sec = timestamp / 1000000;
-						packet.ts_usec = timestamp % 1000000;
-						packet.incl_len = length;
-						packet.orig_len = length + 2; // 2 byte crc not transferred
-						fwrite(&packet, 1, offsetof(PcapPacket, data) + packet.incl_len, pcap);
+					if (file != nullptr) {
+						packet.header.ts_sec = timestamp / 1000000;
+						packet.header.ts_usec = timestamp % 1000000;
+						packet.header.incl_len = length;
+						packet.header.orig_len = length + 2; // 2 byte crc not transferred
+						fwrite(&packet, 1, sizeof(pcap::PacketHeader) + packet.header.incl_len, file);
 
 						// flush file so that we can interrupt any time
-						fflush(pcap);
+						fflush(file);
 					}
 
 					// dissect
@@ -1149,30 +1130,30 @@ int main(int argc, char const *argv[]) {
 
 		// open input pcap file
 		char const *name = inputFile.string().c_str();
-		FILE *pcap = fopen(name, "rb");
-		if (pcap == nullptr) {
+		FILE *file = fopen(name, "rb");
+		if (file == nullptr) {
 			Terminal::err << "error: can't read pcap file " << str(name) << "\n";
 		} else {
 			// read pcap header
-			PcapHeader header;
-			if (fread(&header, sizeof(header), 1, pcap) < 1) {
+			pcap::Header header;
+			if (fread(&header, sizeof(header), 1, file) < 1) {
 				Terminal::err << "error: pcap header incomplete!\n";
-			} else if (header.network != 0xC3) {
+			} else if (header.network != pcap::Network::IEEE802_15_4) {
 				Terminal::err << "error: protocol not supported!\n";
 			} else {
 				// read packets
-				PcapPacket packet;
-				while (fread(&packet, offsetof(PcapPacket, data), 1, pcap) == 1) {
-					// read packet
-					if (fread(packet.data, 1, packet.incl_len, pcap) < packet.incl_len)
+				pcap::Packet<140> packet;
+				while (fread(&packet.header, sizeof(pcap::PacketHeader), 1, file) == 1) {
+					// read packet data
+					if (fread(packet.data, 1, min(packet.header.incl_len, 140), file) < packet.header.incl_len)
 						break;
 
 					// dissect packet
-					PacketReader r(packet.incl_len, packet.data);
+					PacketReader r(packet.header.incl_len, packet.data);
 					handleIeee(r);
 				}
 			}
-			fclose(pcap);
+			fclose(file);
 		}
 	}
 	return 0;

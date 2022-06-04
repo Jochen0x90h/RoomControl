@@ -17,7 +17,10 @@
 */
 namespace Timer {
 
-SystemTime systemTime = {};
+// timer interval is 1024 seconds (2^24 / 16384Hz), given in milliseconds
+constexpr int INTERVAL = 1024000;
+
+uint32_t baseTime = 0;
 
 // next timeout of a timer in the list
 SystemTime next;
@@ -36,7 +39,7 @@ void handle() {
 			clearInterrupt(RTC0_IRQn);
 
 			auto time = Timer::next;
-			Timer::next.value += 0xfffff;
+			Timer::next.value += INTERVAL - 1;
 
 			// resume all coroutines that where timeout occurred
 			Timer::waitlist.resumeAll([time](SystemTime timeout) {
@@ -48,7 +51,7 @@ void handle() {
 					Timer::next = timeout;
 				return false;
 			});
-			NRF_RTC0->CC[0] = Timer::next.value << 4;
+			NRF_RTC0->CC[0] = ((Timer::next.value - Timer::baseTime) << (7 + 4)) / 125;//Timer::next.value << 4;
 
 			// repeat until next timeout is in the future
 		} while (now() >= Timer::next);
@@ -67,7 +70,7 @@ void init() {
 	Timer::nextHandler = Loop::addHandler(handle);
 
 	// initialize RTC0
-	Timer::next.value = 0xfffff;
+	Timer::next.value = INTERVAL - 1;
 	NRF_RTC0->CC[0] = next.value << 4;
 	NRF_RTC0->EVTENSET = N(RTC_EVTENSET_OVRFLW, Set);
 	NRF_RTC0->INTENSET = N(RTC_INTENSET_COMPARE0, Set);
@@ -76,20 +79,25 @@ void init() {
 }
 
 SystemTime now() {
-	uint32_t counter = (NRF_RTC0->COUNTER + 8) >> 4;
+	// time resolution 1/1000 s
+	uint32_t counter = NRF_RTC0->COUNTER;
 	if (NRF_RTC0->EVENTS_OVRFLW) {
 		NRF_RTC0->EVENTS_OVRFLW = 0;
-		counter = (NRF_RTC0->COUNTER + 0x1000008) >> 4;
+
+		// reload counter in case overflow happened after reading the counter
+		counter = NRF_RTC0->COUNTER;
+
+		// advance base time by one interval (1024 seconds)
+		Timer::baseTime += INTERVAL;
 	}
-	Timer::systemTime.value = (Timer::systemTime.value & 0xfff00000) + counter;
-	return Timer::systemTime;
+	return {Timer::baseTime + ((counter * 125 + 1024) >> (7 + 4))};
 }
 
 Awaitable<SystemTime> sleep(SystemTime time) {
 	// check if this time is the next to elapse
 	if (time < Timer::next) {
 		Timer::next = time;
-		NRF_RTC0->CC[0] = time.value << 4;
+		NRF_RTC0->CC[0] = ((time.value - Timer::baseTime) << (7 + 4)) / 125;
 	}
 
 	// check if timeout already elapsed

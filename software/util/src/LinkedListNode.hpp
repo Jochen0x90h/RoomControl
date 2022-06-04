@@ -9,8 +9,8 @@ struct LinkedListNode {
 	/**
 	 * Construct an empty list or an element that is "not in list"
 	 */
-	LinkedListNode() {
-		this->next = this->prev = reinterpret_cast<T *>(this);
+	LinkedListNode() noexcept {
+		this->next = this->prev = static_cast<T *>(this);
 	}
 
 	/**
@@ -62,7 +62,7 @@ struct LinkedListNode {
 	 * Add a node before this node (add at end of list if this is the list head)
 	 */
 	void add(T &node) {
-		node.next = reinterpret_cast<T *>(this);
+		node.next = static_cast<T *>(this);
 		node.prev = this->prev;
 		this->prev->next = &node;
 		this->prev = &node;
@@ -76,7 +76,7 @@ struct LinkedListNode {
 		this->prev->next = this->next;
 
 		// set to "not in list"
-		this->next = this->prev = reinterpret_cast<T *>(this);
+		this->next = this->prev = static_cast<T *>(this);
 	}
 	
 	
@@ -89,5 +89,5 @@ struct LinkedListNode {
 	};
 	
 	Iterator begin() {return {this->next};}
-	Iterator end() {return {reinterpret_cast<T *>(this)};}
+	Iterator end() {return {static_cast<T *>(this)};}
 };

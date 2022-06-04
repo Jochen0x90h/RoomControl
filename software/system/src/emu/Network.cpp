@@ -1,6 +1,7 @@
 #include "../Network.hpp"
 #include "Loop.hpp"
 #include <boost/asio.hpp>
+#include <boardConfig.hpp>
 
 
 namespace asio = boost::asio;
@@ -81,11 +82,15 @@ void init() {
 	Network::nextHandler = Loop::addHandler(handle);
 }
 
-void setLocalPort(int index, uint16_t port) {
+void open(int index, uint16_t port) {
 	assert(uint(index) < NETWORK_CONTEXT_COUNT);
 
 	auto &context = Network::contexts[index];
 	context.socket.bind(asio::ip::udp::endpoint(asio::ip::udp::v6(), port));
+}
+
+void close(int index) {
+
 }
 
 Awaitable<ReceiveParameters> receive(int index, Endpoint& source, int &length, void *data) {

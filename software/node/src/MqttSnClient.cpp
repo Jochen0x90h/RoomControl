@@ -8,10 +8,11 @@ constexpr int MAX_RETRY = 2;
 
 
 MqttSnClient::MqttSnClient(uint16_t localPort) {
-	Network::setLocalPort(NETWORK_MQTT, localPort);
+	Network::open(NETWORK_MQTT, localPort);
 }
 
 MqttSnClient::~MqttSnClient() {
+	Network::close(NETWORK_MQTT);
 }
 
 /*

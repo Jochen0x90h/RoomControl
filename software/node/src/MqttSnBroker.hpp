@@ -56,6 +56,8 @@ public:
 	 */
 	MqttSnBroker(uint16_t localPort);
 
+	~MqttSnBroker();
+
 	/**
 	 * Connect to the gateway
 	 * @param gatewayEndpoint udp endpoint of gateway

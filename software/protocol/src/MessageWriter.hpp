@@ -8,8 +8,8 @@
 #include <cstdint>
 
 
-struct MessageWriter {
-	uint8_t *current;
+class MessageWriter {
+public:
 
 	explicit MessageWriter(uint8_t *message) : current(message) {}
 
@@ -140,6 +140,8 @@ struct MessageWriter {
 	MessageWriter &operator <<(char ch) {u8(ch); return *this;}
 	MessageWriter &operator <<(String const &str) {string(str); return *this;}
 
+
+	uint8_t *current;
 };
 
 

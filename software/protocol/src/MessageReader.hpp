@@ -6,21 +6,12 @@
 #include <cstdint>
 
 
-struct MessageReader {
-	uint8_t *current;
-	uint8_t *end;
+class MessageReader {
+public:
 
 	MessageReader() = default;
 	MessageReader(uint8_t *message, uint8_t *end) : current(message), end(end) {}
 	MessageReader(int length, uint8_t *message) : current(message), end(message + length) {}
-
-	/**
-	 * Returns true if the read packet is still valid, i.e. did not read past the end
-	 * @return true when valid
-	 */
-	bool isValid() {
-		return this->current <= this->end;
-	}
 
 	uint8_t u8() {
 		uint8_t value = this->current[0];
@@ -144,6 +135,10 @@ struct MessageReader {
 		return String(it - str, str);
 	}
 
+	/**
+	 * Skip some bytes
+	 * @param n number of bytes to skip
+	 */
 	void skip(int n) {
 		this->current += n;
 	}
@@ -156,11 +151,31 @@ struct MessageReader {
 	}
 
 	/**
-	 * Get remaining number of bytes in the message
+	 * Check if the reader is still valid, i.e. did not read past the end
+	 * @return true when before or at the end
 	 */
-	int getRemaining() {
-		return this->end - this->current;
+	bool isValid() const {
+		return this->current <= this->end;
 	}
+
+	/**
+	 * Check if we are at the end of the message
+	 * @return true when at or past the end
+	 */
+	bool atEnd() const {
+		return this->current >= this->end;
+	}
+
+	/**
+	 * Get remaining number of bytes in the message
+	 * @return number of remaining bytes
+	 */
+	int getRemaining() const {
+		return int(this->end - this->current);
+	}
+
+	uint8_t *current;
+	uint8_t *end;
 };
 
 
