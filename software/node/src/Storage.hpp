@@ -106,7 +106,7 @@ public:
 		/**
 		 * Indirection operator. Don't store the reference or keep it during co_await because it may change
 		 */
-		T const &operator *() {return *reinterpret_cast<T const *>(this->flash);}
+		T const &operator *() const {return *reinterpret_cast<T const *>(this->flash);}
 	};
 
 protected:
@@ -169,8 +169,8 @@ protected:
 		void enlarge(int count);
 		void shrink(int index, int count);
 		bool hasSpace(void const *flashElement);
-		void *write(int index, ElementInternal *element);
-		void *erase(int index);
+		ElementInternal *write(int index, ElementInternal *element);
+		ElementInternal *erase(int index);
 		void move(int oldIndex, int newIndex);
 	};
 
@@ -252,7 +252,7 @@ public:
 
 		/**
 		 * Overwrite the flash storage of an element at the given index.
-		 * @param index of element, must be in the range [0, size()]
+		 * @param index of element, must be in the range [0, size())
 		 * @param flashElement element to store in flash (gets copied and other elements may be moved in flash)
 		 */
 		void write(int index, FlashType const &flashElement) {
@@ -270,8 +270,8 @@ public:
 		 */
 		void write(int index, RamType *element) {
 			assert(index >= 0 && index <= this->data.count);
-			auto old = this->data.write(index, element);
-			delete reinterpret_cast<RamType *>(old);
+			auto old = static_cast<RamType *>(this->data.write(index, element));
+			delete old;
 		}
 
 		/**
@@ -281,8 +281,8 @@ public:
 		 */
 		void write(int index, Pointer<RamType> &&element) {
 			assert(index >= 0 && index <= this->data.count);
-			auto old = this->data.write(index, element.ptr);
-			delete reinterpret_cast<RamType *>(old);
+			auto old = static_cast<RamType *>(this->data.write(index, element.ptr));
+			delete old;
 
 			// remove ownership from given element
 			element.ptr = nullptr;
@@ -293,8 +293,8 @@ public:
 		 */
 		void erase(int index) {
 			assert(index >= 0 && index < this->data.count);
-			auto old = this->data.erase(index);
-			delete reinterpret_cast<RamType *>(old);
+			auto old = static_cast<RamType *>(this->data.erase(index));
+			delete old;
 		}
 
 		/**
@@ -307,15 +307,7 @@ public:
 			assert(newIndex >= 0 && newIndex < this->data.count);
 			this->data.move(index, newIndex);
 		}
-/*
-		Iterator<FlashType, RamType> begin() const {
-			return {this->data.flashElements, this->data.ramElements};
 
-		}
-		Iterator<FlashType, RamType> end() const {
-			return {this->data.flashElements + this->data.count, this->data.ramElements + this->data.count};
-		}
-*/
 		Iterator<RamType> begin() const {
 			return {this->data.elements};
 		}
@@ -331,8 +323,6 @@ protected:
 
 	void switchFlashRegions();
 
-	//void ramInsert(uint32_t **ramElement, int sizeChange);
-
 	// configuration
 	uint8_t pageStart;
 	uint8_t pageCount;
@@ -344,20 +334,12 @@ protected:
 	// total number of elements in all arrays
 	int elementCount = 0;
 
-
 	// flash pointers
 	uint8_t const *it;
 	uint8_t const *end;
 
-	// space for array elements of all arrays
-	//void const *flashElements[MAX_ELEMENT_COUNT];
-
 	// accumulated size of all flash elements bytes
 	int flashElementsSize = 0;
-
-
-	// space for array elements of all arrays followed by an "end"-pointer
-	//void *ramElements[MAX_ELEMENT_COUNT + 1];
 
 	// space for array elements of all arrays
 	ElementInternal *elements[MAX_ELEMENT_COUNT];

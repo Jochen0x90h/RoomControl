@@ -15,65 +15,120 @@ extern AesKey const defaultAesKey;
 /**
  * Type of device endpoint such as button, relay or temperature sensor
  */
- enum class EndpointType : uint8_t {
-	// if a device contains multiple sub-devices, a separator can be used to structure the endpoints
-	//SEPARATOR = 0,
-	
-	// discrete types
+enum class EndpointType : uint8_t {
+	TYPE_MASK = 0x3f,
+	DIRECTION_MASK = 0xc0,
+
+	// direction relative to device, i.e. IN is device input, OUT is device output (can be subscribed to)
+	IN = 0x80,
+	OUT = 0x40,
+
+	// endpoint types
 	// --------------
-	
-	// on/off switch with two stable states and toggle command (0: off, 1: on, 2: toggle)
-	ON_OFF = 0x01,
-	ON_OFF_IN = 0x81,
-	ON_OFF_OUT = 0x01,
+	UNKNOWN = 0,
 
-	// trigger (button, motion detector), returns to inactive state (0: inactive, 1: active)
-	TRIGGER = 0x02,
-	TRIGGER_IN = 0x82,
-	TRIGGER_OUT = 0x02,
+	// off/on switch with two stable states (0: off, 1: on)
+	OFF_ON = 0x01,
+	OFF_ON_IN = OFF_ON | IN,
+	OFF_ON_OUT = OFF_ON | OUT,
 
-	// up/down (rocker, blind), returns to inactive state when not pressed (0: inactive, 1: up, 2: down)
-	UP_DOWN = 0x03,
-	UP_DOWN_IN = 0x83,
-	UP_DOWN_OUT = 0x03,
+	// off/on switch with two stable states and toggle command (0: off, 1: on, 2: toggle)
+	OFF_ON_TOGGLE = 0x02,
+	OFF_ON_TOGGLE_IN = OFF_ON_TOGGLE | IN,
+	OFF_ON_TOGGLE_OUT = OFF_ON_TOGGLE | OUT,
+
+	// trigger (button, motion detector), returns to inactive state when released (0: release, 1: trigger)
+	TRIGGER = 0x03,
+	TRIGGER_IN = TRIGGER | IN,
+	TRIGGER_OUT = TRIGGER | OUT,
+
+	// up/down (rocker, blind), returns to inactive state when released (0: release, 1: up, 2: down)
+	UP_DOWN = 0x04,
+	UP_DOWN_IN = UP_DOWN | IN,
+	UP_DOWN_OUT = UP_DOWN | OUT,
+
+	// open/close (window) (0: open, 1: close)
+	OPEN_CLOSE = 0x05,
+	OPEN_CLOSE_IN = OPEN_CLOSE | IN,
+	OPEN_CLOSE_OUT = OPEN_CLOSE | OUT,
 
 
 	// level, color etc.
 	// -----------------
 	
-	// level in percent (brightness of a light bulb)
+	// measured level (percent) level in percent (e.g position of blind)
 	LEVEL = 0x10,
-	LEVEL_IN = 0x90,
-	LEVEL_OUT = 0x10,
+	LEVEL_IN = LEVEL | IN,
+	LEVEL_OUT = LEVEL | OUT,
+
+	// set level (e.g. brightness of a light bulb)
+	SET_LEVEL = 0x11,
+	SET_LEVEL_IN = SET_LEVEL | IN,
+	SET_LEVEL_OUT = SET_LEVEL | OUT,
+
+	// set level with duration (e.g. brightness of a light bulb)
+	MOVE_TO_LEVEL = 0x12,
+	MOVE_TO_LEVEL_IN = MOVE_TO_LEVEL | IN,
+	MOVE_TO_LEVEL_OUT = MOVE_TO_LEVEL | OUT,
 
 	// color
-	COLOR_IN = 0x91,
-	COLOR_OUT = 0x11,
-	
+	COLOR = 0x13,
+	COLOR_IN = COLOR | IN,
+	COLOR_OUT = COLOR | OUT,
+
+	// set color
+	SET_COLOR = 0x14,
+	SET_COLOR_IN = SET_COLOR | IN,
+	SET_COLOR_OUT = SET_COLOR | OUT,
+
+	// color temperature
+	COLOR_TEMPERATURE = 0x16,
+	COLOR_TEMPERATURE_IN = COLOR | IN,
+	COLOR_TEMPERATURE_OUT = COLOR | OUT,
+
+	// set color temperature
+	SET_COLOR_TEMPERATURE = 0x17,
+	SET_COLOR_TEMPERATURE_IN = SET_COLOR | IN,
+	SET_COLOR_TEMPERATURE_OUT = SET_COLOR | OUT,
+
 
 	// environment
 	// -----------
 	
-	// temperature (Celsius, Fahrenheit, Kelvin)
-	TEMPERATURE = 0x20,
-	TEMPERATURE_IN = 0xa0,
-	TEMPERATURE_OUT = 0x20,
+	// measured air temperature (1/20 Kelvin, displayed in Celsius or Fahrenheit dependent on user setting)
+	AIR_TEMPERATURE = 0x20,
+	AIR_TEMPERATURE_IN = AIR_TEMPERATURE | IN,
+	AIR_TEMPERATURE_OUT = AIR_TEMPERATURE | OUT,
 
-	// air pressure (hectopascal)
-	AIR_PRESSURE = 0x21,
-	AIR_PRESSURE_IN = 0xa1,
+	// set temperature (absolute/relative)
+	SET_AIR_TEMPERATURE = 0x21,
+	SET_AIR_TEMPERATURE_IN = SET_AIR_TEMPERATURE | IN,
+	SET_AIR_TEMPERATURE_OUT = SET_AIR_TEMPERATURE | OUT,
 
 	// air humidity (percent)
 	AIR_HUMIDITY = 0x22,
-	AIR_HUMIDITY_IN = 0xa2,
+	AIR_HUMIDITY_IN = AIR_HUMIDITY | IN,
+	AIR_HUMIDITY_OUT = AIR_HUMIDITY | OUT,
+
+	// set air humidity (percent)
+	SET_AIR_HUMIDITY = 0x23,
+	SET_AIR_HUMIDITY_IN = SET_AIR_HUMIDITY | IN,
+	SET_AIR_HUMIDITY_OUT = SET_AIR_HUMIDITY | OUT,
+
+	// air pressure (Pascal, displayed in hectopascal, kilopascal or megapascal dependent on user setting)
+	AIR_PRESSURE = 0x24,
+	AIR_PRESSURE_IN = AIR_PRESSURE | IN,
+	AIR_PRESSURE_OUT = AIR_PRESSURE | OUT,
 
 	// air volatile organic components
-	AIR_VOC = 0x23,
-	AIR_VOC_IN = 0xa3,
+	AIR_VOC = 0x25,
+	AIR_VOC_IN = AIR_VOC | IN,
+	AIR_VOC_OUT = AIR_VOC | OUT,
 
 	// illuminance (lux, https://en.wikipedia.org/wiki/Lux)
-	ILLUMINANCE = 0x24,
-	ILLUMINANCE_IN = 0xa4,
+	ILLUMINANCE = 0x26,
+	ILLUMINANCE_IN = ILLUMINANCE | IN,
+	ILLUMINANCE_OUT = ILLUMINANCE | OUT,
 
 	
 	// electrical energy
@@ -81,30 +136,28 @@ extern AesKey const defaultAesKey;
 	
 	// voltage (V, mV)
 	VOLTAGE = 0x30,
-	VOLTAGE_IN = 0xb0,
-	
+	VOLTAGE_IN = VOLTAGE | IN,
+	VOLTAGE_OUT = VOLTAGE | OUT,
+
 	// current (A, mA)
 	CURRENT = 0x31,
-	CURRENT_IN = 0xb1,
+	CURRENT_IN = CURRENT | IN,
+	CURRENT_OUT = CURRENT | OUT,
 
 	// battery level (percent)
 	BATTERY_LEVEL = 0x32,
-	BATTERY_LEVEL_IN = 0xb2,
-	
+	BATTERY_LEVEL_IN = BATTERY_LEVEL | IN,
+	BATTERY_LEVEL_OUT = BATTERY_LEVEL | OUT,
+
 	// energy counter (kWh, Wh)
 	ENERGY_COUNTER = 0x33,
-	ENERGY_COUNTER_IN = 0xb3,
-	
+	ENERGY_COUNTER_IN = ENERGY_COUNTER | IN,
+	ENERGY_COUNTER_OUT = ENERGY_COUNTER | OUT,
+
 	// energy (W, mW)
 	POWER = 0x34,
-	POWER_IN = 0xb4,
-
-	
-	TYPE_MASK = 0x7f,
-	
-	IN = 0x80,
-	OUT = 0x00,
-	DIRECTION_MASK = 0x80
+	POWER_IN = POWER | IN,
+	POWER_OUT = POWER | OUT,
 };
 FLAGS_ENUM(EndpointType);
 

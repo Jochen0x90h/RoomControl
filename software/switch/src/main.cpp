@@ -19,9 +19,9 @@
 constexpr SystemDuration RELAY_TIME = 10ms;
 
 
-constexpr auto ROCKER = bus::EndpointType::UP_DOWN_IN;
-constexpr auto LIGHT = bus::EndpointType::ON_OFF_OUT;
-constexpr auto BLIND = bus::EndpointType::UP_DOWN_OUT;
+constexpr auto ROCKER = bus::EndpointType::UP_DOWN_OUT;
+constexpr auto LIGHT = bus::EndpointType::OFF_ON_IN;
+constexpr auto BLIND = bus::EndpointType::UP_DOWN_IN;
 
 enum class Mode : uint8_t {
 	LIGHT = 1,
@@ -78,7 +78,7 @@ public:
 			co_await Input::trigger(0xf, 0xf, index, state);
 			//Terminal::out << "trigger " << dec(index) << ' ' << dec(int(state)) << '\n';
 
-			// configure when at least one button was held after all were pressed
+			// configure when at least one button was held for 3s after all were pressed
 			if (this->configure && Timer::now() > this->allTime + 3s) {
 				// use button state as configuration
 				int a = this->buttons & 3;

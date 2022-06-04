@@ -72,7 +72,7 @@ Coroutine send() {
 	while (true) {
 		// generate random numbers
 		for (int i = 0; i < array::count(sendData); ++i)
-			sendData[i] = Random::int8();
+			sendData[i] = Random::u8();
 		
 		// send to host	
 		co_await UsbDevice::send(1, array::count(sendData), sendData);

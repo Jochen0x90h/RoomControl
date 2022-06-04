@@ -134,11 +134,11 @@ public:
 	/**
 	 * Gat the value for a key string or put it if not found
 	 * @param key key string
-	 * @param default value function that obtains the default value if a new key was inserted
+	 * @param defaultValue function that obtains the default value if a new key was inserted
 	 * @return location in hash table or -1 if not found and no new element could be added
 	 */
-	template <typename T>
-	int getOrPut(String const &key, T const &defaultValue) {
+	template <typename F>
+	int getOrPut(String const &key, F const &defaultValue) {
 		int index = key.hash() % N;
 
 		// search for the key in the hash table

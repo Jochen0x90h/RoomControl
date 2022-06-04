@@ -2,29 +2,56 @@
 
 #include "Message.hpp"
 #include <Coroutine.hpp>
-#include <LinkedListNode.hpp>
 
 
-struct Publisher : public LinkedListNode<Publisher> {
-	// endpoint or topic index, set by interface or broker
-	uint16_t index;
+struct PublishInfo {
+	// message destination
+	MessageInfo destination;
 
-	// indicates if the data has changed and needs to be published
-	bool dirty = false;
+	struct Parameters {
+		// info about the message source for the subscriber to identify the message
+		MessageInfo &info;
 
-	// type of message to be published
-	MessageType messageType = MessageType::UNKNOWN;
+		// message (length is defined by Subscriber::messageType)
+		void *message;
+	};
 
-	// message (length is defined by messageType)
-	void const *message;
-	
-	// event to notify the interface that the dirty flag was set (set and owned by the interface or broker)
-	Event *event = nullptr;
-	
-	void publish() {
-		this->dirty = true;
-		if (this->event != nullptr)
-			this->event->set();
+	// barrier where the subscriber waits for new messages (owned by subscriber)
+	using Barrier = ::Barrier<Parameters>;
+	Barrier *barrier = nullptr;
+};
+
+
+struct Publisher : public PublishInfo {
+	uint8_t id;
+	MessageType srcType;
+
+	ConvertOptions convertOptions;
+
+	void setInfo(PublishInfo const &publishInfo) {
+		*static_cast<PublishInfo *>(this) = publishInfo;
+	}
+
+	void publishSwitchCommand(uint8_t src) {
+		if (this->barrier == nullptr)
+			return;
+		this->barrier->resumeFirst([this, src] (PublishInfo::Parameters &p) {
+			p.info = this->destination;
+
+			// convert to destination message type and resume coroutine if conversion was successful
+			auto &dst = *reinterpret_cast<Message *>(p.message);
+			return convertCommand(this->destination.type, dst, src, this->convertOptions);
+		});
+	}
+	void publishFloatValue(float src) {
+		if (this->barrier == nullptr)
+			return;
+		this->barrier->resumeFirst([this, src] (PublishInfo::Parameters &p) {
+			p.info = this->destination;
+
+			// convert to destination message type and resume coroutine if conversion was successful
+			auto &dst = *reinterpret_cast<Message *>(p.message);
+			return convertFloatValue(this->destination.type, dst, this->srcType, src, this->convertOptions);
+		});
 	}
 };
-using PublisherList = LinkedListNode<Publisher>;

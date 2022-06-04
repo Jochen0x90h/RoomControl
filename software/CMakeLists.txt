@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.9)
+cmake_minimum_required(VERSION 3.15)
 
 # CLion: use conan plugin and add -DCMAKE_TOOLCHAIN_FILE=conan_toolchain.cmake to the CMake options
 
@@ -12,8 +12,6 @@ set(CMAKE_CXX_STANDARD 20)
 
 # debug generated makefile
 #set(CMAKE_VERBOSE_MAKEFILE TRUE)
-
-separate_arguments(GENERATE_HEX)
 
 message("*** TYPE ${CMAKE_BUILD_TYPE}")
 message("*** BOARD ${BOARD}")
@@ -247,7 +245,6 @@ endif()
 
 # base code for nodes (control and gateway)
 set(NODE
-	node/src/Configuration.hpp
 	node/src/Message.cpp
 	node/src/Message.hpp
 	node/src/MqttSnClient.cpp
@@ -272,7 +269,7 @@ set(CONTROL
 	control/src/BME680.hpp
 	control/src/BusInterface.cpp
 	control/src/BusInterface.hpp
-	control/src/Device.hpp
+	control/src/Configuration.hpp
 	control/src/Interface.cpp
 	control/src/Interface.hpp
 	control/src/LocalInterface.cpp
@@ -306,6 +303,7 @@ endif()
 
 
 # hex generator
+separate_arguments(GENERATE_HEX)
 macro(generate_hex TARGET)
 	if(NOT "${GENERATE_HEX}" STREQUAL "")
 		add_custom_command(TARGET ${TARGET}

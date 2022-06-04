@@ -25,28 +25,36 @@ public:
 
 	int getDeviceCount() override;
 	Device &getDeviceByIndex(int index) override;
-	Device *getDeviceById(DeviceId id) override;
+	Device *getDeviceById(uint8_t id) override;
 
 protected:
 
 	class LocalDevice : public Device {
 	public:
-		DeviceId getId() override;
-		String getName() override;
+		uint8_t getId() const override;
+		String getName() const override;
 		void setName(String name) override;
-		Array<EndpointType const> getEndpoints() override;
-		void addPublisher(uint8_t endpointIndex, Publisher &publisher) override;
-		void addSubscriber(uint8_t endpointIndex, Subscriber &subscriber) override;
+		Array<MessageType const> getEndpoints() const override;
+		void subscribe(uint8_t endpointIndex, Subscriber &subscriber) override;
+		PublishInfo getPublishInfo(uint8_t endpointIndex) override;
+
+		void init(LocalInterface *interface, uint8_t interfaceId, Array<MessageType const> endpoints) {
+			this->interface = interface;
+			this->interfaceId = interfaceId;
+			this->endpoints = endpoints;
+		}
 
 		// back pointer to interface
 		LocalInterface *interface;
 
-		// device id
-		uint8_t id;
+		// interface id
+		uint8_t interfaceId;
+
+		// endpoints
+		Array<MessageType const> endpoints;
 
 		// subscribers and publishers
 		SubscriberList subscribers;
-		PublisherList publishers;
 	};
 
 	// reads the air sensor every minute and publishes the values to the subscribers
@@ -56,6 +64,6 @@ protected:
 
 	uint8_t deviceCount;
 	LocalDevice devices[DEVICE_COUNT];
-	
-	Event publishEvent;
+
+	PublishInfo::Barrier publishBarrier;
 };

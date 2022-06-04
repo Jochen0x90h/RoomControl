@@ -13,8 +13,6 @@ public:
 	static constexpr int MINUTES_SHIFT = 8;
 	static constexpr int HOURS_SHIFT   = 16;
 	static constexpr int WEEKDAY_SHIFT = 24;
-	
-	uint32_t time = 0;
 
 	ClockTime() = default;
 
@@ -92,6 +90,9 @@ public:
 	 * Get weekday: 0 (Monday) to 6 (Sunday)
 	 */
 	int getWeekday() const {return this->time >> WEEKDAY_SHIFT;}
+
+
+	uint32_t time = 0;
 };
 
 
@@ -135,3 +136,32 @@ public:
 		return (this->time & 1 << (WEEKDAYS_SHIFT + time.getWeekday())) != 0;
 	}
 };
+
+/**
+ * Duration in hours with 1/100s resolution
+ */
+struct HourDuration100 {
+	uint8_t hundredths;
+	uint8_t seconds;
+	uint8_t minutes;
+	uint8_t hours;
+	//uint16_t days;
+};
+
+inline HourDuration100 unpackHourDuration100(uint32_t duration) {
+	HourDuration100 d;
+	d.hundredths = duration % 100;
+	duration /= 100;
+	d.seconds = duration % 60;
+	duration /= 60;
+	d.minutes = duration % 60;
+	duration /= 60;
+	d.hours = duration;// % 24;
+	//duration /= 24;
+	//d.days = duration;
+	return d;
+}
+
+inline uint32_t packHourDuration100(HourDuration100 const &duration) {
+	return duration.hundredths + (duration.seconds + (duration.minutes + (duration.hours /*+ duration.days * 24*/) * 60) * 60) * 100;
+}

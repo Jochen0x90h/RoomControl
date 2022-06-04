@@ -1160,7 +1160,7 @@ typedef struct {                                /*!< (@ 0x40001000) RADIO Struct
   __IM  uint32_t  RESERVED7;
   __IM  uint32_t  RXMATCH;                      /*!< (@ 0x00000408) Received address                                           */
   __IM  uint32_t  RXCRC;                        /*!< (@ 0x0000040C) CRC field of previously received packet                    */
-  __IM  uint32_t  DAI;                          /*!< (@ 0x00000410) Device address match index                                 */
+  __IM  uint32_t  DAI;                          /*!< (@ 0x00000410) Device address match plugIndex                                 */
   __IM  uint32_t  PDUSTAT;                      /*!< (@ 0x00000414) Payload status                                             */
   __IM  uint32_t  RESERVED8[59];
   __IOM uint32_t  PACKETPTR;                    /*!< (@ 0x00000504) Packet pointer                                             */

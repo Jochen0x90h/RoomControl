@@ -5,8 +5,34 @@
 #include <util.hpp>
 
 
-using EndpointType = AlarmInterface::EndpointType;
+static MessageType const endpoints[4] = {
+	MessageType::TRIGGER_OUT, MessageType::TRIGGER_OUT, MessageType::TRIGGER_OUT, MessageType::TRIGGER_OUT
+};
+static_assert(array::count(endpoints) >= AlarmInterface::AlarmFlash::MAX_ENDPOINT_COUNT);
 
+/*
+static bool convertMessage(MessageType dstType, void *dstMessage, MessageType srcType, Message const &src,
+	ConvertOptions const &convertOptions)
+{
+	Message &dst = *reinterpret_cast<Message *>(dstMessage);
+
+	switch (srcType) {
+	case MessageType::OFF_ON_IN:
+	case MessageType::OFF_ON_TOGGLE_IN:
+	case MessageType::TRIGGER_IN:
+	case MessageType::UP_DOWN_IN:
+	case MessageType::OPEN_CLOSE_IN:
+		return convertCommandIn(dstType, dst, src.command, convertOptions);
+	case MessageType::SET_LEVEL_IN:
+	case MessageType::SET_AIR_TEMPERATURE_IN:
+	case MessageType::SET_AIR_HUMIDITY_IN:
+		return convertSetFloatValueIn(dstType, dst, srcType, src, convertOptions);
+	default:
+		// conversion failed
+		return false;
+	}
+}
+*/
 
 AlarmInterface::AlarmInterface() {
 	// set backpointers
@@ -32,20 +58,20 @@ Interface::Device &AlarmInterface::getDeviceByIndex(int index) {
 	return this->alarms[index];
 }
 
-Interface::Device *AlarmInterface::getDeviceById(DeviceId id) {
+Interface::Device *AlarmInterface::getDeviceById(uint8_t id) {
 	for (auto &alarm : this->alarms) {
-		if (alarm->id == id)
+		if (alarm->interfaceId == id)
 			return &alarm;
 	}
 	return nullptr;
 }
 
-AlarmInterface::AlarmFlash const &AlarmInterface::getAlarm(int index) const {
+AlarmInterface::AlarmFlash const &AlarmInterface::get(int index) const {
 	assert(index >= 0 && index < this->alarms.count());
 	return *this->alarms[index];
 }
 
-void AlarmInterface::setAlarm(int index, AlarmFlash &flash) {
+void AlarmInterface::set(int index, AlarmFlash &flash) {
 	assert(index >= 0 && index <= this->alarms.count());
 	if (index < this->alarms.count()) {
 		this->alarms.write(index, flash);
@@ -54,21 +80,45 @@ void AlarmInterface::setAlarm(int index, AlarmFlash &flash) {
 		alarm->interface = this;
 
 		// find a free id
-		int id;
-		for (id = 0; id < 256; ++id) {
-			bool found = false;
-			for (auto &alarm : this->alarms) {
-				if (alarm->id == id) {
-					found = true;
-					break;
-				}
-			}
-			if (!found)
-				break;
-		}
-		flash.id = id;
+		flash.interfaceId = allocateInterfaceId(this->alarms);
 
 		this->alarms.write(index, alarm);
+	}
+}
+
+int AlarmInterface::getSubscriberCount(int index, int endpointCount, uint8_t command) {
+	assert(index >= 0 && index < this->alarms.count());
+	int count = 0;
+	for (auto &subscriber : this->alarms[index].subscribers) {
+		if (subscriber.source.device.endpointIndex >= endpointCount)
+			continue;
+
+		Message dst;
+		if (convertCommand(subscriber.destination.type, dst, command, subscriber.convertOptions))
+			++count;
+	}
+	return count;
+}
+
+void AlarmInterface::test(int index, int endpointCount, uint8_t command) {
+	assert(index >= 0 && index < this->alarms.count());
+	auto &alarm = this->alarms[index];
+
+	for (auto &subscriber: alarm.subscribers) {
+		if (subscriber.source.device.endpointIndex >= endpointCount)
+			continue;
+
+		// publish to subscriber
+		subscriber.barrier->resumeFirst([&subscriber, command] (PublishInfo::Parameters &p) {
+			p.info = subscriber.destination;
+
+			// convert to target unit and type and resume coroutine if conversion was successful
+			auto &dst = *reinterpret_cast<Message *>(p.message);
+			return convertCommand(subscriber.destination.type, dst, command, subscriber.convertOptions);
+			//MessageType srcType = flash.endpoints[subscriber.index];
+			//auto &src = flash.messages[subscriber.index];
+			//return convertMessage(subscriber.messageType, p.message, srcType, src, subscriber.convertOptions);
+		});
 	}
 }
 
@@ -86,17 +136,21 @@ Coroutine AlarmInterface::tick() {
 				// alarm goes off: publish to subscribers of alarm
 				for (auto &subscriber: alarm.subscribers) {
 					auto const &flash = *alarm;
-					if (subscriber.index >= flash.endpointCount)
+					if (subscriber.source.device.endpointIndex >= flash.endpointCount)
 						break;
 
 					// publish to subscriber
-					subscriber.barrier->resumeFirst([&subscriber, &flash] (Subscriber::Parameters &p) {
-						p.subscriptionIndex = subscriber.subscriptionIndex;
+					subscriber.barrier->resumeFirst([&subscriber, &flash] (PublishInfo::Parameters &p) {
+						p.info = subscriber.destination;
 
 						// convert to target unit and type and resume coroutine if conversion was successful
-						MessageType type = flash.messageTypes[subscriber.index];
-						Message const &message = flash.messages[subscriber.index];
-						return convert(subscriber.messageType, p.message, type, &message);
+						auto &dst = *reinterpret_cast<Message *>(p.message);
+						uint8_t src = 1;
+						return convertCommand(subscriber.destination.type, dst, src, subscriber.convertOptions);
+						//MessageType type = flash.endpoints[subscriber.index];
+						//auto &message = flash.messages[subscriber.index];
+						//return convertMessage(subscriber.messageType, p.message, type, message,
+						//	subscriber.convertOptions);
 					});
 				}
 			}
@@ -107,16 +161,13 @@ Coroutine AlarmInterface::tick() {
 // AlarmInterface::DeviceFlash
 
 AlarmInterface::AlarmFlash::AlarmFlash(AlarmFlash const &flash) :
-	id(flash.id), time(flash.time), endpointCount(flash.endpointCount)
+	interfaceId(flash.interfaceId), time(flash.time), endpointCount(flash.endpointCount)
 {
-	array::copy(this->endpoints, flash.endpoints);
-	for (int i = 0; i < flash.endpointCount; ++i) {
-		array::copy(this->messages[i].data, flash.messages[i].data);
-	}
 }
 
 int AlarmInterface::AlarmFlash::size() const {
-	return getOffset(AlarmFlash, messages[this->endpointCount]);
+	return sizeof(AlarmFlash);
+	//return getOffset(AlarmFlash, messages[this->endpointCount]);
 }
 
 AlarmInterface::Alarm *AlarmInterface::AlarmFlash::allocate() const {
@@ -126,12 +177,15 @@ AlarmInterface::Alarm *AlarmInterface::AlarmFlash::allocate() const {
 
 // AlarmInterface::Alarm
 
-DeviceId AlarmInterface::Alarm::getId() {
-	auto &flash = **this;
-	return flash.id;
+AlarmInterface::Alarm::~Alarm() {
 }
 
-String AlarmInterface::Alarm::getName() {
+uint8_t AlarmInterface::Alarm::getId() const {
+	auto &flash = **this;
+	return flash.interfaceId;
+}
+
+String AlarmInterface::Alarm::getName() const {
 	return "x";
 }
 
@@ -139,16 +193,17 @@ void AlarmInterface::Alarm::setName(String name) {
 
 }
 
-Array<EndpointType const> AlarmInterface::Alarm::getEndpoints() {
+Array<MessageType const> AlarmInterface::Alarm::getEndpoints() const {
 	auto &flash = **this;
-	return {flash.endpointCount, flash.endpoints};
+	return {flash.endpointCount, endpoints};//flash.endpoints};
 }
 
-void AlarmInterface::Alarm::addPublisher(uint8_t endpointIndex, Publisher &publisher) {
-}
-
-void AlarmInterface::Alarm::addSubscriber(uint8_t endpointIndex, Subscriber &subscriber) {
+void AlarmInterface::Alarm::subscribe(uint8_t endpointIndex, Subscriber &subscriber) {
 	subscriber.remove();
-	subscriber.index = endpointIndex;
+	subscriber.source.device.endpointIndex = endpointIndex;
 	this->subscribers.add(subscriber);
+}
+
+PublishInfo AlarmInterface::Alarm::getPublishInfo(uint8_t endpointIndex) {
+	return {};
 }

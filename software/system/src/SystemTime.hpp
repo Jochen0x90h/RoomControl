@@ -34,6 +34,10 @@ struct SystemDuration {
 	
 };
 
+constexpr SystemDuration operator -(SystemDuration a) {
+	return {-a.value};
+}
+
 constexpr SystemDuration operator +(SystemDuration a, SystemDuration b) {
 	return {a.value + b.value};
 }
@@ -78,6 +82,10 @@ constexpr SystemDuration operator %(SystemDuration a, SystemDuration b) {
 	return {a.value % b.value};
 }
 
+constexpr bool operator ==(SystemDuration a, SystemDuration b) {
+	return a.value == b.value;
+}
+
 constexpr bool operator <(SystemDuration a, SystemDuration b) {
 	return a.value < b.value;
 }
@@ -93,6 +101,8 @@ constexpr bool operator >(SystemDuration a, SystemDuration b) {
 constexpr bool operator >=(SystemDuration a, SystemDuration b) {
 	return a.value >= b.value;
 }
+
+constexpr SystemDuration min(SystemDuration x, SystemDuration y) {return {x.value < y.value ? x.value : y.value};}
 
 
 
@@ -144,7 +154,6 @@ constexpr bool operator >(SystemTime a, SystemTime b) {
 constexpr bool operator >=(SystemTime a, SystemTime b) {
 	return int32_t(a.value - b.value) >= 0;
 }
-
 
 constexpr SystemTime min(SystemTime x, SystemTime y) {return {x.value < y.value ? x.value : y.value};}
 

@@ -18,11 +18,21 @@ void init();
 /**
  * Get an 8 bit random number
  */
-uint8_t int8();
+uint8_t u8();
+
+/**
+ * Get an 16 bit random number
+ */
+uint16_t u16();
+
+/**
+ * Get an 32 bit random number
+ */
+uint32_t u32();
 
 /**
  * Get a 64 bit random number
  */
-uint64_t int64();
+uint64_t u64();
 
 } // namespace Random

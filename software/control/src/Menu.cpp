@@ -7,14 +7,6 @@
 
 Menu::Menu(SwapChain &swapChain) : swapChain(swapChain), bitmap(swapChain.get()) {}
 
-void Menu::label(String s) {
-	int x = 10;
-	int y = this->entryY + 2 - this->offsetY;
-	if (this->bitmap != nullptr)
-		this->bitmap->drawText(x, y, tahoma_8pt, s, 1);
-	this->entryY += tahoma_8pt.height + 4;
-}
-
 void Menu::line() {
 	int x = 10;
 	int y = this->entryY + 2 - this->offsetY;
@@ -23,19 +15,70 @@ void Menu::line() {
 	this->entryY += 1 + 4;
 }
 
+void Menu::beginSection() {
+	this->section = true;
+}
+
+void Menu::endSection() {
+	if (!this->section)
+		line();
+	this->section = false;
+}
+
+Menu::Stream Menu::stream() {
+	if (this->section) {
+		line();
+		this->section = false;
+	}
+	return {10, this->entryY + 2 - this->offsetY, this->bitmap};
+}
+
+void Menu::label() {
+	this->entryY += tahoma_8pt.height + 4;
+}
+
+bool Menu::entry() {
+	const int lineHeight = tahoma_8pt.height + 4;
+	int y = this->entryY + 2 - this->offsetY;
+
+	bool selected = this->entryIndex == this->selected;
+	if (selected) {
+		if (this->bitmap != nullptr)
+			this->bitmap->drawText(0, y, tahoma_8pt, ">", 0);
+		this->selectedY = this->entryY;
+	}
+
+	++this->entryIndex;
+	this->entryY += lineHeight;
+
+	// check if this menu entry was activated
+	bool activated = selected && this->activated;
+	if (activated) {
+		// return the bitmap to the swap chain without drawing it
+		this->swapChain.put(this->bitmap);
+
+		// trigger redraw
+		this->bitmap = nullptr;
+	}
+
+	return activated;
+}
+
 int Menu::getEdit(int editCount) {
 	// check if the next entry is selected
 	if (this->selected == this->entryIndex) {
 		// cycle edit mode if activated
 		if (this->activated) {
-			if (this->edit < editCount)
+			//if (this->edit < editCount)
 				++this->edit;
-			else
-				this->edit = 0;
+			//else
+			//	this->edit = 0;
 				
 			// "consume" activation
 			this->activated = false;
 		}
+		if (this->edit > editCount)
+			this->edit = 0;
 		return this->edit;
 	}
 	return 0;
@@ -98,31 +141,4 @@ AwaitableCoroutine Menu::show() {
 		else
 			this->bitmap->clear();
 	}
-}
-
-bool Menu::entry() {
-	const int lineHeight = tahoma_8pt.height + 4;
-	int y = this->entryY + 2 - this->offsetY;
-
-	bool selected = this->entryIndex == this->selected;
-	if (selected) {
-		if (this->bitmap != nullptr)
-			this->bitmap->drawText(0, y, tahoma_8pt, ">", 0);
-		this->selectedY = this->entryY;
-	}
-
-	++this->entryIndex;
-	this->entryY += lineHeight;
-
-	// check if this menu entry was activated
-	bool activated = selected && this->activated;
-	if (activated) {
-		// return the bitmap to the swap chain without drawing it
-		this->swapChain.put(this->bitmap);
-		
-		// trigger redraw
-		this->bitmap = nullptr;
-	}
-
-	return activated;
 }

@@ -21,8 +21,8 @@ public:
 	static constexpr int MAX_DEVICE_COUNT = 64;
 
 	// number of coroutines for receiving and publishing
-	static constexpr int PUBLISH_COUNT = 4;
 	static constexpr int RECEIVE_COUNT = 4;
+	static constexpr int PUBLISH_COUNT = 4;
 
 
 	/**
@@ -34,16 +34,24 @@ public:
 
 	~RadioInterface() override;
 
-	// start the interface
-	Coroutine start(uint16_t panId, DataBuffer<16> const &key, AesKey const &aesKey);
+	/**
+	 * Set configuration. Interface starts on first call of this method
+	 * @param panId id of pan to use
+	 * @param key network key
+	 * @param aesKey network key prepared for aes encryption
+	 */
+	void setConfiguration(uint16_t panId, DataBuffer<16> const &key, AesKey const &aesKey);
 
 	void setCommissioning(bool enabled) override;
 
 	int getDeviceCount() override;
 	Device &getDeviceByIndex(int index) override;
-	Device *getDeviceById(DeviceId id) override;
+	Device *getDeviceById(uint8_t id) override;
 
 private:
+
+	// start the interface
+	Coroutine start();
 
 	// counters
 	uint8_t macCounter = 0;
@@ -56,7 +64,7 @@ private:
 
 	// configuration
 	uint16_t panId;
-	DataBuffer<16> const *key;
+	DataBuffer<16> const *key = nullptr;
 	AesKey const *aesKey;
 
 	// self-powered devices
@@ -66,19 +74,22 @@ private:
 		static constexpr int MAX_ENDPOINT_COUNT = 32;
 
 		// 32 bit green power id
-		DeviceId id;
-
-		// device type from commissioning message
-		uint8_t deviceType;
+		uint32_t deviceId;
 
 		// device key
 		AesKey aesKey;
+
+		// interface id
+		uint8_t interfaceId;
+
+		// device type from commissioning message
+		uint8_t deviceType;
 
 		// number of endpoints of the device
 		uint8_t endpointCount;
 
 		// endpoint types
-		EndpointType endpoints[MAX_ENDPOINT_COUNT];
+		MessageType endpoints[MAX_ENDPOINT_COUNT];
 
 		// note: endpoints must be the last member
 
@@ -97,14 +108,15 @@ private:
 
 	class GpDevice : public Device, public Storage::Element<GpDeviceFlash> {
 	public:
-		GpDevice(GpDeviceFlash const &flash) : Storage::Element<GpDeviceFlash>(flash) {}
+		explicit GpDevice(GpDeviceFlash const &flash) : Storage::Element<GpDeviceFlash>(flash) {}
+		~GpDevice() override;
 
-		DeviceId getId() override;
-		String getName() override;
+		uint8_t getId() const override;
+		String getName() const override;
 		void setName(String name) override;
-		Array<EndpointType const> getEndpoints() override;
-		void addPublisher(uint8_t endpointIndex, Publisher &publisher) override;
-		void addSubscriber(uint8_t endpointIndex, Subscriber &subscriber) override;
+		Array<MessageType const> getEndpoints() const override;
+		void subscribe(uint8_t endpointIndex, Subscriber &subscriber) override;
+		PublishInfo getPublishInfo(uint8_t endpointIndex) override;
 
 		// back pointer to interface
 		RadioInterface *interface;
@@ -131,6 +143,9 @@ private:
 
 		// short device address
 		uint16_t shortAddress;
+
+		// interface id
+		uint8_t interfaceId;
 
 		// send flags for this device (wait for data request or not)
 		Radio::SendFlags sendFlags;
@@ -161,17 +176,18 @@ private:
 
 	class ZbDevice : public Storage::Element<ZbDeviceFlash>, public Device {
 	public:
-		ZbDevice(ZbDeviceFlash const &flash) : Storage::Element<ZbDeviceFlash>(flash) , sendFlags(flash.sendFlags) {}
+		explicit ZbDevice(ZbDeviceFlash const &flash) : Storage::Element<ZbDeviceFlash>(flash) , sendFlags(flash.sendFlags) {}
+		~ZbDevice() override;
 
-		DeviceId getId() override;
-		String getName() override;
+		uint8_t getId() const override;
+		String getName() const override;
 		void setName(String name) override;
-		Array<EndpointType const> getEndpoints() override;
-		void addPublisher(uint8_t endpointIndex, Publisher &publisher) override;
-		void addSubscriber(uint8_t endpointIndex, Subscriber &subscriber) override;
+		Array<MessageType const> getEndpoints() const override;
+		void subscribe(uint8_t endpointIndex, Subscriber &subscriber) override;
+		PublishInfo getPublishInfo(uint8_t endpointIndex) override;
 
 		// back pointer to interface
-		RadioInterface *interface;
+		RadioInterface *interface = nullptr;
 
 		// send flags for next hop in route (wait for data request or not)
 		Radio::SendFlags sendFlags;
@@ -219,9 +235,6 @@ private:
 		// list of subscribers
 		SubscriberList subscribers;
 
-		// list of publishers
-		PublisherList publishers;
-
 		// barrier for waiting until a route is available
 		Barrier<> routeBarrier;
 	};
@@ -231,9 +244,11 @@ private:
 	// find zbee device by short address
 	ZbDevice *findZbDevice(uint16_t address);
 
+	void allocateInterfaceId();
 	void allocateNextAddress();
 
-	// next short address "on stock" to be fast when a device sends an association request
+	// next interface id and short address "on stock" to be fast when a device sends an association request
+	uint8_t nextInterfaceId;
 	uint16_t nextShortAddress;
 
 public:
@@ -400,7 +415,6 @@ private:
 	// coroutine for handling association requests from new devices
 	AwaitableCoroutine handleAssociationRequest(uint64_t sourceAddress, Radio::SendFlags sendFlags);
 
-
 	Coroutine publish();
 
 
@@ -411,5 +425,6 @@ private:
 	ZbDevice *tempDevice;
 
 
-	Event publishEvent;
+	//Event publishEvent;
+	PublishInfo::Barrier publishBarrier;
 };

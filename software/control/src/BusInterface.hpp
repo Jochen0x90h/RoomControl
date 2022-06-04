@@ -2,9 +2,9 @@
 
 #include "Interface.hpp"
 #include "Storage.hpp"
-#include <Configuration.hpp>
 #include <MessageReader.hpp>
 #include <MessageWriter.hpp>
+#include <State.hpp>
 #include <appConfig.hpp>
 
 
@@ -15,6 +15,9 @@ class BusInterface : public Interface {
 public:
 	static constexpr int MAX_DEVICE_COUNT = 64;
 
+	// number of coroutines for publishing
+	static constexpr int PUBLISH_COUNT = 4;
+
 	/**
 	 * Constructor
 	 * @param configuration global configuration
@@ -24,41 +27,52 @@ public:
 
 	~BusInterface() override;
 
-	// start the interface
-	Coroutine start(DataBuffer<16> const &key, AesKey const &aesKey);
+	/**
+	 * Set configuration. Interface starts on first call of this method
+	 * @param key network key
+	 * @param aesKey network key prepared for aes encryption
+	 */
+	void setConfiguration(DataBuffer<16> const &key, AesKey const &aesKey);
 
 	void setCommissioning(bool enabled) override;
 
 	int getDeviceCount() override;
 	Device &getDeviceByIndex(int index) override;
-	Device *getDeviceById(DeviceId id) override;
+	Device *getDeviceById(uint8_t id) override;
 
 private:
+
+	// start the interface
+	Coroutine start();
 
 	// counters
 	PersistentState<uint32_t> securityCounter;
 
 	// configuration
-	DataBuffer<16> const *key;
+	DataBuffer<16> const *key = nullptr;
 	AesKey const *aesKey;
 
 
 	// devices
-	struct BusDevice;
+	class BusDevice;
 
 	struct DeviceFlash {
 		static constexpr int MAX_ENDPOINT_COUNT = 32;
 
 		// device id
-		uint32_t id;
+		uint32_t deviceId;
 
+		// interface id
+		uint8_t interfaceId;
+
+		// device address
 		uint8_t address;
 
 		// number of endpoints of the device
 		uint8_t endpointCount;
 
 		// endpoint types
-		EndpointType endpoints[MAX_ENDPOINT_COUNT];
+		MessageType endpoints[MAX_ENDPOINT_COUNT];
 
 		// note: endpoints must be the last member because of variable size allocation
 
@@ -77,21 +91,21 @@ private:
 
 	class BusDevice : public Storage::Element<DeviceFlash>, public Device {
 	public:
-		BusDevice(DeviceFlash const &flash) : Storage::Element<DeviceFlash>(flash) {}
+		explicit BusDevice(DeviceFlash const &flash) : Storage::Element<DeviceFlash>(flash) {}
+		~BusDevice() override;
 
-		DeviceId getId() override;
-		String getName() override;
+		uint8_t getId() const override;
+		String getName() const override;
 		void setName(String name) override;
-		Array<EndpointType const> getEndpoints() override;
-		void addPublisher(uint8_t endpointIndex, Publisher &publisher) override;
-		void addSubscriber(uint8_t endpointIndex, Subscriber &subscriber) override;
+		Array<MessageType const> getEndpoints() const override;
+		void subscribe(uint8_t endpointIndex, Subscriber &subscriber) override;
+		PublishInfo getPublishInfo(uint8_t endpointIndex) override;
 
 		// back pointer to interface
-		BusInterface *interface;
+		BusInterface *interface = nullptr;
 
 		// subscribers and publishers
 		SubscriberList subscribers;
-		PublisherList publishers;
 	};
 
 public:
@@ -108,5 +122,5 @@ private:
 	// true for commissioning mode, joining of new devices is allowed
 	bool commissioning = false;
 
-	Event publishEvent;
+	PublishInfo::Barrier publishBarrier;
 };

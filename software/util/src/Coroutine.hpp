@@ -249,8 +249,8 @@ public:
 	}
 	
 	/**
-	 * Resume first waiting coroutine when the predicate is true (and remove it from the list)
-	 * @param predicate boolean predicate function for the list elements
+	 * Remove and resume first waiting coroutine when the predicate is true
+	 * @param predicate boolean predicate function for the first list element
 	 * @return true when list was not empty
 	 */
 	template <typename P>
@@ -601,7 +601,7 @@ struct Coroutine {
 	std::coroutine_handle<> handle;
 	
 	/**
-	 * Destroy the coroutine if it is still alive and suspended (using co_await).
+	 * Destroy the coroutine if it is still alive and suspended (coroutine has called co_await).
 	 */
 	void destroy() {
 		this->handle.destroy();

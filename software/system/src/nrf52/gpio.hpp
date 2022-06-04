@@ -59,7 +59,7 @@ inline void configureInput(int pin, Pull pull = Pull::DISABLED) {
 
 // for boardConfig.hpp
 struct InputConfig {
-	int pin; // port and index
+	int pin; // port and plugIndex
 	Pull pull;
 	bool invert;
 };
@@ -100,7 +100,7 @@ inline void configureOutput(int pin, Pull pull = Pull::DISABLED, Drive drive = D
 
 // for boardConfig.hpp
 struct OutputConfig {
-	int pin; // port and index
+	int pin; // port and plugIndex
 	Pull pull;
 	Drive drive;
 	bool enabled;
