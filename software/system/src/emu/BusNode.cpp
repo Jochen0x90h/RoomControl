@@ -108,16 +108,17 @@ void handle(Gui &gui) {
 			auto endpointType = BusNode::endpoints[endpointIndex];
 			uint8_t state = r.u8();
 			switch (endpointType) {
-				case bus::EndpointType::OFF_ON_IN:
-				case bus::EndpointType::OFF_ON_TOGGLE_IN:
-					if (state <= 1)
-						BusNode::states[endpointIndex] = state;
-					else
-						BusNode::states[endpointIndex] ^= 1;
-					break;
-				case bus::EndpointType::UP_DOWN_IN:
+			case bus::EndpointType::OFF_ON_IN:
+			case bus::EndpointType::OFF_ON_TOGGLE_IN:
+				if (state <= 1)
 					BusNode::states[endpointIndex] = state;
-					break;
+				else
+					BusNode::states[endpointIndex] ^= 1;
+				break;
+			case bus::EndpointType::UP_DOWN_IN:
+				BusNode::states[endpointIndex] = state;
+				break;
+			default:;
 			}
 
 			// loopback

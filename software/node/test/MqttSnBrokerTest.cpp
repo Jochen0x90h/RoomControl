@@ -52,7 +52,7 @@ struct Test {
 
 		Terminal::out << name << " subscribe to '" << inTopic << "'\n";
 		Terminal::out << name << " publish on '" << outTopic << "'\n";
-		this->broker.subscribe(inTopic, subscriber);
+		this->broker.subscribe(inTopic, MessageType::OFF_ON_OUT, subscriber);
 		auto publishInfo = this->broker.getPublishInfo(outTopic, MessageType::OFF_ON_IN);
 
 		while (true) {
