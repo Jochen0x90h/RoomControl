@@ -44,6 +44,9 @@ enum class Type : uint16_t {
 
 	// server selection
 	SRV = 33,
+
+	// next secure
+	NSEC = 47,
 };
 
 // https://datatracker.ietf.org/doc/html/rfc1035#section-3.2.4

@@ -75,6 +75,9 @@ dns::Type handleNameAndType(PacketReader &r) {
 	auto type = r.e16B<dns::Type>();
 	auto clazz = r.e16B<dns::Class>();
 	switch (type) {
+	case dns::Type::A:
+		Terminal::out << " A ";
+		break;
 	case dns::Type::PTR:
 		Terminal::out << " PTR ";
 		break;
@@ -86,6 +89,9 @@ dns::Type handleNameAndType(PacketReader &r) {
 		break;
 	case dns::Type::SRV:
 		Terminal::out << " SRV ";
+		break;
+	case dns::Type::NSEC:
+		Terminal::out << " NSEC ";
 		break;
 	default:
 		Terminal::out << " Unknown";
