@@ -83,6 +83,7 @@ struct LinkedListNode {
 	struct Iterator {
 		T *node;
 		T &operator *() {return *this->node;}
+		T *operator ->() {return this->node;}
 		Iterator &operator ++() {this->node = this->node->next; return *this;}
 		bool operator ==(Iterator it) const {return this->node == it.node;}
 		bool operator !=(Iterator it) const {return this->node != it.node;}

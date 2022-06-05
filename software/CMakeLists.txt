@@ -49,7 +49,7 @@ endif()
 
 
 # platform dependent dependencies
-if(${PLATFORM} STREQUAL "Linux")
+if(${PLATFORM} STREQUAL "Linux" OR ${PLATFORM} STREQUAL "Macos")
 	find_package(libusb CONFIG)
 	find_package(GTest CONFIG)
 	set(LIBRARIES
@@ -73,7 +73,7 @@ endif()
 
 
 # platform dependent configuration
-if(${PLATFORM} STREQUAL "Linux" OR ${PLATFORM} STREQUAL "emu")
+if(${PLATFORM} STREQUAL "Linux" OR ${PLATFORM} STREQUAL "Macos" OR ${PLATFORM} STREQUAL "emu")
 	# posix (linux, osx) or emulator
 
 	# enable address sanitizer
@@ -192,7 +192,7 @@ list(APPEND PROTOCOL ${TINYCRYPT})
 
 
 # drivers
-if(${PLATFORM} STREQUAL "Linux")
+if(${PLATFORM} STREQUAL "Linux" OR ${PLATFORM} STREQUAL "Macos")
 	set(LOOP system/src/Loop.hpp system/src/posix/Loop.hpp system/src/posix/Loop.cpp)
 	set(NETWORK system/src/Network.hpp system/src/posix/Network.cpp)
 	set(OUTPUT system/src/Output.hpp system/src/posix/Output.cpp system/src/Debug.hpp)
@@ -277,7 +277,6 @@ set(SYSTEM
 	${TIMER}
 	${USB_DEVICE}
 )
-message("*** SYSTEM ${SYSTEM}")
 source_group(system FILES ${SYSTEM})
 
 ## system files and drivers
@@ -402,7 +401,7 @@ source_group(control FILES ${CONTROL})
 # hex generator
 separate_arguments(GENERATE_HEX)
 macro(generate_hex TARGET)
-	if(NOT "${GENERATE_HEX}" STREQUAL "")
+	if(NOT "${GENERATE_HEX}" STREQUAL "" AND NOT "${GENERATE_HEX}" STREQUAL "None")
 		#message("*** Generate Hex for ${TARGET}: ${GENERATE_HEX}")
 		add_custom_command(TARGET ${TARGET}
 			POST_BUILD
@@ -447,7 +446,7 @@ install(TARGETS control
 
 endif() # ${BOARD} STREQUAL "emuControl"
 
-if(${PLATFORM} STREQUAL "Linux")
+if(${PLATFORM} STREQUAL "Linux" OR ${PLATFORM} STREQUAL "Macos")
 
 # tools
 # -----
@@ -455,13 +454,13 @@ if(${PLATFORM} STREQUAL "Linux")
 # terminal for tests that output text or binary data via usb
 add_executable(terminal
 	tools/src/terminal.cpp
-	)
+)
 target_include_directories(terminal
 	PRIVATE
 	util/src
 	protocol/src
 	system/src
-	)
+)
 target_link_libraries(terminal ${LIBRARIES})
 
 
@@ -487,7 +486,6 @@ add_executable(mdnsSniffer
 	${UTIL}
 	${PROTOCOL}
 	${LOOP}
-	${TIMER}
 	${NETWORK}
 	${TERMINAL}
 )

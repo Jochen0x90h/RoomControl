@@ -40,12 +40,6 @@ void init() {
 	Loop::addTimeout(Timer::context);
 }
 
-SystemTime now() {
-	timespec time;
-	int r = clock_gettime(CLOCK_MONOTONIC, &time);
-	return {uint32_t(time.tv_sec * 1000 + time.tv_nsec / 1000000)};
-}
-
 Awaitable<SystemTime> sleep(SystemTime time) {
 	// check if Timer::init() was called
     assert(Timer::inited);

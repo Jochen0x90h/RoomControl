@@ -13,10 +13,10 @@
 #include <StringBuffer.hpp>
 #include <StringOperators.hpp>
 #include <util.hpp>
-#include <boost/filesystem.hpp>
 #include <array>
 #include <map>
 #include <string>
+#include <filesystem>
 #include <chrono>
 #include <libusb.h>
 
@@ -25,8 +25,9 @@
 
 // PTM 215Z/216Z: Press A0 for 7 seconds to commission on channel 15, then A1 and A0 together to confirm
 
-namespace fs = boost::filesystem;
+namespace fs = std::filesystem;
 
+using Packet = pcap::Packet<140>;
 
 // default link key used by aps layer, prepared for aes encryption/decryption
 AesKey za09LinkAesKey;
@@ -1052,7 +1053,7 @@ int main(int argc, char const *argv[]) {
 			//ret = libusb_set_interface_alt_setting(handle, 0, 0);
 
 			pcap::Header header;
-			pcap::Packet<140> packet;
+			Packet packet;
 			int length;
 
 			// reset the radio
@@ -1129,10 +1130,10 @@ int main(int argc, char const *argv[]) {
 		// read from file
 
 		// open input pcap file
-		char const *name = inputFile.string().c_str();
-		FILE *file = fopen(name, "rb");
+		std::string name = inputFile.string();
+		FILE *file = fopen(name.c_str(), "rb");
 		if (file == nullptr) {
-			Terminal::err << "error: can't read pcap file " << str(name) << "\n";
+			Terminal::err << "error: can't read pcap file " << str(name.c_str()) << "\n";
 		} else {
 			// read pcap header
 			pcap::Header header;
@@ -1142,10 +1143,11 @@ int main(int argc, char const *argv[]) {
 				Terminal::err << "error: protocol not supported!\n";
 			} else {
 				// read packets
-				pcap::Packet<140> packet;
+				Packet packet;
 				while (fread(&packet.header, sizeof(pcap::PacketHeader), 1, file) == 1) {
 					// read packet data
-					if (fread(packet.data, 1, min(packet.header.incl_len, 140), file) < packet.header.incl_len)
+					int len = min(packet.header.incl_len, sizeof(packet.data));
+					if (fread(packet.data, 1, len, file) < packet.header.incl_len)
 						break;
 
 					// dissect packet

@@ -13,6 +13,8 @@ namespace fs = std::filesystem;
 
 uint16_t port = 5353;
 
+using Packet = pcap::Packet<4096>;
+
 class PacketReader : public MessageReader {
 public:
 
@@ -71,6 +73,11 @@ dns::Type handleNameAndType(PacketReader &r) {
 	// domain name
 	handleName(r);
 
+	if (r.getRemaining() < 2 + 2) {
+		Terminal::out << " Unexpected End";
+		return dns::Type::UNKNOWN;
+	}
+
 	// type and class
 	auto type = r.e16B<dns::Type>();
 	auto clazz = r.e16B<dns::Class>();
@@ -90,6 +97,9 @@ dns::Type handleNameAndType(PacketReader &r) {
 	case dns::Type::SRV:
 		Terminal::out << " SRV ";
 		break;
+	case dns::Type::OPT:
+		Terminal::out << " OPT ";
+		break;
 	case dns::Type::NSEC:
 		Terminal::out << " NSEC ";
 		break;
@@ -99,11 +109,24 @@ dns::Type handleNameAndType(PacketReader &r) {
 	return type;
 }
 
-void handleRr(PacketReader &r) {
+bool handleRr(PacketReader &r) {
+	// name and type
 	auto type = handleNameAndType(r);
+	if (type == dns::Type::UNKNOWN)
+		return false;
 
+	// ttl and length
+	if (r.getRemaining() < 4 + 2) {
+		return false;
+	}
 	uint32_t ttl = r.u32B();
 	uint16_t length = r.u16B();
+
+	// handle type dependent data
+	if (r.getRemaining() < length) {
+		Terminal::out << " Unexpected End";
+		return false;
+	}
 
 	auto end = r.current + length;
 	switch (type) {
@@ -119,8 +142,10 @@ void handleRr(PacketReader &r) {
 	case dns::Type::TXT:
 		handleName(r);
 		break;
+    default:;
 	}
 	r.current = end;
+	return true;
 }
 
 void handleDns(PacketReader &r) {
@@ -132,22 +157,35 @@ void handleDns(PacketReader &r) {
 	int additionalRRs = r.u16B();
 
 	bool isQuery = (flags & dns::Flags::QR_MASK) == dns::Flags::QUERY;
-	Terminal::out << (isQuery ? 'Q' : 'R') << '\n';
+	Terminal::out << (isQuery ? "Query" : "Response") << '\n';
 
 	for (int i = 0; i < questionCount; ++i) {
-		Terminal::out << "Q ";
-		handleNameAndType(r);
+		Terminal::out << "Qu ";
+		auto t = handleNameAndType(r);
 		Terminal::out << '\n';
+		if (t == dns::Type::UNKNOWN)
+			return;
 	}
 	for (int i = 0; i < answerRRs; ++i) {
-		Terminal::out << "A ";
-		handleRr(r);
+		Terminal::out << "An " << ' ';
+		bool ok = handleRr(r);
 		Terminal::out << '\n';
+		if (!ok)
+			return;
+	}
+	for (int i = 0; i < authorityRRs; ++i) {
+		Terminal::out << "Au ";
+		bool ok = handleRr(r);
+		Terminal::out << '\n';
+		if (!ok)
+			return;
 	}
 	for (int i = 0; i < additionalRRs; ++i) {
-		Terminal::out << "a ";
-		handleRr(r);
+		Terminal::out << "Ad ";
+		bool ok = handleRr(r);
 		Terminal::out << '\n';
+		if (!ok)
+			return;
 	}
 }
 
@@ -155,12 +193,16 @@ void handleDns(PacketReader &r) {
 Coroutine sniffer(FILE *file) {
 	Network::open(0, port);
 
+	// join multicast group
+	auto address = Network::Address::fromString("ff02::fb");
+	Network::join(0, address);
+
 	while (true) {
-		Network::Endpoint source;
 
 		while (true) {
-			pcap::Packet<1024> packet;
-			int length = 1024;
+			Network::Endpoint source;
+			Packet packet;
+			int length = sizeof(packet.data);
 			co_await Network::receive(0, source, length, packet.data);
 
 			packet.header.ts_sec = 0;
@@ -173,14 +215,13 @@ Coroutine sniffer(FILE *file) {
 			fflush(file);
 
 			// print hex
-			for (int i = 0; i < length; ++i)
-				Terminal::out << hex(packet.data[i]);
-			Terminal::out << '\n';
+			//for (int i = 0; i < length; ++i)
+			//	Terminal::out << hex(packet.data[i]);
+			//Terminal::out << '\n';
 
 			// dissect
 			PacketReader r(length, packet.data);
 			handleDns(r);
-
 		}
 	}
 }
@@ -198,7 +239,11 @@ int main(int argc, char const *argv[]) {
 	for (int i = 1; i < argc; ++i) {
 		std::string arg = argv[i];
 
-		{
+		if (arg == "-i" || arg == "--input") {
+			// input pcap file
+			++i;
+			inputFile = argv[i];
+		} else {
 			// output pcap file
 			if (arg == "-o" )
 				++i;
@@ -225,7 +270,39 @@ int main(int argc, char const *argv[]) {
 
 			sniffer(file);
 
+			Terminal::out << "waiting for mDNS packets on port 5353 ...\n";
 			Loop::run();
+		}
+	} else {
+		// read from file
+
+		// open input pcap file
+		std::string name = inputFile.string();
+		FILE *file = fopen(name.c_str(), "rb");
+		if (file == nullptr) {
+			Terminal::err << "error: can't read pcap file " << str(name.c_str()) << "\n";
+		} else {
+			// read pcap header
+			pcap::Header header;
+			if (fread(&header, sizeof(header), 1, file) < 1) {
+				Terminal::err << "error: pcap header incomplete!\n";
+			} else if (header.network != pcap::Network::USER0) {
+				Terminal::err << "error: protocol not supported!\n";
+			} else {
+				// read packets
+				Packet packet;
+				while (fread(&packet.header, sizeof(pcap::PacketHeader), 1, file) == 1) {
+					// read packet data
+					int len = min(packet.header.incl_len, sizeof(packet.data));
+					if (fread(packet.data, 1, len, file) < packet.header.incl_len)
+						break;
+
+					// dissect packet
+					PacketReader r(packet.header.incl_len, packet.data);
+					handleDns(r);
+				}
+			}
+			fclose(file);
 		}
 	}
 

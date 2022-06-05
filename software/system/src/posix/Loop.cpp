@@ -1,11 +1,19 @@
 #include "Loop.hpp"
 #include "../Timer.hpp"
-#include "../Terminal.hpp"
-#include <StringOperators.hpp>
 #include <util.hpp>
 #include <assert.hpp>
 #include <poll.h>
 
+
+namespace Timer {
+
+SystemTime now() {
+    timespec time;
+    clock_gettime(CLOCK_MONOTONIC, &time);
+    return {uint32_t(time.tv_sec * 1000 + time.tv_nsec / 1000000)};
+}
+
+}
 
 namespace Loop {
 
@@ -71,13 +79,18 @@ void run() {
 		// check for events
 		if (r > 0) {
 			int i = 0;
-			for (auto &handler : Loop::handlers) {
+			auto it = Loop::handlers.begin();
+			while (it != Loop::handlers.end()) {
 				auto events = infos[i].revents;
-				if (events != 0) {
-					//Terminal::out << "events " << dec(events) << '\n';
-					handler.activate(events);
-				}
+				if (events != 0)
+					it->activate(events);
+
+				auto last = it;
+				++it;
 				++i;
+
+				if (last->events == 0)
+					last->remove();
 			}
 		}
 	}

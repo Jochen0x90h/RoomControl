@@ -14,18 +14,17 @@ constexpr int NETWORK_CONTEXT_COUNT = 16;
 
 namespace Network {
 
-Endpoint Endpoint::fromString(String s, uint16_t defaultPort) {
-	struct sockaddr_in6 address;
+Address Address::fromString(String s) {
 	char buffer[64];
 	array::copy(s.count(), buffer, s.data);
 	buffer[s.count()] = 0;
-	inet_pton(AF_INET6, buffer, &(address.sin6_addr));
 
-	Endpoint endpoint;
-	array::copy(16, endpoint.address.u8, address.sin6_addr.s6_addr);
-	endpoint.port = defaultPort;
-	
-	return endpoint;
+	in6_addr a;
+	inet_pton(AF_INET6, buffer, &(a));
+
+	Address address;
+	array::copy(16, address.u8, a.s6_addr);
+	return address;
 }
 
 
@@ -84,35 +83,51 @@ void init() {
 		context.fd = -1;
 }
 
-void open(int index, uint16_t port) {
+bool open(int index, uint16_t port) {
 	assert(Network::inited);
 	assert(uint(index) < NETWORK_CONTEXT_COUNT);
 	auto &context = Network::contexts[index];
 
 	// create socket
 	assert(context.fd == -1);
-	context.fd = socket(AF_INET6, SOCK_DGRAM, 0);
+	int fd = socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
 	fcntl(context.fd, F_SETFL, O_NONBLOCK);
 
+	// set reuse address and port
 	int reuse = 1;
-	setsockopt(context.fd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
-	//setsockopt(context.fd, )
-
-
-	context.events = 0;
+	//setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
+	setsockopt(fd, SOL_SOCKET, SO_REUSEPORT, &reuse, sizeof(reuse));
 
 	// bind to local port
-	struct sockaddr_in6 address = {AF_INET6, htons(port)};
-	int r = bind(context.fd, (struct sockaddr*)&address, sizeof(address));
+	struct sockaddr_in6 address = {.sin6_family = AF_INET6, .sin6_port= htons(port)};
+	int r = bind(fd, (struct sockaddr*)&address, sizeof(address));
+    if (r < 0) {
+		int e = errno;
+		::close(fd);
+		return false;
+	}
+
+	// set file descriptor
+	context.fd = fd;
+	context.events = 0;
+	return true;
+}
+
+bool join(int index, Address const &multicastGroup) {
+	assert(Network::inited);
+	assert(uint(index) < NETWORK_CONTEXT_COUNT);
+	auto &context = Network::contexts[index];
 
 	// join multicast group
 	struct ipv6_mreq group;
+	array::copy(16, group.ipv6mr_multiaddr.s6_addr, multicastGroup.u8);
 	group.ipv6mr_interface = 0;
-	inet_pton(AF_INET6, "ff02::fb", &group.ipv6mr_multiaddr);
-	setsockopt(context.fd, IPPROTO_IPV6, IPV6_ADD_MEMBERSHIP, &group, sizeof(group));
-
-	// add to event loop
-	Loop::addHandler(context);
+	int r = setsockopt(context.fd, IPPROTO_IPV6, IPV6_JOIN_GROUP, &group, sizeof(group));
+	if (r < 0) {
+		int e = errno;
+		return false;
+	}
+	return true;
 }
 
 void close(int index) {
@@ -122,9 +137,7 @@ void close(int index) {
 	assert(context.fd != -1);
 	::close(context.fd);
 	context.fd = -1;
-
-	// remove from event loop
-	context.remove();
+	context.events = 0;
 }
 
 Awaitable<ReceiveParameters> receive(int index, Endpoint& source, int &length, void *data) {
@@ -133,6 +146,8 @@ Awaitable<ReceiveParameters> receive(int index, Endpoint& source, int &length, v
 
 	auto &context = Network::contexts[index];
 	context.events |= POLLIN;
+	if (context.isEmpty())
+		Loop::addHandler(context);
 	return {context.receiveWaitlist, &source, &length, data};
 }
 
@@ -142,6 +157,8 @@ Awaitable<SendParameters> send(int index, Endpoint const &destination, int lengt
 
 	auto &context = Network::contexts[index];
 	context.events |= POLLOUT;
+	if (context.isEmpty())
+		Loop::addHandler(context);
 	return {context.sendWaitlist, &destination, length, data};
 }
 

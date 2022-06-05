@@ -50,7 +50,7 @@ int main(void) {
 
 	Network::open(0, localPort);
 	
-	destination = Network::Endpoint::fromString("::1", remotePort);
+	destination = {Network::Address::fromString("::1"), remotePort};
 	
 	sender();
 	receiver();

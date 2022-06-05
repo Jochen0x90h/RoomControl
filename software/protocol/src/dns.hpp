@@ -30,6 +30,8 @@ FLAGS_ENUM(Flags)
 
 // https://datatracker.ietf.org/doc/html/rfc1035#section-3.2.2
 enum class Type : uint16_t {
+	UNKNOWN = 0,
+
 	// ipv4 address
 	A = 1,
 
@@ -44,6 +46,9 @@ enum class Type : uint16_t {
 
 	// server selection
 	SRV = 33,
+
+	// ?
+	OPT = 41,
 
 	// next secure
 	NSEC = 47,
