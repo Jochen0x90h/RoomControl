@@ -680,9 +680,12 @@ target_include_directories(StorageTest
 )
 target_link_libraries(StorageTest ${LIBRARIES})
 
+endif() # ${BOARD} STREQUAL "emuControl"
+
 
 # unit tests (GTest)
 # ------------------
+if(POSIX AND NOT EMU)
 
 # enable testing, adds a target to run all unit tests
 enable_testing()
@@ -735,4 +738,4 @@ add_test(NAME systemTest
 	#WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/../testdata
 )
 
-endif() # ${BOARD} STREQUAL "emuControl"
+endif() # POSIX AND NOT EMU

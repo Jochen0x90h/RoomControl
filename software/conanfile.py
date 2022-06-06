@@ -55,7 +55,7 @@ class Project(ConanFile):
     def requirements(self):
         p = str(self.options.platform if self.options.platform else self.settings.os)
         if str(self.settings.os) in p:
-            self.requires("libusb/1.0.24")
+            self.requires("libusb/1.0.26")
             self.requires("boost/1.79.0")
             self.requires("gtest/1.11.0")
         if "emu" in p:
