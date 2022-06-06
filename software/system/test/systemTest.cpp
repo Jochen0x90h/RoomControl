@@ -3,8 +3,18 @@
 #include <gtest/gtest.h>
 
 
-
 TEST(systemTest, SystemTime) {
+	SystemTime t1 = {0};
+	SystemTime t2 = {0x70000000};
+	SystemTime t3 = {0x90000000};
+
+	EXPECT_TRUE(t1 < t2);
+	EXPECT_TRUE(t2 < t3);
+	EXPECT_TRUE(t3 < t1);
+}
+
+/*
+TEST(systemTest, SystemTime16) {
 	// reference time
 	SystemTime r = {0x00010010};
 	SystemTime16 r16;
@@ -22,7 +32,7 @@ TEST(systemTest, SystemTime) {
 	EXPECT_EQ(e1, r);
 	EXPECT_EQ(e2, r);
 	EXPECT_EQ(e3, SystemTime{0x00020010});
-}
+}*/
 
 TEST(systemTest, ClockTime) {
 	// time 1 is Tuesday, 10:05:01

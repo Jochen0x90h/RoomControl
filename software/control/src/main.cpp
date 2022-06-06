@@ -149,7 +149,7 @@ int main(int argc, const char **argv) {
 	setKey(configuration.aesKey, configuration.key);
 	configuration.ieeeLongAddress = UINT64_C(0x00124b00214f3c55);
 	configuration.mqttLocalPort = 1337;
-	configuration.mqttGateway = Network::Endpoint::fromString("::1", 10000);
+	configuration.mqttGateway = {Network::Address::fromString("::1"), 10000};
 	roomControl.configurations.write(0, configuration);
 	roomControl.applyConfiguration();
 /*

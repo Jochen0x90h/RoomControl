@@ -1,6 +1,5 @@
 #include "../Timer.hpp"
 #include "Loop.hpp"
-#include <time.h>
 
 
 namespace Timer {
@@ -37,7 +36,11 @@ void init() {
 	Timer::inited = true;
 
 	Timer::context.time = now() + SystemDuration::max();
-	Loop::addTimeout(Timer::context);
+	Loop::timeouts.add(Timer::context);
+}
+
+SystemTime now() {
+	return Loop::now();
 }
 
 Awaitable<SystemTime> sleep(SystemTime time) {

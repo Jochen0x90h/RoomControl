@@ -7,6 +7,7 @@
 #include <Queue.hpp>
 #include <boardConfig.hpp>
 #include <libusb.h>
+#include <cstdio>
 
 
 namespace Radio {

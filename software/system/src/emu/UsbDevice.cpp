@@ -15,9 +15,17 @@ struct Endpoint {
 
 Endpoint endpoints[1];
 
+std::function<void (uint8_t)> onSetConfiguration;
+
 // event loop handler chain
 Loop::Handler nextHandler;
 void handle(Gui &gui) {
+	// call onSetConfiguration once
+	if (UsbDevice::onSetConfiguration != nullptr) {
+		UsbDevice::onSetConfiguration(1);
+		UsbDevice::onSetConfiguration = nullptr;
+	}
+
 	for (auto &endpoint : UsbDevice::endpoints) {
 
 		endpoint.sendWaitlist.resumeFirst([](SendParameters p) {
@@ -55,7 +63,8 @@ void init(
 	UsbDevice::text = deviceDescriptor.bDeviceProtocol == 1;
 	
 	// set configuration
-	Loop::context.post([onSetConfiguration]() {onSetConfiguration(1);});
+	UsbDevice::onSetConfiguration = onSetConfiguration;
+	//Loop::context.post([onSetConfiguration]() {onSetConfiguration(1);});
 
 	// add to event loop handler chain
 	UsbDevice::nextHandler = Loop::addHandler(handle);

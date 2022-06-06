@@ -53,14 +53,13 @@ class Project(ConanFile):
     ]
 
     def requirements(self):
-        if not self.options.platform:
-            self.requires("libusb/1.0.24")
-            self.requires("gtest/1.11.0")
-        if self.options.platform == "emu":
+        p = str(self.options.platform if self.options.platform else self.settings.os)
+        if str(self.settings.os) in p:
             self.requires("libusb/1.0.24")
             self.requires("boost/1.79.0")
-            self.requires("glfw/3.3.7")
             self.requires("gtest/1.11.0")
+        if "emu" in p:
+            self.requires("glfw/3.3.7")
 
     keep_imports = True
     def imports(self):
@@ -69,17 +68,18 @@ class Project(ConanFile):
         self.copy("*", src="@libdirs", dst="lib")
 
     def generate(self):
+        p = str(self.options.platform if self.options.platform else self.settings.os)
+
         # generate "conan_toolchain.cmake"
         toolchain = CMakeToolchain(self)
-        toolchain.variables["PLATFORM"] = self.options.platform if self.options.platform else self.settings.os
+        toolchain.variables["PLATFORM"] = p #self.options.platform if self.options.platform else self.settings.os
         toolchain.variables["BOARD"] = self.options.board
         toolchain.variables["MCU"] = self.options.mcu
         toolchain.variables["CPU"] = self.options.cpu
         toolchain.variables["FPU"] = self.options.fpu
 
-
         # https://github.com/conan-io/conan/blob/develop/conan/tools/cmake/toolchain.py
-        if self.options.platform and self.options.platform != "emu":
+        if str(self.settings.os) not in p:
             toolchain.blocks["generic_system"].values["cmake_system_name"] = "Generic"
             toolchain.blocks["generic_system"].values["cmake_system_processor"] = self.settings.arch
             toolchain.variables["CMAKE_TRY_COMPILE_TARGET_TYPE"] = "STATIC_LIBRARY"

@@ -20,6 +20,16 @@ message("*** MCU ${MCU}")
 message("*** CPU ${CPU}")
 message("*** FPU ${FPU}")
 
+# posix compatible platforms
+if("Linux" IN_LIST PLATFORM OR "Macos" IN_LIST PLATFORM OR "FreeBSD" IN_LIST PLATFORM)
+	set(POSIX 1)
+endif()
+
+# emulator
+if("emu" IN_LIST PLATFORM)
+	set(EMU 1)
+endif()
+
 
 # cpu dependent configuration
 if(${CPU} MATCHES "cortex")
@@ -48,33 +58,17 @@ if(${CPU} MATCHES "cortex")
 endif()
 
 
-# platform dependent dependencies
-if(${PLATFORM} STREQUAL "Linux" OR ${PLATFORM} STREQUAL "Macos")
-	find_package(libusb CONFIG)
-	find_package(GTest CONFIG)
-	set(LIBRARIES
-		libusb::libusb
-		gtest::gtest
-	)
-endif()
-if(${PLATFORM} STREQUAL "emu")
-	find_package(libusb CONFIG)
-	find_package(Boost CONFIG)
-	find_package(glfw3 CONFIG)
-	find_package(GTest CONFIG)
-	set(LIBRARIES
-		libusb::libusb
-		Boost::headers
-		Boost::filesystem
-		glfw
-		gtest::gtest
-	)
-endif()
-
-
 # platform dependent configuration
-if(${PLATFORM} STREQUAL "Linux" OR ${PLATFORM} STREQUAL "Macos" OR ${PLATFORM} STREQUAL "emu")
-	# posix (linux, osx) or emulator
+if(POSIX)
+	message("*** posix")
+	find_package(Boost CONFIG)
+	find_package(libusb CONFIG)
+	find_package(GTest CONFIG)
+	set(LIBRARIES
+		Boost::headers
+		libusb::libusb
+		gtest::gtest
+	)
 
 	# enable address sanitizer
 	if(CMAKE_BUILD_TYPE STREQUAL Debug)
@@ -93,10 +87,21 @@ if(${PLATFORM} STREQUAL "Linux" OR ${PLATFORM} STREQUAL "Macos" OR ${PLATFORM} S
 
 	# define emulator flag
 	add_definitions(-DEMU)
-elseif(${PLATFORM} STREQUAL "nrf52")
+endif()
+if(EMU)
+	#message("*** emu")
+	find_package(glfw3 CONFIG)
+	set(LIBRARIES ${LIBRARIES}
+		glfw
+	)
+endif()
+
+if("nrf52" IN_LIST PLATFORM)
 	# Nordic nRF52
 	set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -L${CMAKE_SOURCE_DIR}/system/src/nrf52/system -T${CMAKE_SOURCE_DIR}/board/${BOARD}/link.ld")
-elseif(${PLATFORM} STREQUAL "stm32f0")
+endif()
+
+if("stm32f0" IN_LIST PLATFORM)
 	# ST STM32F0
 	set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -T${CMAKE_SOURCE_DIR}/board/${BOARD}/link.ld")
 endif()
@@ -192,20 +197,23 @@ list(APPEND PROTOCOL ${TINYCRYPT})
 
 
 # drivers
-if(${PLATFORM} STREQUAL "Linux" OR ${PLATFORM} STREQUAL "Macos")
-	set(LOOP system/src/Loop.hpp system/src/posix/Loop.hpp system/src/posix/Loop.cpp)
+if(POSIX)
+	set(CALENDAR system/src/ClockTime.hpp system/src/Calendar.hpp system/src/posix/Calendar.cpp)
+	set(LOOP system/src/Loop.hpp system/src/posix/Loop.cpp system/src/posix/Loop2.cpp)
 	set(NETWORK system/src/Network.hpp system/src/posix/Network.cpp)
 	set(OUTPUT system/src/Output.hpp system/src/posix/Output.cpp system/src/Debug.hpp)
 	set(TERMINAL system/src/Terminal.hpp system/src/posix/Terminal.cpp)
 	set(TIMER system/src/SystemTime.hpp system/src/Timer.hpp system/src/posix/Timer.cpp)
-elseif(${PLATFORM} STREQUAL "emu")
+endif()
+if(EMU)
 	set(BUS_NODE system/src/BusNode.hpp system/src/emu/BusNode.cpp)
 	set(BUS_MASTER system/src/BusMaster.hpp system/src/emu/BusMaster.cpp)
-	set(CALENDAR system/src/ClockTime.hpp system/src/Calendar.hpp system/src/emu/Calendar.cpp)
 	set(FLASH system/src/Flash.hpp system/src/emu/Flash.cpp)
 	set(INPUT system/src/Input.hpp system/src/emu/Input.hpp system/src/emu/Input.cpp)
 	set(LOOP
 		system/src/Loop.hpp
+		system/src/posix/Loop.hpp
+		system/src/posix/Loop.cpp
 		system/src/emu/Loop.hpp
 		system/src/emu/Loop.cpp
 		system/src/emu/Gui.cpp
@@ -216,16 +224,14 @@ elseif(${PLATFORM} STREQUAL "emu")
 		glad/glad.h
 		glad/khrplatform.h
 	)
-	set(NETWORK system/src/Network.hpp system/src/emu/Network.cpp)
 	set(OUTPUT system/src/Output.hpp system/src/emu/Output.cpp system/src/Debug.hpp)
 	set(POTI system/src/Poti.hpp system/src/emu/Poti.cpp)
 	set(RADIO system/src/RadioDefs.hpp system/src/Radio.hpp system/src/emu/Radio.cpp)
 	set(RANDOM system/src/Random.hpp system/src/emu/Random.cpp)
 	set(SPI system/src/Spi.hpp system/src/emu/Spi.hpp system/src/emu/Spi.cpp)
-	set(TERMINAL system/src/Terminal.hpp system/src/posix/Terminal.cpp)
-	set(TIMER system/src/SystemTime.hpp system/src/Timer.hpp system/src/emu/Timer.cpp)
 	set(USB_DEVICE system/src/UsbDevice.hpp system/src/emu/UsbDevice.cpp)
-elseif(${PLATFORM} STREQUAL "nrf52")
+endif()
+if("nrf52" IN_LIST PLATFORM)
 	set(BUS_MASTER system/src/BusMaster.hpp system/src/nrf52/BusMaster.cpp)
 	set(CALENDAR system/src/ClockTime.hpp system/src/Calendar.hpp system/src/nrf52/Calendar.cpp)
 	set(FLASH system/src/Flash.hpp system/src/nrf52/Flash.cpp)
@@ -244,7 +250,8 @@ elseif(${PLATFORM} STREQUAL "nrf52")
 	set(TERMINAL system/src/Terminal.hpp system/src/nrf52/Terminal.cpp)
 	set(TIMER system/src/SystemTime.hpp system/src/Timer.hpp system/src/nrf52/Timer.cpp)
 	set(USB_DEVICE system/src/UsbDevice.hpp system/src/nrf52/UsbDevice.cpp)
-elseif(${PLATFORM} STREQUAL "stm32f0")
+endif()
+if("stm32f0" IN_LIST PLATFORM)
 	set(BUS_NODE system/src/BusNode.hpp system/src/stm32f0/BusNode.cpp)
 	set(INPUT system/src/Input.hpp system/src/stm32f0/gpio.hpp system/src/stm32f0/Input.cpp)
 	set(LOOP
@@ -278,79 +285,6 @@ set(SYSTEM
 	${USB_DEVICE}
 )
 source_group(system FILES ${SYSTEM})
-
-## system files and drivers
-#set(SYSTEM
-#	system/src/ClockTime.hpp
-#	system/src/Debug.hpp
-#	system/src/RadioDefs.hpp
-#	system/src/SystemTime.hpp
-#)
-#macro(add_drivers)
-#	foreach(NAME ${ARGV})
-#		if(EXISTS ${CMAKE_SOURCE_DIR}/system/src/${PLATFORM}/${NAME}.cpp)
-#			list(APPEND SYSTEM system/src/${NAME}.hpp)
-#			if(EXISTS ${CMAKE_SOURCE_DIR}/system/src/${PLATFORM}/${NAME}.hpp)
-#				list(APPEND SYSTEM system/src/${PLATFORM}/${NAME}.hpp)
-#			endif()
-#			list(APPEND SYSTEM system/src/${PLATFORM}/${NAME}.cpp)
-#			list(APPEND DRIVERS ${NAME})
-#		endif()
-#	endforeach()
-#endmacro()
-#add_drivers(
-#	BusMaster
-#	BusNode
-#	Calendar
-#	ClockTime
-#	Debug
-#	Flash
-#	Input
-#	Loop
-#	Network
-#	Output
-#	Poti
-#	Radio
-#	RadioDefs
-#	Random
-#	Spi
-#	SystemTime
-#	Terminal
-#	Timer
-#	UsbDevice
-#)
-#if(${PLATFORM} STREQUAL "emu")
-#	list(APPEND SYSTEM
-#		system/src/emu/Gui.cpp
-#		system/src/emu/Gui.hpp
-#		font/tahoma_8pt.cpp # used by Gui
-#		font/tahoma_8pt.hpp
-#	)
-#endif()
-#if (${PLATFORM} STREQUAL "nrf52")
-#	list(APPEND SYSTEM
-#		system/src/nrf52/system/gcc_startup_nrf52840.S
-#		system/src/nrf52/system/system_nrf52840.c
-#	)
-#endif()
-#if (${PLATFORM} STREQUAL "stm32f0")
-#	list(APPEND SYSTEM
-#		system/src/stm32f0/system/startup_stm32f042x6.s
-#	)
-#endif()
-#source_group(system FILES ${SYSTEM})
-#
-#
-## OpenGL support for emulator
-#if(${PLATFORM} STREQUAL "emu")
-#	set(GLAD
-#		glad/glad.c
-#		glad/glad.h
-#		glad/khrplatform.h
-#	)
-#	source_group(glad FILES ${GLAD})
-#	list(APPEND SYSTEM ${GLAD})
-#endif()
 
 
 # base code for nodes (control and gateway)
@@ -446,10 +380,10 @@ install(TARGETS control
 
 endif() # ${BOARD} STREQUAL "emuControl"
 
-if(${PLATFORM} STREQUAL "Linux" OR ${PLATFORM} STREQUAL "Macos")
 
 # tools
 # -----
+if(POSIX AND NOT EMU)
 
 # terminal for tests that output text or binary data via usb
 add_executable(terminal
@@ -498,7 +432,7 @@ target_include_directories(mdnsSniffer
 target_link_libraries(mdnsSniffer ${LIBRARIES})
 
 
-endif() # ${PLATFORM} STREQUAL "Linux"
+endif() # POSIX
 
 
 # wall switch executable
@@ -510,11 +444,13 @@ if(${BOARD} IN_LIST SWITCH_BOARDS)
 		board/${BOARD}/boardConfig.hpp
 		${UTIL}
 		${PROTOCOL}
-		${LOOP}
-		${TIMER}
+		${BUS_NODE}
 		${INPUT}
+		${LOOP}
 		${OUTPUT}
 		${SPI}
+		${TIMER}
+		${TERMINAL}
 	)
 	target_include_directories(switch
 		PRIVATE
@@ -530,9 +466,8 @@ if(${BOARD} IN_LIST SWITCH_BOARDS)
 	generate_hex(switch)
 endif()
 
-
 # radio device that is used by the sniffer and radio driver of the emulator
-if(NOT ${PLATFORM} STREQUAL "emu" AND RADIO)
+if(NOT EMU AND RADIO)
 	add_executable(radioDevice
 		tools/src/radioDevice.cpp
 		tools/src/appConfig.hpp
@@ -540,8 +475,10 @@ if(NOT ${PLATFORM} STREQUAL "emu" AND RADIO)
 		${UTIL}
 		${PROTOCOL}
 		${LOOP}
-		${TIMER}
+		${OUTPUT}
 		${RADIO}
+		${RANDOM}
+		${TIMER}
 		${USB_DEVICE}
 	)
 	target_include_directories(radioDevice
@@ -558,8 +495,6 @@ if(NOT ${PLATFORM} STREQUAL "emu" AND RADIO)
 	generate_hex(radioDevice)
 endif()
 
-
-#if(NOT ${BOARD} STREQUAL "None")
 
 # system test executables
 # -----------------------
@@ -603,7 +538,6 @@ add_system_test_executable(Spi)
 add_system_test_executable(Timer)
 add_system_test_executable(UsbDevice)
 
-#endif() # NOT ${BOARD} STREQUAL "None"
 
 if(${BOARD} STREQUAL "emuControl")
 
@@ -800,4 +734,5 @@ add_test(NAME systemTest
 	COMMAND systemTest --gtest_output=xml:report.xml
 	#WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/../testdata
 )
-endif()
+
+endif() # ${BOARD} STREQUAL "emuControl"

@@ -1,5 +1,6 @@
 #include "../Network.hpp"
 #include "Loop.hpp"
+#include <cerrno>
 #include <poll.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -28,7 +29,7 @@ Address Address::fromString(String s) {
 }
 
 
-class Context : public Loop::Handler {
+class Context : public Loop::FileDescriptor {
 public:
 
 	Waitlist<ReceiveParameters> receiveWaitlist;
@@ -147,7 +148,7 @@ Awaitable<ReceiveParameters> receive(int index, Endpoint& source, int &length, v
 	auto &context = Network::contexts[index];
 	context.events |= POLLIN;
 	if (context.isEmpty())
-		Loop::addHandler(context);
+		Loop::fileDescriptors.add(context);
 	return {context.receiveWaitlist, &source, &length, data};
 }
 
@@ -158,7 +159,7 @@ Awaitable<SendParameters> send(int index, Endpoint const &destination, int lengt
 	auto &context = Network::contexts[index];
 	context.events |= POLLOUT;
 	if (context.isEmpty())
-		Loop::addHandler(context);
+		Loop::fileDescriptors.add(context);
 	return {context.sendWaitlist, &destination, length, data};
 }
 

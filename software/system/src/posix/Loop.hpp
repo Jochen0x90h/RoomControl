@@ -3,22 +3,30 @@
 #include "../Loop.hpp"
 #include "SystemTime.hpp"
 #include <LinkedListNode.hpp>
-#include <cstdint>
+#include <ctime>
 
 
 namespace Loop {
 
-class Handler : public LinkedListNode<Handler> {
+inline SystemTime now() {
+	timespec time;
+	clock_gettime(CLOCK_MONOTONIC, &time);
+	return {uint32_t(time.tv_sec * 1000 + time.tv_nsec / 1000000)};
+}
+
+// events for Network
+class FileDescriptor : public LinkedListNode<FileDescriptor> {
 public:
-	virtual ~Handler();
+	virtual ~FileDescriptor();
 	virtual void activate(uint16_t events) = 0;
 
 	int fd;
 	short int events;
 };
-using HandlerList = LinkedListNode<Handler>;
+using FileDescriptorList = LinkedListNode<FileDescriptor>;
+extern FileDescriptorList fileDescriptors;
 
-
+// timeouts for Timer and Calendar
 class Timeout : public LinkedListNode<Timeout> {
 public:
 	virtual ~Timeout();
@@ -27,16 +35,11 @@ public:
 	SystemTime time;
 };
 using TimeoutList = LinkedListNode<Timeout>;
-
-
-/**
- * Add a handler to the event loop
- */
-void addHandler(Handler &handler);
+extern TimeoutList timeouts;
 
 /**
- * Add a timeout to the event loop
+ * Run the event loop only once
  */
-void addTimeout(Timeout &timeout);
+void runOnce(bool wait = true);
 
 } // namespace Loop
