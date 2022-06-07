@@ -1,5 +1,6 @@
 #include "../Network.hpp"
 #include "Loop.hpp"
+#include <boardConfig.hpp>
 #include <cerrno>
 #include <poll.h>
 #include <sys/socket.h>
@@ -8,9 +9,6 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <fcntl.h>
-
-
-constexpr int NETWORK_CONTEXT_COUNT = 16;
 
 
 namespace Network {

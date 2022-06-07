@@ -60,7 +60,7 @@ endif()
 
 # platform dependent configuration
 if(POSIX)
-	message("*** posix")
+	#message("*** posix")
 	find_package(Boost CONFIG)
 	find_package(libusb CONFIG)
 	find_package(GTest CONFIG)
@@ -403,7 +403,7 @@ add_executable(ieeeSniffer
 	tools/src/ieeeSniffer.cpp
 	${UTIL}
 	${PROTOCOL}
-	${SYSTEM}
+	${TERMINAL}
 )
 target_include_directories(ieeeSniffer
 	PRIVATE
@@ -417,6 +417,7 @@ target_link_libraries(ieeeSniffer ${LIBRARIES})
 # sniffer for mDNS multicast udp packets that can write .pcap files
 add_executable(mdnsSniffer
 	tools/src/mdnsSniffer.cpp
+	board/${BOARD}/boardConfig.hpp
 	${UTIL}
 	${PROTOCOL}
 	${LOOP}
@@ -425,6 +426,7 @@ add_executable(mdnsSniffer
 )
 target_include_directories(mdnsSniffer
 	PRIVATE
+	board/${BOARD} # boardConfig.hpp
 	util/src
 	protocol/src
 	system/src
@@ -502,7 +504,7 @@ endif()
 function(add_system_test_executable NAME)
 	# check if driver is available
 	if(system/src/${NAME}.hpp IN_LIST SYSTEM)
-		message("*** Add ${NAME}Test")
+		#message("*** Add ${NAME}Test")
 		# add test executable
 		add_executable(${NAME}Test
 			system/test/${NAME}Test.cpp
