@@ -15,20 +15,17 @@ uint16_t port = 5353;
 
 using Packet = pcap::Packet<4096>;
 
-class PacketReader : public MessageReader {
+class DnsReader : public MessageReader {
 public:
 
-	PacketReader(int length, uint8_t *message) : MessageReader(length, message), begin(message) {}
-	PacketReader(PacketReader &r, int offset) : MessageReader(r.begin + offset, r.end), begin(r.begin) {}
+	DnsReader(int length, uint8_t *message) : MessageReader(length, message), begin(message) {}
+	DnsReader(DnsReader &r, int offset) : MessageReader(r.begin + offset, r.end), begin(r.begin) {}
 
 	uint8_t *begin;
 };
 
-void handleName(PacketReader &r, bool first = true) {
-	while (true) {
-		// check if at end of message
-		if (r.atEnd())
-			break;
+void handleName(DnsReader &r, bool first = true) {
+	while (!r.atEnd()) {
 		int len = r.u8();
 
 		// check for zero termination
@@ -38,7 +35,7 @@ void handleName(PacketReader &r, bool first = true) {
 		// check if it is a pointer
 		if ((len & 0xc0) == 0xc0) {
 			int offset = ((len & 0x3f) << 8) | r.u8();
-			PacketReader r2(r, offset);
+			DnsReader r2(r, offset);
 			handleName(r2, first);
 			break;
 		}
@@ -52,7 +49,7 @@ void handleName(PacketReader &r, bool first = true) {
 	}
 }
 
-void handleAddress6(PacketReader &r) {
+void handleAddress6(DnsReader &r) {
 	for (int i = 0; i < 8; ++i) {
 		if (i != 0)
 			Terminal::out << ':';
@@ -60,7 +57,7 @@ void handleAddress6(PacketReader &r) {
 	}
 }
 
-void handleServer(PacketReader &r) {
+void handleServer(DnsReader &r) {
 	uint16_t priority = r.u16B();
 	uint16_t weight = r.u16B();
 	uint16_t port = r.u16B();
@@ -69,7 +66,7 @@ void handleServer(PacketReader &r) {
 	handleName(r);
 }
 
-dns::Type handleNameAndType(PacketReader &r) {
+dns::Type handleNameAndType(DnsReader &r) {
 	// domain name
 	handleName(r);
 
@@ -80,7 +77,7 @@ dns::Type handleNameAndType(PacketReader &r) {
 
 	// type and class
 	auto type = r.e16B<dns::Type>();
-	auto clazz = r.e16B<dns::Class>();
+	auto flags2 = r.e16B<dns::Flags2>();
 	switch (type) {
 	case dns::Type::A:
 		Terminal::out << " A ";
@@ -103,13 +100,18 @@ dns::Type handleNameAndType(PacketReader &r) {
 	case dns::Type::NSEC:
 		Terminal::out << " NSEC ";
 		break;
+	case dns::Type::ANY:
+		Terminal::out << " ANY ";
+		break;
 	default:
 		Terminal::out << " Unknown";
 	}
+	if ((flags2 & dns::Flags2::FLUSH) != 0)
+		Terminal::out << "flush ";
 	return type;
 }
 
-bool handleRr(PacketReader &r) {
+bool handleRr(DnsReader &r) {
 	// name and type
 	auto type = handleNameAndType(r);
 	if (type == dns::Type::UNKNOWN)
@@ -148,7 +150,7 @@ bool handleRr(PacketReader &r) {
 	return true;
 }
 
-void handleDns(PacketReader &r) {
+void handleDns(DnsReader &r) {
 	uint16_t transactionId = r.u16B();
 	auto flags = r.e16B<dns::Flags>();
 	int questionCount = r.u16B();
@@ -167,7 +169,7 @@ void handleDns(PacketReader &r) {
 			return;
 	}
 	for (int i = 0; i < answerRRs; ++i) {
-		Terminal::out << "An " << ' ';
+		Terminal::out << "An ";
 		bool ok = handleRr(r);
 		Terminal::out << '\n';
 		if (!ok)
@@ -204,6 +206,7 @@ Coroutine sniffer(FILE *file) {
 			Packet packet;
 			int length = sizeof(packet.data);
 			co_await Network::receive(0, source, length, packet.data);
+			Terminal::out << "from " << dec(source.port) << ' ';
 
 			packet.header.ts_sec = 0;
 			packet.header.ts_usec = 0;
@@ -220,7 +223,7 @@ Coroutine sniffer(FILE *file) {
 			//Terminal::out << '\n';
 
 			// dissect
-			PacketReader r(length, packet.data);
+			DnsReader r(length, packet.data);
 			handleDns(r);
 		}
 	}
@@ -298,7 +301,7 @@ int main(int argc, char const *argv[]) {
 						break;
 
 					// dissect packet
-					PacketReader r(packet.header.incl_len, packet.data);
+					DnsReader r(packet.header.incl_len, packet.data);
 					handleDns(r);
 				}
 			}

@@ -52,12 +52,20 @@ enum class Type : uint16_t {
 
 	// next secure
 	NSEC = 47,
+
+	// request for all records the server/cache has available
+	ANY = 255,
 };
 
 // https://datatracker.ietf.org/doc/html/rfc1035#section-3.2.4
-enum class Class : uint16_t {
+enum class Flags2 : uint16_t {
 	// internet
-	IN = 1,
+	CLASS_IN = 1,
+	CLASS_MASK = 0x7fff,
+
+	// cache flush
+	FLUSH = 0x8000
 };
+FLAGS_ENUM(Flags2)
 
 } // namespace dns
