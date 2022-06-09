@@ -35,7 +35,7 @@ void handle() {
 			clearInterrupt(TIM2_IRQn);
 
 			auto time = Timer::next;
-			Timer::next.value += 0x7fffffff;
+			Timer::next += SystemDuration::max();
 
 			// resume all coroutines that where timeout occurred
 			Timer::waitlist.resumeAll([time](SystemTime timeout) {
@@ -67,9 +67,9 @@ void init() {
 
 	// initialize TIM2
 	RCC->APB1ENR = RCC->APB1ENR | RCC_APB1ENR_TIM2EN;
-	Timer::next.value = 0x7fffffff;
+	Timer::next.value = SystemDuration::max().value;
 	TIM2->CCR1 = Timer::next.value;
-	TIM2->PSC = (CLOCK + 1024 / 2) / 1024 - 1; // prescaler
+	TIM2->PSC = (CLOCK + 1000 / 2) / 1000 - 1;//(CLOCK + 1024 / 2) / 1024 - 1; // prescaler
 	TIM2->EGR = TIM_EGR_UG; // update generation so that prescaler takes effect
 	TIM2->DIER = TIM_DIER_CC1IE; // interrupt enable for CC1
 	TIM2->CR1 = TIM_CR1_CEN; // enable, count up

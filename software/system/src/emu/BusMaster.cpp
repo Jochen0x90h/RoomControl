@@ -6,6 +6,7 @@
 #include <emu/Loop.hpp>
 #include <iostream>
 #include <fstream>
+#include <chrono>
 
 
 // emulator implementation of bus uses virtual devices on user interface

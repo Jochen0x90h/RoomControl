@@ -5,6 +5,8 @@
 
 namespace Terminal {
 
+inline void init() {}
+
 /**
  * Write a string to a terminal (blocking)
  * @param index of channel

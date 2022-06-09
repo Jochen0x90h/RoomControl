@@ -31,7 +31,8 @@ struct SystemDuration {
 		this->value *= b;
 		return *this;
 	}
-	
+
+	static constexpr SystemDuration max() {return {0x7fffffff};}
 };
 
 constexpr SystemDuration operator -(SystemDuration a) {
@@ -161,31 +162,31 @@ constexpr SystemTime min(SystemTime x, SystemTime y) {return {x.value < y.value 
  * Suffix for milliseconds, e.g. 100ms
  */
 constexpr SystemDuration operator "" ms(unsigned long long ms) {
-	return {int32_t((ms * 128 + 62) / 125)};
+	return {int32_t(ms)};
 }
 
 /**
  * Suffix for seconds, e.g. 5s
  */
 constexpr SystemDuration operator "" s(unsigned long long s) {
-	return {int32_t(s * 1024)};
+	return {int32_t(s * 1000)};
 }
 
 /**
  * Suffix for minutes, e.g. 3min
  */
 constexpr SystemDuration operator "" min(unsigned long long s) {
-	return {int32_t(s * 60 * 1024)};
+	return {int32_t(s * 60 * 1000)};
 }
 
 /**
  * Suffix for hours, e.g. 8h
  */
 constexpr SystemDuration operator "" h(unsigned long long s) {
-	return {int32_t(s * 60 * 60 * 1024)};
+	return {int32_t(s * 60 * 60 * 1000)};
 }
 
-
+/*
 struct SystemDuration16 {
 	uint16_t value;
 	
@@ -212,3 +213,4 @@ struct SystemTime16 {
 		return {(t.value & 0xffff0000) + this->value - (carry << 16)};
 	}
 };
+*/

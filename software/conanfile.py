@@ -29,14 +29,14 @@ class Project(ConanFile):
     license="CC-BY-NC-SA-4.0"
     settings = "os", "compiler", "build_type", "arch"
     options = {
+        "platform": "ANY",
         "board": "ANY",
-        "family": "ANY",
         "mcu": "ANY",
         "cpu": "ANY",
         "fpu": "ANY"}
     default_options = {
-        "board": "emuControl",
-        "family": "emu",
+        "platform": None,
+        "board": None,
         "mcu": None,
         "cpu": None,
         "fpu": None}
@@ -53,11 +53,13 @@ class Project(ConanFile):
     ]
 
     def requirements(self):
-        if self.options.family == "emu":
-            self.requires("boost/1.79.0")
-            self.requires("glfw/3.3.7")
+        p = str(self.options.platform if self.options.platform else self.settings.os)
+        if str(self.settings.os) in p:
             self.requires("libusb/1.0.26")
+            self.requires("boost/1.79.0")
             self.requires("gtest/1.11.0")
+        if "emu" in p:
+            self.requires("glfw/3.3.7")
 
     keep_imports = True
     def imports(self):
@@ -66,17 +68,18 @@ class Project(ConanFile):
         self.copy("*", src="@libdirs", dst="lib")
 
     def generate(self):
+        p = str(self.options.platform if self.options.platform else self.settings.os)
+
         # generate "conan_toolchain.cmake"
         toolchain = CMakeToolchain(self)
+        toolchain.variables["PLATFORM"] = p #self.options.platform if self.options.platform else self.settings.os
         toolchain.variables["BOARD"] = self.options.board
-        toolchain.variables["FAMILY"] = self.options.family
         toolchain.variables["MCU"] = self.options.mcu
         toolchain.variables["CPU"] = self.options.cpu
         toolchain.variables["FPU"] = self.options.fpu
 
-
         # https://github.com/conan-io/conan/blob/develop/conan/tools/cmake/toolchain.py
-        if self.options.family != "emu":
+        if str(self.settings.os) not in p:
             toolchain.blocks["generic_system"].values["cmake_system_name"] = "Generic"
             toolchain.blocks["generic_system"].values["cmake_system_processor"] = self.settings.arch
             toolchain.variables["CMAKE_TRY_COMPILE_TARGET_TYPE"] = "STATIC_LIBRARY"
@@ -96,8 +99,8 @@ class Project(ConanFile):
         cmake.configure()
         cmake.build()
 
-        # run unit tests if CONAN_RUN_TESTS environment variable is set
-        if os.getenv("CONAN_RUN_TESTS"):
+        # run unit tests if CONAN_RUN_TESTS environment variable is set to 1
+        if os.getenv("CONAN_RUN_TESTS") == "1":
             cmake.test()
 
     def package(self):

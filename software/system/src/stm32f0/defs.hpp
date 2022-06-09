@@ -2,27 +2,6 @@
 
 #include "system/stm32f042x6.h"
 
-/*
-
-// construct bitfield from value
-#define V(field, value) ((value) << field##_Pos)
-
-// construct bitfield from named value
-#define N(field, value) (field##_##value << field##_Pos)
-
-// get bitfield
-#define GET(reg, field) (((reg) & field##_Msk) >> field##_Pos)
-
-// test if a bitfield has a given named value
-#define TEST(reg, field, value) (((reg) & field##_Msk) == (field##_##value << field##_Pos))
-
-// trigger a task
-constexpr int TRIGGER = 1;
-
-// indicator that an event was generated
-constexpr int GENERATED = 1;
-*/
-
 
 
 // nvic

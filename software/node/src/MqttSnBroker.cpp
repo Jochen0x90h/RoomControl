@@ -22,7 +22,7 @@ constexpr int8_t min(int8_t x, int8_t y) {return x < y ? x : y;}
 
 
 MqttSnBroker::MqttSnBroker(uint16_t localPort) {
-	Network::setLocalPort(NETWORK_MQTT, localPort);
+	Network::open(NETWORK_MQTT, localPort);
 
 	// init connections
 	for (ConnectionInfo &connection : this->connections) {
@@ -37,6 +37,10 @@ MqttSnBroker::MqttSnBroker(uint16_t localPort) {
 		receive();
 	for (int i = 0; i < FORWARD_COUNT; ++i)
 		forward();
+}
+
+MqttSnBroker::~MqttSnBroker() {
+	Network::close(NETWORK_MQTT);
 }
 
 AwaitableCoroutine MqttSnBroker::connect(Network::Endpoint const &gatewayEndpoint, String name,
@@ -270,7 +274,7 @@ AwaitableCoroutine MqttSnBroker::keepAlive() {
 									auto returnCode = r.e8<mqttsn::ReturnCode>();
 
 									// check if successful
-									if (r.isValid() && returnCode == mqttsn::ReturnCode::ACCEPTED) {
+									if (!r.atEnd() && returnCode == mqttsn::ReturnCode::ACCEPTED) {
 										topic.gatewayTopicId = topicId;
 										break;
 									}
@@ -582,7 +586,7 @@ Coroutine MqttSnBroker::publish() {
 							auto returnCode = r.e8<mqttsn::ReturnCode>();
 
 							// check if successful
-							if (r.isValid() && returnCode == mqttsn::ReturnCode::ACCEPTED)
+							if (!r.atEnd() && returnCode == mqttsn::ReturnCode::ACCEPTED)
 								break;
 						}
 					}
@@ -1108,7 +1112,7 @@ Coroutine MqttSnBroker::receive() {
 #endif
 
 			// check if we read past the end of the message
-			if (!r.isValid()) {
+			if (r.atEnd()) {
 				continue;
 			}
 
@@ -1216,7 +1220,7 @@ Coroutine MqttSnBroker::forward() {
 							auto returnCode = r.e8<mqttsn::ReturnCode>();
 
 							// check if successful
-							if (r.isValid() && topicId == topicId2 && returnCode == mqttsn::ReturnCode::ACCEPTED)
+							if (!r.atEnd() && topicId == topicId2 && returnCode == mqttsn::ReturnCode::ACCEPTED)
 								break;
 						}
 					}

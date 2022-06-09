@@ -30,8 +30,9 @@ Coroutine receiver() {
 	}
 }
 
+// it is possible to start two instances with different ports
 uint16_t localPort = 1337;
-uint16_t remotePort = 1338;
+uint16_t remotePort = 1337;
 
 #ifdef EMU
 int main(int argc, char const **argv) {
@@ -47,9 +48,9 @@ int main(void) {
 	Network::init();
 	Output::init(); // for debug signals on pins
 
-	Network::setLocalPort(0, localPort);
+	Network::open(0, localPort);
 	
-	destination = Network::Endpoint::fromString("::1", remotePort);
+	destination = {Network::Address::fromString("::1"), remotePort};
 	
 	sender();
 	receiver();

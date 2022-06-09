@@ -1,4 +1,4 @@
-#include <Usb.hpp>
+#include <UsbDevice.hpp>
 #include <Debug.hpp>
 #include <Loop.hpp>
 #include <Coroutine.hpp>
@@ -86,7 +86,7 @@ Coroutine echo() {
 	while (true) {
 		// receive data from host
 		int length = array::count(buffer);
-		co_await Usb::receive(1, length, buffer);
+		co_await UsbDevice::receive(1, length, buffer);
 
 		// check received data
 		bool error = false;
@@ -98,7 +98,7 @@ Coroutine echo() {
 			Debug::setRedLed(true);
 		
 		// send data back to host
-		co_await Usb::send(1, length, buffer);
+		co_await UsbDevice::send(1, length, buffer);
 
 		Debug::toggleBlueLed();
 	}
@@ -106,7 +106,7 @@ Coroutine echo() {
 
 int main(void) {
 	Loop::init();
-	Usb::init(
+	UsbDevice::init(
 		[](usb::DescriptorType descriptorType) {
 			switch (descriptorType) {
 			case usb::DescriptorType::DEVICE:
@@ -119,7 +119,7 @@ int main(void) {
 		},
 		[](uint8_t bConfigurationValue) {
 			// enable bulk endpoints 1 in and 1 out (keep control endpoint 0 enabled)
-			Usb::enableEndpoints(1 | (1 << 1), 1 | (1 << 1)); 			
+			UsbDevice::enableEndpoints(1 | (1 << 1), 1 | (1 << 1));
 		
 			// start to receive from usb host
 			echo();

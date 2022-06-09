@@ -23,7 +23,7 @@ struct Test {
 
 	// connect to gateway and keep the connection alive
 	Coroutine connect(uint16_t gatewayPort, String name) {
-		Network::Endpoint gatewayEndpoint = Network::Endpoint::fromString("::1", gatewayPort);
+		Network::Endpoint gatewayEndpoint = {Network::Address::fromString("::1"), gatewayPort};
 
 		while (true) {
 			// connect to gateway

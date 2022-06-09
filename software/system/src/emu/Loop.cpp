@@ -1,9 +1,10 @@
 #include "Loop.hpp"
+#include "../posix/Loop.hpp"
+#include <cstdio>
+#include <cstdlib>
 
 
 namespace Loop {
-
-asio::io_context context;
 
 // opengl window
 GLFWwindow *window = nullptr;
@@ -84,8 +85,6 @@ void init() {
 }
 
 void run() {
-	//context.run();
-	
 	// check if loop::init() was called
 	assert(Loop::window != nullptr);
 	
@@ -93,17 +92,13 @@ void run() {
 	Gui gui;
 	
 	int frameCount = 0;
-	auto start = std::chrono::steady_clock::now();
+	//auto start = std::chrono::steady_clock::now();
 	while (!glfwWindowShouldClose(Loop::window)) {
-		auto frameStart = std::chrono::steady_clock::now();
+		//auto frameStart = std::chrono::steady_clock::now();
 
 		// process events
 		glfwPollEvents();
-
-		// process emulated system events
-		Loop::context.poll();
-		if (Loop::context.stopped())
-			Loop::context.reset();
+		Loop::runOnce(false);
 
 		// mouse
 		gui.doMouse(window);
@@ -123,14 +118,14 @@ void run() {
 		glfwSwapBuffers(Loop::window);
 				
 		// show frames per second
-		auto now = std::chrono::steady_clock::now();
+		/*auto now = std::chrono::steady_clock::now();
 		++frameCount;
 		auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(now - start);
 		if (duration.count() > 1000) {
 			//std::cout << frameCount * 1000 / duration.count() << "fps" << std::endl;
 			frameCount = 0;
 			start = std::chrono::steady_clock::now();
-		}
+		}*/
 	}
 	
 	// cleanup

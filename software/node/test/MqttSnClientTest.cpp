@@ -40,7 +40,7 @@ AwaitableCoroutine subscribe(MqttSnClient &client) {
 
 Coroutine publish() {
 	uint16_t localPort = 1337;
-	Network::Endpoint gatewayEndpoint = Network::Endpoint::fromString("::1", 10000);
+	Network::Endpoint gatewayEndpoint = {Network::Address::fromString("::1"), 10000};
 	
 	MqttSnClient client(localPort);
 	MqttSnClient::Result result;

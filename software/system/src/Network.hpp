@@ -2,28 +2,33 @@
 
 #include <String.hpp>
 #include <Coroutine.hpp>
-#include <boardConfig.hpp>
 
 
 namespace Network {
 
-struct Endpoint {
-	union {
-		uint8_t u8[16];
-		uint8_t u32[4];
-	} address;
-	uint16_t port;
+union Address {
+	uint8_t u8[16];
+	uint8_t u32[4];
 
-	static Endpoint fromString(String s, uint16_t defaultPort);
+	static Address fromString(String s);
 
-	bool operator ==(Endpoint const &e) const {
-		if (e.port != this->port)
-			return false;
+	bool operator ==(Address const &a) const {
 		for (int i = 0; i < 4; ++i) {
-			if (e.address.u32[i] != this->address.u32[i])
+			if (a.u32[i] != this->u32[i])
 				return false;
 		}
 		return true;
+	}
+};
+
+struct Endpoint {
+	Address address;
+	uint16_t port;
+
+	//static Endpoint fromString(String s, uint16_t defaultPort);
+
+	bool operator ==(Endpoint const &e) const {
+		return e.address == this->address && e.port == this->port;
 	}
 };
 
@@ -49,11 +54,25 @@ struct SendParameters {
 void init();
 
 /**
- * Set local port number
+ * Open a network connection on a local port
  * @param index context index (number of contexts defined by NETWORK_CONTEXT_COUNT in sysConfig.hpp)
  * @param port local port number
  */
-void setLocalPort(int index, uint16_t port);
+bool open(int index, uint16_t port);
+
+/**
+ * Join a multicast group
+ * @param index context index (number of contexts defined by NETWORK_CONTEXT_COUNT in sysConfig.hpp)
+ * @param multicastGroup
+ * @return
+ */
+bool join(int index, Address const &multicastGroup);
+
+/**
+ * Close a network connection
+ * @param index
+ */
+void close(int index);
 
 /**
  * Receive data

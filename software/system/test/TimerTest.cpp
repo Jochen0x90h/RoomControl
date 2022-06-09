@@ -31,7 +31,7 @@ Coroutine timer3() {
 
 		// test if time overflow works on nrf52
 		auto time = Timer::now();
-		int i = (time.value >> 20) & 3;
+		int i = int(time.value >> 20) & 3;
 
 		co_await Timer::sleep(500ms + i * 1s);
 	}

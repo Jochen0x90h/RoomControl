@@ -7,6 +7,7 @@
 #include <boardConfig.hpp>
 #include <fstream>
 #include <iostream>
+#include <cstring>
 //#include <StringOperators.hpp>
 
 

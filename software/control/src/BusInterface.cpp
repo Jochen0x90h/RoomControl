@@ -69,25 +69,25 @@ static bool readMessage(MessageType dstType, void *dstMessage, MessageType srcTy
 	Message &dst = *reinterpret_cast<Message *>(dstMessage);
 
 	switch (srcType) {
-		case MessageType::OFF_ON_OUT:
-		case MessageType::OFF_ON_TOGGLE_OUT:
-		case MessageType::TRIGGER_OUT:
-		case MessageType::UP_DOWN_OUT:
-		case MessageType::OPEN_CLOSE_OUT:
-			return convertCommand(dstType, dst, r.u8(), convertOptions);
-		case MessageType::LEVEL_OUT: {
-			// convert level from 0 - 255 to 0.0 - 1.0
-			float level = float(r.u8()) / 255.0f;
-			return convertFloatValue(dstType, dst, srcType, level, convertOptions);
-		}
-		case MessageType::AIR_TEMPERATURE_OUT: {
-			// convert temperature from 1/20 Kelvin to Kelvin
-			float temperature = float(r.u16L()) * 0.05f;
-			return convertFloatValue(dstType, dst, srcType, temperature, convertOptions);
-		}
-		default:
-			// conversion failed
-			return false;
+	case MessageType::OFF_ON_OUT:
+	case MessageType::OFF_ON_TOGGLE_OUT:
+	case MessageType::TRIGGER_OUT:
+	case MessageType::UP_DOWN_OUT:
+	case MessageType::OPEN_CLOSE_OUT:
+		return convertCommand(dstType, dst, r.u8(), convertOptions);
+	case MessageType::LEVEL_OUT: {
+		// convert level from 0 - 255 to 0.0 - 1.0
+		float level = float(r.u8()) / 255.0f;
+		return convertFloatValue(dstType, dst, srcType, level, convertOptions);
+	}
+	case MessageType::AIR_TEMPERATURE_OUT: {
+		// convert temperature from 1/20 Kelvin to Kelvin
+		float temperature = float(r.u16L()) * 0.05f;
+		return convertFloatValue(dstType, dst, srcType, temperature, convertOptions);
+	}
+	default:
+		// conversion failed
+		return false;
 	}
 
 	// conversion successful
@@ -309,11 +309,9 @@ Coroutine BusInterface::publish() {
 			// check if it is an output
 			if (isInput(messageType)) {
 				// send data message to node
-				int sendLength;
+				bus::MessageWriter w(outMessage);
 				{
 					DeviceFlash const &flash = *device;
-
-					bus::MessageWriter w(outMessage);
 
 					// set start of header
 					w.setHeader();
@@ -339,14 +337,10 @@ Coroutine BusInterface::publish() {
 					Nonce nonce(flash.address, this->securityCounter);
 					w.encrypt(micLength, nonce, *this->aesKey);
 
-					//bool ok = decrypt(message, nonce, header, headerLength, message, payloadLength, micLength, this->configuration->networkAesKey);
-
 					// increment security counter
 					++this->securityCounter;
-
-					sendLength = w.getLength();
 				}
-				co_await BusMaster::send(sendLength, outMessage);
+				co_await BusMaster::send(w.getLength(), outMessage);
 			}
 
 			/*
@@ -367,6 +361,7 @@ Coroutine BusInterface::publish() {
 		}
 	}
 }
+
 
 // BusInterface::DeviceFlash
 
@@ -390,7 +385,7 @@ uint8_t BusInterface::BusDevice::getId() const {
 }
 
 String BusInterface::BusDevice::getName() const {
-	return "x";
+	return "b";
 }
 
 void BusInterface::BusDevice::setName(String name) {
