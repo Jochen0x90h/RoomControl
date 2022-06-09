@@ -32,7 +32,7 @@ void handleName(DnsReader &r, bool first = true) {
 		if (len == 0)
 			break;
 
-		// check if it is a pointer
+		// check for pointer
 		if ((len & 0xc0) == 0xc0) {
 			int offset = ((len & 0x3f) << 8) | r.u8();
 			DnsReader r2(r, offset);
@@ -58,26 +58,15 @@ void handleAddress6(DnsReader &r) {
 }
 
 void handleServer(DnsReader &r) {
-	uint16_t priority = r.u16B();
-	uint16_t weight = r.u16B();
-	uint16_t port = r.u16B();
+	auto priority = r.u16B();
+	auto weight = r.u16B();
+	auto port = r.u16B();
 	Terminal::out << "priority=" << dec(priority) << " weight=" << dec(weight) << " port=" << dec(port) << ' ';
 
 	handleName(r);
 }
 
-dns::Type handleNameAndType(DnsReader &r) {
-	// domain name
-	handleName(r);
-
-	if (r.getRemaining() < 2 + 2) {
-		Terminal::out << " Unexpected End";
-		return dns::Type::UNKNOWN;
-	}
-
-	// type and class
-	auto type = r.e16B<dns::Type>();
-	auto flags2 = r.e16B<dns::Flags2>();
+void printTypeAndFlags2(dns::Type type, dns::Flags2 flags2) {
 	switch (type) {
 	case dns::Type::A:
 		Terminal::out << " A ";
@@ -108,28 +97,29 @@ dns::Type handleNameAndType(DnsReader &r) {
 	}
 	if ((flags2 & dns::Flags2::FLUSH) != 0)
 		Terminal::out << "flush ";
-	return type;
 }
 
-bool handleRr(DnsReader &r) {
-	// name and type
-	auto type = handleNameAndType(r);
-	if (type == dns::Type::UNKNOWN)
-		return false;
+// handle resource record (RR)
+bool handleResourceRecord(DnsReader &r) {
+	// domain name
+	handleName(r);
 
-	// ttl and length
-	if (r.getRemaining() < 4 + 2) {
+	// type, class, ttl and length
+	if (r.getRemaining() < 2 + 2 + 4 + 2) {
+		Terminal::out << " Unexpected End";
 		return false;
 	}
-	uint32_t ttl = r.u32B();
-	uint16_t length = r.u16B();
+	auto type = r.e16B<dns::Type>();
+	auto flags2 = r.e16B<dns::Flags2>();
+	printTypeAndFlags2(type, flags2);
+	auto ttl = r.u32B();
+	auto length = r.u16B();
 
-	// handle type dependent data
+	// type dependent data
 	if (r.getRemaining() < length) {
 		Terminal::out << " Unexpected End";
 		return false;
 	}
-
 	auto end = r.current + length;
 	switch (type) {
 	case dns::Type::PTR:
@@ -154,37 +144,54 @@ void handleDns(DnsReader &r) {
 	uint16_t transactionId = r.u16B();
 	auto flags = r.e16B<dns::Flags>();
 	int questionCount = r.u16B();
-	int answerRRs = r.u16B();
-	int authorityRRs = r.u16B();
-	int additionalRRs = r.u16B();
+	int answerCount = r.u16B();
+	int authorityCount = r.u16B();
+	int additionalCount = r.u16B();
 
 	bool isQuery = (flags & dns::Flags::QR_MASK) == dns::Flags::QUERY;
 	Terminal::out << (isQuery ? "Query" : "Response") << '\n';
 
+	Terminal::out << "\tquestionCount " << dec(questionCount) << '\n';
 	for (int i = 0; i < questionCount; ++i) {
-		Terminal::out << "Qu ";
-		auto t = handleNameAndType(r);
-		Terminal::out << '\n';
-		if (t == dns::Type::UNKNOWN)
+		Terminal::out << "\t\t";
+
+		// domain name
+		handleName(r);
+
+		// type, class, ttl and length
+		if (r.getRemaining() < 2 + 2) {
+			Terminal::out << " Unexpected End";
 			return;
+		}
+
+		auto type = r.e16B<dns::Type>();
+		auto flags2 = r.e16B<dns::Flags2>();
+		printTypeAndFlags2(type, flags2);
+		Terminal::out << '\n';
 	}
-	for (int i = 0; i < answerRRs; ++i) {
-		Terminal::out << "An ";
-		bool ok = handleRr(r);
+
+	Terminal::out << "\tanswerCount " << dec(answerCount) << '\n';
+	for (int i = 0; i < answerCount; ++i) {
+		Terminal::out << "\t\t";
+		bool ok = handleResourceRecord(r);
 		Terminal::out << '\n';
 		if (!ok)
 			return;
 	}
-	for (int i = 0; i < authorityRRs; ++i) {
-		Terminal::out << "Au ";
-		bool ok = handleRr(r);
+
+	Terminal::out << "\tauthorityCount " << dec(authorityCount) << '\n';
+	for (int i = 0; i < authorityCount; ++i) {
+		Terminal::out << "\t\t";
+		bool ok = handleResourceRecord(r);
 		Terminal::out << '\n';
 		if (!ok)
 			return;
 	}
-	for (int i = 0; i < additionalRRs; ++i) {
-		Terminal::out << "Ad ";
-		bool ok = handleRr(r);
+
+	Terminal::out << "\tadditionalCount " << dec(additionalCount) << '\n';
+	for (int i = 0; i < additionalCount; ++i) {
+		Terminal::out << "\t\t";
+		bool ok = handleResourceRecord(r);
 		Terminal::out << '\n';
 		if (!ok)
 			return;
