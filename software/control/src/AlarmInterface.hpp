@@ -95,7 +95,7 @@ protected:
 		uint8_t getId() const override;
 		String getName() const override;
 		void setName(String name) override;
-		Array<MessageType const> getEndpoints() const override;
+		Array<MessageType2 const> getEndpoints() const override;
 		void subscribe(uint8_t endpointIndex, Subscriber &subscriber) override;
 		PublishInfo getPublishInfo(uint8_t endpointIndex) override;
 

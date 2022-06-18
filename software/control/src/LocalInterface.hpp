@@ -34,11 +34,11 @@ protected:
 		uint8_t getId() const override;
 		String getName() const override;
 		void setName(String name) override;
-		Array<MessageType const> getEndpoints() const override;
+		Array<MessageType2 const> getEndpoints() const override;
 		void subscribe(uint8_t endpointIndex, Subscriber &subscriber) override;
 		PublishInfo getPublishInfo(uint8_t endpointIndex) override;
 
-		void init(LocalInterface *interface, uint8_t interfaceId, Array<MessageType const> endpoints) {
+		void init(LocalInterface *interface, uint8_t interfaceId, Array<MessageType2 const> endpoints) {
 			this->interface = interface;
 			this->interfaceId = interfaceId;
 			this->endpoints = endpoints;
@@ -51,7 +51,7 @@ protected:
 		uint8_t interfaceId;
 
 		// endpoints
-		Array<MessageType const> endpoints;
+		Array<MessageType2 const> endpoints;
 
 		// subscribers and publishers
 		SubscriberList subscribers;

@@ -77,6 +77,10 @@ public:
 		return value;
 	}
 
+	float f32L() {
+		return 0.0f;
+	}
+
 	uint64_t u64L() {
 		auto lo = uint64_t(u32L());
 		return lo | (uint64_t(u32L()) << 32);

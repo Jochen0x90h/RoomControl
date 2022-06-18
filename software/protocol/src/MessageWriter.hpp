@@ -11,7 +11,7 @@
 class MessageWriter {
 public:
 
-	explicit MessageWriter(uint8_t *message) : current(message) {}
+	explicit MessageWriter(uint8_t *message) : begin(message), current(message) {}
 
 	void u8(uint8_t value) {
 		this->current[0] = value;
@@ -69,6 +69,10 @@ public:
 		this->current += 4;
 	}
 
+	void f32L(float value) {
+
+	}
+
 	void u64L(uint64_t value) {
 		u32L(value);
 		u32L(value >> 32);
@@ -124,9 +128,17 @@ public:
 	 */
 	void string(String const &str) {
 		auto current = this->current;
-		for (int i = 0; i < str.length; ++i)
+		for (int i = 0; i < str.count(); ++i)
 			current[i] = uint8_t(str.data[i]);
-		this->current += str.length;
+		this->current += str.count();
+	}
+
+	/**
+	 * Add string contents with 8 bit length
+	 */
+	void string8(String const &str) {
+		u8(str.count());
+		string(str);
 	}
 
 	/**
@@ -136,11 +148,20 @@ public:
 		this->current += n;
 	}
 
+	/**
+	 * Get length of message
+	 * @return length
+	 */
+	int getLength() const {
+		return int(this->current - this->begin);
+	}
+
 	// fulfill stream concept
 	MessageWriter &operator <<(char ch) {u8(ch); return *this;}
 	MessageWriter &operator <<(String const &str) {string(str); return *this;}
 
 
+	uint8_t *begin;
 	uint8_t *current;
 };
 

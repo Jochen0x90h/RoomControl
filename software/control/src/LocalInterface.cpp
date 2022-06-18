@@ -21,31 +21,35 @@ constexpr int BME680_PRESSURE_ENDPOINT = 2;
 constexpr int BME680_VOC_ENDPOINT = 3;
 
 // endpoint type arrays for getEndpoints()
-constexpr MessageType bme680Endpoints[] = {
-	MessageType::AIR_TEMPERATURE_OUT,
-	MessageType::AIR_HUMIDITY_OUT,
-	MessageType::AIR_PRESSURE_OUT,
-	MessageType::AIR_VOC_OUT
+constexpr MessageType2 bme680Endpoints[] = {
+	MessageType2::PHYSICAL_TEMPERATURE_MEASURED_ROOM_OUT,//AIR_TEMPERATURE_OUT,
+	MessageType2::CONCENTRATION_RELATIVE_HUMIDITY_MEASURED_AIR_OUT, //AIR_HUMIDITY_OUT,
+	MessageType2::PHYSICAL_PRESSURE_MEASURED_ATMOSPHERE_OUT,//AIR_PRESSURE_OUT,
+	MessageType2::CONCENTRATION_VOC_OUT,//AIR_VOC_OUT
 };
 
-constexpr MessageType heatingEndpoints[] = {
-	MessageType::OFF_ON_TOGGLE_IN
+constexpr MessageType2 heatingEndpoints[] = {
+	MessageType2::SWITCH_BINARY_ON_OFF_CMD_OUT//OFF_ON_TOGGLE_IN
 };
 
-constexpr MessageType brightnessSensorEndpoints[] = {
-	MessageType::ILLUMINANCE_OUT,
+constexpr MessageType2 brightnessSensorEndpoints[] = {
+	MessageType2::PHYSICAL_ILLUMINATION_OUT//ILLUMINANCE_OUT,
 };
 
-constexpr MessageType motionDetectorEndpoints[] = {
-	MessageType::TRIGGER_OUT,
+constexpr MessageType2 motionDetectorEndpoints[] = {
+	MessageType2::SWITCH_BINARY_OCCUPANCY_OUT//TRIGGER_OUT,
 };
 
-constexpr MessageType inEndpoints[] = {
-	MessageType::OFF_ON_OUT, MessageType::OFF_ON_OUT, MessageType::OFF_ON_OUT, MessageType::OFF_ON_OUT
+// binary inputs (have out endpoints)
+constexpr MessageType2 inEndpoints[] = {
+	//MessageType::OFF_ON_OUT, MessageType::OFF_ON_OUT, MessageType::OFF_ON_OUT, MessageType::OFF_ON_OUT
+	MessageType2::SWITCH_BINARY_OUT, MessageType2::SWITCH_BINARY_OUT, MessageType2::SWITCH_BINARY_OUT, MessageType2::SWITCH_BINARY_OUT
 };
 
-constexpr MessageType outEndpoints[] = {
-	MessageType::OFF_ON_IN, MessageType::OFF_ON_IN, MessageType::OFF_ON_IN, MessageType::OFF_ON_IN
+// binary outputs (have in enpoitns)
+constexpr MessageType2 outEndpoints[] = {
+	//MessageType::OFF_ON_IN, MessageType::OFF_ON_IN, MessageType::OFF_ON_IN, MessageType::OFF_ON_IN
+	MessageType2::SWITCH_BINARY_CMD_IN, MessageType2::SWITCH_BINARY_CMD_IN, MessageType2::SWITCH_BINARY_CMD_IN, MessageType2::SWITCH_BINARY_CMD_IN
 };
 
 
@@ -135,9 +139,9 @@ Coroutine LocalInterface::readAirSensor() {
 				p.info = subscriber.destination;
 
 				// convert to destination message type and resume coroutine if conversion was successful
-				auto &dst = *reinterpret_cast<Message *>(p.message);
-				MessageType srcType = bme680Endpoints[subscriber.source.device.endpointIndex];
-				return convertFloatValue(subscriber.destination.type, dst, srcType, src, subscriber.convertOptions);
+				auto &dst = *reinterpret_cast<Message2 *>(p.message);
+				auto srcType = bme680Endpoints[subscriber.source.device.endpointIndex];
+				return convertFloat(subscriber.destination.type, dst, src, subscriber.convertOptions);
 			});
 		}
 		
@@ -153,8 +157,8 @@ Coroutine LocalInterface::readAirSensor() {
 Coroutine LocalInterface::publish() {
 	while (true) {
 		// wait for message
-		MessageInfo info;
-		Message message;
+		MessageInfo2 info;
+		Message2 message;
 		co_await this->publishBarrier.wait(info, &message);
 
 		// set to device
@@ -206,7 +210,7 @@ void LocalInterface::LocalDevice::setName(String name) {
 
 }
 
-Array<MessageType const> LocalInterface::LocalDevice::getEndpoints() const {
+Array<MessageType2 const> LocalInterface::LocalDevice::getEndpoints() const {
 	return this->endpoints;
 }
 

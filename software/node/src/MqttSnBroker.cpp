@@ -294,7 +294,7 @@ AwaitableCoroutine MqttSnBroker::keepAlive() {
 	}
 }
 
-void MqttSnBroker::subscribe(String topicName, MessageType type, Subscriber &subscriber) {
+void MqttSnBroker::subscribe(String topicName, MessageType2 type, Subscriber &subscriber) {
 	int topicIndex = obtainTopicIndex(topicName);
 	if (topicIndex == -1) {
 		// error: topic list is full
@@ -315,7 +315,7 @@ void MqttSnBroker::subscribe(String topicName, MessageType type, Subscriber &sub
 		this->keepAliveEvent.set();
 }
 
-PublishInfo MqttSnBroker::getPublishInfo(String topicName, MessageType type) {
+PublishInfo MqttSnBroker::getPublishInfo(String topicName, MessageType2 type) {
 	int topicIndex = obtainTopicIndex(topicName);
 	if (topicIndex == -1) {
 		// error: topic list is full
@@ -336,12 +336,12 @@ int MqttSnBroker::obtainTopicIndex(String name) {
 	return this->topics.getOrPut(name, []() {return TopicInfo{BitField<MAX_CONNECTION_COUNT, 2>().set(), 0, false, 0, 0};});
 }
 
-static bool writeMessage(MessageWriter &w, MessageType srcType, void const *srcMessage) {
-	Message const &src = *reinterpret_cast<Message const *>(srcMessage);
+static bool writeMessage(MessageWriter &w, MessageType2 srcType, void const *srcMessage) {
+	auto const &src = *reinterpret_cast<Message2 const *>(srcMessage);
 	static char const offOn[] = {'0', '1', '!'};
 	static char const trigger[] = {'#', '!'};
 	static char const upDown[] = {'#', '+', '-'};
-
+/*
 	switch (srcType) {
 	case MessageType::OFF_ON_IN:
 	case MessageType::OFF_ON_TOGGLE_IN:
@@ -375,7 +375,7 @@ static bool writeMessage(MessageWriter &w, MessageType srcType, void const *srcM
 		// conversion failed
 		return false;
 	}
-
+*/
 	// conversion successful
 	return true;
 }
@@ -393,8 +393,8 @@ static int find(String message, Array<MessageValue const> messageValues) {
 	return -1;
 }
 
-static bool readMessage(MessageType dstType, void *dstMessage, MessageReader r) {
-	Message &dst = *reinterpret_cast<Message *>(dstMessage);
+static bool readMessage(MessageType2 dstType, void *dstMessage, MessageReader r) {
+	auto &dst = *reinterpret_cast<Message2 *>(dstMessage);
 	static MessageValue const offOn[] = {
 		{"0", 0}, {"1", 1},
 		{"off", 0}, {"on", 1}};
@@ -410,7 +410,7 @@ static bool readMessage(MessageType dstType, void *dstMessage, MessageReader r) 
 	static MessageValue const openClose[] = {
 		{"0", 0}, {"1", 1},
 		{"open", 0}, {"close", 1}};
-
+/*
 	switch (dstType) {
 	case MessageType::UNKNOWN:
 		return false;
@@ -492,7 +492,7 @@ static bool readMessage(MessageType dstType, void *dstMessage, MessageReader r) 
 		// conversion failed
 		return false;
 	}
-
+*/
 	// conversion successful
 	return true;
 }
@@ -503,8 +503,8 @@ Coroutine MqttSnBroker::publish() {
 		auto &thisName = this->connections[0].name;
 
 		// wait for message
-		MessageInfo info;
-		Message message;
+		MessageInfo2 info;
+		Message2 message;
 		co_await this->publishBarrier.wait(info, &message);
 		uint16_t topicId = info.topic.id;
 		uint16_t topicIndex = topicId - 1;

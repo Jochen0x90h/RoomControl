@@ -740,4 +740,23 @@ add_test(NAME systemTest
 	#WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/../testdata
 )
 
+# node test
+add_executable(nodeTest
+	node/test/nodeTest.cpp
+	${UTIL}
+	node/src/Message.cpp
+	node/src/Message.hpp
+)
+target_include_directories(nodeTest
+	PRIVATE
+	node/src
+	protocol/src
+	util/src
+)
+target_link_libraries(nodeTest ${LIBRARIES})
+add_test(NAME nodeTest
+	COMMAND nodeTest --gtest_output=xml:report.xml
+	#WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/../testdata
+)
+
 endif() # POSIX AND NOT EMU

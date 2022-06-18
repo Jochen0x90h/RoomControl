@@ -63,28 +63,51 @@ Coroutine BusInterface::start() {
 		publish();
 }
 
-static bool readMessage(MessageType dstType, void *dstMessage, MessageType srcType, MessageReader r,
+static bool readMessage(MessageType2 dstType, void *dstMessage, MessageType2 srcType, MessageReader r,
 	ConvertOptions const &convertOptions)
 {
-	Message &dst = *reinterpret_cast<Message *>(dstMessage);
+	auto &dst = *reinterpret_cast<Message2 *>(dstMessage);
 
-	switch (srcType) {
-	case MessageType::OFF_ON_OUT:
-	case MessageType::OFF_ON_TOGGLE_OUT:
-	case MessageType::TRIGGER_OUT:
-	case MessageType::UP_DOWN_OUT:
-	case MessageType::OPEN_CLOSE_OUT:
-		return convertCommand(dstType, dst, r.u8(), convertOptions);
-	case MessageType::LEVEL_OUT: {
-		// convert level from 0 - 255 to 0.0 - 1.0
-		float level = float(r.u8()) / 255.0f;
-		return convertFloatValue(dstType, dst, srcType, level, convertOptions);
+	switch (srcType & MessageType2::CATEGORY) {
+	case MessageType2::SWITCH:
+		return convertSwitch(dstType, dst, r.u8(), convertOptions);
+	case MessageType2::MULTISTATE:
+		// todo
+		break;
+	case MessageType2::LEVEL: {
+		// level: convert from 0 - 65535 to 0.0 - 1.0
+		float level = float(r.u16L()) / 65535.0f;
+		if ((srcType & MessageType2::CMD) == 0)
+			return convertFloat(dstType, dst, level, convertOptions);
+		uint8_t command = r.u8();
+		return convertFloatCommand(dstType, dst, command, level, convertOptions);
 	}
-	case MessageType::AIR_TEMPERATURE_OUT: {
+	case MessageType2::PHYSICAL:
+	case MessageType2::CONCENTRATION: {
+		float value = r.f32L();
+		if ((srcType & MessageType2::CMD) == 0)
+			return convertFloat(dstType, dst, value, convertOptions);
+		uint8_t command = r.u8();
+		return convertFloatCommand(dstType, dst, command, value, convertOptions);
+	}
+	case MessageType2::LIGHTING: {
+		// lighting: all values are normalized except color temperature
+		float value = r.u16L();
+		if ((srcType & MessageType2::LIGHTING_CATEGORY) != MessageType2::LIGHTING_COLOR_TEMPERATURE)
+			value /= 65535.0f;
+		if ((srcType & MessageType2::CMD) == 0)
+			return convertFloat(dstType, dst, value, convertOptions);
+		uint8_t command = r.u8();
+		uint16_t transition = r.u16L();
+		return convertFloatTransition(dstType, dst, value, command, transition, convertOptions);
+	}
+	case MessageType2::METERING:
+		// todo
+/*	case MessageType::AIR_TEMPERATURE_OUT: {
 		// convert temperature from 1/20 Kelvin to Kelvin
 		float temperature = float(r.u16L()) * 0.05f;
 		return convertFloatValue(dstType, dst, srcType, temperature, convertOptions);
-	}
+	}*/
 	default:
 		// conversion failed
 		return false;
@@ -230,7 +253,7 @@ Coroutine BusInterface::receive() {
 					for (auto &subscriber: device.subscribers) {
 						// check if this is the right endpoint
 						if (subscriber.source.device.endpointIndex == endpointIndex) {
-							MessageType srcType = flash.endpoints[endpointIndex];
+							auto srcType = flash.endpoints[endpointIndex];
 							subscriber.barrier->resumeFirst([&subscriber, &r, srcType](PublishInfo::Parameters &p) {
 								p.info = subscriber.destination;
 
@@ -247,18 +270,40 @@ Coroutine BusInterface::receive() {
 	}
 }
 
-static bool writeMessage(MessageWriter &w, MessageType messageType, Message &message) {
-	switch (messageType) {
-	case MessageType::OFF_ON_IN:
-	case MessageType::OFF_ON_TOGGLE_IN:
-	case MessageType::TRIGGER_IN:
-	case MessageType::UP_DOWN_IN:
-	case MessageType::OPEN_CLOSE_IN:
-		w.u8(message.command);
+static bool writeMessage(MessageWriter &w, MessageType2 type, Message2 &message) {
+	switch (type & MessageType2::CATEGORY) {
+	case bus::EndpointType2::SWITCH:
+		w.u8(message.value.u8);
 		break;
-	case MessageType::LEVEL_IN:
-		w.u8(clamp(int(message.value.f * 255.0f + 0.5f), 0, 255));
+	case MessageType2::MULTISTATE:
+		// todo
 		break;
+	case MessageType2::LEVEL:
+		w.u16L(clamp(int(message.value.f * 65535.0f + 0.5f), 0, 65535));
+		if ((type & MessageType2::CMD) != 0)
+			w.u8(message.command);
+		break;
+	case MessageType2::PHYSICAL:
+	case MessageType2::CONCENTRATION:
+		w.f32L(message.value.f);
+		if ((type & MessageType2::CMD) != 0)
+			w.u8(message.command);
+		break;
+	case MessageType2::LIGHTING: {
+		float value = message.value.f;
+		if ((type & MessageType2::LIGHTING_CATEGORY) != MessageType2::LIGHTING_COLOR_TEMPERATURE)
+			value *= 65535.0f;
+		w.u16L(clamp(int(value + 0.5f), 0, 65535));
+		if ((type & MessageType2::CMD) != 0) {
+			w.u8(message.command);
+			w.u16L(message.transition);
+		}
+		break;
+	}
+	case MessageType2::METERING:
+		// todo
+		break;
+/*
 	case MessageType::SET_LEVEL_IN:
 	case MessageType::MOVE_TO_LEVEL_IN:
 		w.e8<bus::LevelControlCommand>(bus::LevelControlCommand(message.command));
@@ -279,6 +324,7 @@ static bool writeMessage(MessageWriter &w, MessageType messageType, Message &mes
 		w.e8<bus::LevelControlCommand>(bus::LevelControlCommand(message.command));
 		w.u16L(clamp(int(message.value.f * 20.0f + 0.5f), 0, 65535));
 		break;
+*/
 	default:
 		// not supported
 		return false;
@@ -291,8 +337,8 @@ Coroutine BusInterface::publish() {
 	uint8_t inMessage[maxMessageLength];
 	while (true) {
 		// wait for message
-		MessageInfo info;
-		Message message;
+		MessageInfo2 info;
+		Message2 message;
 		co_await this->publishBarrier.wait(info, &message);
 
 		// find destination device
@@ -304,7 +350,7 @@ Coroutine BusInterface::publish() {
 			uint8_t endpointIndex = info.device.endpointIndex;
 			if (endpointIndex >= device->endpointCount)
 				break;
-			MessageType messageType = device->endpoints[endpointIndex];
+			auto messageType = device->endpoints[endpointIndex];
 
 			// check if it is an output
 			if (isInput(messageType)) {
@@ -366,7 +412,7 @@ Coroutine BusInterface::publish() {
 // BusInterface::DeviceFlash
 
 int BusInterface::DeviceFlash::size() const {
-	return getOffset(DeviceFlash, endpoints[this->endpointCount]);
+	return offsetOf(DeviceFlash, endpoints[this->endpointCount]);
 }
 
 BusInterface::BusDevice *BusInterface::DeviceFlash::allocate() const {
@@ -392,7 +438,7 @@ void BusInterface::BusDevice::setName(String name) {
 
 }
 
-Array<MessageType const> BusInterface::BusDevice::getEndpoints() const {
+Array<MessageType2 const> BusInterface::BusDevice::getEndpoints() const {
 	auto &flash = **this;
 	return {flash.endpointCount, flash.endpoints};
 }

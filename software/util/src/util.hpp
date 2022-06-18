@@ -3,14 +3,17 @@
 #include "Array.hpp"
 #include <stdint.h>
 
-#define getOffset(Type, member) intptr_t(&((Type*)nullptr)->member)
+#define offsetOf(Type, member) intptr_t(&((Type*)nullptr)->member)
 
 using uint = unsigned int;
 
 //constexpr int abs(int x) {return x >= 0 ? x : -x;}
 
 constexpr int min(int x, int y) {return x < y ? x : y;}
+constexpr float min(float x, float y) {return x < y ? x : y;}
+
 constexpr int max(int x, int y) {return x > y ? x : y;}
+constexpr float max(float x, float y) {return x > y ? x : y;}
 
 constexpr int clamp(int x, int lo, int hi) {return x < lo ? lo : (x > hi ? hi : x);}
 constexpr float clamp(float x, float lo, float hi) {return x < lo ? lo : (x > hi ? hi : x);}

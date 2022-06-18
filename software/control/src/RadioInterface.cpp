@@ -42,7 +42,7 @@ enum class Mode : uint8_t {
 
 struct EndpointInfo {
 	// endpoint type as exposed in Interface
-	MessageType messageType;
+	MessageType2 messageType;
 
 	// role of cluster (client/output or server/input)
 	Role role;
@@ -61,7 +61,7 @@ struct EndpointInfo {
 EndpointInfo const endpointInfos[] {
 	// battery percentage 0-100% in 0.5% steps, i.e. value is 0-200
 	{
-		MessageType::BATTERY_LEVEL_OUT,
+		MessageType2::LEVEL_BATTERY_OUT,
 		Role::SERVER,
 		zb::ZclCluster::POWER_CONFIGURATION,
 		Mode::ATTRIBUTE,
@@ -70,7 +70,7 @@ EndpointInfo const endpointInfos[] {
 
 	// wall switch (sends on/off commands, needs binding)
 	{
-		MessageType::OFF_ON_TOGGLE_OUT,
+		MessageType2::SWITCH_BINARY_ON_OFF_CMD_OUT,
 		Role::CLIENT,
 		zb::ZclCluster::ON_OFF,
 		Mode::COMMAND
@@ -78,7 +78,7 @@ EndpointInfo const endpointInfos[] {
 
 	// power on/off, e.g. light bulb, switchable socket (receives on/off commands)
 	{
-		MessageType::OFF_ON_TOGGLE_IN,
+		MessageType2::SWITCH_BINARY_ON_OFF_CMD_IN,
 		Role::SERVER,
 		zb::ZclCluster::ON_OFF,
 		Mode::COMMAND
@@ -86,7 +86,7 @@ EndpointInfo const endpointInfos[] {
 
 	// level, e.g. brightness of light bulb
 	{
-		MessageType::MOVE_TO_LEVEL_IN,
+		MessageType2::LIGHTING_BRIGHTNESS_CMD_IN,
 		Role::SERVER,
 		zb::ZclCluster::LEVEL_CONTROL,
 		Mode::COMMAND
@@ -560,7 +560,7 @@ void RadioInterface::writeApsAckZcl(PacketWriter &w, uint8_t destinationEndpoint
 
 
 bool writeZclClusterSpecific(RadioInterface::PacketWriter &w, uint8_t zclCounter, EndpointInfo const &info,
-	MessageType messageType, Message &message)
+	MessageType2 messageType, Message2 &message)
 {
 	// zbee cluster library frame
 	w.e8(zb::ZclFrameControl::TYPE_CLUSTER_SPECIFIC
@@ -788,29 +788,28 @@ Coroutine RadioInterface::sendBeacon() {
 	}
 }
 
-static bool handleZclClusterSpecific(MessageType dstType, void *dstMessage, EndpointInfo const &info, MessageReader r,
+static bool handleZclClusterSpecific(MessageType2 dstType, void *dstMessage, EndpointInfo const &info, MessageReader r,
 	ConvertOptions const &convertOptions)
 {
 	// get command
 	uint8_t command = r.u8();
 
-	Message &dst = *reinterpret_cast<Message *>(dstMessage);
+	auto &dst = *reinterpret_cast<Message2 *>(dstMessage);
 	switch (info.cluster) {
 	case zb::ZclCluster::ON_OFF:
-		return convertCommand(dstType, dst, command, convertOptions);
+		return convertSwitch(dstType, dst, command, convertOptions);
 	case zb::ZclCluster::LEVEL_CONTROL: {
-		Message level;
-		level.command = 0;
+		uint8_t command = 0;
 		switch (zb::ZclLevelControlCommand(command)) {
 		case zb::ZclLevelControlCommand::STEP:
 		case zb::ZclLevelControlCommand::STEP_WITH_ON_OFF:
-			level.command = r.u8() == 0 ? 1 : 2; // increase/decrease
+			command = r.u8() == 0 ? 1 : 2; // increase/decrease
 			// fall through
 		case zb::ZclLevelControlCommand::MOVE_TO_LEVEL:
 		case zb::ZclLevelControlCommand::MOVE_TO_LEVEL_WITH_ON_OFF: {
-			level.value.f = float(r.u8()) / 254.0f;
-			level.transition = r.u16L(); // transition time in 1/10 s
-			return convertSetFloatValue(dstType, dst, MessageType::MOVE_TO_LEVEL_OUT, level, convertOptions);
+			float value = float(r.u8()) / 254.0f;
+			uint16_t transition = r.u16L(); // transition time in 1/10 s
+			return convertFloatTransition(dstType, dst, value, command, transition, convertOptions);
 		}
 		default:
 			// conversion failed
@@ -1847,8 +1846,8 @@ void RadioInterface::handleGp(uint8_t const *mac, PacketReader &r) {
 					subscriber.barrier->resumeFirst([&subscriber, message] (PublishInfo::Parameters &p) {
 						p.info = subscriber.destination;
 
-						auto &dst = *reinterpret_cast<Message *>(p.message);
-						return convertCommand(subscriber.destination.type, dst, message, subscriber.convertOptions);
+						auto &dst = *reinterpret_cast<Message2 *>(p.message);
+						return convertSwitch(subscriber.destination.type, dst, message, subscriber.convertOptions);
 					});
 				}
 			}
@@ -1876,16 +1875,16 @@ void RadioInterface::handleGpCommission(uint32_t deviceId, PacketReader& r) {
 	switch (flash.deviceType) {
 	case 0x02:
 		// switch, PTM215Z ("friends of hue")
-		flash.endpoints[0] = MessageType ::UP_DOWN_OUT;
-		flash.endpoints[1] = MessageType::UP_DOWN_OUT;
-		flash.endpoints[2] = MessageType::UP_DOWN_OUT;
+		flash.endpoints[0] = MessageType2::SWITCH_TERNARY_ONESHOT_ROCKER_OUT;//UP_DOWN_OUT;
+		flash.endpoints[1] = MessageType2::SWITCH_TERNARY_ONESHOT_ROCKER_OUT;
+		flash.endpoints[2] = MessageType2::SWITCH_TERNARY_ONESHOT_ROCKER_OUT;
 		flash.endpointCount = 3;
 		break;
 	case 0x07:
 		// generic switch, PTM216Z
-		flash.endpoints[0] = MessageType::UP_DOWN_OUT;
-		flash.endpoints[1] = MessageType::UP_DOWN_OUT;
-		flash.endpoints[2] = MessageType::UP_DOWN_OUT;
+		flash.endpoints[0] = MessageType2::SWITCH_TERNARY_ONESHOT_ROCKER_OUT;
+		flash.endpoints[1] = MessageType2::SWITCH_TERNARY_ONESHOT_ROCKER_OUT;
+		flash.endpoints[2] = MessageType2::SWITCH_TERNARY_ONESHOT_ROCKER_OUT;
 		flash.endpointCount = 3;
 		break;
 	default:
@@ -2247,8 +2246,8 @@ Terminal::out << ("Endpoint Descriptor " + dec(endpoint) + " Status " + dec(stat
 
 	// check some endpoints if they are available, e.g. battery percentage
 	for (int i = 0; i < endpointCount; ++i) {
-		auto messageType = MessageType(flash.endpoints[i]);
-		if (messageType == MessageType::BATTERY_LEVEL_OUT) {
+		auto messageType = MessageType2(flash.endpoints[i]);
+		if (messageType == MessageType2::LEVEL_BATTERY_OUT) {
 			uint8_t index = flash.endpoints[ZbDeviceFlash::MAX_ENDPOINT_COUNT + i * 2];
 			auto const &info = endpointInfos[index];
 			uint8_t endpoint = flash.endpoints[ZbDeviceFlash::MAX_ENDPOINT_COUNT + i * 2 + 1];
@@ -2313,7 +2312,7 @@ Terminal::out << ("Power Source Attribute Status " + dec(status) + " Source " + 
 
 	// bind endpoints that send a command (e.g. on/off cluster of a wall switch)
 	for (int i = 0; i < endpointCount; ++i) {
-		auto messageType = MessageType(flash.endpoints[i]);
+		auto messageType = MessageType2(flash.endpoints[i]);
 		EndpointInfo const &info = endpointInfos[flash.endpoints[ZbDeviceFlash::MAX_ENDPOINT_COUNT + i * 2]];
 		uint8_t endpoint = flash.endpoints[ZbDeviceFlash::MAX_ENDPOINT_COUNT + i * 2 + 1];
 
@@ -2409,8 +2408,8 @@ Coroutine RadioInterface::publish() {
 	uint8_t packet[64];
 	while (true) {
 		// wait for message
-		MessageInfo info;
-		Message message;
+		MessageInfo2 info;
+		Message2 message;
 		co_await this->publishBarrier.wait(info, &message);
 
 		// find destination device
@@ -2422,7 +2421,7 @@ Coroutine RadioInterface::publish() {
 			uint8_t endpointIndex = info.device.endpointIndex;
 			if (endpointIndex >= device->endpointCount)
 				break;
-			MessageType messageType = MessageType(device->endpoints[endpointIndex]);
+			auto messageType = MessageType2(device->endpoints[endpointIndex]);
 			uint8_t const *p = device->getEndpointIndices() + endpointIndex;
 			EndpointInfo const &endpointInfo = endpointInfos[p[0]];
 			uint8_t zbEndpointIndex = p[1];
@@ -2555,7 +2554,7 @@ Coroutine RadioInterface::publish() {
 // RadioInterface::GpDeviceFlash
 
 int RadioInterface::GpDeviceFlash::size() const {
-	return getOffset(GpDeviceFlash, endpoints[this->endpointCount]);
+	return offsetOf(GpDeviceFlash, endpoints[this->endpointCount]);
 }
 
 RadioInterface::GpDevice *RadioInterface::GpDeviceFlash::allocate() const {
@@ -2580,7 +2579,7 @@ void RadioInterface::GpDevice::setName(String name) {
 
 }
 
-Array<MessageType const> RadioInterface::GpDevice::getEndpoints() const {
+Array<MessageType2 const> RadioInterface::GpDevice::getEndpoints() const {
 	auto &flash = **this;
 	return {flash.endpointCount, flash.endpoints};
 }
@@ -2603,7 +2602,7 @@ PublishInfo RadioInterface::GpDevice::getPublishInfo(uint8_t endpointIndex) {
 // RadioInterface::ZbDeviceFlash
 
 int RadioInterface::ZbDeviceFlash::size() const {
-	return getOffset(ZbDeviceFlash, endpoints[this->endpointCount * 3]);
+	return offsetOf(ZbDeviceFlash, endpoints[this->endpointCount * 3]);
 }
 
 RadioInterface::ZbDevice *RadioInterface::ZbDeviceFlash::allocate() const {
@@ -2628,9 +2627,9 @@ void RadioInterface::ZbDevice::setName(String name) {
 
 }
 
-Array<MessageType const> RadioInterface::ZbDevice::getEndpoints() const {
+Array<MessageType2 const> RadioInterface::ZbDevice::getEndpoints() const {
 	auto &flash = **this;
-	return {flash.endpointCount, reinterpret_cast<MessageType const*>(flash.endpoints)};
+	return {flash.endpointCount, reinterpret_cast<MessageType2 const*>(flash.endpoints)};
 }
 
 void RadioInterface::ZbDevice::subscribe(uint8_t endpointIndex, Subscriber &subscriber) {
@@ -2643,7 +2642,7 @@ PublishInfo RadioInterface::ZbDevice::getPublishInfo(uint8_t endpointIndex) {
 	auto &flash = **this;
 	if (endpointIndex >= flash.endpointCount)
 		return {};
-	auto endpoints = reinterpret_cast<MessageType const*>(flash.endpoints);
+	auto endpoints = reinterpret_cast<MessageType2 const*>(flash.endpoints);
 	return {{.type = endpoints[endpointIndex], .device = {flash.interfaceId, endpointIndex}},
 		&this->interface->publishBarrier};
 }

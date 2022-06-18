@@ -51,7 +51,7 @@ public:
 		 * Get endpoints (message type for each endpoint)
 		 * @return array of endpoints
 		 */
-		virtual Array<MessageType const> getEndpoints() const = 0;
+		virtual Array<MessageType2 const> getEndpoints() const = 0;
 
 		/**
 		 * Subscribe to receive messages messages from an endpoint

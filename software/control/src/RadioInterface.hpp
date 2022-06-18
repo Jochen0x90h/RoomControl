@@ -89,7 +89,7 @@ private:
 		uint8_t endpointCount;
 
 		// endpoint types
-		MessageType endpoints[MAX_ENDPOINT_COUNT];
+		MessageType2 endpoints[MAX_ENDPOINT_COUNT];
 
 		// note: endpoints must be the last member
 
@@ -114,7 +114,7 @@ private:
 		uint8_t getId() const override;
 		String getName() const override;
 		void setName(String name) override;
-		Array<MessageType const> getEndpoints() const override;
+		Array<MessageType2 const> getEndpoints() const override;
 		void subscribe(uint8_t endpointIndex, Subscriber &subscriber) override;
 		PublishInfo getPublishInfo(uint8_t endpointIndex) override;
 
@@ -182,7 +182,7 @@ private:
 		uint8_t getId() const override;
 		String getName() const override;
 		void setName(String name) override;
-		Array<MessageType const> getEndpoints() const override;
+		Array<MessageType2 const> getEndpoints() const override;
 		void subscribe(uint8_t endpointIndex, Subscriber &subscriber) override;
 		PublishInfo getPublishInfo(uint8_t endpointIndex) override;
 
@@ -287,10 +287,10 @@ public:
 	class PacketWriter : public EncryptWriter {
 	public:
 		/**
-		 * Construct on radio packet where the length (including 2 byte crc) is in the first byte
+		 * Construct on radio packet where the length is in the first byte
 		 */
 		template <int N>
-		PacketWriter(uint8_t (&packet)[N]) : EncryptWriter(packet + 1), begin(packet)
+		PacketWriter(uint8_t (&packet)[N]) : EncryptWriter(packet + 1)
 #ifdef EMU
 			, end(packet + N)
 #endif
@@ -327,18 +327,17 @@ public:
 		}
 
 		/**
-		 * Set send flags and length of packet
+		 * Set send flags behind packet and length of packet to first byte (including 2 byte for crc)
 		 */
 		void finish(Radio::SendFlags sendFlags) {
 #ifdef EMU
 			assert(this->current < this->end - 1);
 #endif
 			*this->current = uint8_t(sendFlags);
-			this->begin[0] = this->current - (this->begin + 1) + 2; // + 2 for crc added by hardware
+			this->begin[-1] = (this->current - this->begin) + 2; // + 2 for crc added by hardware
 		}
 
 	protected:
-		uint8_t *begin;
 #ifdef EMU
 		uint8_t *end;
 #endif
