@@ -111,13 +111,12 @@ endif()
 # enable coroutines
 # enable concepts
 # suppress warning for own s and ms literal operators that are used instad of those in std::chrono
-# suppress warning for switch case labels outside of enumeration range (for "flags enum")
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
 	# clang
 	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fcoroutines-ts -Wno-user-defined-literals")
 else()
 	# gcc
-	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fcoroutines -fconcepts -Wno-literal-suffix -Wno-switch")
+	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fcoroutines -fconcepts -Wno-literal-suffix")
 endif()
 
 
@@ -737,6 +736,25 @@ target_include_directories(systemTest
 target_link_libraries(systemTest ${LIBRARIES})
 add_test(NAME systemTest
 	COMMAND systemTest --gtest_output=xml:report.xml
+	#WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/../testdata
+)
+
+# node test
+add_executable(nodeTest
+	node/test/nodeTest.cpp
+	${UTIL}
+	node/src/Message.cpp
+	node/src/Message.hpp
+)
+target_include_directories(nodeTest
+	PRIVATE
+	node/src
+	protocol/src
+	util/src
+)
+target_link_libraries(nodeTest ${LIBRARIES})
+add_test(NAME nodeTest
+	COMMAND nodeTest --gtest_output=xml:report.xml
 	#WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/../testdata
 )
 

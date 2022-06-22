@@ -633,11 +633,11 @@ void handleAps(PacketReader &r, uint8_t const *extendedSource) {
 			{
 				Terminal::out << "Transport Key\n";
 				auto keyType = r.e8<zb::StandardKeyType>();
-				auto key = r.data<16>();
+				auto key = r.data8<16>();
 				if (keyType == zb::StandardKeyType::NETWORK)
 					uint8_t keySequenceNumber = r.u8();
-				auto extendedDestination = r.data<8>();
-				auto extendedSource = r.data<8>();
+				auto extendedDestination = r.data8<8>();
+				auto extendedSource = r.data8<8>();
 
 				// set key
 				switch (keyType) {
@@ -1146,7 +1146,7 @@ int main(int argc, char const *argv[]) {
 				Packet packet;
 				while (fread(&packet.header, sizeof(pcap::PacketHeader), 1, file) == 1) {
 					// read packet data
-					int len = min(packet.header.incl_len, sizeof(packet.data));
+					int len = min(packet.header.incl_len, int(sizeof(packet.data)));
 					if (fread(packet.data, 1, len, file) < packet.header.incl_len)
 						break;
 

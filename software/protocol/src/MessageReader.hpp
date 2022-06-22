@@ -77,6 +77,15 @@ public:
 		return value;
 	}
 
+	float f32L() {
+		union Value {
+			uint32_t i;
+			float f;
+		};
+		Value v = {.i = u32L()};
+		return v.f;
+	}
+
 	uint64_t u64L() {
 		auto lo = uint64_t(u32L());
 		return lo | (uint64_t(u32L()) << 32);
@@ -85,6 +94,27 @@ public:
 	uint64_t u64B() {
 		auto hi = uint64_t(u32B()) << 32;
 		return hi | uint64_t(u32B());
+	}
+
+	/**
+	 * Read a buffer with given length
+	 * @tparam N length of buffer
+	 * @return buffer
+	 */
+	template <int N>
+	Array<uint8_t const, N> data8() {
+		auto ar = this->current;
+		this->current += N;
+		return Array<uint8_t const, N>(ar);
+	}
+
+	template <typename T>
+	void data16L(int count, T *data) {
+		for (int i = 0; i < count; ++i) {
+			uint16_t value = this->current[i * 2] | (this->current[i * 2 + 1] << 8);
+			data[i] = T(value);
+		}
+		this->current += count * 2;
 	}
 
 	/**
@@ -106,18 +136,6 @@ public:
 		auto str = this->current;
 		this->current += length;
 		return {length, str};
-	}
-
-	/**
-	 * Read a buffer with given length
-	 * @tparam N length of buffer
-	 * @return buffer
-	 */
-	template <int N>
-	Array<uint8_t const, N> data() {
-		auto ar = this->current;
-		this->current += N;
-		return Array<uint8_t const, N>(ar);
 	}
 
 	/**

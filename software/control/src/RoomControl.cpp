@@ -20,6 +20,7 @@
 constexpr String weekdaysLong[7] = {"Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"};
 constexpr String weekdaysShort[7] = {"M", "T", "W", "T", "F", "S", "S"};
 
+/*
 static String const commandNames[] = {"off", "on", "toggle", "release", "trigger", "up", "down","open", "close",
 	"set", "add", "sub", ">", "<", "else"};
 static uint8_t const onOffCommands[] = {0, 1};
@@ -31,28 +32,45 @@ static uint8_t const setCommands[] = {9, 10, 11};
 static uint8_t const compareCommands[] = {12, 13, 14};
 
 static Array<uint8_t const> switchCommands[] = {onOffCommands, onOffToggleCommands, triggerCommands, upDownCommands, openCloseCommands};
+*/
+
+static String const releasedPressed[] = {"released", "pressed"};
+static String const offOnToggle[] = {"off", "on", "toggle"};
+static String const closedOpenToggle[] = {"close", "open", "toggle"};
+static String const lockedToggle[] = {"unlocked", "locked", "toggle"};
+static String const occupancy[] = {"unoccupied", "occupied"};
+static String const activation[] = {"deactivated", "activated"};
+static String const enabled[] = {"disabled", "enabled"};
+
+static String const offOn1On2[] = {"off", "on1", "on2"};
+static String const releasedUpDown[] = {"released", "up", "down"};
+static String const stoppedOpeningClosing[] = {"stopped", "opening", "closing"};
+static String const unlockedTiltLocked[] = {"unlocked", "tilt", "locked"};
+
+static String const compareOperators[] = {">", "<", "else"};
+static String const commands[] = {"set", "add", "sub"};
 
 // functions
 
 // function plugs
 static RoomControl::Plug const switchPlugs[] = {
-	{"Switch", MessageType::OFF_ON_TOGGLE_IN},
-	{"Switch", MessageType::OFF_ON_OUT}};
+	{"Power", MessageType::BINARY_POWER_LIGHT_CMD_IN},
+	{"Power", MessageType::BINARY_POWER_LIGHT_OUT}};
 static RoomControl::Plug const blindPlugs[] = {
-	{"Up/Down", MessageType::UP_DOWN_IN},
-	{"Trigger", MessageType::TRIGGER_IN},
-	{"Position", MessageType::SET_LEVEL_IN},
-	{"Enable Down", MessageType::OFF_ON_IN},
-	{"Up/Down", MessageType::UP_DOWN_OUT},
-	{"Position", MessageType::LEVEL_OUT}};
+	{"Up/Down",     MessageType::TERNARY_BUTTON_IN},
+	{"Trigger",     MessageType::BINARY_BUTTON_IN},
+	{"Position",    MessageType::LEVEL_OPEN_BLIND_CMD_IN},
+	{"Enable Down", MessageType::BINARY_ENABLE_CLOSE_IN},
+	{"Open/Close",  MessageType::TERNARY_OPENING_BLIND_OUT}, // stop/opening/closing
+	{"Position",    MessageType::LEVEL_OPEN_BLIND_OUT}};
 static RoomControl::Plug const heatingControlPlugs[] = {
-	{"On/Off", MessageType::OFF_ON_TOGGLE_IN},
-	{"Night", MessageType::OFF_ON_TOGGLE_IN},
-	{"Summer", MessageType::OFF_ON_TOGGLE_IN},
-	{"Windows", MessageType::OPEN_CLOSE_IN},
-	{"Set Temperature", MessageType::SET_AIR_TEMPERATURE_IN},
-	{"Temperature Sensor", MessageType::AIR_TEMPERATURE_IN},
-	{"Valve", MessageType::OFF_ON_OUT},
+	{"On/Off",             MessageType::BINARY_POWER_AC_CMD_IN},
+	{"Night",              MessageType::BINARY_IN},
+	{"Summer",             MessageType::BINARY_IN},
+	{"Windows",            MessageType::BINARY_OPEN_WINDOW_IN},
+	{"Set Temperature",    MessageType::PHYSICAL_TEMPERATURE_SETPOINT_HEATER_CMD_IN},
+	{"Temperature Sensor", MessageType::PHYSICAL_TEMPERATURE_MEASURED_ROOM_IN},
+	{"Valve",              MessageType::BINARY_OPEN_VALVE_OUT},
 };
 
 struct FunctionInfo {
@@ -67,14 +85,14 @@ struct FunctionInfo {
 // function infos (must be sorted by type)
 static FunctionInfo const functionInfos[] = {
 	{
-			"Switch",
+			"Light",
 			RoomControl::FunctionFlash::Type::SIMPLE_SWITCH,
 			RoomControl::FunctionFlash::TypeClass::SWITCH,
 			0,
 			switchPlugs
 		},
 	{
-			"Timeout Switch",
+			"Timeout Light",
 			RoomControl::FunctionFlash::Type::TIMEOUT_SWITCH,
 			RoomControl::FunctionFlash::TypeClass::SWITCH,
 			sizeof(RoomControl::TimeoutSwitch::Config),
@@ -178,1563 +196,6 @@ void RoomControl::applyConfiguration() {
 }
 
 
-
-/*
-// todo don't register all topics in one go, message buffer may overflow
-void RoomControl::subscribeAll() {
-	
-	// register/subscribe room topics
-	auto const &configuration = *this->configurations[0];
-	
-	// house topic (room name is published when empty message is received on this topic)
-	TopicBuffer topic;
-	subscribeTopic(this->houseTopicId, topic.enumeration(), QOS);
-
-	// toom topic (device names are published when empty message is received on this topic)
-	topic /= configuration.name;
-	subscribeTopic(this->roomTopicId, topic.enumeration(), QOS);
-
-
-	// register/subscribe device topics
-	for (int i = 0; i < this->localDevices.size(); ++i) {
-		subscribeDevice(this->localDevices[i]);
-	}
-	for (int i = 0; i < this->busDevices.size(); ++i) {
-		subscribeDevice(this->busDevices[i]);
-	}
-
-	// register routes
-	for (int i = 0; i < this->routes.size(); ++i) {
-		subscribeRoute(i);
-	}
-
-	// register timers
-	for (int i = 0; i < this->timers.size(); ++i) {
-		subscribeTimer(i);
-	}
-}
-
-
-// Devices
-// -------
-
-Plus<String, Dec<uint8_t>> RoomControl::Device::Component::getName() const {
-	//return componentInfos[this->type].shortName + dec(this->endpointIndex) + ('a' + this->componentIndex);
-	uint8_t shortNameIndex = componentInfos[this->type].shortNameIndex;
-	return componentShortNames[shortNameIndex] + dec(this->nameIndex);
-}
-
-void RoomControl::Device::Component::init(EndpointType endpointType) {
-/ *	auto type = Device::Component::BUTTON;
-	
-	int i = array::size(componentInfos);
-	while (i > 0 && !isCompatible(endpointType, type)) {
-		--i;
-		int t = type + 1;
-		type = Device::Component::Type(t % array::size(componentInfos));
-	}
-	
-	int newSize = componentInfos[type].component.size;
-	auto dst = reinterpret_cast<uint32_t *>(this);
-	array::fill(dst, dst + newSize, 0);
-
-	this->type = type;* /
-}
-
-void RoomControl::Device::Component::rotateType(EndpointType endpointType, int delta) {
-/ *	auto type = this->type;
-	int oldSize = componentInfos[type].component.size;
-	
-	int dir = delta >= 0 ? 1 : -1;
-	int i = array::size(componentInfos);
-	while (delta != 0) {
-		delta -= dir;
-		do {
-			--i;
-			int t = type + dir;
-			type = Device::Component::Type((t + array::size(componentInfos)) % array::size(componentInfos));
-		} while (i > 0 && !isCompatible(endpointType, type));
-	}
-	this->type = type;
-	int newSize = componentInfos[type].component.size;
-	
-	if (newSize > oldSize) {
-		auto dst = reinterpret_cast<uint32_t *>(this) + oldSize;
-		array::fill(dst, dst + (newSize - oldSize), 0);
-	}* /
-}
-
-bool RoomControl::Device::Component::checkClass(uint8_t classFlags) const {
-	return (componentInfos[this->type].component.classFlags & classFlags) == classFlags;
-}
-
-int RoomControl::Device::getFlashSize() const {
-	// flash size of name and elements
-	uint32_t const *flash = this->buffer;
-	int size = 0;
-	for (int i = 0; i < this->componentCount; ++i) {
-		auto type = reinterpret_cast<Device::Component const *>(flash + size)->type;
-		size += componentInfos[type].component.size;
-	}
-	return getOffset(Device, buffer[size]);
-}
-
-int RoomControl::Device::getRamSize() const {
-	// ram size of elements
-	uint32_t const *flash = this->buffer;
-	int size = 0;
-	for (int i = 0; i < this->componentCount; ++i) {
-		auto type = reinterpret_cast<Device::Component const *>(flash)->type;
-		flash += componentInfos[type].component.size;
-		size += componentInfos[type].state.size;
-	}
-	return getOffset(DeviceState, buffer[size]);
-}
-
-void RoomControl::Device::setName(String name) {
-	assign(this->name, name);
-}
-
-uint8_t RoomControl::Device::getNameIndex(Component::Type type, int skipComponentIndex) const {
-	// set of already used name indices
-	uint32_t usedSet = 0;
-	
-	uint8_t shortNameIndex = componentInfos[type].shortNameIndex;
-	
-	uint32_t const *flash = this->buffer;
-	for (int i = 0; i < this->componentCount; ++i) {
-		auto &component = *reinterpret_cast<Component const *>(flash);
-		auto &componentInfo = componentInfos[component.type];
-		if (i != skipComponentIndex) {
-			if (componentInfo.shortNameIndex == shortNameIndex)
-				usedSet |= 1 << component.nameIndex;
-		}
-		flash += componentInfo.component.size;
-	}
-	
-	// find first unused name index
-	for (int i = 0; i < 32; ++i) {
-		if (((usedSet >> i) & 1) == 0)
-			return i;
-	}
-	return 0;
-}
-
-
-bool RoomControl::DeviceState::Component::checkClass(Device::Component::Type type, uint8_t classFlags) const {
-	return (componentInfos[type].state.classFlags & classFlags) == classFlags;
-}
-
-void RoomControl::subscribeDevice(Storage::Element<Device, DeviceState> e) {
-	Device const &device = *e.flash;
-	DeviceState &deviceState = *e.ram;
-
-	// subscribe to device topic (enum/<room>/<device>)
-	TopicBuffer topic = getRoomName() / device.getName();
-	subscribeTopic(deviceState.deviceTopicId, topic.enumeration(), QOS);
-
-	// iterate over device components
-	ComponentIterator it(device, deviceState);
-	while (!it.atEnd()) {
-		auto &component = it.getComponent();
-		auto &state = it.getState();
-		
-		// append component topic
-		StringBuffer<8> b = component.getName();
-		topic /= b;
-		
-		// register status topic (stat/<room>/<device>/<component>)
-		registerTopic(state.statusTopicId, topic.state());
-
-		// check if component has a command topic
-		if (state.is<DeviceState::CommandComponent>(component)) {
-			// subscribe to command topic (cmnd/<room>/<device>/<component>)
-			auto &commandComponentState = state.cast<DeviceState::CommandComponent>();
-			subscribeTopic(commandComponentState.commandTopicId, topic.command(), QOS);
-		}
-		
-		topic.removeLast();
-		it.next();
-	}
-}
-
-SystemTime RoomControl::updateDevices(SystemTime time,
-	uint8_t localEndpointId, uint8_t busEndpointId, uint8_t radioEndpointId, uint8_t const *data,
-	uint16_t topicId, String message)
-{
-	// get duration since last update
-	SystemDuration duration = time - this->lastUpdateTime;
-	this->lastUpdateTime = time;
-
-	// flag that indicates if changing values (e.g. moving blind) should be reported
-	bool reportChanging = time >= this->nextReportTime;
-	if (reportChanging) {
-		// publish changing values in a regular interval
-		this->nextReportTime = time + 1s;
-		//std::cout << "report" << std::endl;
-	}
-
-	// next timeout, may be decreased by a device that needs earlier timeout
-	SystemTime nextTimeout = this->nextReportTime;
-
-	//nextTimeout = updateDevices(time, duration, reportChanging, this->localInterface, this->localDevices,
-	//	localEndpointId, data, topicId, message, nextTimeout);
-//	nextTimeout = updateDevices(time, duration, reportChanging, this->busInterface, this->busDevices,
-//		busEndpointId, data, topicId, message, nextTimeout);
-//	nextTimeout = updateDevices(time, duration, reportChanging, this->radioInterface, this->radioDevices,
-//		radioEndpointId, data, topicId, message, nextTimeout);
-
-	return nextTimeout;
-}*/
-/*
-SystemTime RoomControl::updateDevices(SystemTime time, SystemDuration duration, bool reportChanging,
-	Interface &interface, Storage::Array<Device, DeviceState> &devices, uint8_t endpointId, uint8_t const *data,
-	uint16_t topicId, String message, SystemTime nextTimeout)
-{
-	// iterate over devices
-	int deviceCount = devices.size();
-	int extendedCount = deviceCount + (this->tempFor == &devices ? 1 : 0);
-	for (int deviceIndex = 0; deviceIndex < extendedCount; ++deviceIndex) {
-		// check if there is a device being edited
-		Storage::Element<Device, DeviceState> e;
-		if (deviceIndex == deviceCount || this->tempFor == devices[deviceIndex].flash)
-			e = {&this->temp.device, &this->tempState.device};
-		else
-			e = devices[deviceIndex];
-		Device const &device = *e.flash;
-		DeviceState &deviceState = *e.ram;
-
-		// check for request to list attributes in this device
-		if (topicId == deviceState.deviceTopicId && message.isEmpty()) {
-			for (ComponentIterator it(device, deviceState); !it.atEnd(); it.next()) {
-				auto &component = it.getComponent();
-				StringBuffer<8> b = component.getName();
-				b += ' ';
-				b += componentInfos[component.type].hasCommand ? 'c' : 's';
-				publish(deviceState.deviceTopicId, b, QOS);
-			}
-		}
-		
-		// output data to send to a device endpoint
-		uint8_t outValid = false;
-		uint8_t outData[8] = {};
-
-		// iterate over device elements
-		ComponentIterator it(device, deviceState);
-		while (!it.atEnd()) {
-			auto &component = it.getComponent();
-			auto &state = it.getState();
-			
-			// check if we have data from device or output data (that can be used as input by button/switch components)
-			uint8_t const *d = endpointId == state.endpointId ? data : (outValid ? outData : nullptr);
-			
-			switch (component.type) {
-			case Device::Component::BUTTON:
-				if (d != nullptr) {
-					//std::cout << "button1 " << int(data[0]) << " " << int(d[0]) << std::endl;
-					// get button state
-					uint8_t value = (d[0] >> component.elementIndex) & 1;
-					if (value != state.flags) {
-						state.flags = value;
-						publish(state.statusTopicId, buttonStates[value], QOS);
-					}
-					//std::cout << "button2 " << int(data[0]) << " " << int(d[0]) << std::endl;
-				}
-				break;
-			case Device::Component::HOLD_BUTTON:
-				if (d != nullptr) {
-					// get button state
-					uint8_t value = (d[0] >> component.elementIndex) & 1;
-					if (value != state.flags) {
-						state.flags = value;
-
-						auto &holdButton = component.cast<Device::HoldButton>();
-						auto &holdButtonState = state.cast<DeviceState::HoldButton>();
-						if (value != 0) {
-							// pressed: set timeout
-							holdButtonState.timeout = time + holdButton.duration;
-						} else {
-							// released: publish "stop" instead of "release" when timeout has elapsed
-							if (time >= holdButtonState.timeout)
-								value = 2;
-						}
-						publish(state.statusTopicId, buttonStates[value], QOS);
-					}
-				}
-				break;
-			case Device::Component::DELAY_BUTTON:
-				{
-					auto &delayButton = component.cast<Device::DelayButton>();
-					auto &delayButtonState = state.cast<DeviceState::DelayButton>();
-				
-					if (d != nullptr) {
-						// get button state
-						uint8_t value = (d[0] >> component.elementIndex) & 1;
-//std::cout << "delay button " << int(value) << " " << int(state.flags) << std::endl;
-std::cout << "delay button " << int(data[0]) << " " << int(d[0]) << std::endl;
-						if (value != state.flags) {
-							uint8_t pressed = state.flags & 2;
-							state.flags = value;
-
-							if (value != 0) {
-								// pressed: set timeout, but not change state yet
-								delayButtonState.timeout = time + delayButton.duration;
-								nextTimeout = min(nextTimeout, delayButtonState.timeout);
-							} else {
-								// released: publish "release" if "press" was sent
-								if (pressed != 0) {
-									publish(state.statusTopicId, buttonStates[0], QOS);
-								}
-							}
-						}
-					}
-					
-					if (state.flags == 1) {
-						// currently pressed, but timeout has not elapsed yet
-						if (time < delayButtonState.timeout) {
-							// calc next timeout
-							nextTimeout = min(nextTimeout, delayButtonState.timeout);
-						} else {
-							// timeout elapsed: set pressed flag and publish press
-							state.flags = 3;
-							publish(delayButtonState.statusTopicId, switchStates[1], QOS);
-						}
-					}
-				}
-				break;
-			case Device::Component::SWITCH:
-				if (d != nullptr) {
-					// get switch state
-					uint8_t value = (d[0] >> component.elementIndex) & 1;
-					if (value != state.flags) {
-						state.flags = value;
-						publish(state.statusTopicId, switchStates[value], QOS);
-					}
-				}
-
-				break;
-			case Device::Component::ROCKER:
-				if (d != nullptr) {
-					// get rocker state
-					uint8_t value = (d[0] >> component.elementIndex) & 3;
-					if (value != state.flags) {
-						state.flags = value;
-						publish(state.statusTopicId, rockerStates[value], QOS);
-					}
-				}
-
-				break;
-			case Device::Component::HOLD_ROCKER:
-				if (d != nullptr) {
-					// get rocker state
-					uint8_t value = (d[0] >> component.elementIndex) & 3;
-					if (value != state.flags) {
-						state.flags = value;
-
-						auto &holdRocker = component.cast<Device::HoldRocker>();
-						auto &holdRockerState = state.cast<DeviceState::HoldRocker>();
-						if (value != 0) {
-							// up or down pressed: set timeout
-							holdRockerState.timeout = time + holdRocker.duration;
-						} else {
-							// released: publish "stop" instead of "release" when timeout has elapsed
-							if (time >= holdRockerState.timeout)
-								value = 3;
-						}
-						publish(state.statusTopicId, rockerStates[value], QOS);
-					}
-				}
-				break;
-			case Device::Component::RELAY:
-			case Device::Component::TIME_RELAY:
-				{
-					auto &relayState = state.cast<DeviceState::Relay>();
-					uint8_t relay = state.flags & DeviceState::Blind::RELAY;
-					bool report  = false;
-					
-					// handle mqtt message
-					if (topicId == relayState.commandTopicId) {
-						if (message.isEmpty()) {
-							// indicate that we want to publish the current state
-							report = true;
-						} else {
-							bool on = relay != 0;
-
-							// try to parse float value
-							optional<float> value = parseFloat(message);
-							if (value != null) {
-								on = *value != 0.0f;
-								relayState.flags &= ~DeviceState::Relay::PRESSED;
-							} else {
-								char command = message.length == 1 ? message[0] : 0;
-								bool toggle = command == '^';
-								bool up = command == '+';
-								bool down = command == '-';
-								bool release = command == '#';
-								bool pressed = (relayState.flags & DeviceState::Blind::PRESSED) != 0;
-
-								if (release) {
-									// release
-									relayState.flags &= ~DeviceState::Blind::PRESSED;
-								} else if (!pressed || !(toggle || up || down)) {
-									// switch off when not pressed or unrecognized command
-									on = up || (toggle && !on);
-									relayState.flags &= ~DeviceState::Blind::PRESSED;
-								}
-							}
-							relay = uint8_t(on);
-						}
-						
-						// publish relay state if it has changed
-						if (relay != (relayState.flags & DeviceState::Relay::RELAY)) {
-							state.flags ^= DeviceState::Relay::RELAY;
-
-							// indicate we want to send the new state to the device endpoint
-							outValid = true;
-
-							// indicate that we want to publish the current state
-							report = true;
-						
-							// set timeout
-							if (relay != 0 && component.type == Device::Component::TIME_RELAY) {
-								auto &timeRelay = component.cast<Device::TimeRelay>();
-								auto &timeRelayState = state.cast<DeviceState::TimeRelay>();
-							
-								// set on timeout
-								timeRelayState.timeout = time + timeRelay.duration;
-							}
-						}
-					}
-
-					// handle timeout of time relay
-					if (relay != 0 && component.type == Device::Component::TIME_RELAY) {
-						// currently on
-						auto &timeRelayState = state.cast<DeviceState::TimeRelay>();
-						if (time < timeRelayState.timeout) {
-							// calc next timeout
-							nextTimeout = min(nextTimeout, timeRelayState.timeout);
-						} else {
-							// switch off
-							timeRelayState.flags &= ~DeviceState::Blind::RELAY;
-							relay = 0;
-							
-							// indicate we want to send the new state to the device endpoint
-							outValid = true;
-
-							// indicate that we want to publish the current state
-							report = true;
-						}
-					}
-					
-					// publish current state
-					if (report)
-						publish(state.statusTopicId, switchStates[relay], QOS);
-					
-					// set current state to output data
-					outData[0] |= relay << component.elementIndex;
-				}
-				break;
-			case Device::Component::BLIND:
-				{
-					auto &blind = component.cast<Device::Blind>();
-					auto &blindState = state.cast<DeviceState::Blind>();
-					uint8_t relays = state.flags & DeviceState::Blind::RELAYS;
-					bool report = false;
-					
-					// handle topic
-					if (topicId == blindState.commandTopicId) {
-						if (message.isEmpty()) {
-							// indicate that we want to publish the current state
-							report = true;
-						} else {
-							// try to parse float value
-							optional<float> value = parseFloat(message);
-							if (value != null) {
-								// move to target position in the range [0, 1]
-								// todo: maybe prevent instant direction change
-								if (*value >= 1.0f) {
-									// move up with extra time
-									blindState.timeout = time + blind.duration - blindState.duration + 500ms;
-									relays = DeviceState::Blind::RELAY_UP;
-								} else if (*value <= 0.0f) {
-									// move down with extra time
-									blindState.timeout = time + blind.duration + 500ms;
-									relays = DeviceState::Blind::RELAY_DOWN;
-								} else {
-									// move to target position
-									SystemDuration targetDuration = blind.duration * *value;
-									if (targetDuration > blindState.duration) {
-										// move up
-										blindState.timeout = time + targetDuration - blindState.duration;
-										relays = DeviceState::Blind::RELAY_UP;
-										blindState.flags |= DeviceState::Blind::DIRECTIION_UP;
-									} else {
-										// move down
-										blindState.timeout = time + blindState.duration - targetDuration;
-										relays = DeviceState::Blind::RELAY_DOWN;
-										blindState.flags &= ~DeviceState::Blind::DIRECTIION_UP;
-									}
-								}
-								blindState.flags &= ~DeviceState::Blind::PRESSED;
-							} else {
-								char command = message.length == 1 ? message[0] : 0;
-								bool toggle = command == '^';
-								bool up = command == '+';
-								bool down = command == '-';
-								bool release = command == '#';
-								bool pressed = (blindState.flags & DeviceState::Blind::PRESSED) != 0;
-								
-								if (relays != 0) {
-									// currently moving
-									if (release) {
-										// release
-										blindState.flags &= ~DeviceState::Blind::PRESSED;
-									} else if (!pressed || !(toggle || up || down)) {
-										// stop when not pressed or unrecognized command (e.g. empty message)
-										relays = 0;
-										blindState.flags &= ~DeviceState::Blind::PRESSED;
-									}
-								} else {
-									// currently stopped: start on toggle, up and down
-									bool directionUp = (blindState.flags & DeviceState::Blind::DIRECTIION_UP) != 0;
-									if (up || (toggle && !directionUp)) {
-										// up with extra time
-										blindState.timeout = time + blind.duration - blindState.duration + 500ms;
-										relays = DeviceState::Blind::RELAY_UP;
-										blindState.flags |= DeviceState::Blind::DIRECTIION_UP | DeviceState::Blind::PRESSED;
-									} else if (down || (toggle && directionUp)) {
-										// down with extra time
-										blindState.timeout = time + blindState.duration + 500ms;
-										relays = DeviceState::Blind::RELAY_DOWN;
-										blindState.flags &= ~DeviceState::Blind::DIRECTIION_UP;
-										blindState.flags |= DeviceState::Blind::PRESSED;
-									}
-								}
-							}
-						}
-						
-						// check if state of relays has changed
-						if (relays != (state.flags & DeviceState::Blind::RELAYS)) {
-							state.flags = (state.flags & ~DeviceState::Blind::RELAYS) | relays;
-
-							// indicate we want to send the new state to the device endpoint
-							outValid = true;
-							
-							if (relays == 0) {
-								// stopped: indicate that we want to publish the current state
-								report = true;
-							}
-						}
-					}
-
-					// handle timeout if currently moving
-					if (relays != 0) {
-						if (relays & DeviceState::Blind::RELAY_UP) {
-							// currently moving up
-							blindState.duration += duration;
-							if (blindState.duration > blind.duration)
-								blindState.duration = blind.duration;
-						} else {
-							// currently moving down
-							blindState.duration -= duration;
-							if (blindState.duration < 0s)
-								blindState.duration = 0s;
-						}
-					
-						// check if run time has elapsed
-						if (time < blindState.timeout) {
-							// no: calc next timeout
-							nextTimeout = min(nextTimeout, blindState.timeout);
-						} else {
-							// yes: stop
-							blindState.flags &= ~DeviceState::Blind::RELAYS;
-							relays = 0;
-
-							// indicate we want to send the new state to the device endpoint
-							outValid = true;
-
-							// stopped: indicate that we want to publish the current state
-							report = true;
-						}
-					}
-
-					// publish current position
-					if (report || (reportChanging && relays != 0)) {
-						float pos = blindState.duration / blind.duration;
-						StringBuffer<8> b = flt(pos, 0, relays == 0 ? 3 : 2);
-						publish(state.statusTopicId, b, QOS);
-					}
-
-					// set current state to output data
-					outData[0] |= relays << component.elementIndex;
-				}
-				break;
-			case Device::Component::CELSIUS:
-				if (d != nullptr) {
-					auto &temperatureSensorState = state.cast<DeviceState::TemperatureSensor>();
-					uint16_t t = d[0] | (d[1] << 8);
-					temperatureSensorState.temperature = t;
-
-					// convert temperature from 1/20 K to 1/10 °C
-					int celsius = (t - 5463) / 2; // subtract 273.15 * 20 and divide by 2
-					StringBuffer<6> b = dec(celsius / 10) + '.' + dec((celsius + 3000) % 10);
-					publish(state.statusTopicId, b, QOS);
-				}
-				break;
-			case Device::Component::FAHRENHEIT:
-				if (d != nullptr) {
-					auto &temperatureSensorState = state.cast<DeviceState::TemperatureSensor>();
-					uint16_t t = d[0] | (d[1] << 8);
-					temperatureSensorState.temperature = t;
-
-					// convert temperature from 1/20 K to 1/10 °F
-					int fahrenheit = (t - 5463) * 9 / 10 + 320;
-					StringBuffer<6> b = dec(fahrenheit / 10) + '.' + dec((fahrenheit - 5000) % 10);
-					publish(state.statusTopicId, b, QOS);
-				}
-
-				break;
-			}
-
-			uint8_t endpointIndex = component.endpointIndex;
-			uint8_t endpointId = state.endpointId;
-			it.next();
-			if (it.atEnd() || it.getComponent().endpointIndex != endpointIndex) {
-				if (outValid) {
-					//busSend(endpointId, outData, 1);
-					interface.send(endpointId, outData, 1);
-					outValid = false;
-				}
-				outData[0] = 0;
-				//array::fill(outData, array::end(outData), 0);
-			}
-		}
-	}
-	return nextTimeout;
-}
-
-bool RoomControl::isCompatible(EndpointType endpointType, Device::Component::Type type) {
-	bool binary = type == Device::Component::BUTTON || type == Device::Component::SWITCH;
-	bool timedBinary = type == Device::Component::HOLD_BUTTON || type == Device::Component::DELAY_BUTTON;
-	bool ternary = type == Device::Component::ROCKER;
-	bool timedTernary = type == Device::Component::HOLD_ROCKER;
-	bool relay = type == Device::Component::RELAY || type == Device::Component::TIME_RELAY;
-	
-	switch (endpointType) {
-	//case EndpointType::BINARY_SENSOR:
-	case EndpointType::BUTTON:
-	case EndpointType::ON_OFF:
-		// buttons and switchs
-		return binary || timedBinary;
-	case EndpointType::ROCKER:
-		// buttons, switches and rockers
-		return binary || timedBinary || ternary || timedTernary;
-	//case EndpointType::RELAY:
-	//case EndpointType::LIGHT:
-		// one relay with binary sensors for the relay state
-		return relay || binary;
-	case EndpointType::BLIND:
-		// two relays with binary and ternaty sensors for the relay states
-		return type == relay || Device::Component::BLIND || binary || ternary;
-	case EndpointType::TEMPERATURE_IN:
-		// temperature sensor
-		return type == Device::Component::CELSIUS || type == Device::Component::FAHRENHEIT;
-	}
-	return false;
-}
-
-void RoomControl::listDevices(Interface &interface, Storage::Array<Device, DeviceState> &devices,
-	MenuState editDevice, MenuState addDevice)
-{
-	// list devices
-	for (auto e : devices) {
-		auto &device = *e.flash;
-		
-		StringBuffer<24> b = device.getName();
-		if (entry(b)) {
-			// edit device
-			clone(interface, this->temp.device, this->tempState.device, device, *e.ram);
-			
-			// indicate that the device is being edited
-			this->tempFor = &device;
-			push(editDevice);
-		}
-	}
-
-	// menu entries to add missing devices
-	int deviceCount = interface.getDeviceCount();
-	for (int deviceIndex = 0; deviceIndex < deviceCount; ++deviceIndex) {
-		DeviceId deviceId = interface.getDeviceId(deviceIndex);
-		bool found = false;
-		for (auto e : devices) {
-			auto &device = *e.flash;
-			if (device.deviceId == deviceId) {
-				found = true;
-				break;
-			}
-		}
-		if (!found) {
-			StringBuffer<24> b = "Add " + hex(deviceId, deviceId <= 0xffffffff ? 8 : 16);
-			if (entry(b)) {
-				Device &device = this->temp.device;
-				DeviceState &deviceState = this->tempState.device;
-				device.deviceId = deviceId;
-				device.setName(b.string().substring(4));
-				device.componentCount = 0;
-				deviceState.deviceTopicId = 0;
-				
-				// subscribe to device topic (enum/<room>/<device>)
-				TopicBuffer topic = getRoomName() / device.getName();
-				subscribeTopic(deviceState.deviceTopicId, topic.enumeration(), QOS);
-
-				// indicate that a new device is being edited by letting tempFor point to the device array
-				this->tempFor = &devices;
-				push(addDevice);
-			}
-		}
-	}
-
-	if (entry("Exit")) {
-		interface.setCommissioning(false);
-		pop();
-	}
-}
-
-void RoomControl::editDevice(Interface &interface, Storage::Array<Device, DeviceState> &devices, bool add,
-	MenuState editComponent, MenuState addComponent)
-{
-	Device &device = this->temp.device;
-	DeviceState &deviceState = this->tempState.device;
-
-	// device name
-	//todo: edit name
-	label(device.getName());
-
-	// device endpoints
-	Array<EndpointType const> endpoints = interface.getEndpoints(device.deviceId);
-	ComponentIterator it(device, deviceState);
-	for (int endpointIndex = 0; endpointIndex < endpoints.length; ++endpointIndex) {
-		line();
-		
-		// endpoint type
-		auto endpointType = endpoints[endpointIndex];
-		StringBuffer<24> b;
-		auto endpointInfo = findEndpointInfo(endpointType);
-		if (endpointInfo != nullptr)
-			b += endpointInfo->name;
-		else
-			b += '?';
-		label(b);
-		
-		// device components that are associated with the current device endpoint
-		while (!it.atEnd() && it.getComponent().endpointIndex == endpointIndex) {
-			auto &component = it.getComponent();
-			auto &state = it.getState();
-			ComponentInfo const &componentInfo = componentInfos[component.type];
-
-			// menu entry for compnent (component name and current state/value)
-			b = componentInfo.name + ": "; // component.getName()
-			switch (component.type) {
-			case Device::Component::BUTTON:
-			case Device::Component::HOLD_BUTTON:
-			case Device::Component::DELAY_BUTTON:
-				{
-					b += buttonStatesLong[state.flags & 1];
-				}
-				break;
-			case Device::Component::ROCKER:
-			case Device::Component::HOLD_ROCKER:
-				{
-					b += rockerStatesLong[state.flags & 3];
-				}
-				break;
-			case Device::Component::SWITCH:
-			case Device::Component::RELAY:
-			case Device::Component::TIME_RELAY:
-				{
-					b += switchStatesLong[state.flags & 1];
-				}
-				break;
-			case Device::Component::BLIND:
-				{
-					auto blind = component.cast<Device::Blind>();
-					auto blindState = state.cast<DeviceState::Blind>();
-					float pos = blindState.duration / blind.duration;
-					b += flt(pos, 1, (state.flags & 3) == 0 ? 3 : 2);
-				}
-				break;
-			case Device::Component::CELSIUS:
-				{
-					auto temperatureSensorState = state.cast<DeviceState::TemperatureSensor>();
-					uint16_t t = temperatureSensorState.temperature;
-
-					// convert temperature from 1/20 K to 1/10 °C
-					int celsius = (t - 5463) / 2; // subtract 273.15 * 20 and divide by 2
-					b += dec(celsius / 10) + '.' + dec((celsius + 3000) % 10) + " oC";
-				}
-				break;
-			case Device::Component::FAHRENHEIT:
-				{
-					auto temperatureSensorState = state.cast<DeviceState::TemperatureSensor>();
-					uint16_t t = temperatureSensorState.temperature;
-
-					// convert temperature from 1/20 K to 1/10 °F
-					int fahrenheit = (t - 5463) * 9 / 10 + 320;
-					b += dec(fahrenheit / 10) + '.' + dec((fahrenheit - 5000) % 10) + "oF";
-				}
-				break;
-			}
-			if (entry(b)) {
-				// set index
-				this->tempIndex = it.componentIndex;
-
-				// copy component
-				auto dst = reinterpret_cast<uint32_t *>(&this->temp2.component);
-				auto src = reinterpret_cast<uint32_t const *>(&component);
-				array::copy(dst, dst + componentInfo.component.size, src);
-				
-				push(editComponent);
-			}
-			
-			it.next();
-		}
-		
-		// add device component
-		if (device.componentCount < Device::MAX_COMPONENT_COUNT) {
-			if (entry("Add Component")) {
-				// set index
-				this->tempIndex = it.componentIndex;
-
-				// select first valid type
-				auto &component = this->temp2.component;
-				component.init(endpointType);
-				component.endpointIndex = endpointIndex;
-				component.nameIndex = device.getNameIndex(component.type, -1);
-
-				// set default duration
-				if (component.is<Device::TimeComponent>())
-					this->temp2.timeComponent.duration = 1s;
-
-				push(addComponent);
-			}
-		}
-	}
-	line();
-
-	// save, delete, cancel
-	if (entry("Save Device")) {
-		int index = getThisIndex();
-		
-		// unsubscribe old command topics
-		if (index < devices.size()) {
-			auto e = devices[index];
-			destroy(interface, *e.flash, *e.ram);
-		}
-		devices.write(index, &device, &deviceState);
-		this->tempFor = nullptr;
-		pop();
-	}
-	if (!add) {
-		if (entry("Delete Device")) {
-			int index = getThisIndex();
-
-			// unsubscribe new command topics
-			destroy(interface, device, deviceState);
-
-			// unsubscribe old command topics
-			auto e = devices[index];
-			destroy(interface, *e.flash, *e.ram);
-			
-			this->routes.erase(getThisIndex());
-			this->tempFor = nullptr;
-			pop();
-		}
-	}
-	if (entry("Cancel")) {
-		// unsubscribe new command topics
-		destroy(interface, device, deviceState);
-		this->tempFor = nullptr;
-		pop();
-	}
-}
-
-void RoomControl::editComponent(int delta, Interface &interface, bool add) {
-	uint8_t editBegin[5];
-	uint8_t editEnd[5];
-	Device const &device = this->temp.device;
-	Device::Component &component = this->temp2.component;
-	
-	// get endpoint type
-	auto endpointType = interface.getEndpoints(device.deviceId)[component.endpointIndex];
-	auto endpointInfo = findEndpointInfo(endpointType);
-	
-	// edit component type
-	int edit = getEdit(1);
-	if (edit > 0 && delta != 0) {
-		component.rotateType(endpointType, delta);
-		component.nameIndex = device.getNameIndex(component.type, this->tempIndex);
-
-		// set default values
-		if (component.is<Device::TimeComponent>())
-			this->temp2.timeComponent.duration = 1s;
-	}
-	ComponentInfo const &componentInfo = componentInfos[component.type];
-	
-	// menu entry for component type
-	editBegin[1] = 0;
-	StringBuffer<24> b = componentInfo.name;
-	editEnd[1] = b.length();
-	entry(b, edit > 0, editBegin[1], editEnd[1]);
-
-	// component name (auto-generated)
-	b = "Name: " + component.getName();
-	label(b);
-
-	// element index
-	int step = componentInfo.elementIndexStep;
-	if (endpointInfo != nullptr && step < endpointInfo->elementCount) {
-		// edit element index
-		int edit = getEdit(1);
-		if (edit > 0) {
-			int elementCount = endpointInfo->elementCount;
-			component.elementIndex = (component.elementIndex + delta * step + elementCount) % elementCount;
-		}
-
-		// menu entry for element index
-		b = "Index: ";
-		editBegin[1] = b.length();
-		b += dec(component.elementIndex);
-		editEnd[1] = b.length();
-		entry(b, edit > 0, editBegin[1], editEnd[1]);
-	}
-
-	// duration
-	if (component.is<Device::TimeComponent>()) {
-		SystemDuration duration = this->temp2.timeComponent.duration;
-						
-		// decompose duration
-		int tenths = duration % 1s / 100ms;
-		int seconds = int(duration / 1s) % 60;
-		int minutes = int(duration / 1min) % 60;
-		int hours = duration / 1h;
-		
-		// edit duration
-		int edit = getEdit(hours == 0 ? 4 : 3);
-		if (edit > 0) {
-			if (delta != 0) {
-				if (edit == 1) {
-					hours = (hours + delta + 512) & 511;
-					tenths = 0;
-				}
-				if (edit == 2)
-					minutes = (minutes + delta + 60) % 60;
-				if (edit == 3)
-					seconds = (seconds + delta + 60) % 60;
-				if (edit == 4) {
-					tenths = (tenths + delta + 10) % 10;
-				}
-				this->temp2.timeComponent.duration = ((hours * 60 + minutes) * 60 + seconds) * 1s + tenths * 100ms;
-			}
-		}/ * else if (duration < 100ms) {
-			// enforce minimum duration
-			this->temp2.timeComponent.duration = 100ms;
-		}* /
-
-		// menu entry for duration
-		b = "Duration: ";
-		editBegin[1] = b.length();
-		b += dec(hours);
-		editEnd[1] = b.length();
-		b += ':';
-		editBegin[2] = b.length();
-		b += dec(minutes, 2);
-		editEnd[2] = b.length();
-		b += ':';
-		editBegin[3] = b.length();
-		b += dec(seconds, 2);
-		editEnd[3] = b.length();
-		if (hours == 0) {
-			b += '.';
-			editBegin[4] = b.length();
-			b += dec(tenths);
-			editEnd[4] = b.length();
-		}
-		entry(b, edit > 0, editBegin[edit], editEnd[edit]);
-	}
-
-	// save, delete, cancel
-	if (entry("Save Component")) {
-		// seek to component
-		ComponentEditor editor(this->temp.device, this->tempState.device, this->tempIndex);
-		auto &state = editor.getState();
-		TopicBuffer topic = getRoomName() / device.getName();
-
-		// set type or insert component
-		if (!add) {
-			// edit component
-			auto &oldComponent = editor.getComponent();
-
-			// unregister old status topic
-			unregisterTopic(state.statusTopicId);
-			
-			// unsubscribe from old command topic
-			if (state.is<DeviceState::CommandComponent>(oldComponent)) {
-				auto &oldCommandState = state.cast<DeviceState::CommandComponent>();
-				StringBuffer<8> b = oldComponent.getName();
-				topic /= b;
-				unsubscribeTopic(oldCommandState.commandTopicId, topic.command());
-				topic.removeLast();
-			}
-								
-			// change component
-			editor.changeType(component.type);
-		} else {
-			// add component
-			editor.insert(component.type);
-			++this->temp.device.componentCount;
-		
-			// subscribe to endpoint
-			interface.subscribe(state.endpointId, device.deviceId, component.endpointIndex);
-		}
-
-		// copy component
-		auto &newComponent = editor.getComponent();
-		auto dst = reinterpret_cast<uint32_t *>(&newComponent);
-		auto src = reinterpret_cast<uint32_t const *>(&component);
-		array::copy(dst, dst + componentInfo.component.size, src);
-
-		// register new state topic
-		StringBuffer<8> b = component.getName();
-		topic /= b;
-		registerTopic(state.statusTopicId, topic.state());
-
-		// subscribe new command topic
-		if (state.is<DeviceState::CommandComponent>(component)) {
-			auto &commandState = state.cast<DeviceState::CommandComponent>();
-			subscribeTopic(commandState.commandTopicId, topic.command(), QOS);
-		}
-
-		pop();
-	}
-	if (!add) {
-		if (entry("Delete Component")) {
-			ComponentEditor editor(this->temp.device, this->tempState.device, this->tempIndex);
-			auto &state = editor.getState();
-			TopicBuffer topic = getRoomName() / device.getName();
-
-			// unsubscribe old command topic
-			if (state.is<DeviceState::CommandComponent>(component)) {
-				auto &commandState = state.cast<DeviceState::CommandComponent>();
-				unsubscribeTopic(commandState.commandTopicId, topic.command());
-			}
-
-			editor.erase();
-			pop();
-		}
-	}
-	if (entry("Cancel")) {
-		pop();
-	}
-}
-
-void RoomControl::clone(Interface &interface, Device &dstDevice, DeviceState &dstDeviceState,
-	Device const &srcDevice, DeviceState const &srcDeviceState)
-{
-	// copy device
-	{
-		auto begin = reinterpret_cast<uint32_t *>(&dstDevice);
-		auto end = begin + (srcDevice.getFlashSize() >> 2);
-		array::copy(begin, end, reinterpret_cast<uint32_t const *>(&srcDevice));
-	}
-	
-	// copy device state
-	{
-		auto begin = reinterpret_cast<uint32_t *>(&dstDeviceState);
-		auto end = begin + (srcDevice.getRamSize() >> 2);
-		array::copy(begin, end, reinterpret_cast<uint32_t const *>(&srcDeviceState));
-	}
-	
-	// duplicate subscriptions to device topic
-	addSubscriptionReference(dstDeviceState.deviceTopicId);
-	
-	// duplicate subscriptions to interface and mptt (command topics)
-	for (ComponentIterator it(dstDevice, dstDeviceState); !it.atEnd(); it.next()) {
-		auto &component = it.getComponent();
-		auto &state = it.getState();
-
-		// subscription to interface
-		state.endpointId = 0;
-		interface.subscribe(state.endpointId, dstDevice.deviceId, component.endpointIndex);
-
-		// subscription to mqtt
-		if (state.is<DeviceState::CommandComponent>(component)) {
-			addSubscriptionReference(state.cast<DeviceState::CommandComponent>().commandTopicId);
-		}
-	}
-}
-
-void RoomControl::destroy(Interface &interface, Device const &device, DeviceState &deviceState) {
-	TopicBuffer topic = getRoomName() / device.getName();
-
-	// unsubscribe from device topic (enum/<room>/<device>)
-	unsubscribeTopic(deviceState.deviceTopicId, topic.enumeration());
-
-	// destroy components
-	for (ComponentIterator it(device, deviceState); !it.atEnd(); it.next()) {
-		auto &component = it.getComponent();
-		auto &state = it.getState();
-		
-		// unsubscribe from interface
-		interface.unsubscribe(state.endpointId, device.deviceId, component.endpointIndex);
-		
-		// unsubscribe from mqtt
-		if (state.is<DeviceState::CommandComponent>(component)) {
-			StringBuffer<8> b = component.getName();
-			topic /= b;
-			unsubscribeTopic(state.cast<DeviceState::CommandComponent>().commandTopicId, topic.command());
-			topic.removeLast();
-		}
-	}
-}
-*/
-
-// ComponentIterator
-// -----------------
-/*
-void RoomControl::ComponentIterator::next() {
-	auto type = getComponent().type;
-	this->component += componentInfos[type].component.size;
-	this->state += componentInfos[type].state.size;
-	++this->componentIndex;
-}
-
-
-// ComponentEditor
-// ---------------
-
-RoomControl::ComponentEditor::ComponentEditor(Device &device, DeviceState &state, int index)
-	: component(device.buffer), componentsEnd(array::end(device.buffer))
-	, state(state.buffer), statesEnd(array::end(state.buffer))
-{
-	for (int i = 0; i < index; ++i) {
-		auto type = getComponent().type;
-		this->component += componentInfos[type].component.size;
-		this->state += componentInfos[type].state.size;
-	}
-}
-
-RoomControl::Device::Component &RoomControl::ComponentEditor::insert(Device::Component::Type type) {
-	auto &componentInfo = componentInfos[type];
-	
-	// insert element
-	array::insert(this->component, this->componentsEnd, componentInfo.component.size);
-	array::insert(this->state, this->statesEnd, componentInfo.state.size);
-
-	// clear ram
-	array::fill(this->state, this->state + componentInfo.state.size, 0);
-
-	// set type
-	auto &component = *reinterpret_cast<Device::Component *>(this->component);
-	component.type = type;
-	return component;
-}
-
-void RoomControl::ComponentEditor::changeType(Device::Component::Type type) {
-	auto oldType = getComponent().type;
-	int oldComponentSize = componentInfos[oldType].component.size;
-	int oldStateSize = componentInfos[oldType].state.size;
-
-	int newComponentSize = componentInfos[type].component.size;
-	int newStateSize = componentInfos[type].state.size;
-
-	// reallocate flash
-	if (newComponentSize > oldComponentSize)
-		array::insert(this->component + oldComponentSize, this->componentsEnd, newComponentSize - oldComponentSize);
-	else if (newComponentSize < oldComponentSize)
-		array::erase(this->component + newComponentSize, this->componentsEnd, oldComponentSize - newComponentSize);
-	
-	// reallocate ram
-	if (newStateSize > oldStateSize)
-		array::insert(this->state + oldStateSize, this->statesEnd, newStateSize - oldStateSize);
-	else if (newStateSize < oldStateSize)
-		array::erase(this->state + newStateSize, this->statesEnd, oldStateSize - newStateSize);
-
-	// clear ram behind base class
-	array::fill(this->state + (sizeof(DeviceState::Component) + 3) / 4, this->state + newStateSize, 0);
-
-	// set new type
-	getComponent().type = type;
-}
-
-void RoomControl::ComponentEditor::erase() {
-	auto &componentInfo = componentInfos[getComponent().type];
-
-	array::erase(this->component, this->componentsEnd, componentInfo.component.size);
-	array::erase(this->state, this->statesEnd, componentInfo.state.size);
-}
-
-/ *
-void RoomControl::ComponentEditor::next() {
-	auto type = getComponent().type;
-	++this->componentIndex;
-	this->component += componentInfos[type].component.size;
-	this->state += componentInfos[type].state.size;
-}
-* /
-
-
-// Interface
-// ---------
-/ *
-void RoomControl::subscribeInterface(Interface &interface, Storage::Element<Device, DeviceState> e) {
-	Device const &device = *e.flash;
-	DeviceState &deviceState = *e.ram;
-
-	// get list of endpoints (is empty if device not found)
-	Array<EndpointType const> endpoints = interface.getEndpoints(device.deviceId);
-	
-	// iterate over device components
-	ComponentIterator it(device, deviceState);
-	while (!it.atEnd()) {
-		auto &component = it.getComponent();
-		auto &state = it.getState();
-
-		// subscribe component to device endpoint
-		int endpointIndex = component.endpointIndex;
-		if (endpointIndex < endpoints.length) {
-			// check endpoint type compatibility
-			if (isCompatible(endpoints[endpointIndex], component.type)) {
-				// subscribe
-				interface.subscribe(state.endpointId, device.deviceId, endpointIndex);
-			}
-		}
-		
-		// next component
-		it.next();
-	}
-}
-
-void RoomControl::subscribeInterface(Interface &interface, Storage::Array<Device, DeviceState> &devices) {
-	for (auto e : devices) {
-		Device const &device = *e.flash;
-		DeviceState &deviceState = *e.ram;
-	
-		// get list of endpoints (is empty if device not found)
-		Array<EndpointType const> endpoints = interface.getEndpoints(device.deviceId);
-		
-		ComponentIterator it(device, deviceState);
-		while (!it.atEnd()) {
-			auto &component = it.getComponent();
-			auto &state = it.getState();
-
-			int endpointIndex = component.endpointIndex;
-			if (endpointIndex < endpoints.length) {
-				// check endpoint type compatibility
-				if (isCompatible(endpoints[endpointIndex], component.type)) {
-					// subscribe
-					interface.subscribe(state.endpointId, device.deviceId, endpointIndex);
-				}
-			}
-			
-			// next element
-			it.next();
-		}
-	}
-}
-* /
-
-// Routes
-// ------
-
-int RoomControl::Route::getFlashSize() const {
-	return getOffset(Route, buffer[this->srcTopicLength + this->dstTopicLength]);
-}
-
-int RoomControl::Route::getRamSize() const {
-	return sizeof(RouteState);
-}
-
-void RoomControl::Route::setSrcTopic(String topic) {
-	// move data of destination topic
-	int oldSize = this->srcTopicLength;
-	int newSize = topic.length;
-	if (newSize > oldSize)
-		array::insert(this->buffer, this->buffer + newSize + this->dstTopicLength, newSize - oldSize);
-	else if (newSize < oldSize)
-		array::erase(this->buffer, this->buffer + oldSize + this->dstTopicLength, oldSize - newSize);
-
-	uint8_t *dst = this->buffer;
-	array::copy(dst, dst + topic.length, topic.begin());
-	this->srcTopicLength = newSize;
-}
-
-void RoomControl::Route::setDstTopic(String topic) {
-	uint8_t *dst = this->buffer + this->srcTopicLength;
-	array::copy(dst, dst + topic.length, topic.begin());
-	this->dstTopicLength = topic.length;
-}
-
-void RoomControl::subscribeRoute(int index) {
-	auto e = this->routes[index];
-	Route const &route = *e.flash;
-	RouteState &routeState = *e.ram;
-	
-	TopicBuffer topic = route.getSrcTopic();
-	subscribeTopic(routeState.srcTopicId, topic.state(), QOS);
-	
-	topic = route.getDstTopic();
-	registerTopic(routeState.dstTopicId, topic.command());
-}
-
-void RoomControl::clone(Route &dstRoute, RouteState &dstRouteState,
-	Route const &srcRoute, RouteState const &srcRouteState)
-{
-	// copy route
-	uint8_t *dst = reinterpret_cast<uint8_t *>(&dstRoute);
-	uint8_t const *src = reinterpret_cast<uint8_t const *>(&srcRoute);
-	array::copy(dst, dst + srcRoute.getFlashSize(), src);
-
-	// clone state
-	addSubscriptionReference(dstRouteState.srcTopicId = srcRouteState.srcTopicId);
-	dstRouteState.dstTopicId = srcRouteState.dstTopicId;
-}
-
-
-// Command
-// -------
-
-void RoomControl::publishCommand(uint16_t topicId, Command::ValueType valueType, uint8_t const *value) {
-	StringBuffer<16> b;
-	switch (valueType) {
-	case Command::ValueType::BUTTON:
-		publish(topicId, buttonStates[1], 1);
-		b += buttonStates[0];
-		break;
-	case Command::ValueType::SWITCH:
-		b += switchStates[*value & 1];
-		break;
-	case Command::ValueType::ROCKER:
-		publish(topicId, buttonStates[(*value & 1) + 1], 1);
-		b += rockerStates[0];
-		break;
-	case Command::ValueType::VALUE8:
-		b += dec(*value);
-		break;
-	case Command::ValueType::PERCENTAGE:
-		b += flt(*value * 0.01f, 0, 2);
-		break;
-	case Command::ValueType::CELSIUS:
-		b += flt(8.0f + *value * 0.1f, 0, 1);
-		break;
-	case Command::ValueType::COLOR_RGB:
-		b += "rgb(" + dec(value[0]) + ',' + dec(value[1]) + ',' + dec(value[2]) + ')';
-		break;
-	}
-	
-	publish(topicId, b, 1);
-}
-
-
-// Timers
-// ------
-
-int RoomControl::Timer::getFlashSize() const {
-	int size = 0;
-	for (int i = 0; i < this->commandCount; ++i) {
-		auto &command = *reinterpret_cast<Command const *>(this->commands + size);
-		size += sizeof(Command) + command.topicLength + valueInfos[int(command.valueType)].size;
-	}
-	return getOffset(Timer, commands[size]);
-}
-
-int RoomControl::Timer::getRamSize() const {
-	return getOffset(TimerState, commands[this->commandCount]);
-}
-
-Coroutine RoomControl::doTimers() {
-	while (true) {
-		co_await calendar::secondTick();
-		
-		// check for timer event
-		auto now = calendar::now();
-		if (now.getSeconds() == 0) {
-			int minutes = now.getMinutes();
-			int hours = now.getHours();
-			int weekday = now.getWeekday();
-			for (auto e : this->timers) {
-				Timer const &timer = *e.flash;
-				TimerState &timerState = *e.ram;
-				
-				ClockTime t = timer.time;
-				if (t.getMinutes() == minutes && t.getHours() == hours && (t.getWeekdays() & (1 << weekday)) != 0) {
-					// timer event: publish commands
-					for (CommandIterator it(timer, timerState); !it.atEnd(); it.next()) {
-						auto &command = it.getCommand();
-						auto &state = it.getState();
-
-						publishCommand(state.topicId, command.valueType, it.getValue());
-					}
-				}
-			}
-		}
-	}
-}
-
-void RoomControl::subscribeTimer(int index) {
-	auto e = this->timers[index];
-	
-	Timer const &timer = *e.flash;
-	TimerState &timerState = *e.ram;
-	
-	for (CommandIterator it(timer, timerState); !it.atEnd(); it.next()) {
-		auto &command = it.getCommand();
-		auto &state = it.getState();
-
-		// get topic
-		TopicBuffer topic = it.getTopic();
-
-		// register topic (so that we can publish on timer event)
-		registerTopic(state.topicId, topic.command());
-	}
-}
-
-void RoomControl::clone(Timer &dstTimer, TimerState &dstTimerState,
-	Timer const &srcTimer, TimerState const &srcTimerState)
-{
-	// copy timer
-	uint8_t *dst = reinterpret_cast<uint8_t *>(&dstTimer);
-	uint8_t const *src = reinterpret_cast<uint8_t const *>(&srcTimer);
-	array::copy(dst, dst + srcTimer.getFlashSize(), src);
-
-	// clone state
-	for (int i = 0; i < srcTimer.commandCount; ++i) {
-		addSubscriptionReference(dstTimerState.commands[i].topicId = srcTimerState.commands[i].topicId);
-	}
-}
-
-
-// CommandIterator
-// ---------------
-
-void RoomControl::CommandIterator::next() {
-	++this->commandIndex;
-	Command const &command = *reinterpret_cast<Command const *>(this->command);
-	this->command += sizeof(Command) + command.topicLength + valueInfos[int(command.valueType)].size;
-	++this->state;
-}
-
-
-// CommandEditor
-// -------------
-
-RoomControl::CommandEditor::CommandEditor(Timer &timer, TimerState &state, int index)
-	: command(timer.commands), commandsEnd(array::end(timer.commands))
-	, state(state.commands + index), statesEnd(array::end(state.commands))
-{
-	for (int i = 0; i < index; ++i) {
-		Command &command = *reinterpret_cast<Command *>(this->command);
-		this->command += sizeof(Command) + command.topicLength + valueInfos[int(command.valueType)].size;
-	}
-}
-
-void RoomControl::CommandEditor::setTopic(String topic) {
-	Command &command = getCommand();
-	int oldSize = command.topicLength;
-	int newSize = topic.length;
-	
-	// reallocate
-	uint8_t *t = this->command  + sizeof(Command);
-	if (newSize > oldSize)
-		array::insert(t + oldSize, this->commandsEnd, newSize - oldSize);
-	else if (newSize < oldSize)
-		array::erase(t + newSize, this->commandsEnd, oldSize - newSize);
-
-	// set new topic
-	command.topicLength = newSize;
-	array::copy(t, t + newSize, topic.data);
-}
-
-void RoomControl::CommandEditor::setValueType(Command::ValueType valueType) {
-	Command &command = getCommand();
-	int oldSize = valueInfos[int(command.valueType)].size;
-	int newSize = valueInfos[int(valueType)].size;
-
-	// reallocate
-	uint8_t *value = this->command  + sizeof(Command) + command.topicLength;
-	if (newSize > oldSize)
-		array::insert(value + oldSize, this->commandsEnd, newSize - oldSize);
-	else if (newSize < oldSize)
-		array::erase(value + newSize, this->commandsEnd, oldSize - newSize);
-
-	// set new value type and clear value
-	command.valueType = valueType;
-	array::fill(value, value + newSize, 0);
-}
-
-void RoomControl::CommandEditor::insert() {
-	Command::ValueType valueType = Command::ValueType::BUTTON;
-	int size = sizeof(Command) + 0 + valueInfos[int(valueType)].size;
-
-	// insert element
-	array::insert(this->command, this->commandsEnd, size);
-	array::insert(this->state, this->statesEnd, 1);
-
-	// clear ram
-	*this->state = CommandState{};
-
-	// set type
-	auto &command = getCommand();
-	command.topicLength = 0;
-	command.valueType = valueType;
-}
-
-void RoomControl::CommandEditor::erase() {
-	auto &valueInfo = valueInfos[int(getCommand().valueType)];
-
-	array::erase(this->command, this->commandsEnd, valueInfo.size);
-	array::erase(this->state, this->statesEnd, 1);
-}
-
-void RoomControl::CommandEditor::next() {
-	auto &command = getCommand();
-	this->command += sizeof(Command) + command.topicLength + valueInfos[int(command.valueType)].size;
-	++this->state;
-}
-
-
-
-// Topic Selector
-// --------------
-
-void RoomControl::enterTopicSelector(String topic, bool onlyCommands, int index) {
-	this->selectedTopic = topic;
-
-	// check if current topic has the format <room>/<device>/<attribute>
-	if (this->selectedTopic.getElementCount() == 3) {
-		// remove attibute from topic
-		this->selectedTopic.removeLast();
-		this->topicDepth = 2;
-	} else {
-		// start at this room
-		this->selectedTopic = getRoomName();
-		this->topicDepth = 1;
-	}
-
-	// only list attributes that have a command topic
-	this->onlyCommands = onlyCommands;
-
-	// subscribe to selected topic
-	subscribeTopic(this->selectedTopicId, this->selectedTopic.enumeration(), QOS);
-
-	// request enumeration of rooms, devices or attributes
-	publish(this->selectedTopicId, String(), QOS);
-
-	// enter topic selector menu
-	push(SELECT_TOPIC);
-	this->tempIndex = index;
-}
-*/
-
 // Functions
 // ---------
 
@@ -1742,35 +203,12 @@ static void printDevices(Interface &interface) {
 	for (int i = 0; i < interface.getDeviceCount(); ++i) {
 		auto &device = interface.getDeviceByIndex(i);
 		Terminal::out << (hex(device.getId()) + '\n');
-		Array<MessageType const> endpoints = device.getEndpoints();
+		auto endpoints = device.getEndpoints();
 		for (auto endpoint : endpoints) {
-			Terminal::out << '\t' << getTypeName(endpoint);
-			/*switch (endpoint & MessageType::TYPE_MASK) {
-			case MessageType::ON_OFF:
-				Terminal::out << "ON_OFF";
-				break;
-			case MessageType::ON_OFF_TOGGLE:
-				Terminal::out << "ON_OFF_TOGGLE";
-				break;
-			case MessageType::TRIGGER:
-				Terminal::out << "TRIGGER";
-				break;
-			case MessageType::UP_DOWN:
-				Terminal::out << "UP_DOWN";
-				break;
-			case MessageType::UP_DOWN_TRIGGER:
-				Terminal::out << "UP_DOWN_TRIGGER";
-				break;
-			case MessageType::BATTERY_LEVEL:
-				Terminal::out << "BATTERY_LEVEL";
-				break;
-			default:
-				Terminal::out << "unknown";
-				break;
-			}*/
+			Terminal::out << '\t' << getTypeLabel(endpoint);
 			if ((endpoint & MessageType::DIRECTION_MASK) == MessageType::IN)
 				Terminal::out << " In";
-			else
+			if ((endpoint & MessageType::DIRECTION_MASK) == MessageType::OUT)
 				Terminal::out << " Out";
 			Terminal::out << '\n';
 		}
@@ -1972,10 +410,12 @@ Coroutine RoomControl::idleDisplay() {
 // menu helpers
 
 static int getComponentCount(MessageType messageType) {
-	return (messageType & MessageType::TYPE_MASK) == MessageType::MOVE_TO_LEVEL ? 2 : 1;
+	//return (messageType & MessageType::TYPE_MASK) == MessageType::MOVE_TO_LEVEL ? 2 : 1;
+	return (messageType & MessageType::CATEGORY) == MessageType::LIGHTING ? 2 : 1;
 }
 
 // next message type for alarms
+/*
 static MessageType nextAlarmMessageType(MessageType messageType, int delta) {
 	static MessageType const types[] {
 		MessageType::OFF_ON_IN,
@@ -1994,7 +434,7 @@ static MessageType nextAlarmMessageType(MessageType messageType, int delta) {
 	int index = array::binaryLowerBound(types, [messageType](MessageType a) {return a < messageType;});
 	index = (index + array::count(types) * 256 + delta) % array::count(types);
 	return types[index];
-}
+}*/
 
 void RoomControl::printConnection(Menu::Stream &stream, Connection const &connection) {
 	auto &interface = getInterface(connection);
@@ -2004,7 +444,7 @@ void RoomControl::printConnection(Menu::Stream &stream, Connection const &connec
 		stream << deviceName << ':' << dec(connection.endpointIndex);
 		auto endpoints = device->getEndpoints();
 		if (connection.endpointIndex < endpoints.count()) {
-			String endpointName = getTypeName(endpoints[connection.endpointIndex]);
+			String endpointName = getTypeLabel(endpoints[connection.endpointIndex]);
 			stream << " (" << endpointName << ')';
 		}
 	} else {
@@ -2012,6 +452,7 @@ void RoomControl::printConnection(Menu::Stream &stream, Connection const &connec
 	}
 }
 
+/*
 static Message getDefaultMessage(MessageType messageType) {
 	switch (messageType & MessageType::TYPE_MASK) {
 		case MessageType::OFF_ON:
@@ -2034,199 +475,542 @@ static Message getDefaultMessage(MessageType messageType) {
 			return {};
 	}
 }
+*/
+Array<String const> RoomControl::getSwitchStates(Usage usage) {
+	switch (usage) {
+	case Usage::OFF_ON:
+		return {2, offOnToggle};
+	case Usage::OFF_ON_TOGGLE:
+		return offOnToggle;
+	case Usage::RELEASED_PRESSED:
+		return releasedPressed;
+	case Usage::CLOSED_OPEN:
+		return {2, closedOpenToggle};
+	case Usage::CLOSED_OPEN_TOGGLE:
+		return closedOpenToggle;
+	case Usage::LOCK:
+		return {2, lockedToggle};
+	case Usage::LOCK_TOGGLE:
+		return lockedToggle;
+	case Usage::OCCUPANCY:
+		return occupancy;
+	case Usage::ACTIVATION:
+		return activation;
+	case Usage::ENABLED:
+		return enabled;
 
-// default command convert matrix
-static int16_t const command2command[SWITCH_COMMAND_COUNT][SWITCH_COMMAND_COUNT] = {
-	// OFF_ON ->
+	case Usage::OFF_ON1_ON2:
+		return offOn1On2;
+	case Usage::RELEASED_UP_DOWN:
+		return releasedUpDown;
+	case Usage::STOPPED_OPENING_CLOSING:
+		return stoppedOpeningClosing;
+	case Usage::TILT_LOCK:
+		return unlockedTiltLocked;
+
+	default:;
+	}
+	return offOnToggle;
+}
+
+// number of different switch types for default convert options
+constexpr int SWITCH_TYPE_COUNT = 5;
+
+int RoomControl::getSwitchType(MessageType type) {
+	auto category = type & MessageType::CATEGORY;
+	if (category == MessageType::TERNARY) {
+		// off/on1/on2 or release/up/down
+		return (type & MessageType::TERNARY_CATEGORY) == MessageType ::TERNARY_BUTTON ? 4 : 1;
+	}
+	auto binaryCategory = type & MessageType::BINARY_CATEGORY;
+	if (binaryCategory == MessageType::BINARY_BUTTON || binaryCategory == MessageType::BINARY_ALARM) {
+		// release/press
+		return 3;
+	}
+
+	// off/on or off/on/toggle
+	return (type & MessageType::CMD) != 0 ? 2 : 0;
+}
+
+constexpr int OFF = 0;
+constexpr int ON = 1;
+constexpr int ON1 = 1;
+constexpr int ON2 = 2;
+constexpr int TOGGLE = 2;
+constexpr int RELEASE = 0;
+constexpr int PRESS = 1;
+constexpr int UP = 1;
+constexpr int DOWN = 2;
+constexpr int SET = 0;
+constexpr int INCREASE = 1;
+constexpr int DECREASE = 2;
+constexpr int DISCARD = 7;
+
+constexpr uint16_t convert(int s0, int s1) noexcept {
+	return s0 | (s1 << 3) | (-1 << 6);
+}
+
+constexpr uint16_t convert(int s0, int s1, int s2) noexcept {
+	return s0 | (s1 << 3) | (s2 << 6) | (-1 << 9);
+}
+
+// default switch convert matrix
+static uint16_t const switch2switch[SWITCH_TYPE_COUNT][SWITCH_TYPE_COUNT] = {
+	// off/on ->
 	{
-		0 | (1 << 3) | -1 << 6, // OFF_ON
-		0 | (1 << 3) | -1 << 6, // OFF_ON_TOGGLE
-		7 | (1 << 3) | -1 << 6, // TRIGGER
-		7 | (1 << 3) | -1 << 6, // UP_DOWN
-		0 | (1 << 3) | -1 << 6, // OPEN_CLOSE
+		convert(OFF, ON), // off/on
+		convert(OFF, ON1), // off/on1/on2
+		convert(OFF, ON), // off/on/toggle
+		convert(DISCARD, PRESS), // release/press
+		convert(DISCARD, UP), // release/up/down
 	},
-	// OFF_ON_TOGGLE ->
+	// off/on1/on2 ->
 	{
-		0 | (1 << 3) | -1 << 6, // OFF_ON
-		0 | (1 << 3) | (2 << 6) | -1 << 9, // OFF_ON_TOGGLE
-		7 | (7 << 3) | (1 << 6) | -1 << 9, // TRIGGER
-		7 | (1 << 3) | -1 << 6, // UP_DOWN
-		0 | (1 << 3) | -1 << 6, // OPEN_CLOSE
+		convert(OFF, ON, DISCARD), // off/on
+		convert(OFF, ON1, ON2), // off/on1/on2
+		convert(OFF, ON, DISCARD), // off/on/toggle
+		convert(DISCARD, PRESS, DISCARD), // release/press
+		convert(DISCARD, UP, DISCARD), // release/up/down
 	},
-	// TRIGGER ->
+	// off/on/toggle ->
 	{
-		7 | (1 << 3) | -1 << 6, // OFF_ON
-		7 | (2 << 3) | -1 << 6, // OFF_ON_TOGGLE
-		0 | (1 << 3) | -1 << 6, // TRIGGER
-		0 | (1 << 3) | -1 << 6, // UP_DOWN
-		7 | (1 << 3) | -1 << 6, // OPEN_CLOSE
+		convert(OFF, ON, DISCARD), // off/on
+		convert(OFF, ON1, DISCARD), // off/on1/on2
+		convert(OFF, ON, TOGGLE), // off/on/toggle
+		convert(DISCARD, DISCARD, PRESS), // release/press
+		convert(DISCARD, DISCARD, UP), // release/up/down
 	},
-	// UP_DOWN ->
+	// release/press ->
 	{
-		7 | (1 << 3) | (0 << 6) | -1 << 9, // OFF_ON
-		7 | (1 << 3) | (0 << 6) | -1 << 9, // OFF_ON_TOGGLE
-		0 | (1 << 3) | -1 << 6, // TRIGGER
-		0 | (1 << 3) | (2 << 6) | -1 << 9, // UP_DOWN
-		7 | (1 << 3) | (0 << 6) | -1 << 9, // OPEN_CLOSE
+		convert(DISCARD, ON), // off/on
+		convert(DISCARD, ON1), // off/on1/on2
+		convert(DISCARD, TOGGLE), // off/on/toggle
+		convert(RELEASE, PRESS), // release/press
+		convert(RELEASE, UP), // release/up/down
 	},
-	// OPEN_CLOSE ->
+	// release/up/down ->
 	{
-		0 | (1 << 3) | -1 << 6, // OFF_ON
-		0 | (1 << 3) | -1 << 6, // OFF_ON_TOGGLE
-		7 | (1 << 3) | -1 << 6, // TRIGGER
-		7 | (1 << 3) | -1 << 6, // UP_DOWN
-		0 | (1 << 3) | -1 << 6, // OPEN_CLOSE
+		convert(DISCARD, ON, OFF), // off/on
+		convert(OFF, ON1, ON2), // off/on1/on2
+		convert(DISCARD, ON, OFF), // off/on/toggle
+		convert(RELEASE, PRESS, DISCARD), // release/press
+		convert(RELEASE, UP, DOWN), // release/up/down
 	},
 };
 
-// default command to set value convert
-static int16_t const command2setValue[SWITCH_COMMAND_COUNT] = {
-	7 | (0 << 3) | -1 << 6, // OFF_ON -> set
-	7 | (0 << 3) | -1 << 6, // OFF_ON_TOGGLE -> set
-	7 | (0 << 3) | -1 << 6, // TRIGGER -> set
-	7 | (1 << 3) | (2 << 6) | -1 << 9, // UP_DOWN -> increase/decrease
-	7 | (0 << 3) | -1 << 6, // OPEN_CLOSE -> set
+// default switch to value command convert
+static uint16_t const switch2valueCommand[SWITCH_TYPE_COUNT] = {
+	convert(DISCARD, SET), // off/on -> set/increase/decrease
+	convert(DISCARD, SET, DISCARD), // off/on1/on2 -> set/increase/decrease
+	convert(DISCARD, SET, DISCARD), // off/on/toggle -> set/increase/decrease
+	convert(DISCARD, SET), // release/press -> set/increase/decrease
+	convert(DISCARD, INCREASE, DECREASE), // release/up/down -> set/increase/decrease
 };
 
-// default value to command convert
-static int16_t const value2command[SWITCH_COMMAND_COUNT] = {
-	1 | (0 << 3) | -1 << 6, // greater/less -> OFF_ON
-	1 | (0 << 3) | -1 << 6, // greater/less -> OFF_ON_TOGGLE
-	1 | (1 << 3) | (0 << 6) | -1 << 9, // greater/less/else -> TRIGGER
-	1 | (2 << 3) | (0 << 6) | -1 << 9, // equal/greater/less -> UP_DOWN
-	1 | (0 << 3) | -1 << 6, // greater/less -> OPEN_CLOSE
+// default value command to switch convert
+static uint16_t const value2switch[SWITCH_TYPE_COUNT] = {
+	convert(ON, OFF, DISCARD), // greater/less/else -> off/on
+	convert(ON, OFF, DISCARD), // greater/less/else -> off/on/toggle
+	convert(PRESS, RELEASE, DISCARD), // greater/less/else -> release/press
+	convert(UP, DOWN, RELEASE), // greater/less/else -> release/up/down
 };
 
-inline ConvertOptions makeConvertOptions(int16_t commands, float value1, float value2) {
-	return {.commands = uint16_t(commands), .value = {.f = {value1, value2}}};
+
+inline ConvertOptions makeConvertOptions(int16_t commands, float value0, float value1, float value2) {
+	return {.commands = uint16_t(commands), .value = {.f = {value0, value1, value2}}};
 }
 
 // default convert options for message logger and generator
-static ConvertOptions getDefaultConvertOptions(MessageType messageType) {
-	switch (messageType & MessageType::TYPE_MASK) {
-	case MessageType::OFF_ON:
-	case MessageType::OFF_ON_TOGGLE:
-	case MessageType::TRIGGER:
-	case MessageType::UP_DOWN:
-	case MessageType::OPEN_CLOSE: {
-		auto mt = int(messageType & MessageType::TYPE_MASK) - int(MessageType::OFF_ON);
-		return {.commands = uint16_t(command2command[mt][mt])};
+ConvertOptions RoomControl::getDefaultConvertOptions(MessageType type) {
+	switch (type & MessageType::CATEGORY) {
+	case MessageType::BINARY:
+	case MessageType::TERNARY: {
+		int t = getSwitchType(type);
+		return {.commands = uint16_t(switch2switch[t][t])};
 	}
-	default:
-		break;
+	default:;
 	}
 	return {};
 }
 
 // default convert options for function connection
-static ConvertOptions getDefaultConvertOptions(MessageType dstType, MessageType srcType) {
-	// check if both are a switch command
-	auto d = uint(dstType) - uint(MessageType::OFF_ON_IN);
-	auto s = uint(srcType) - uint(MessageType::OFF_ON_OUT);
-	bool dstIsCommand = d < SWITCH_COMMAND_COUNT;
-	bool srcIsCommand = s < SWITCH_COMMAND_COUNT;
-	if (dstIsCommand && srcIsCommand)
-		return {.commands = uint16_t(command2command[s][d])};
-
-	// check if source is a switch command and destination is a set command
-	if (srcIsCommand) {
-		switch (dstType) {
-		case MessageType::SET_LEVEL_IN:
-			return makeConvertOptions(command2setValue[s], 0.5f, 0.1f);
-		case MessageType::SET_AIR_TEMPERATURE_IN:
-			return makeConvertOptions(command2setValue[s], 293.15f, 0.5f);
+ConvertOptions RoomControl::getDefaultConvertOptions(MessageType dstType, MessageType srcType) {
+	// check if destination is a switch
+	if ((dstType & MessageType::CATEGORY) <= MessageType::TERNARY) {
+		int d = getSwitchType(dstType);
+		switch (srcType & MessageType::CATEGORY) {
+		case MessageType::BINARY:
+		case MessageType::TERNARY:
+			// both are a switch
+			return {.commands = uint16_t(switch2switch[getSwitchType(srcType)][getSwitchType(dstType)])};
+		case MessageType::PHYSICAL:
+		case MessageType::CONCENTRATION:
+		case MessageType::LIGHTING: {
+			// source is a float value, use thresholds to convert
+			auto usage = getUsage(srcType);
+			float value = getDefaultFloatValue(usage);
+			return makeConvertOptions(value2switch[d], value, value, value);
+		}
 		default:;
 		}
 	}
 
-	// check if source is a simple value and destination is a switch command
-	// todo units
-	if (dstIsCommand) {
-		switch (srcType) {
-		case MessageType::LEVEL_OUT:
-			return makeConvertOptions(value2command[d], 0.5f, 0.5f);
-		case MessageType::AIR_TEMPERATURE_OUT:
-			return makeConvertOptions(value2command[d], 293.15f + 0.5f, 293.15f - 0.5f);
-		case MessageType::AIR_HUMIDITY_OUT:
-			return makeConvertOptions(value2command[d], 0.6f, 0.01f);
-		case MessageType::AIR_PRESSURE_OUT:
-			return makeConvertOptions(value2command[d], 1000.0f * 100.0f, 100.0f);
-		case MessageType::AIR_VOC_OUT:
-			return makeConvertOptions(value2command[d], 10.0f, 1.0f);
+	// check if source is a switch
+	if ((srcType & MessageType::CATEGORY) <= MessageType::TERNARY) {
+		int s = getSwitchType(srcType);
+		switch (dstType & MessageType::CATEGORY) {
+		case MessageType::PHYSICAL:
+		case MessageType::CONCENTRATION:
+		case MessageType::LIGHTING: {
+			// source is a float value, use list of value and command (set, increment, decrement) to convert
+			auto usage = getUsage(dstType);
+			float value = getDefaultFloatValue(usage);
+			float rvalue = stepValue(usage, true, 0.0f, 1);
+			int commands = switch2valueCommand[s];
+			bool r0 = (commands & 7) != 0;
+			bool r1 = ((commands >> 3) & 7) != 0;
+			bool r2 = ((commands >> 6) & 7) != 0;
+			float f0 = r0 ? rvalue : value;
+			float f1 = r1 ? rvalue : value;
+			float f2 = r2 ? rvalue : value;
+			return makeConvertOptions(switch2valueCommand[s], f0, f1, f2);
+		}
 		default:;
 		}
 	}
-
 	return {};
 }
 
+constexpr float CELSIUS_OFFSET = 273.15f;
 
-float RoomControl::stepTemperature(float value, int delta) {
-	return std::round(value * 2.0f + float(delta)) * 0.5f;
+float RoomControl::getDefaultFloatValue(Usage usage) {
+	switch (usage) {
+	case Usage::UNIT_INTERVAL:
+	case Usage::PERCENT:
+		return 0.5f;
+	case Usage::TEMPERATURE:
+		return CELSIUS_OFFSET;
+	case Usage::TEMPERATURE_FREEZER:
+		return CELSIUS_OFFSET - 18.0f;
+	case Usage::TEMPERATURE_FRIDGE:
+		return CELSIUS_OFFSET + 4.0f;
+	case Usage::TEMPERATURE_OUTDOOR:
+		return CELSIUS_OFFSET + 10.0f;
+	case Usage::TEMPERATURE_OVEN:
+		return CELSIUS_OFFSET + 200.0f;
+	case Usage::TEMPERATURE_ROOM:
+		return CELSIUS_OFFSET + 20.0f;
+	case Usage::TEMPERATURE_COLOR:
+		return 3000.0f;
+	case Usage::PRESSURE_ATMOSPHERIC:
+		return 101320.0f;
+	default:
+		return 0.0f;
+	}
 }
 
-Flt RoomControl::displayTemperature(float kelvin) {
-	return flt(kelvin - 273.15f, -1);
+static float step(float value, int delta, float increment, float lo, float hi) {
+	return clamp(float(iround(value / increment) + delta) * increment, lo, hi);
 }
 
-String RoomControl::getTemperatureUnit() {
-	return "oC";
+static float step(float value, int delta, float increment, float lo, float hi, bool relative, float rhi) {
+	return step(value, delta, increment, relative ? 0.0f : lo, relative ? rhi : hi);
 }
 
-static void editCommand(Menu::Stream &stream, Message &message, bool editMessage, int delta, Array<uint8_t const> commands) {
-	if (editMessage)
-		message.command = (message.command + 30 + delta) % commands.count();
-	stream << underline(commandNames[commands[message.command]], editMessage);
+static float stepCelsius(float value, int delta, float increment, float lo, float hi, bool relative, float rhi) {
+	if (relative)
+		return step(value, delta, increment, 0.0f, rhi);
+	return step(value - CELSIUS_OFFSET, delta, increment, lo, hi) + CELSIUS_OFFSET;
+}
+
+float RoomControl::stepValue(Usage usage, bool relative, float value, int delta) {
+	switch (usage) {
+	case Usage::UNIT_INTERVAL:
+	case Usage::PERCENT:
+		return step(value, delta, 0.05f, 0.0f, 1.0f, relative, 1.0f);
+	case Usage::TEMPERATURE:
+		return stepCelsius(value, delta, 1.0f, -273.0f, 5000.0f, relative, 100.0f);
+	case Usage::TEMPERATURE_FREEZER:
+		return stepCelsius(value, delta, 0.5f, -30.0f, 0.0f, relative, 10.0f);
+	case Usage::TEMPERATURE_FRIDGE:
+		return stepCelsius(value, delta, 0.5f, 0.0f, 20.0f, relative, 10.0f);
+	case Usage::TEMPERATURE_OUTDOOR:
+		return step(value - CELSIUS_OFFSET, delta, 1.0f, -50.0f, 60.0f) + CELSIUS_OFFSET;
+	case Usage::TEMPERATURE_OVEN:
+		return stepCelsius(value, delta, 5.0f, 50.0f, 500.0f, relative, 200.0f);
+	case Usage::TEMPERATURE_ROOM:
+		// todo: Celsius or Fahrenheit
+		return stepCelsius(value, delta, 0.5f, 0.0f, 50.0f, relative, 20.0f);
+	case Usage::TEMPERATURE_COLOR:
+		return step(value, delta, 100.0f, 1000.0f, 10000.0f, relative, 5000.0f);
+	case Usage::PRESSURE_ATMOSPHERIC:
+		return step(value, delta, 100.0f, 50000.0f, 150000.0f);
+	default:
+		return value;
+	}
+}
+
+Flt RoomControl::getDisplayValue(Usage usage, bool relative, float value) {
+	switch (usage) {
+	case Usage::UNIT_INTERVAL:
+		return flt(value, -2);
+	case Usage::PERCENT:
+		return flt(value * 100.0f, 0);
+	case Usage::TEMPERATURE:
+	case Usage::TEMPERATURE_FREEZER:
+	case Usage::TEMPERATURE_FRIDGE:
+	case Usage::TEMPERATURE_OUTDOOR:
+	case Usage::TEMPERATURE_OVEN:
+	case Usage::TEMPERATURE_ROOM:
+		// todo: Celsius or Fahrenheit
+		if (relative)
+			return flt(value, -1);
+		return flt(value - CELSIUS_OFFSET, -1);
+	case Usage::TEMPERATURE_COLOR:
+		return flt(value, -1);
+	case Usage::PRESSURE_ATMOSPHERIC:
+		// todo: Unit
+		return flt(value * 0.01f, 0);
+	default:;
+	}
+	return {};
+}
+
+String RoomControl::getDisplayUnit(Usage usage) {
+	switch (usage) {
+	case Usage::PERCENT:
+		return "%";
+	case Usage::TEMPERATURE:
+	case Usage::TEMPERATURE_FREEZER:
+	case Usage::TEMPERATURE_FRIDGE:
+	case Usage::TEMPERATURE_OUTDOOR:
+	case Usage::TEMPERATURE_OVEN:
+	case Usage::TEMPERATURE_ROOM:
+		// todo: Celsius or Fahrenheit
+		return "oC";
+	case Usage::TEMPERATURE_COLOR:
+		return "K";
+	case Usage::PRESSURE_ATMOSPHERIC:
+		// todo: Unit
+		return "hPa";
+	default:;
+	}
+	return {};
 }
 
 void RoomControl::editMessage(Menu::Stream &stream, MessageType messageType,
 	Message &message, bool editMessage1, bool editMessage2, int delta)
 {
-	// edit and display message values
-	switch (messageType & MessageType::TYPE_MASK) {
-	case MessageType::OFF_ON:
-		editCommand(stream, message, editMessage1, delta, onOffCommands);
-		break;
-	case MessageType::OFF_ON_TOGGLE:
-		editCommand(stream, message, editMessage1, delta, onOffToggleCommands);
-		break;
-	case MessageType::TRIGGER:
-		editCommand(stream, message, editMessage1, delta, triggerCommands);
-		break;
-	case MessageType::UP_DOWN:
-		editCommand(stream, message, editMessage1, delta, upDownCommands);
-		break;
-	case MessageType::OPEN_CLOSE:
-		editCommand(stream, message, editMessage1, delta, openCloseCommands);
-		break;
-	case MessageType::LEVEL:
-		break;
-	case MessageType::SET_LEVEL:
-		break;
-	case MessageType::MOVE_TO_LEVEL:
+	auto usage = getUsage(messageType);
+	switch (messageType & MessageType::CATEGORY) {
+	case MessageType::BINARY:
+	case MessageType::TERNARY: {
+		// switch
+		auto states = getSwitchStates(usage);
 		if (editMessage1)
-			message.value.f = clamp(float(message.value.f) + delta * 0.05f, 0.0f, 1.0f);
+			message.value.u8 = (message.value.u8 + 30 + delta) % states.count();
+		stream << underline(states[message.value.u8], editMessage1);
+		break;
+	}
+	case MessageType::LEVEL:
+	case MessageType::PHYSICAL:
+	case MessageType::CONCENTRATION:
+		// float
+		if (editMessage1)
+			message.value.f = stepValue(usage, false, message.value.f, delta);
+		stream << underline(getDisplayValue(usage, false, message.value.f), editMessage1) << getDisplayUnit(usage);
+		break;
+	case MessageType::LIGHTING:
+		// float + transition
+		if (editMessage1)
+			message.value.f = stepValue(usage, false, message.value.f, delta);
 		if (editMessage2)
 			message.transition = clamp(message.transition + delta, 0, 65535);
-		stream << underline(flt(message.value.f, 2), editMessage1) << ' ';
+		stream << underline(getDisplayValue(usage, false, message.value.f), editMessage1) << getDisplayUnit(usage) << ' ';
 
 		// transition time in 1/10 s
 		stream << underline(dec(message.transition / 10) + '.' + dec(message.transition % 10), editMessage2) << 's';
 		break;
-	case MessageType::AIR_TEMPERATURE:
-		if (editMessage1)
-			message.value.f = stepTemperature(message.value.f, delta);
-		stream << underline(displayTemperature(message.value.f), editMessage1) << getTemperatureUnit();
-		break;
-	case MessageType::SET_AIR_TEMPERATURE:
-		break;
-	case MessageType::AIR_PRESSURE:
-		if (editMessage1)
-			message.value.f = message.value.f + delta;
-		stream << underline(flt(message.value.f * 0.01f, 0), editMessage1) << "hPa";
-		break;
+	default:;
 	}
 }
+
+
+static int editDestinationCommand(Menu::Stream &stream, ConvertOptions &convertOptions, int index,
+	Array<String const> const &dstCommands, bool editCommand, int delta)
+{
+	// edit destination command
+	int offset = index * 3;
+	int command = (convertOptions.commands >> offset) & 7;
+	int commandCount = dstCommands.count();
+	if (editCommand) {
+		command += delta;
+		while (command > commandCount)
+			command -= commandCount + 1;
+		while (command < 0)
+			command += commandCount + 1;
+		if (command >= commandCount)
+			command = 7;
+		convertOptions.commands = (convertOptions.commands & ~(7 << offset)) | command << offset;
+	}
+
+	stream << underline(command < commandCount ? dstCommands[command] : "(ignore)", editCommand);
+	return command;
+}
+
+void RoomControl::editConvertSwitch2Switch(Menu &menu, ConvertOptions &convertOptions,
+	Array<String const> const &dstStates, Array<String const> const &srcStates)
+{
+	int delta = menu.getDelta();
+
+	// one menu entry per source switch state
+	for (int i = 0; i < srcStates.count(); ++i) {
+		auto stream = menu.stream();
+
+		// source command
+		stream << srcStates[i] << " -> ";
+
+		// edit destination switch state
+		bool editState = menu.getEdit(1) == 1;
+		editDestinationCommand(stream, convertOptions, i, dstStates, editState, delta);
+
+		menu.entry();
+	}
+
+	// set remaining commands to invalid
+	convertOptions.commands |= -1 << srcStates.count() * 3;
+}
+
+void RoomControl::editConvertFloat2Switch(Menu &menu, ConvertOptions &convertOptions,
+	Array<String const> const &dstStates, Usage srcUsage) {
+
+	int delta = menu.getDelta();
+
+	// one menu entry per source compare operator
+	for (int i = 0; i < array::count(compareOperators); ++i) {
+		auto stream = menu.stream();
+
+		// source command
+		stream << compareOperators[i];
+
+		if (i <= 1) {
+			// edit value
+			bool editValue = menu.getEdit(2) == 1;
+			if (editValue)
+				convertOptions.value.f[i] = stepValue(srcUsage, false, convertOptions.value.f[i], delta);
+
+			// value
+			stream << ' ' << underline(getDisplayValue(srcUsage, false, convertOptions.value.f[i]), editValue)
+				<< ' ' << getDisplayUnit(srcUsage);
+		}
+		stream << " -> ";
+
+		// edit destination switch state
+		bool editState = menu.getEdit(2) == 2;
+		editDestinationCommand(stream, convertOptions, i, dstStates, editState, delta);
+
+		menu.entry();
+	}
+
+	// set remaining commands to invalid
+	convertOptions.commands |= -1 << array::count(compareOperators) * 3;
+}
+
+void RoomControl::editConvertSwitch2FloatCommand(Menu &menu, ConvertOptions &convertOptions, Usage dstUsage,
+	Array<String const> const &srcCommands)
+{
+	static_assert(array::count(commands) <= ConvertOptions::MAX_VALUE_COUNT);
+
+	int delta = menu.getDelta();
+
+	// one menu entry per source command
+	for (int i = 0; i < srcCommands.count(); ++i) {
+
+		auto stream = menu.stream();
+
+		// source command
+		stream << srcCommands[i] << " -> ";
+
+		// edit destination command
+		bool editCommand = menu.getEdit(2) == 1;
+		bool lastRelative = convertOptions.getCommand(i) != 0;
+		int command = editDestinationCommand(stream, convertOptions, i, commands, editCommand, delta);
+		bool relative = command != 0;
+
+		float value = convertOptions.value.f[i];
+		if (relative != lastRelative) {
+			// command was changed between absolute (set) and relative (increase, decrease)
+			if (!relative && lastRelative)
+				value += getDefaultFloatValue(dstUsage);
+			if (relative && !lastRelative)
+				value -= getDefaultFloatValue(dstUsage);
+		}
+
+		if (command < array::count(commands)) {
+			// edit set-value
+			bool editValue = menu.getEdit(2) == 2;
+			if (editValue)
+				value = stepValue(dstUsage, relative, value, delta);
+
+			// set-value
+			stream << ' ' << underline(getDisplayValue(dstUsage, relative, value), editValue)
+				<< ' ' << getDisplayUnit(dstUsage);
+		} else {
+			// ignore command: no value to edit
+			menu.getEdit(1);
+		}
+		convertOptions.value.f[i] = value;
+
+		menu.entry();
+	}
+
+	// set remaining commands to invalid
+	convertOptions.commands |= -1 << srcCommands.count() * 3;
+}
+
+void RoomControl::editConvertOptions(Menu &menu, ConvertOptions &convertOptions, MessageType dstType, MessageType srcType) {
+	auto dstUsage = getUsage(dstType);
+	auto srcUsage = getUsage(srcType);
+
+	// check if destination is a switch
+	if ((dstType & MessageType::CATEGORY) <= MessageType::TERNARY) {
+		auto dstStates = getSwitchStates(dstUsage);
+
+		switch (srcType & MessageType::CATEGORY) {
+		case MessageType::BINARY:
+		case MessageType::TERNARY:
+			// both are a switch
+			editConvertSwitch2Switch(menu, convertOptions, dstStates, getSwitchStates(srcUsage));
+			return;
+		case MessageType::LEVEL:
+		case MessageType::PHYSICAL:
+		case MessageType::CONCENTRATION:
+		case MessageType::LIGHTING:
+			editConvertFloat2Switch(menu, convertOptions, dstStates, srcUsage);
+			return;
+		case MessageType::METERING:
+			// todo
+			return;
+		default:;
+		}
+	}
+
+	// check if source is a switch
+	if ((srcType & MessageType::CATEGORY) <= MessageType::TERNARY) {
+		switch (dstType & MessageType::CATEGORY) {
+		case MessageType::LEVEL:
+		case MessageType::PHYSICAL:
+		case MessageType::CONCENTRATION:
+		case MessageType::LIGHTING:
+			// source is a switch and destination is a value (with command)
+			editConvertSwitch2FloatCommand(menu, convertOptions, dstUsage, getSwitchStates(srcUsage));
+
+			return;
+		default:;
+		}
+	}
+}
+
 
 String getName(RoomControl::Connection::Interface interface) {
 	switch (interface) {
@@ -2478,14 +1262,14 @@ AwaitableCoroutine RoomControl::alarmActionsMenu(AlarmInterface::AlarmFlash &fla
 AwaitableCoroutine RoomControl::endpointsMenu(Interface::Device &device) {
 	Menu menu(this->swapChain);
 	while (true) {
-		Array<MessageType const> endpoints = device.getEndpoints();
+		auto endpoints = device.getEndpoints();
 		for (int i = 0; i < endpoints.count(); ++i) {
 			auto messageType = endpoints[i];
 			auto stream = menu.stream();
-			stream << dec(i) << ": " << getTypeName(messageType);
+			stream << dec(i) << ": " << getTypeLabel(messageType);
 			if ((messageType & MessageType::DIRECTION_MASK) == MessageType::IN)
 				stream << " In";
-			else
+			if ((messageType & MessageType::DIRECTION_MASK) == MessageType::OUT)
 				stream << " Out";
 			menu.entry();
 		}
@@ -2530,29 +1314,22 @@ AwaitableCoroutine RoomControl::messageLogger(Interface::Device &device) {
 			Event &event = queue[i];
 			auto stream = menu.stream();
 			stream << dec(event.info.device.endpointIndex) << ": ";
-			switch (event.info.type & MessageType::TYPE_MASK) {
-			case MessageType::OFF_ON:
-				stream << commandNames[onOffCommands[event.message.command]];
+			auto usage = getUsage(event.info.type);
+			switch (event.info.type & MessageType::CATEGORY) {
+			case MessageType::BINARY:
+			case MessageType::TERNARY:
+				stream << getSwitchStates(usage)[event.message.value.u8];
 				break;
-			case MessageType::OFF_ON_TOGGLE:
-				stream << commandNames[onOffToggleCommands[event.message.command]];
+			case MessageType::LEVEL:
+			case MessageType::PHYSICAL:
+			case MessageType::CONCENTRATION:
+			case MessageType::LIGHTING: {
+				bool relative = (event.info.type & MessageType::CMD) != 0 && event.message.command != 0;
+				stream << getDisplayValue(usage, relative, event.message.value.f) << getDisplayUnit(usage);
 				break;
-			case MessageType::TRIGGER:
-				stream << commandNames[triggerCommands[event.message.command]];
-				break;
-			case MessageType::UP_DOWN:
-				stream << commandNames[upDownCommands[event.message.command]];
-				break;
-			case MessageType::OPEN_CLOSE:
-				stream << commandNames[openCloseCommands[event.message.command]];
-				break;
-			case MessageType::AIR_TEMPERATURE:
-				// todo: units
-				stream << flt(event.message.value.f - 273.15f, 1) << "oC";
-				break;
-			case MessageType::AIR_PRESSURE:
-				// todo: units
-				stream << flt(event.message.value.f * 0.01, 1) << "hPa";
+			}
+			case MessageType::METERING:
+				//stream << getDisplayValue(usage, event.message.value.u32) << getDisplayUnit(usage);
 				break;
 			default:;
 			}
@@ -2563,7 +1340,7 @@ AwaitableCoroutine RoomControl::messageLogger(Interface::Device &device) {
 			break;
 
 		// update subscribers
-		Array<MessageType const> endpoints = device.getEndpoints();
+		auto endpoints = device.getEndpoints();
 		for (int endpointIndex = 0; endpointIndex < min(endpoints.count(), array::count(subscribers)); ++endpointIndex) {
 			auto &subscriber = subscribers[endpointIndex];
 			auto messageType = endpoints[endpointIndex];
@@ -2588,13 +1365,13 @@ AwaitableCoroutine RoomControl::messageGenerator(Interface::Device &device) {
 
 	uint8_t endpointIndex = 0;
 	MessageType lastMessageType = MessageType::UNKNOWN;
-	Message message;
+	Message message = {};
 	PublishInfo::Barrier *publishBarrier;
 
 	// menu loop
 	Menu menu(this->swapChain);
 	while (true) {
-		Array<MessageType const> endpoints = device.getEndpoints();
+		auto endpoints = device.getEndpoints();
 		if (endpoints.count() > 0) {
 			// get endpoint type
 			endpointIndex = clamp(endpointIndex, 0, endpoints.count() - 1);
@@ -2613,10 +1390,24 @@ AwaitableCoroutine RoomControl::messageGenerator(Interface::Device &device) {
 				messageType = endpoints[endpointIndex];
 			}
 
-			// update message type and reset message if type has changed
+			// set default message if type has changed
 			if (messageType != lastMessageType) {
 				lastMessageType = messageType;
-				message = getDefaultMessage(messageType);
+
+				auto usage = getUsage(messageType);
+				switch (messageType & MessageType::CATEGORY) {
+				case MessageType::BINARY:
+				case MessageType::TERNARY:
+					message.value.u8 = 1;
+					break;
+				case MessageType::LEVEL:
+				case MessageType::PHYSICAL:
+				case MessageType::CONCENTRATION:
+				case MessageType::LIGHTING:
+					message.value.f = getDefaultFloatValue(usage);
+					break;
+				default:;
+				}
 			}
 
 			// edit message
@@ -2633,16 +1424,12 @@ AwaitableCoroutine RoomControl::messageGenerator(Interface::Device &device) {
 
 					// convert to destination message type and resume coroutine if conversion was successful
 					auto &dst = *reinterpret_cast<Message *>(p.message);
-					switch (messageType) {
-					case MessageType::OFF_ON_OUT:
-					case MessageType::OFF_ON_TOGGLE_OUT:
-					case MessageType::TRIGGER_OUT:
-					case MessageType::UP_DOWN_OUT:
-					case MessageType::OPEN_CLOSE_OUT:
-						dst.command = message.command;
-					default:
+					if ((messageType & MessageType::CATEGORY) <= MessageType::TERNARY)
+						dst.value.u8 = message.value.u8;
+					else if ((messageType & MessageType::CMD) == 0)
+						dst.value = message.value;
+					else
 						dst = message;
-					}
 					return true;
 				});
 			}
@@ -2652,7 +1439,8 @@ AwaitableCoroutine RoomControl::messageGenerator(Interface::Device &device) {
 			break;
 			
 		// show menu
-		co_await select(menu.show(), Timer::sleep(250ms));
+		//co_await select(menu.show(), Timer::sleep(250ms));
+		co_await menu.show();
 	}
 }
 
@@ -2798,7 +1586,7 @@ AwaitableCoroutine RoomControl::functionMenu(int index, FunctionFlash &flash) {
 					for (int connectionIndex = 0; connectionIndex < flash.connectionCount; ++connectionIndex, ++it) {
 						auto &connection = it.getConnection();
 						auto &plug = functionInfo.plugs[connection.plugIndex];
-						if (plug.messageType == MessageType::UP_DOWN_OUT && !connection.isMqtt()) {
+						if (plug.messageType == MessageType::TERNARY_OPENING_BLIND_OUT /*UP_DOWN_OUT*/ && !connection.isMqtt()) {
 							auto &interface = getInterface(connection);
 							auto *device = interface.getDeviceById(connection.deviceId);
 							if (device != nullptr)
@@ -2925,8 +1713,8 @@ AwaitableCoroutine RoomControl::measureRunTime(Interface::Device &device, Connec
 			info.barrier->resumeFirst([&device, &connection, state] (PublishInfo::Parameters &p) {
 				auto dstType = device.getEndpoints()[connection.endpointIndex];
 				p.info = {dstType, {.device = {device.getId(), connection.endpointIndex}}};
-				Message &dst = *reinterpret_cast<Message *>(p.message);
-				return convertCommand(dstType, dst, state, connection.convertOptions);
+				auto &dst = *reinterpret_cast<Message *>(p.message);
+				return convertSwitch(dstType, dst, state, connection.convertOptions);
 			});
 
 			//publisher.publish();
@@ -2946,312 +1734,6 @@ AwaitableCoroutine RoomControl::measureRunTime(Interface::Device &device, Connec
 
 			if (state != 0)
 				duration = (Timer::now() - startTime) * 100 / 1s;
-		}
-	}
-}
-
-
-/*
-
-static void editConvertOptionsValue2Command(Menu &menu, ConvertOptions &convertOptions,
-	Array<uint8_t const> dstCommands)
-{
-	int delta = menu.getDelta();
-
-	// one menu entry for greater, equals, less
-	for (int i = 0; i < 3; ++i) {
-		auto stream = menu.stream();
-
-		// source command
-		stream << commandNames[compareCommands[i]] << " -> ";
-
-		// edit destination command
-		int offset = i * 3;
-		int command = (convertOptions.commands >> offset) & 7;
-		bool editCommand = menu.getEdit(1) == 1;
-		int commandCount = dstCommands.count();
-		if (editCommand) {
-			command += delta;
-			while (command > commandCount)
-				command -= commandCount + 1;
-			while (command < 0)
-				command += commandCount + 1;
-			if (command >= commandCount)
-				command = 7;
-			convertOptions.commands = (convertOptions.commands & ~(7 << offset)) | command << offset;
-		}
-
-		stream << underline(command < commandCount ? commandNames[dstCommands[command]] : "(ignore)", editCommand);
-		menu.entry();
-
-
-	}
-
-	// set remaining commands to invalid
-	convertOptions.commands |= -1 << array::count(compareCommands) * 3;
-}
-
-// edit convert optons for command messages (e.g. OFF_ON, UP_DOWN)
-static void editConvertOptionsCommand(Menu &menu, ConvertOptions &convertOptions, Array<uint8_t const> dstCommands,
-	MessageType srcType)
-{
-	switch (srcType & MessageType::TYPE_MASK) {
-	case MessageType::OFF_ON:
-		editConvertOptionsCommand2Command(menu, convertOptions, dstCommands, onOffCommands);
-		break;
-	case MessageType::OFF_ON_TOGGLE:
-		editConvertOptionsCommand2Command(menu, convertOptions, dstCommands, onOffToggleCommands);
-		break;
-	case MessageType::TRIGGER:
-		editConvertOptionsCommand2Command(menu, convertOptions, dstCommands, triggerCommands);
-		break;
-	case MessageType::UP_DOWN:
-		editConvertOptionsCommand2Command(menu, convertOptions, dstCommands, upDownCommands);
-		break;
-	case MessageType::OPEN_CLOSE:
-		editConvertOptionsCommand2Command(menu, convertOptions, dstCommands, openCloseCommands);
-		break;
-	case MessageType::AIR_TEMPERATURE:
-		editConvertOptionsValue2Command(menu, convertOptions, dstCommands);
-		break;
-	}
-}
-
-static bool hasSetCommand(uint16_t commands) {
-	for (int i = 0; i < 4; ++i) {
-		if ((commands & 7) == 0)
-			return true;
-		commands >>= 3;
-	}
-	return false;
-}
-
-static bool hasIncDecCommand(uint16_t commands) {
-	for (int i = 0; i < 4; ++i) {
-		int c = commands & 7;
-		if (c == 1 || c == 2)
-			return true;
-		commands >>= 3;
-	}
-	return false;
-}
-
-// edit convert options for "set float" messages (e.g. SET_LEVEL, SET_TEMPERATURE)
-static void editConvertOptionsSetFloat(Menu &menu, ConvertOptions &convertOptions,
-	MessageType srcType, float scale, float offset, float precision, float maxValue, int decimalCount, String unit)
-{
-	// edit convert options for set command (set, increase, decrease)
-	editConvertOptionsCommand(menu, convertOptions, setCommands, srcType);
-
-	// absolute value
-	int delta = menu.getDelta();
-	if (hasSetCommand(convertOptions.commands)) {
-		bool editLevel = menu.getEdit(1);
-		if (editLevel)
-			convertOptions.value.f[0] = clamp(float(iround((convertOptions.value.f[0] - offset) * precision) + delta)
-				/ precision + offset, 0.0f, maxValue);
-		menu.stream() << "Set: "
-			<< underline(flt(convertOptions.value.f[0] * scale - offset, decimalCount), editLevel)
-			<< ' ' << unit;
-		menu.entry();
-	}
-
-	// relative value
-	if (hasIncDecCommand(convertOptions.commands)) {
-		bool editLevel = menu.getEdit(1);
-		if (editLevel)
-			convertOptions.value.f[1] = clamp(float(iround((convertOptions.value.f[1]) * precision) + delta)
-				/ precision, 0.0f, maxValue);
-		menu.stream() << "Inc/Dec: "
-			<< underline(flt(convertOptions.value.f[1] * scale, decimalCount), editLevel)
-			<< ' ' << unit;
-		menu.entry();
-	}
-}
-*/
-static int editDestinationCommand(Menu::Stream &stream, ConvertOptions &convertOptions, int index,
-	Array<uint8_t const> const &dstCommands, bool editCommand, int delta)
-{
-	// edit destination command
-	int offset = index * 3;
-	int command = (convertOptions.commands >> offset) & 7;
-	int commandCount = dstCommands.count();
-	if (editCommand) {
-		command += delta;
-		while (command > commandCount)
-			command -= commandCount + 1;
-		while (command < 0)
-			command += commandCount + 1;
-		if (command >= commandCount)
-			command = 7;
-		convertOptions.commands = (convertOptions.commands & ~(7 << offset)) | command << offset;
-	}
-
-	stream << underline(command < commandCount ? commandNames[dstCommands[command]] : "(ignore)", editCommand);
-	return command;
-}
-
-static void editConvertSwitch2Switch(Menu &menu, ConvertOptions &convertOptions,
-	Array<uint8_t const> const &dstCommands, Array<uint8_t const> const &srcCommands)
-{
-	int delta = menu.getDelta();
-
-	// one menu entry per source command
-	for (int i = 0; i < srcCommands.count(); ++i) {
-		auto stream = menu.stream();
-
-		// source command
-		stream << commandNames[srcCommands[i]] << " -> ";
-
-		// edit destination command
-		bool editCommand = menu.getEdit(1) == 1;
-		editDestinationCommand(stream, convertOptions, i, dstCommands, editCommand, delta);
-
-		menu.entry();
-	}
-
-	// set remaining commands to invalid
-	convertOptions.commands |= -1 << srcCommands.count() * 3;
-}
-
-static void editConvertSwitch2SetFloat(Menu &menu, ConvertOptions &convertOptions,
-	Array<uint8_t const> const &srcCommands, float scale, float offset, float precision, int decimalCount, float maxValue, String unit)
-{
-	static_assert(array::count(setCommands) <= ConvertOptions::MAX_VALUE_COUNT);
-
-	int delta = menu.getDelta();
-
-	// one menu entry per source command
-	for (int i = 0; i < srcCommands.count(); ++i) {
-
-		auto stream = menu.stream();
-
-		// source command
-		stream << commandNames[srcCommands[i]] << " -> ";
-		//menu.label();
-
-		//auto stream = menu.stream();
-
-		// edit destination command
-		bool editCommand = menu.getEdit(2) == 1;
-		int lastCommand = convertOptions.getCommand(i);
-		int command = editDestinationCommand(stream, convertOptions, i, setCommands, editCommand, delta);
-		if (command != lastCommand) {
-			if (command == 0 && lastCommand != 0)
-				convertOptions.value.f[i] += offset;
-			if (command != 0 && lastCommand == 0)
-				convertOptions.value.f[i] -= offset;
-		}
-
-		if (command < array::count(setCommands)) {
-			float o = command == 0 ? offset : 0.0f;
-
-			// edit set-value
-			bool editValue = menu.getEdit(2) == 2;
-			if (editValue) {
-				convertOptions.value.f[i] = clamp(
-					(float(iround((convertOptions.value.f[i] * scale + o) * precision) + delta)
-						/ precision - o) / scale, 0.0f, maxValue);
-			}
-
-			// set-value
-			stream << ' ' << underline(flt(convertOptions.value.f[i] * scale + o, decimalCount), editValue)
-				<< ' ' << unit;
-		} else {
-			// ignore command: no value to edit
-			menu.getEdit(1);
-		}
-
-		menu.entry();
-	}
-
-	// set remaining commands to invalid
-	convertOptions.commands |= -1 << srcCommands.count() * 3;
-}
-
-static void editConvertFloat2Switch(Menu &menu, ConvertOptions &convertOptions,
-	Array<uint8_t const> const &dstCommands, float scale, float offset, float precision, int decimalCount, float maxValue, String unit) {
-
-	int delta = menu.getDelta();
-
-	// one menu entry per source command
-	for (int i = 0; i < array::count(compareCommands); ++i) {
-		auto stream = menu.stream();
-
-		// source command
-		stream << commandNames[compareCommands[i]];
-
-		if (i <= 1) {
-			// edit value
-			bool editValue = menu.getEdit(2) == 1;
-			if (editValue) {
-				convertOptions.value.f[i] = clamp(
-					(float(iround((convertOptions.value.f[i] * scale + offset) * precision) + delta)
-						/ precision - offset) / scale, 0.0f, maxValue);
-			}
-
-			// value
-			stream << ' ' << underline(flt(convertOptions.value.f[i] * scale + offset, decimalCount), editValue)
-				<< ' ' << unit;
-		}
-		stream << " -> ";
-
-		// edit destination command
-		bool editCommand = menu.getEdit(2) == 2;
-		editDestinationCommand(stream, convertOptions, i, dstCommands, editCommand, delta);
-
-		menu.entry();
-	}
-
-	// set remaining commands to invalid
-	convertOptions.commands |= -1 << array::count(compareCommands) * 3;
-}
-
-static void editConvertOptions(Menu &menu, ConvertOptions &convertOptions, MessageType dstType, MessageType srcType) {
-	// check if both are a switch command
-	auto d = uint(dstType) - uint(MessageType::OFF_ON_IN);
-	auto s = uint(srcType) - uint(MessageType::OFF_ON_OUT);
-	bool dstIsCommand = d < SWITCH_COMMAND_COUNT;
-	bool srcIsCommand = s < SWITCH_COMMAND_COUNT;
-	if (dstIsCommand && srcIsCommand) {
-		editConvertSwitch2Switch(menu, convertOptions, switchCommands[d], switchCommands[s]);
-		return;
-	}
-
-	// check if source is a switch command and destination is a set command
-	if (srcIsCommand) {
-		switch (dstType) {
-		case MessageType::SET_LEVEL_IN:
-			editConvertSwitch2SetFloat(menu, convertOptions, switchCommands[s], 1.0f, 0.0f, 100.0f, -2, 1.0f, String());
-			return;
-		case MessageType::MOVE_TO_LEVEL_IN:
-			return;
-		case MessageType::SET_AIR_TEMPERATURE_IN:
-			editConvertSwitch2SetFloat(menu, convertOptions, switchCommands[s], 1.0f, -273.15f, 2.0f, -1, 10000.0f, "oC");
-			return;
-		default:;
-		}
-	}
-
-	// check if source is a simple value and destination is a switch command
-	if (dstIsCommand) {
-		switch (srcType) {
-		case MessageType::LEVEL_OUT:
-			editConvertFloat2Switch(menu, convertOptions, switchCommands[d], 1.0f, 0.0f, 100.0f, -2, 1.0f, String());
-			return;
-		case MessageType::AIR_TEMPERATURE_OUT:
-			editConvertFloat2Switch(menu, convertOptions, switchCommands[d], 1.0f, -273.15f, 2.0f, -1, 10000.0f, "oC");
-			return;
-		case MessageType::AIR_HUMIDITY_OUT:
-			editConvertFloat2Switch(menu, convertOptions, switchCommands[d], 100.0f, 0.0f, 1.0f, 0, 1.0f, "%");
-			return;
-		case MessageType::AIR_PRESSURE_OUT:
-			editConvertFloat2Switch(menu, convertOptions, switchCommands[d], 0.01f, 0.0f, 1.0f, 0, 2000.0f * 100.0f, "hPa");
-			return;
-		case MessageType::AIR_VOC_OUT:
-			editConvertFloat2Switch(menu, convertOptions, switchCommands[d], 1.0f, 0.0f, 0.1f, 1, 100.0f, "O");
-			return;
-		default:;
 		}
 	}
 }
@@ -3366,7 +1848,7 @@ AwaitableCoroutine RoomControl::selectFunctionEndpoint(Interface::Device &device
 			auto messageType = endpoints[i];
 			if (isCompatible(plug, messageType) != 0) {
 				// endpoint is compatible
-				String typeName = getTypeName(messageType);
+				String typeName = getTypeLabel(messageType);
 				menu.stream() << dec(i) << " (" << typeName << ')';
 				if (menu.entry()) {
 					// endpoint selected
@@ -3491,6 +1973,7 @@ void RoomControl::FunctionFlash::setType(Type type) {
 		config.runTime = 1000;
 		break;
 	}
+	default:;
 	}
 }
 
@@ -3585,7 +2068,7 @@ Coroutine RoomControl::SimpleSwitch::start(RoomControl &roomControl) {
 		// publish
 		for (int i = 0; i < outputCount; ++i) {
 			auto &publisher = publishers[i];
-			publisher.publishSwitchCommand(state.state);
+			publisher.publishSwitch(state.state);
 		}
 	}
 }
@@ -3662,8 +2145,7 @@ Coroutine RoomControl::TimeoutSwitch::start(RoomControl &roomControl) {
 		// publish
 		for (int i = 0; i < outputCount; ++i) {
 			auto &publisher = publishers[i];
-			publisher.publishSwitchCommand(state.state);
-			//publishers[i].publish();
+			publisher.publishSwitch(state.state);
 		}
 	}
 }
@@ -3734,7 +2216,7 @@ Coroutine RoomControl::TimedBlind::start(RoomControl &roomControl) {
 		case 0:
 		case 1:
 			// up/down or trigger in
-			if (message.command == 0) {
+			if (message.value.u8 == 0) {
 				// released: stop if timeout elapsed
 				if (Timer::now() > startTime + holdTime)
 					targetPosition = position;
@@ -3745,7 +2227,7 @@ Coroutine RoomControl::TimedBlind::start(RoomControl &roomControl) {
 					if (info.plug.id == 1) {
 						// trigger
 						targetPosition = ((up || (targetPosition == 0s)) && targetPosition < maxPosition) ? maxPosition : 0s;
-					} else if (message.command == 1) {
+					} else if (message.value.u8 == 1) {
 						// up
 						targetPosition = 0s;
 					} else {
@@ -3786,7 +2268,7 @@ Coroutine RoomControl::TimedBlind::start(RoomControl &roomControl) {
 		}
 		case 3:
 			// enable down
-			enableDown = message.command;
+			enableDown = message.value.u8;
 			break;
 		}
 
@@ -3812,13 +2294,13 @@ Coroutine RoomControl::TimedBlind::start(RoomControl &roomControl) {
 			switch (publisher.id) {
 			case 4:
 				// up/down out
-				publisher.publishSwitchCommand(state);
+				publisher.publishSwitch(state);
 				break;
 			case 5: {
 				// position out
 				float outPosition = position / maxPosition;
 				//Terminal::out << "pos " << flt(outPosition) << '\n';
-				publisher.publishFloatValue(outPosition);
+				publisher.publishFloat(outPosition);
 				break;
 			}
 			}
@@ -3846,7 +2328,7 @@ Coroutine RoomControl::HeatingControl::start(RoomControl &roomControl) {
 	OffOn night;
 	OffOn summer;
 	uint32_t windows = 0xffffffff;
-	FloatValue setTemperature = {20.0f + 273.15f};
+	FloatValue setTemperature = {20.0f + CELSIUS_OFFSET};
 	float temperature = 20.0f + 273.15f;
 
 	// no references to flash allowed beyond this point as flash may be reallocated
@@ -3860,20 +2342,20 @@ Coroutine RoomControl::HeatingControl::start(RoomControl &roomControl) {
 		switch (info.plug.id) {
 		case 0:
 			// on/off in
-			on.apply(message.command);
+			on.apply(message.value.u8);
 			break;
 		case 1:
 			// night in
-			night.apply(message.command);
+			night.apply(message.value.u8);
 			break;
 		case 2:
 			// summer in
-			summer.apply(message.command);
+			summer.apply(message.value.u8);
 			break;
 		case 3:
 			// windows in
-			Terminal::out << "window " << dec(info.plug.connectionIndex) << (message.command ? " close\n" : " open\n");
-			if (message.command == 0)
+			Terminal::out << "window " << dec(info.plug.connectionIndex) << (message.value.u8 ? " close\n" : " open\n");
+			if (message.value.u8 == 0)
 				windows &= ~(1 << info.plug.connectionIndex);
 			else
 				windows |= 1 << info.plug.connectionIndex;
@@ -3908,7 +2390,7 @@ Coroutine RoomControl::HeatingControl::start(RoomControl &roomControl) {
 		// publish
 		for (int i = 0; i < outputCount; ++i) {
 			auto &publisher = publishers[i];
-			publisher.publishSwitchCommand(valve);
+			publisher.publishSwitch(valve);
 		}
 	}
 }

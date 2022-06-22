@@ -133,6 +133,7 @@ int main(int argc, const char **argv) {
 	Poti::init();
 	BusMaster::init();
 	Radio::init();
+	Network::init();
 	Output::init();
 	Input::init();
 

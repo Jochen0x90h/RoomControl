@@ -22,30 +22,32 @@ constexpr int BME680_VOC_ENDPOINT = 3;
 
 // endpoint type arrays for getEndpoints()
 constexpr MessageType bme680Endpoints[] = {
-	MessageType::AIR_TEMPERATURE_OUT,
-	MessageType::AIR_HUMIDITY_OUT,
-	MessageType::AIR_PRESSURE_OUT,
-	MessageType::AIR_VOC_OUT
+	MessageType::PHYSICAL_TEMPERATURE_MEASURED_ROOM_OUT,
+	MessageType::CONCENTRATION_RELATIVE_HUMIDITY_MEASURED_AIR_OUT,
+	MessageType::PHYSICAL_PRESSURE_MEASURED_ATMOSPHERE_OUT,
+	MessageType::CONCENTRATION_VOC_OUT,
 };
 
 constexpr MessageType heatingEndpoints[] = {
-	MessageType::OFF_ON_TOGGLE_IN
+	MessageType::BINARY_OPEN_VALVE_CMD_OUT
 };
 
 constexpr MessageType brightnessSensorEndpoints[] = {
-	MessageType::ILLUMINANCE_OUT,
+	MessageType::PHYSICAL_ILLUMINANCE_OUT,
 };
 
 constexpr MessageType motionDetectorEndpoints[] = {
-	MessageType::TRIGGER_OUT,
+	MessageType::BINARY_OCCUPANCY_OUT,
 };
 
+// binary inputs (have out endpoints)
 constexpr MessageType inEndpoints[] = {
-	MessageType::OFF_ON_OUT, MessageType::OFF_ON_OUT, MessageType::OFF_ON_OUT, MessageType::OFF_ON_OUT
+	MessageType::BINARY_OUT, MessageType::BINARY_OUT, MessageType::BINARY_OUT, MessageType::BINARY_OUT
 };
 
+// binary outputs (have in enpoitns)
 constexpr MessageType outEndpoints[] = {
-	MessageType::OFF_ON_IN, MessageType::OFF_ON_IN, MessageType::OFF_ON_IN, MessageType::OFF_ON_IN
+	MessageType::BINARY_CMD_IN, MessageType::BINARY_CMD_IN, MessageType::BINARY_CMD_IN, MessageType::BINARY_CMD_IN
 };
 
 
@@ -136,8 +138,8 @@ Coroutine LocalInterface::readAirSensor() {
 
 				// convert to destination message type and resume coroutine if conversion was successful
 				auto &dst = *reinterpret_cast<Message *>(p.message);
-				MessageType srcType = bme680Endpoints[subscriber.source.device.endpointIndex];
-				return convertFloatValue(subscriber.destination.type, dst, srcType, src, subscriber.convertOptions);
+				auto srcType = bme680Endpoints[subscriber.source.device.endpointIndex];
+				return convertFloat(subscriber.destination.type, dst, src, subscriber.convertOptions);
 			});
 		}
 		

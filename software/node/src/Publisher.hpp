@@ -32,7 +32,7 @@ struct Publisher : public PublishInfo {
 		*static_cast<PublishInfo *>(this) = publishInfo;
 	}
 
-	void publishSwitchCommand(uint8_t src) {
+	void publishSwitch(uint8_t src) {
 		if (this->barrier == nullptr)
 			return;
 		this->barrier->resumeFirst([this, src] (PublishInfo::Parameters &p) {
@@ -40,10 +40,10 @@ struct Publisher : public PublishInfo {
 
 			// convert to destination message type and resume coroutine if conversion was successful
 			auto &dst = *reinterpret_cast<Message *>(p.message);
-			return convertCommand(this->destination.type, dst, src, this->convertOptions);
+			return convertSwitch(this->destination.type, dst, src, this->convertOptions);
 		});
 	}
-	void publishFloatValue(float src) {
+	void publishFloat(float src) {
 		if (this->barrier == nullptr)
 			return;
 		this->barrier->resumeFirst([this, src] (PublishInfo::Parameters &p) {
@@ -51,7 +51,7 @@ struct Publisher : public PublishInfo {
 
 			// convert to destination message type and resume coroutine if conversion was successful
 			auto &dst = *reinterpret_cast<Message *>(p.message);
-			return convertFloatValue(this->destination.type, dst, this->srcType, src, this->convertOptions);
+			return convertFloat(this->destination.type, dst, src, this->convertOptions);
 		});
 	}
 };

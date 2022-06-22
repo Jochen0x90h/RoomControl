@@ -217,7 +217,7 @@ AwaitableCoroutine MqttSnClient::publish(Result &result, uint16_t topicId, mqtts
 			w.e8(flags);
 			w.u16B(topicId);
 			w.u16B(msgId);
-			w.data(length, data);
+			w.data8(length, data);
 			co_await Network::send(NETWORK_MQTT, this->gatewayEndpoint, w.finish());
 		}
 		

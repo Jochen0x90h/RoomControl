@@ -303,7 +303,7 @@ int main(int argc, char const *argv[]) {
 				Packet packet;
 				while (fread(&packet.header, sizeof(pcap::PacketHeader), 1, file) == 1) {
 					// read packet data
-					int len = min(packet.header.incl_len, sizeof(packet.data));
+					int len = min(packet.header.incl_len, int(sizeof(packet.data)));
 					if (fread(packet.data, 1, len, file) < packet.header.incl_len)
 						break;
 

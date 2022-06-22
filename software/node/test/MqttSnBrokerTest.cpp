@@ -46,14 +46,14 @@ struct Test {
 		PublishInfo::Barrier barrier;
 		Subscriber subscriber;
 		subscriber.convertOptions.commands = 0 | (1 << 3) | -1 << 6;
-		subscriber.destination.type = MessageType::OFF_ON_IN;
+		subscriber.destination.type = MessageType::BINARY_IN;
 		subscriber.destination.plug.id = 0;
 		subscriber.barrier = &barrier;
 
 		Terminal::out << name << " subscribe to '" << inTopic << "'\n";
 		Terminal::out << name << " publish on '" << outTopic << "'\n";
-		this->broker.subscribe(inTopic, MessageType::OFF_ON_OUT, subscriber);
-		auto publishInfo = this->broker.getPublishInfo(outTopic, MessageType::OFF_ON_IN);
+		this->broker.subscribe(inTopic, MessageType::BINARY_OUT, subscriber);
+		auto publishInfo = this->broker.getPublishInfo(outTopic, MessageType::BINARY_IN);
 
 		while (true) {
 			MessageInfo info;

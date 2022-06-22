@@ -116,7 +116,7 @@ public:
 		 * Construct on message and allocate space for the length byte
 		 */
 		template <int N>
-		PacketWriter(uint8_t (&message)[N]) : MessageWriter(message + 1), begin(message)
+		PacketWriter(uint8_t (&message)[N]) : MessageWriter(message + 1)
 #ifdef EMU
 			, end(message + N)
 #endif
@@ -129,12 +129,12 @@ public:
 #ifdef EMU
 			assert(this->current < this->end);
 #endif
-			int length = this->current - this->begin;
-			this->begin[0] = length;
-			return {length, this->begin};
+			auto begin = this->begin - 1;
+			int length = this->current - begin;
+			begin[0] = length;
+			return {length, begin};
 		}
-		
-		uint8_t *begin;
+
 #ifdef EMU
 		uint8_t *end;
 #endif

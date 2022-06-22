@@ -75,3 +75,4 @@ constexpr int RADIO_MQTT = 1;
 // -------
 
 constexpr int NETWORK_MQTT = 0;
+constexpr int NETWORK_MDNS = 1;

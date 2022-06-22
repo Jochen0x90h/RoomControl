@@ -11,7 +11,7 @@
 class MessageWriter {
 public:
 
-	explicit MessageWriter(uint8_t *message) : current(message) {}
+	explicit MessageWriter(uint8_t *message) : begin(message), current(message) {}
 
 	void u8(uint8_t value) {
 		this->current[0] = value;
@@ -69,6 +69,15 @@ public:
 		this->current += 4;
 	}
 
+	void f32L(float value) {
+		union Value {
+			uint32_t i;
+			float f;
+		};
+		Value v = {.f = value};
+		u32L(v.i);
+	}
+
 	void u64L(uint64_t value) {
 		u32L(value);
 		u32L(value >> 32);
@@ -83,7 +92,7 @@ public:
 	 * Add the contents of a data buffer
 	 */
 	template <int N>
-	void data(DataBuffer<N> const &buffer) {
+	void data8(DataBuffer<N> const &buffer) {
 		auto current = this->current;
 		for (int i = 0; i < N; ++i)
 			current[i] = buffer.data[i];
@@ -94,7 +103,7 @@ public:
 	 * Add the contents of an array, cast each element to uint8_t
 	 */
 	template <typename T, int N>
-	void data(Array<T, N> array) {
+	void data8(Array<T, N> array) {
 		auto current = this->current;
 		for (int i = 0; i < array.count(); ++i)
 			current[i] = uint8_t(array[i]);
@@ -105,14 +114,14 @@ public:
 	 * Add the contents of an array, cast each element to uint8_t
 	 */
 	template <typename T, int N>
-	void data(T (&array)[N]) {
+	void data8(T (&array)[N]) {
 		auto current = this->current;
 		for (int i = 0; i < N; ++i)
 			current[i] = uint8_t(array[i]);
 		this->current += N;
 	}
 
-	void data(int length, uint8_t const *data) {
+	void data8(int length, uint8_t const *data) {
 		auto current = this->current;
 		for (int i = 0; i < length; ++i)
 			current[i] = data[i];
@@ -120,13 +129,35 @@ public:
 	}
 
 	/**
+	 * Add the contents of an array, cast each element to uint16_t
+	 */
+	template <typename T, int N>
+	void data16L(Array<T, N> array) {
+		auto current = this->current;
+		for (int i = 0; i < array.count(); ++i) {
+			uint16_t value = uint16_t(array[i]);
+			current[i * 2] = value;
+			current[i * 2 + 1] = value >> 8;
+		}
+		this->current += array.count() * 2;
+	}
+
+	/**
 	 * Add string contents without length
 	 */
 	void string(String const &str) {
 		auto current = this->current;
-		for (int i = 0; i < str.length; ++i)
+		for (int i = 0; i < str.count(); ++i)
 			current[i] = uint8_t(str.data[i]);
-		this->current += str.length;
+		this->current += str.count();
+	}
+
+	/**
+	 * Add string contents with 8 bit length
+	 */
+	void string8(String const &str) {
+		u8(str.count());
+		string(str);
 	}
 
 	/**
@@ -136,11 +167,20 @@ public:
 		this->current += n;
 	}
 
+	/**
+	 * Get length of message
+	 * @return length
+	 */
+	int getLength() const {
+		return int(this->current - this->begin);
+	}
+
 	// fulfill stream concept
 	MessageWriter &operator <<(char ch) {u8(ch); return *this;}
 	MessageWriter &operator <<(String const &str) {string(str); return *this;}
 
 
+	uint8_t *begin;
 	uint8_t *current;
 };
 

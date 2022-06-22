@@ -6,7 +6,7 @@
 
 
 static MessageType const endpoints[4] = {
-	MessageType::TRIGGER_OUT, MessageType::TRIGGER_OUT, MessageType::TRIGGER_OUT, MessageType::TRIGGER_OUT
+	MessageType::BINARY_ALARM_OUT, MessageType::BINARY_ALARM_OUT, MessageType::BINARY_ALARM_OUT, MessageType::BINARY_ALARM_OUT
 };
 static_assert(array::count(endpoints) >= AlarmInterface::AlarmFlash::MAX_ENDPOINT_COUNT);
 
@@ -94,7 +94,7 @@ int AlarmInterface::getSubscriberCount(int index, int endpointCount, uint8_t com
 			continue;
 
 		Message dst;
-		if (convertCommand(subscriber.destination.type, dst, command, subscriber.convertOptions))
+		if (convertSwitch(subscriber.destination.type, dst, command, subscriber.convertOptions))
 			++count;
 	}
 	return count;
@@ -114,7 +114,7 @@ void AlarmInterface::test(int index, int endpointCount, uint8_t command) {
 
 			// convert to target unit and type and resume coroutine if conversion was successful
 			auto &dst = *reinterpret_cast<Message *>(p.message);
-			return convertCommand(subscriber.destination.type, dst, command, subscriber.convertOptions);
+			return convertSwitch(subscriber.destination.type, dst, command, subscriber.convertOptions);
 			//MessageType srcType = flash.endpoints[subscriber.index];
 			//auto &src = flash.messages[subscriber.index];
 			//return convertMessage(subscriber.messageType, p.message, srcType, src, subscriber.convertOptions);
@@ -146,7 +146,7 @@ Coroutine AlarmInterface::tick() {
 						// convert to target unit and type and resume coroutine if conversion was successful
 						auto &dst = *reinterpret_cast<Message *>(p.message);
 						uint8_t src = 1;
-						return convertCommand(subscriber.destination.type, dst, src, subscriber.convertOptions);
+						return convertSwitch(subscriber.destination.type, dst, src, subscriber.convertOptions);
 						//MessageType type = flash.endpoints[subscriber.index];
 						//auto &message = flash.messages[subscriber.index];
 						//return convertMessage(subscriber.messageType, p.message, type, message,

@@ -2,15 +2,20 @@
 
 #include <String.hpp>
 #include <Coroutine.hpp>
+#include <netinet/in.h>
 
 
 namespace Network {
 
 union Address {
 	uint8_t u8[16];
-	uint8_t u32[4];
+	uint32_t u32[4];
 
 	static Address fromString(String s);
+
+	bool isLinkLocal() const {
+		return this->u32[0] == htonl(0xfe800000U) && this->u32[1] == 0;
+	}
 
 	bool operator ==(Address const &a) const {
 		for (int i = 0; i < 4; ++i) {

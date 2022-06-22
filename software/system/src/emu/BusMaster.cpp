@@ -24,19 +24,23 @@ struct Device {
 		AesKey aesKey;
 	};
 
+	// device id
 	uint32_t id;
+
+	// two sets of endpoints to test reconfiguration of device
 	Array<EndpointType const> endpoints[2];
+
 	Flash flash;
 	uint8_t commissioning;
 	uint32_t securityCounter;
 	int states[16];
 };
 
-constexpr auto SWITCH = EndpointType::OFF_ON_OUT;
-constexpr auto BUTTON = EndpointType::TRIGGER_OUT;
-constexpr auto ROCKER = EndpointType::UP_DOWN_OUT;
-constexpr auto LIGHT = EndpointType::OFF_ON_TOGGLE_IN;
-constexpr auto BLIND = EndpointType::UP_DOWN_IN;
+constexpr auto SWITCH = EndpointType::BINARY_SWITCH_WALL_OUT;
+constexpr auto BUTTON = EndpointType::BINARY_BUTTON_OUT;
+constexpr auto ROCKER = EndpointType::TERNARY_BUTTON_OUT;
+constexpr auto LIGHT = EndpointType::BINARY_POWER_LIGHT_CMD_IN;
+constexpr auto BLIND = EndpointType::TERNARY_OPENING_BLIND_IN;
 
 const EndpointType endpoints1a[] = {
 	ROCKER, ROCKER, LIGHT, LIGHT, LIGHT,
@@ -48,7 +52,7 @@ const EndpointType endpoints2[] = {
 	ROCKER, BUTTON, BLIND, ROCKER, BUTTON, BLIND, LIGHT, LIGHT,
 };
 const EndpointType endpoints3a[] = {
-	EndpointType::AIR_TEMPERATURE_OUT
+	EndpointType::PHYSICAL_TEMPERATURE_MEASURED_ROOM_OUT
 };
 
 
@@ -104,7 +108,7 @@ void handle(Gui &gui) {
 						device.flash.address = r.u8();
 
 						// set key
-						setKey(device.flash.aesKey, r.data<16>());
+						setKey(device.flash.aesKey, r.data8<16>());
 
 						// reset security counter
 						device.securityCounter = 0;
@@ -160,7 +164,7 @@ void handle(Gui &gui) {
 							state = (state & ~3) | s;
 							break;
 						}
-						case EndpointType::AIR_TEMPERATURE_IN:
+						case EndpointType::PHYSICAL_TEMPERATURE_MEASURED_ROOM_IN:
 							state = r.u16L();
 							break;
 						default:;
@@ -209,7 +213,7 @@ void handle(Gui &gui) {
 			w.id(device.id);
 
 			// list of endpoints
-			w.data(device.endpoints[device.commissioning - 1]);
+			w.data16L(device.endpoints[device.commissioning - 1]);
 
 			// add message integrity code (mic) using default key, message stays unencrypted
 			w.setMessage();
@@ -257,8 +261,8 @@ void handle(Gui &gui) {
 						auto value = gui.onOff(id++);
 						if (value) {
 							state = *value;
-							send = true;
 							w.u8(state);
+							send = true;
 						}
 						break;
 					}
@@ -267,8 +271,8 @@ void handle(Gui &gui) {
 						auto value = gui.button(id++);
 						if (value) {
 							state = *value;
-							send = true;
 							w.u8(state);
+							send = true;
 						}
 						break;
 					}
@@ -277,8 +281,8 @@ void handle(Gui &gui) {
 						auto value = gui.rocker(id++);
 						if (value) {
 							state = *value;
-							send = true;
 							w.u8(state);
+							send = true;
 						}
 						break;
 					}
@@ -297,15 +301,15 @@ void handle(Gui &gui) {
 						state = (state & 3) | (blind << 2);
 						break;
 					}
-
-					case EndpointType::AIR_TEMPERATURE_OUT: {
+					case EndpointType::PHYSICAL_TEMPERATURE_MEASURED_ROOM_OUT: {
 						// temperature sensor
 						auto temperature = gui.temperatureSensor(id++);
 						if (temperature) {
 							// convert temperature from Celsius to 1/20 Kelvin
-							state = int((*temperature + 273.15f) * 20.0f + 0.5f);
+							//state = int((*temperature + 273.15f) * 20.0f + 0.5f);
+							w.f32L(*temperature + 273.15f);
 							send = true;
-							w.u16L(state);
+							//w.u16L(state);
 						}
 						break;
 					}

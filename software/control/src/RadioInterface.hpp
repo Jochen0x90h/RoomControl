@@ -154,7 +154,7 @@ private:
 		uint8_t endpointCount;
 
 		// endpoint types followed by pairs of endpoint info index and zbee endpoint index
-		uint8_t endpoints[MAX_ENDPOINT_COUNT * 3];
+		uint16_t endpoints[MAX_ENDPOINT_COUNT * 3];
 
 		// note: endpoints must be the last member
 
@@ -171,7 +171,7 @@ private:
 		ZbDevice *allocate() const;
 
 		// pairs of endpoint info index and zbee endpoint index
-		uint8_t const *getEndpointIndices() const {return this->endpoints + this->endpointCount;}
+		uint16_t const *getEndpointIndices() const {return this->endpoints + this->endpointCount;}
 	};
 
 	class ZbDevice : public Storage::Element<ZbDeviceFlash>, public Device {
@@ -287,10 +287,10 @@ public:
 	class PacketWriter : public EncryptWriter {
 	public:
 		/**
-		 * Construct on radio packet where the length (including 2 byte crc) is in the first byte
+		 * Construct on radio packet where the length is in the first byte
 		 */
 		template <int N>
-		PacketWriter(uint8_t (&packet)[N]) : EncryptWriter(packet + 1), begin(packet)
+		PacketWriter(uint8_t (&packet)[N]) : EncryptWriter(packet + 1)
 #ifdef EMU
 			, end(packet + N)
 #endif
@@ -327,18 +327,17 @@ public:
 		}
 
 		/**
-		 * Set send flags and length of packet
+		 * Set send flags behind packet and length of packet to first byte (including 2 byte for crc)
 		 */
 		void finish(Radio::SendFlags sendFlags) {
 #ifdef EMU
 			assert(this->current < this->end - 1);
 #endif
 			*this->current = uint8_t(sendFlags);
-			this->begin[0] = this->current - (this->begin + 1) + 2; // + 2 for crc added by hardware
+			this->begin[-1] = (this->current - this->begin) + 2; // + 2 for crc added by hardware
 		}
 
 	protected:
-		uint8_t *begin;
 #ifdef EMU
 		uint8_t *end;
 #endif

@@ -81,7 +81,8 @@ void handle() {
 			uint8_t bRequest = NRF_USBD->BREQUEST;
 
 			switch (bmRequestType) {
-			case usb::Request::OUT | usb::Request::TYPE_STANDARD | usb::Request::RECIPIENT_DEVICE:
+			case usb::Request::STANDARD_DEVICE_OUT:
+			//case usb::Request::OUT | usb::Request::TYPE_STANDARD | usb::Request::RECIPIENT_DEVICE:
 				// write request to standard device
 				if (bRequest == 0x05) {
 					// set address, handled by hardware
@@ -97,7 +98,8 @@ void handle() {
 					NRF_USBD->TASKS_EP0STALL = TRIGGER;
 				}
 				break;
-			case usb::Request::IN | usb::Request::TYPE_STANDARD | usb::Request::RECIPIENT_DEVICE:
+			case usb::Request::STANDARD_DEVICE_IN:
+			//case usb::Request::IN | usb::Request::TYPE_STANDARD | usb::Request::RECIPIENT_DEVICE:
 				// read request to standard device
 				if (bRequest == 0x06) {
 					// get descriptor from user code by using the callback
@@ -117,7 +119,8 @@ void handle() {
 					NRF_USBD->TASKS_EP0STALL = TRIGGER;
 				}
 				break;
-			case usb::Request::OUT | usb::Request::TYPE_STANDARD | usb::Request::RECIPIENT_INTERFACE:
+			case usb::Request::STANDARD_INTERFACE_OUT:
+			//case usb::Request::OUT | usb::Request::TYPE_STANDARD | usb::Request::RECIPIENT_INTERFACE:
 				// write request to standard interface
 				if (bRequest == 0x11) {
 					// set interface
@@ -131,7 +134,8 @@ void handle() {
 					NRF_USBD->TASKS_EP0STALL = TRIGGER;
 				}
 				break;
-			case usb::Request::OUT | usb::Request::TYPE_VENDOR | usb::Request::RECIPIENT_INTERFACE:
+			case usb::Request::VENDOR_INTERFACE_OUT:
+			//case usb::Request::OUT | usb::Request::TYPE_VENDOR | usb::Request::RECIPIENT_INTERFACE:
 				{
 					int wValue = (NRF_USBD->WVALUEH << 8) | NRF_USBD->WVALUEL;
 					int wIndex = (NRF_USBD->WINDEXH << 8) | NRF_USBD->WINDEXL;
