@@ -19,9 +19,9 @@
 constexpr SystemDuration RELAY_TIME = 10ms;
 
 
-constexpr auto ROCKER = bus::EndpointType::UP_DOWN_OUT;
-constexpr auto LIGHT = bus::EndpointType::OFF_ON_IN;
-constexpr auto BLIND = bus::EndpointType::UP_DOWN_IN;
+constexpr auto ROCKER = bus::EndpointType::TERNARY_BUTTON_OUT;
+constexpr auto LIGHT = bus::EndpointType::BINARY_POWER_LIGHT_IN;
+constexpr auto BLIND = bus::EndpointType::TERNARY_OPENING_BLIND_IN;
 
 enum class Mode : uint8_t {
 	LIGHT = 1,
@@ -208,9 +208,9 @@ public:
 				// encoded device id
 				w.id(deviceId);
 
-				// list of endpoints
-				w.data(endpoints[int(modeA)]);
-				w.data(endpoints[int(modeB)]);
+				// list of endpoints of part A and B
+				w.data16L(endpoints[int(modeA)]);
+				w.data16L(endpoints[int(modeB)]);
 
 				// encrypt
 				w.setMessage();
@@ -285,7 +285,7 @@ public:
 					//Terminal::out << "commissioned on address " << dec(address) << '\n';
 
 					// set key
-					setKey(aesKey, r.data<16>());
+					setKey(aesKey, r.data8<16>());
 				}
 			} else {
 				// received data message

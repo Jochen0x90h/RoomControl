@@ -6,11 +6,11 @@
 
 struct PublishInfo {
 	// message destination
-	MessageInfo2 destination;
+	MessageInfo destination;
 
 	struct Parameters {
 		// info about the message source for the subscriber to identify the message
-		MessageInfo2 &info;
+		MessageInfo &info;
 
 		// message (length is defined by Subscriber::messageType)
 		void *message;
@@ -24,7 +24,7 @@ struct PublishInfo {
 
 struct Publisher : public PublishInfo {
 	uint8_t id;
-	MessageType2 srcType;
+	MessageType srcType;
 
 	ConvertOptions convertOptions;
 
@@ -39,7 +39,7 @@ struct Publisher : public PublishInfo {
 			p.info = this->destination;
 
 			// convert to destination message type and resume coroutine if conversion was successful
-			auto &dst = *reinterpret_cast<Message2 *>(p.message);
+			auto &dst = *reinterpret_cast<Message *>(p.message);
 			return convertSwitch(this->destination.type, dst, src, this->convertOptions);
 		});
 	}
@@ -50,7 +50,7 @@ struct Publisher : public PublishInfo {
 			p.info = this->destination;
 
 			// convert to destination message type and resume coroutine if conversion was successful
-			auto &dst = *reinterpret_cast<Message2 *>(p.message);
+			auto &dst = *reinterpret_cast<Message *>(p.message);
 			return convertFloat(this->destination.type, dst, src, this->convertOptions);
 		});
 	}

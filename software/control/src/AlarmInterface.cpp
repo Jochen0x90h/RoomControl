@@ -5,9 +5,8 @@
 #include <util.hpp>
 
 
-static MessageType2 const endpoints[4] = {
-	//MessageType::TRIGGER_OUT, MessageType::TRIGGER_OUT, MessageType::TRIGGER_OUT, MessageType::TRIGGER_OUT
-	MessageType2::SWITCH_BINARY_ONESHOT_ALARM_OUT, MessageType2::SWITCH_BINARY_ONESHOT_ALARM_OUT, MessageType2::SWITCH_BINARY_ONESHOT_ALARM_OUT, MessageType2::SWITCH_BINARY_ONESHOT_ALARM_OUT
+static MessageType const endpoints[4] = {
+	MessageType::BINARY_ALARM_OUT, MessageType::BINARY_ALARM_OUT, MessageType::BINARY_ALARM_OUT, MessageType::BINARY_ALARM_OUT
 };
 static_assert(array::count(endpoints) >= AlarmInterface::AlarmFlash::MAX_ENDPOINT_COUNT);
 
@@ -94,7 +93,7 @@ int AlarmInterface::getSubscriberCount(int index, int endpointCount, uint8_t com
 		if (subscriber.source.device.endpointIndex >= endpointCount)
 			continue;
 
-		Message2 dst;
+		Message dst;
 		if (convertSwitch(subscriber.destination.type, dst, command, subscriber.convertOptions))
 			++count;
 	}
@@ -114,7 +113,7 @@ void AlarmInterface::test(int index, int endpointCount, uint8_t command) {
 			p.info = subscriber.destination;
 
 			// convert to target unit and type and resume coroutine if conversion was successful
-			auto &dst = *reinterpret_cast<Message2 *>(p.message);
+			auto &dst = *reinterpret_cast<Message *>(p.message);
 			return convertSwitch(subscriber.destination.type, dst, command, subscriber.convertOptions);
 			//MessageType srcType = flash.endpoints[subscriber.index];
 			//auto &src = flash.messages[subscriber.index];
@@ -145,7 +144,7 @@ Coroutine AlarmInterface::tick() {
 						p.info = subscriber.destination;
 
 						// convert to target unit and type and resume coroutine if conversion was successful
-						auto &dst = *reinterpret_cast<Message2 *>(p.message);
+						auto &dst = *reinterpret_cast<Message *>(p.message);
 						uint8_t src = 1;
 						return convertSwitch(subscriber.destination.type, dst, src, subscriber.convertOptions);
 						//MessageType type = flash.endpoints[subscriber.index];
@@ -194,7 +193,7 @@ void AlarmInterface::Alarm::setName(String name) {
 
 }
 
-Array<MessageType2 const> AlarmInterface::Alarm::getEndpoints() const {
+Array<MessageType const> AlarmInterface::Alarm::getEndpoints() const {
 	auto &flash = **this;
 	return {flash.endpointCount, endpoints};//flash.endpoints};
 }

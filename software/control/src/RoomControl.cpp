@@ -34,57 +34,44 @@ static uint8_t const compareCommands[] = {12, 13, 14};
 static Array<uint8_t const> switchCommands[] = {onOffCommands, onOffToggleCommands, triggerCommands, upDownCommands, openCloseCommands};
 */
 
-static String const switchReleasePress[] = {"release", "press"};
-static String const switchOffOn[] = {"off", "on"};
-static String const switchOpenClose[] = {"open", "close"};
-static String const switchReleaseUpDown[] = {"release", "up", "down"};
+static String const releasedPressed[] = {"released", "pressed"};
+static String const offOnToggle[] = {"off", "on", "toggle"};
+static String const closedOpenToggle[] = {"close", "open", "toggle"};
+static String const lockedToggle[] = {"unlocked", "locked", "toggle"};
+static String const occupancy[] = {"unoccupied", "occupied"};
+static String const activation[] = {"deactivated", "activated"};
+static String const enabled[] = {"disabled", "enabled"};
+
+static String const offOn1On2[] = {"off", "on1", "on2"};
+static String const releasedUpDown[] = {"released", "up", "down"};
+static String const stoppedOpeningClosing[] = {"stopped", "opening", "closing"};
+static String const unlockedTiltLocked[] = {"unlocked", "tilt", "locked"};
+
 static String const compareOperators[] = {">", "<", "else"};
 static String const commands[] = {"set", "add", "sub"};
 
 // functions
 
 // function plugs
-/*
 static RoomControl::Plug const switchPlugs[] = {
-	{"Switch", MessageType::OFF_ON_TOGGLE_IN},
-	{"Switch", MessageType::OFF_ON_OUT}};
+	{"Power", MessageType::BINARY_POWER_LIGHT_CMD_IN},
+	{"Power", MessageType::BINARY_POWER_LIGHT_OUT}};
 static RoomControl::Plug const blindPlugs[] = {
-	{"Up/Down", MessageType::UP_DOWN_IN},
-	{"Trigger", MessageType::TRIGGER_IN},
-	{"Position", MessageType::SET_LEVEL_IN},
-	{"Enable Down", MessageType::OFF_ON_IN},
-	{"Up/Down", MessageType::UP_DOWN_OUT},
-	{"Position", MessageType::LEVEL_OUT}};
+	{"Up/Down",     MessageType::TERNARY_BUTTON_IN},
+	{"Trigger",     MessageType::BINARY_BUTTON_IN},
+	{"Position",    MessageType::LEVEL_OPEN_BLIND_CMD_IN},
+	{"Enable Down", MessageType::BINARY_ENABLE_CLOSE_IN},
+	{"Open/Close",  MessageType::TERNARY_OPENING_BLIND_OUT}, // stop/opening/closing
+	{"Position",    MessageType::LEVEL_OPEN_BLIND_OUT}};
 static RoomControl::Plug const heatingControlPlugs[] = {
-	{"On/Off", MessageType::OFF_ON_TOGGLE_IN},
-	{"Night", MessageType::OFF_ON_TOGGLE_IN},
-	{"Summer", MessageType::OFF_ON_TOGGLE_IN},
-	{"Windows", MessageType::OPEN_CLOSE_IN},
-	{"Set Temperature", MessageType::SET_AIR_TEMPERATURE_IN},
-	{"Temperature Sensor", MessageType::AIR_TEMPERATURE_IN},
-	{"Valve", MessageType::OFF_ON_OUT},
+	{"On/Off",             MessageType::BINARY_POWER_AC_CMD_IN},
+	{"Night",              MessageType::BINARY_IN},
+	{"Summer",             MessageType::BINARY_IN},
+	{"Windows",            MessageType::BINARY_OPEN_WINDOW_IN},
+	{"Set Temperature",    MessageType::PHYSICAL_TEMPERATURE_SETPOINT_HEATER_CMD_IN},
+	{"Temperature Sensor", MessageType::PHYSICAL_TEMPERATURE_MEASURED_ROOM_IN},
+	{"Valve",              MessageType::BINARY_OPEN_VALVE_OUT},
 };
-*/
-static RoomControl::Plug const switchPlugs[] = {
-	{"Switch", MessageType2::SWITCH_BINARY_ON_OFF_CMD_IN},
-	{"Switch", MessageType2::SWITCH_BINARY_ON_OFF_OUT}};
-static RoomControl::Plug const blindPlugs[] = {
-	{"Up/Down", MessageType2::SWITCH_TERNARY_ONESHOT_ROCKER_IN},
-	{"Trigger", MessageType2::SWITCH_BINARY_ONESHOT_BUTTON_IN},
-	{"Position", MessageType2::LEVEL_APERTURE_BLIND_CMD_IN},
-	{"Enable Down", MessageType2::SWITCH_BINARY_ENABLE_CLOSE_IN},
-	{"Open/Close", MessageType2::SWITCH_TERNARY_OPEN_CLOSE_OUT},
-	{"Position", MessageType2::LEVEL_APERTURE_BLIND_OUT}};
-static RoomControl::Plug const heatingControlPlugs[] = {
-	{"On/Off", MessageType2::SWITCH_BINARY_ON_OFF_CMD_IN},
-	{"Night", MessageType2::SWITCH_BINARY_ON_OFF_CMD_IN},
-	{"Summer", MessageType2::SWITCH_BINARY_ON_OFF_CMD_IN},
-	{"Windows", MessageType2::SWITCH_BINARY_APERTURE_IN},
-	{"Set Temperature", MessageType2::PHYSICAL_TEMPERATURE_SETPOINT_CMD_IN},
-	{"Temperature Sensor", MessageType2::PHYSICAL_TEMPERATURE_MEASURED_IN},
-	{"Valve", MessageType2::SWITCH_BINARY_ON_OFF_OUT},
-};
-
 
 struct FunctionInfo {
 	String name;
@@ -98,14 +85,14 @@ struct FunctionInfo {
 // function infos (must be sorted by type)
 static FunctionInfo const functionInfos[] = {
 	{
-			"Switch",
+			"Light",
 			RoomControl::FunctionFlash::Type::SIMPLE_SWITCH,
 			RoomControl::FunctionFlash::TypeClass::SWITCH,
 			0,
 			switchPlugs
 		},
 	{
-			"Timeout Switch",
+			"Timeout Light",
 			RoomControl::FunctionFlash::Type::TIMEOUT_SWITCH,
 			RoomControl::FunctionFlash::TypeClass::SWITCH,
 			sizeof(RoomControl::TimeoutSwitch::Config),
@@ -140,7 +127,7 @@ RoomControl::FunctionFlash::Type nextFunctionType(RoomControl::FunctionFlash::Ty
 	return functionInfos[i].type;
 }
 
-static bool isCompatible(RoomControl::Plug const &plug, MessageType2 messageType) {
+static bool isCompatible(RoomControl::Plug const &plug, MessageType messageType) {
 	if (plug.isInput())
 		return isCompatible(plug.messageType, messageType);
 	else
@@ -219,9 +206,9 @@ static void printDevices(Interface &interface) {
 		auto endpoints = device.getEndpoints();
 		for (auto endpoint : endpoints) {
 			Terminal::out << '\t' << getTypeLabel(endpoint);
-			if ((endpoint & MessageType2::DIRECTION_MASK) == MessageType2::IN)
+			if ((endpoint & MessageType::DIRECTION_MASK) == MessageType::IN)
 				Terminal::out << " In";
-			if ((endpoint & MessageType2::DIRECTION_MASK) == MessageType2::OUT)
+			if ((endpoint & MessageType::DIRECTION_MASK) == MessageType::OUT)
 				Terminal::out << " Out";
 			Terminal::out << '\n';
 		}
@@ -422,9 +409,9 @@ Coroutine RoomControl::idleDisplay() {
 
 // menu helpers
 
-static int getComponentCount(MessageType2 messageType) {
+static int getComponentCount(MessageType messageType) {
 	//return (messageType & MessageType::TYPE_MASK) == MessageType::MOVE_TO_LEVEL ? 2 : 1;
-	return (messageType & MessageType2::CATEGORY) == MessageType2::LIGHTING ? 2 : 1;
+	return (messageType & MessageType::CATEGORY) == MessageType::LIGHTING ? 2 : 1;
 }
 
 // next message type for alarms
@@ -466,7 +453,7 @@ void RoomControl::printConnection(Menu::Stream &stream, Connection const &connec
 }
 
 /*
-static Message2 getDefaultMessage(MessageType2 messageType) {
+static Message getDefaultMessage(MessageType messageType) {
 	switch (messageType & MessageType::TYPE_MASK) {
 		case MessageType::OFF_ON:
 		case MessageType::OFF_ON_TOGGLE:
@@ -489,301 +476,273 @@ static Message2 getDefaultMessage(MessageType2 messageType) {
 	}
 }
 */
+Array<String const> RoomControl::getSwitchStates(Usage usage) {
+	switch (usage) {
+	case Usage::OFF_ON:
+		return {2, offOnToggle};
+	case Usage::OFF_ON_TOGGLE:
+		return offOnToggle;
+	case Usage::RELEASED_PRESSED:
+		return releasedPressed;
+	case Usage::CLOSED_OPEN:
+		return {2, closedOpenToggle};
+	case Usage::CLOSED_OPEN_TOGGLE:
+		return closedOpenToggle;
+	case Usage::LOCK:
+		return {2, lockedToggle};
+	case Usage::LOCK_TOGGLE:
+		return lockedToggle;
+	case Usage::OCCUPANCY:
+		return occupancy;
+	case Usage::ACTIVATION:
+		return activation;
+	case Usage::ENABLED:
+		return enabled;
+
+	case Usage::OFF_ON1_ON2:
+		return offOn1On2;
+	case Usage::RELEASED_UP_DOWN:
+		return releasedUpDown;
+	case Usage::STOPPED_OPENING_CLOSING:
+		return stoppedOpeningClosing;
+	case Usage::TILT_LOCK:
+		return unlockedTiltLocked;
+	}
+	return offOnToggle;
+}
 
 // number of different switch types for default convert options
-constexpr int SWITCH_TYPE_COUNT = 4;
+constexpr int SWITCH_TYPE_COUNT = 5;
 
-static int getSwitchType(MessageType2 type) {
-	auto switchCategory = type & MessageType2::SWITCH_CATEGORY;
-	if (switchCategory == MessageType2::SWITCH_TERNARY)
+int RoomControl::getSwitchType(MessageType type) {
+	auto category = type & MessageType::CATEGORY;
+	if (category == MessageType::TERNARY) {
+		// off/on1/on2 or release/up/down
+		return (type & MessageType::TERNARY_CATEGORY) == MessageType ::TERNARY_BUTTON ? 4 : 1;
+	}
+	auto binaryCategory = type & MessageType::BINARY_CATEGORY;
+	if (binaryCategory == MessageType::BINARY_BUTTON || binaryCategory == MessageType::BINARY_ALARM) {
+		// release/press
 		return 3;
+	}
 
-	auto binaryCategory = type & MessageType2::SWITCH_BINARY_CATEGORY;
-	if (binaryCategory == bus::EndpointType2::SWITCH_BINARY_ONESHOT)
-		return 2;
+	// off/on or off/on/toggle
+	return (type & MessageType::CMD) != 0 ? 2 : 0;
+}
 
-	return (type & MessageType2::CMD) != 0 ? 1 : 0;
+constexpr int OFF = 0;
+constexpr int ON = 1;
+constexpr int ON1 = 1;
+constexpr int ON2 = 2;
+constexpr int TOGGLE = 2;
+constexpr int RELEASE = 0;
+constexpr int PRESS = 1;
+constexpr int UP = 1;
+constexpr int DOWN = 2;
+constexpr int SET = 0;
+constexpr int INCREASE = 1;
+constexpr int DECREASE = 2;
+constexpr int DISCARD = 7;
+
+constexpr uint16_t convert(int s0, int s1) noexcept {
+	return s0 | (s1 << 3) | (-1 << 6);
+}
+
+constexpr uint16_t convert(int s0, int s1, int s2) noexcept {
+	return s0 | (s1 << 3) | (s2 << 6) | (-1 << 9);
 }
 
 // default switch convert matrix
-static int16_t const switch2switch[SWITCH_TYPE_COUNT][SWITCH_TYPE_COUNT] = {
+static uint16_t const switch2switch[SWITCH_TYPE_COUNT][SWITCH_TYPE_COUNT] = {
 	// off/on ->
 	{
-		0 | (1 << 3) | -1 << 6, // off/on
-		0 | (1 << 3) | -1 << 6, // off/on/toggle
-		7 | (1 << 3) | -1 << 6, // release/press
-		7 | (1 << 3) | -1 << 6, // release/up/down
+		convert(OFF, ON), // off/on
+		convert(OFF, ON1), // off/on1/on2
+		convert(OFF, ON), // off/on/toggle
+		convert(DISCARD, PRESS), // release/press
+		convert(DISCARD, UP), // release/up/down
+	},
+	// off/on1/on2 ->
+	{
+		convert(OFF, ON, DISCARD), // off/on
+		convert(OFF, ON1, ON2), // off/on1/on2
+		convert(OFF, ON, DISCARD), // off/on/toggle
+		convert(DISCARD, PRESS, DISCARD), // release/press
+		convert(DISCARD, UP, DISCARD), // release/up/down
 	},
 	// off/on/toggle ->
 	{
-		0 | (1 << 3) | -1 << 6, // off/on
-		0 | (1 << 3) | (2 << 6) | -1 << 9, // off/on/toggle
-		7 | (7 << 3) | (1 << 6) | -1 << 9, // release/press
-		7 | (1 << 3) | -1 << 6, // release/up/down
+		convert(OFF, ON, DISCARD), // off/on
+		convert(OFF, ON1, DISCARD), // off/on1/on2
+		convert(OFF, ON, TOGGLE), // off/on/toggle
+		convert(DISCARD, DISCARD, PRESS), // release/press
+		convert(DISCARD, DISCARD, UP), // release/up/down
 	},
 	// release/press ->
 	{
-		7 | (1 << 3) | -1 << 6, // off/on
-		7 | (2 << 3) | -1 << 6, // OFF_ON_TOGGLE
-		0 | (1 << 3) | -1 << 6, // release/press
-		0 | (1 << 3) | -1 << 6, // release/up/down
+		convert(DISCARD, ON), // off/on
+		convert(DISCARD, ON1), // off/on1/on2
+		convert(DISCARD, TOGGLE), // off/on/toggle
+		convert(RELEASE, PRESS), // release/press
+		convert(RELEASE, UP), // release/up/down
 	},
 	// release/up/down ->
 	{
-		7 | (1 << 3) | (0 << 6) | -1 << 9, // off/on
-		7 | (1 << 3) | (0 << 6) | -1 << 9, // off/on/toggle
-		0 | (1 << 3) | -1 << 6, // release/press
-		0 | (1 << 3) | (2 << 6) | -1 << 9, // release/up/down
+		convert(DISCARD, ON, OFF), // off/on
+		convert(OFF, ON1, ON2), // off/on1/on2
+		convert(DISCARD, ON, OFF), // off/on/toggle
+		convert(RELEASE, PRESS, DISCARD), // release/press
+		convert(RELEASE, UP, DOWN), // release/up/down
 	},
 };
 
 // default switch to value command convert
-static int16_t const switch2valueCommand[SWITCH_TYPE_COUNT] = {
-	7 | (0 << 3) | -1 << 6, // off/on -> set value
-	7 | (0 << 3) | -1 << 6, // off/on/toggle -> set value
-	7 | (0 << 3) | -1 << 6, // release/press -> set value
-	7 | (1 << 3) | (2 << 6) | -1 << 9, // release/up/down -> increase/decrease value
+static uint16_t const switch2valueCommand[SWITCH_TYPE_COUNT] = {
+	convert(DISCARD, SET), // off/on -> set/increase/decrease
+	convert(DISCARD, SET, DISCARD), // off/on1/on2 -> set/increase/decrease
+	convert(DISCARD, SET, DISCARD), // off/on/toggle -> set/increase/decrease
+	convert(DISCARD, SET), // release/press -> set/increase/decrease
+	convert(DISCARD, INCREASE, DECREASE), // release/up/down -> set/increase/decrease
 };
 
 // default value command to switch convert
-static int16_t const value2switch[SWITCH_TYPE_COUNT] = {
-	1 | (0 << 3) | -1 << 6, // greater/less value -> off/on
-	1 | (0 << 3) | -1 << 6, // greater/less value -> off/on/toggle
-	1 | (1 << 3) | (0 << 6) | -1 << 9, // greater/less/else value -> release/press
-	1 | (2 << 3) | (0 << 6) | -1 << 9, // equal/greater/less value -> release/up/down
+static uint16_t const value2switch[SWITCH_TYPE_COUNT] = {
+	convert(ON, OFF, DISCARD), // greater/less/else -> off/on
+	convert(ON, OFF, DISCARD), // greater/less/else -> off/on/toggle
+	convert(PRESS, RELEASE, DISCARD), // greater/less/else -> release/press
+	convert(UP, DOWN, RELEASE), // greater/less/else -> release/up/down
 };
 
-/*
-// default command convert matrix
-static int16_t const command2command[SWITCH_COMMAND_COUNT][SWITCH_COMMAND_COUNT] = {
-	// OFF_ON ->
-	{
-		0 | (1 << 3) | -1 << 6, // OFF_ON
-		0 | (1 << 3) | -1 << 6, // OFF_ON_TOGGLE
-		7 | (1 << 3) | -1 << 6, // TRIGGER
-		7 | (1 << 3) | -1 << 6, // UP_DOWN
-		0 | (1 << 3) | -1 << 6, // OPEN_CLOSE
-	},
-	// OFF_ON_TOGGLE ->
-	{
-		0 | (1 << 3) | -1 << 6, // OFF_ON
-		0 | (1 << 3) | (2 << 6) | -1 << 9, // OFF_ON_TOGGLE
-		7 | (7 << 3) | (1 << 6) | -1 << 9, // TRIGGER
-		7 | (1 << 3) | -1 << 6, // UP_DOWN
-		0 | (1 << 3) | -1 << 6, // OPEN_CLOSE
-	},
-	// TRIGGER ->
-	{
-		7 | (1 << 3) | -1 << 6, // OFF_ON
-		7 | (2 << 3) | -1 << 6, // OFF_ON_TOGGLE
-		0 | (1 << 3) | -1 << 6, // TRIGGER
-		0 | (1 << 3) | -1 << 6, // UP_DOWN
-		7 | (1 << 3) | -1 << 6, // OPEN_CLOSE
-	},
-	// UP_DOWN ->
-	{
-		7 | (1 << 3) | (0 << 6) | -1 << 9, // OFF_ON
-		7 | (1 << 3) | (0 << 6) | -1 << 9, // OFF_ON_TOGGLE
-		0 | (1 << 3) | -1 << 6, // TRIGGER
-		0 | (1 << 3) | (2 << 6) | -1 << 9, // UP_DOWN
-		7 | (1 << 3) | (0 << 6) | -1 << 9, // OPEN_CLOSE
-	},
-	// OPEN_CLOSE ->
-	{
-		0 | (1 << 3) | -1 << 6, // OFF_ON
-		0 | (1 << 3) | -1 << 6, // OFF_ON_TOGGLE
-		7 | (1 << 3) | -1 << 6, // TRIGGER
-		7 | (1 << 3) | -1 << 6, // UP_DOWN
-		0 | (1 << 3) | -1 << 6, // OPEN_CLOSE
-	},
-};
 
-// default command to set value convert
-static int16_t const command2setValue[SWITCH_COMMAND_COUNT] = {
-	7 | (0 << 3) | -1 << 6, // OFF_ON -> set
-	7 | (0 << 3) | -1 << 6, // OFF_ON_TOGGLE -> set
-	7 | (0 << 3) | -1 << 6, // TRIGGER -> set
-	7 | (1 << 3) | (2 << 6) | -1 << 9, // UP_DOWN -> increase/decrease
-	7 | (0 << 3) | -1 << 6, // OPEN_CLOSE -> set
-};
-
-// default value to command convert
-static int16_t const value2command[SWITCH_COMMAND_COUNT] = {
-	1 | (0 << 3) | -1 << 6, // greater/less -> OFF_ON
-	1 | (0 << 3) | -1 << 6, // greater/less -> OFF_ON_TOGGLE
-	1 | (1 << 3) | (0 << 6) | -1 << 9, // greater/less/else -> TRIGGER
-	1 | (2 << 3) | (0 << 6) | -1 << 9, // equal/greater/less -> UP_DOWN
-	1 | (0 << 3) | -1 << 6, // greater/less -> OPEN_CLOSE
-};
-*/
-
-inline ConvertOptions makeConvertOptions(int16_t commands, float value1, float value2) {
-	return {.commands = uint16_t(commands), .value = {.f = {value1, value2}}};
+inline ConvertOptions makeConvertOptions(int16_t commands, float value0, float value1, float value2) {
+	return {.commands = uint16_t(commands), .value = {.f = {value0, value1, value2}}};
 }
 
 // default convert options for message logger and generator
-static ConvertOptions getDefaultConvertOptions(MessageType2 type) {
-	switch (type & MessageType2::CATEGORY) {
-	case MessageType2::SWITCH: {
+ConvertOptions RoomControl::getDefaultConvertOptions(MessageType type) {
+	switch (type & MessageType::CATEGORY) {
+	case MessageType::BINARY:
+	case MessageType::TERNARY: {
 		int t = getSwitchType(type);
 		return {.commands = uint16_t(switch2switch[t][t])};
 	}
 	default:;
 	}
 	return {};
-	/*
-	switch (messageType & MessageType::TYPE_MASK) {
-	case MessageType::OFF_ON:
-	case MessageType::OFF_ON_TOGGLE:
-	case MessageType::TRIGGER:
-	case MessageType::UP_DOWN:
-	case MessageType::OPEN_CLOSE: {
-		auto mt = int(messageType & MessageType::TYPE_MASK) - int(MessageType::OFF_ON);
-		return {.commands = uint16_t(command2command[mt][mt])};
-	}
-	default:
-		break;
-	}*/
 }
 
 // default convert options for function connection
-static ConvertOptions getDefaultConvertOptions(MessageType2 dstType, MessageType2 srcType) {
+ConvertOptions RoomControl::getDefaultConvertOptions(MessageType dstType, MessageType srcType) {
 	// check if destination is a switch
-	if ((dstType & MessageType2::CATEGORY) == MessageType2::SWITCH) {
+	if ((dstType & MessageType::CATEGORY) <= MessageType::TERNARY) {
 		int d = getSwitchType(dstType);
-		switch (srcType & MessageType2::CATEGORY) {
-		case MessageType2::SWITCH:
+		switch (srcType & MessageType::CATEGORY) {
+		case MessageType::BINARY:
+		case MessageType::TERNARY:
 			// both are a switch
 			return {.commands = uint16_t(switch2switch[getSwitchType(srcType)][getSwitchType(dstType)])};
-		case MessageType2::PHYSICAL:
-		case MessageType2::CONCENTRATION:
-		case MessageType2::LIGHTING:
+		case MessageType::PHYSICAL:
+		case MessageType::CONCENTRATION:
+		case MessageType::LIGHTING: {
 			// source is a float value, use thresholds to convert
-			// todo: units
-			return makeConvertOptions(value2switch[d], 0.5f, 0.5f);
+			auto usage = getUsage(srcType);
+			float value = getDefaultFloatValue(usage);
+			return makeConvertOptions(value2switch[d], value, value, value);
+		}
 		default:;
 		}
 	}
 
 	// check if source is a switch
-	if ((srcType & MessageType2::CATEGORY) == MessageType2::SWITCH) {
+	if ((srcType & MessageType::CATEGORY) <= MessageType::TERNARY) {
 		int s = getSwitchType(srcType);
-		switch (dstType & MessageType2::CATEGORY) {
-		case MessageType2::PHYSICAL:
-		case MessageType2::CONCENTRATION:
-		case MessageType2::LIGHTING:
+		switch (dstType & MessageType::CATEGORY) {
+		case MessageType::PHYSICAL:
+		case MessageType::CONCENTRATION:
+		case MessageType::LIGHTING: {
 			// source is a float value, use list of value and command (set, increment, decrement) to convert
-			// todo: units
-			return makeConvertOptions(switch2valueCommand[s], 0.5f, 0.5f);
+			auto usage = getUsage(dstType);
+			float value = getDefaultFloatValue(usage);
+			float rvalue = stepValue(usage, true, 0.0f, 1);
+			int commands = switch2valueCommand[s];
+			bool r0 = (commands & 7) != 0;
+			bool r1 = ((commands >> 3) & 7) != 0;
+			bool r2 = ((commands >> 6) & 7) != 0;
+			float f0 = r0 ? rvalue : value;
+			float f1 = r1 ? rvalue : value;
+			float f2 = r2 ? rvalue : value;
+			return makeConvertOptions(switch2valueCommand[s], f0, f1, f2);
+		}
 		default:;
 		}
 	}
 	return {};
-
-/*
-	// check if both are a switch command
-	auto d = uint(dstType) - uint(MessageType::OFF_ON_IN);
-	auto s = uint(srcType) - uint(MessageType::OFF_ON_OUT);
-	bool dstIsCommand = d < SWITCH_COMMAND_COUNT;
-	bool srcIsCommand = s < SWITCH_COMMAND_COUNT;
-	if (dstIsCommand && srcIsCommand)
-		return {.commands = uint16_t(command2command[s][d])};
-
-	// check if source is a switch command and destination is a set command
-	if (srcIsCommand) {
-		switch (dstType) {
-		case MessageType::SET_LEVEL_IN:
-			return makeConvertOptions(command2setValue[s], 0.5f, 0.1f);
-		case MessageType::SET_AIR_TEMPERATURE_IN:
-			return makeConvertOptions(command2setValue[s], 293.15f, 0.5f);
-		default:;
-		}
-	}
-
-	// check if source is a simple value and destination is a switch command
-	// todo units
-	if (dstIsCommand) {
-		switch (srcType) {
-		case MessageType::LEVEL_OUT:
-			return makeConvertOptions(value2command[d], 0.5f, 0.5f);
-		case MessageType::AIR_TEMPERATURE_OUT:
-			return makeConvertOptions(value2command[d], 293.15f + 0.5f, 293.15f - 0.5f);
-		case MessageType::AIR_HUMIDITY_OUT:
-			return makeConvertOptions(value2command[d], 0.6f, 0.01f);
-		case MessageType::AIR_PRESSURE_OUT:
-			return makeConvertOptions(value2command[d], 1000.0f * 100.0f, 100.0f);
-		case MessageType::AIR_VOC_OUT:
-			return makeConvertOptions(value2command[d], 10.0f, 1.0f);
-		default:;
-		}
-	}
-
-	return {};
- */
 }
 
-/*
-float RoomControl::stepTemperature(float value, int delta) {
-	return std::round(value * 2.0f + float(delta)) * 0.5f;
-}
+constexpr float CELSIUS_OFFSET = 273.15f;
 
-Flt RoomControl::displayTemperature(float kelvin) {
-	return flt(kelvin - 273.15f, -1);
-}
-
-String RoomControl::getTemperatureUnit() {
-	return "oC";
-}
-*/
-Array<String const> RoomControl::getSwitchStates(Usage usage) {
+float RoomControl::getDefaultFloatValue(Usage usage) {
 	switch (usage) {
-	case Usage::RELEASE_PRESS:
-		return switchReleasePress;
-	case Usage::OFF_ON:
-		return switchOffOn;
+	case Usage::UNIT_INTERVAL:
+	case Usage::PERCENT:
+		return 0.5f;
+	case Usage::TEMPERATURE:
+		return CELSIUS_OFFSET;
+	case Usage::TEMPERATURE_FREEZER:
+		return CELSIUS_OFFSET - 18.0f;
+	case Usage::TEMPERATURE_FRIDGE:
+		return CELSIUS_OFFSET + 4.0f;
+	case Usage::TEMPERATURE_OUTDOOR:
+		return CELSIUS_OFFSET + 10.0f;
+	case Usage::TEMPERATURE_OVEN:
+		return CELSIUS_OFFSET + 200.0f;
+	case Usage::TEMPERATURE_ROOM:
+		return CELSIUS_OFFSET + 20.0f;
+	case Usage::TEMPERATURE_COLOR:
+		return 3000.0f;
+	case Usage::PRESSURE_ATMOSPHERIC:
+		return 101320.0f;
+	default:
+		return 0.0f;
 	}
-	return switchOffOn;
 }
 
 static float step(float value, int delta, float increment, float lo, float hi) {
 	return clamp(float(iround(value / increment) + delta) * increment, lo, hi);
 }
 
-constexpr float CELSIUS_OFFSET = 273.15f;
+static float step(float value, int delta, float increment, float lo, float hi, bool relative, float rhi) {
+	return step(value, delta, increment, relative ? 0.0f : lo, relative ? rhi : hi);
+}
 
-float RoomControl::getDefaultFloat(Usage usage) {
-	switch (usage) {
-	case Usage::KELVIN:
-		return CELSIUS_OFFSET;
-	case Usage::OUTDOOR_TEMPERATURE:
-		return CELSIUS_OFFSET + 10.0f;
-	case Usage::ROOM_TEMPERATURE:
-		return CELSIUS_OFFSET + 20.0f;
-	case Usage::COLOR_TEMPERATURE:
-		return 3000.0f;
-	default:
-		return 0.0f;
-	}
+static float stepCelsius(float value, int delta, float increment, float lo, float hi, bool relative, float rhi) {
+	if (relative)
+		return step(value, delta, increment, 0.0f, rhi);
+	return step(value - CELSIUS_OFFSET, delta, increment, lo, hi) + CELSIUS_OFFSET;
 }
 
 float RoomControl::stepValue(Usage usage, bool relative, float value, int delta) {
 	switch (usage) {
 	case Usage::UNIT_INTERVAL:
-	case Usage::PERCENTAGE:
-		if (relative)
-			return step(value, delta, 0.05f, -1.0f, 1.0f);
-		return step(value, delta, 0.05f, 0.0f, 1.0f);
-	case Usage::OUTDOOR_TEMPERATURE:
+	case Usage::PERCENT:
+		return step(value, delta, 0.05f, 0.0f, 1.0f, relative, 1.0f);
+	case Usage::TEMPERATURE:
+		return stepCelsius(value, delta, 1.0f, -273.0f, 5000.0f, relative, 100.0f);
+	case Usage::TEMPERATURE_FREEZER:
+		return stepCelsius(value, delta, 0.5f, -30.0f, 0.0f, relative, 10.0f);
+	case Usage::TEMPERATURE_FRIDGE:
+		return stepCelsius(value, delta, 0.5f, 0.0f, 20.0f, relative, 10.0f);
+	case Usage::TEMPERATURE_OUTDOOR:
 		return step(value - CELSIUS_OFFSET, delta, 1.0f, -50.0f, 60.0f) + CELSIUS_OFFSET;
-	case Usage::ROOM_TEMPERATURE:
+	case Usage::TEMPERATURE_OVEN:
+		return stepCelsius(value, delta, 5.0f, 50.0f, 500.0f, relative, 200.0f);
+	case Usage::TEMPERATURE_ROOM:
 		// todo: Celsius or Fahrenheit
-		if (relative)
-			return step(value, delta, 0.5f, -20.0f, 20.0f);
-		return step(value - CELSIUS_OFFSET, delta, 0.5f, 0.0f, 50.0f) + CELSIUS_OFFSET;
-	case Usage::COLOR_TEMPERATURE:
-		if (relative)
-			return step(value, delta, 100.0f, -5000.0f, 5000.0f);
-		return step(value, delta, 100.0f, 1000.0f, 10000.0f);
+		return stepCelsius(value, delta, 0.5f, 0.0f, 50.0f, relative, 20.0f);
+	case Usage::TEMPERATURE_COLOR:
+		return step(value, delta, 100.0f, 1000.0f, 10000.0f, relative, 5000.0f);
+	case Usage::PRESSURE_ATMOSPHERIC:
+		return step(value, delta, 100.0f, 50000.0f, 150000.0f);
 	default:
 		return value;
 	}
@@ -793,64 +752,72 @@ Flt RoomControl::getDisplayValue(Usage usage, bool relative, float value) {
 	switch (usage) {
 	case Usage::UNIT_INTERVAL:
 		return flt(value, -2);
-	case Usage::PERCENTAGE:
-		return flt(value, 0);
-	case Usage::OUTDOOR_TEMPERATURE:
-	case Usage::ROOM_TEMPERATURE:
+	case Usage::PERCENT:
+		return flt(value * 100.0f, 0);
+	case Usage::TEMPERATURE:
+	case Usage::TEMPERATURE_FREEZER:
+	case Usage::TEMPERATURE_FRIDGE:
+	case Usage::TEMPERATURE_OUTDOOR:
+	case Usage::TEMPERATURE_OVEN:
+	case Usage::TEMPERATURE_ROOM:
 		// todo: Celsius or Fahrenheit
 		if (relative)
 			return flt(value, -1);
 		return flt(value - CELSIUS_OFFSET, -1);
-	case Usage::COLOR_TEMPERATURE:
+	case Usage::TEMPERATURE_COLOR:
 		return flt(value, -1);
+	case Usage::PRESSURE_ATMOSPHERIC:
+		// todo: Unit
+		return flt(value * 0.01f, 0);
 	}
 	return {};
 }
 
 String RoomControl::getDisplayUnit(Usage usage) {
 	switch (usage) {
-	case Usage::PERCENTAGE:
+	case Usage::PERCENT:
 		return "%";
-	case Usage::OUTDOOR_TEMPERATURE:
-	case Usage::ROOM_TEMPERATURE:
+	case Usage::TEMPERATURE:
+	case Usage::TEMPERATURE_FREEZER:
+	case Usage::TEMPERATURE_FRIDGE:
+	case Usage::TEMPERATURE_OUTDOOR:
+	case Usage::TEMPERATURE_OVEN:
+	case Usage::TEMPERATURE_ROOM:
 		// todo: Celsius or Fahrenheit
 		return "oC";
-	case Usage::COLOR_TEMPERATURE:
+	case Usage::TEMPERATURE_COLOR:
 		return "K";
+	case Usage::PRESSURE_ATMOSPHERIC:
+		// todo: Unit
+		return "hPa";
 	default:;
 	}
 	return {};
 }
 
-/*
-static void editCommand(Menu::Stream &stream, Message &message, bool editMessage, int delta, Array<uint8_t const> commands) {
-	if (editMessage)
-		message.command = (message.command + 30 + delta) % commands.count();
-	stream << underline(commandNames[commands[message.command]], editMessage);
-}*/
-
-void RoomControl::editMessage(Menu::Stream &stream, MessageType2 messageType,
-	Message2 &message, bool editMessage1, bool editMessage2, int delta)
+void RoomControl::editMessage(Menu::Stream &stream, MessageType messageType,
+	Message &message, bool editMessage1, bool editMessage2, int delta)
 {
 	auto usage = getUsage(messageType);
-	switch (messageType & MessageType2::CATEGORY) {
-	case MessageType2::SWITCH: {
+	switch (messageType & MessageType::CATEGORY) {
+	case MessageType::BINARY:
+	case MessageType::TERNARY: {
 		// switch
 		auto states = getSwitchStates(usage);
 		if (editMessage1)
 			message.value.u8 = (message.value.u8 + 30 + delta) % states.count();
-		stream << underline(states[message.command], editMessage1);
+		stream << underline(states[message.value.u8], editMessage1);
 		break;
 	}
-	case MessageType2::LEVEL:
-	case MessageType2::PHYSICAL:
-	case MessageType2::CONCENTRATION:
+	case MessageType::LEVEL:
+	case MessageType::PHYSICAL:
+	case MessageType::CONCENTRATION:
 		// float
 		if (editMessage1)
 			message.value.f = stepValue(usage, false, message.value.f, delta);
 		stream << underline(getDisplayValue(usage, false, message.value.f), editMessage1) << getDisplayUnit(usage);
 		break;
-	case MessageType2::LIGHTING:
+	case MessageType::LIGHTING:
 		// float + transition
 		if (editMessage1)
 			message.value.f = stepValue(usage, false, message.value.f, delta);
@@ -862,54 +829,6 @@ void RoomControl::editMessage(Menu::Stream &stream, MessageType2 messageType,
 		stream << underline(dec(message.transition / 10) + '.' + dec(message.transition % 10), editMessage2) << 's';
 		break;
 	}
-
-
-
-	/*
-	// edit and display message values
-	switch (messageType & MessageType::TYPE_MASK) {
-	case MessageType::OFF_ON:
-		editCommand(stream, message, editMessage1, delta, onOffCommands);
-		break;
-	case MessageType::OFF_ON_TOGGLE:
-		editCommand(stream, message, editMessage1, delta, onOffToggleCommands);
-		break;
-	case MessageType::TRIGGER:
-		editCommand(stream, message, editMessage1, delta, triggerCommands);
-		break;
-	case MessageType::UP_DOWN:
-		editCommand(stream, message, editMessage1, delta, upDownCommands);
-		break;
-	case MessageType::OPEN_CLOSE:
-		editCommand(stream, message, editMessage1, delta, openCloseCommands);
-		break;
-	case MessageType::LEVEL:
-		break;
-	case MessageType::SET_LEVEL:
-		break;
-	case MessageType::MOVE_TO_LEVEL:
-		if (editMessage1)
-			message.value.f = clamp(float(message.value.f) + delta * 0.05f, 0.0f, 1.0f);
-		if (editMessage2)
-			message.transition = clamp(message.transition + delta, 0, 65535);
-		stream << underline(flt(message.value.f, 2), editMessage1) << ' ';
-
-		// transition time in 1/10 s
-		stream << underline(dec(message.transition / 10) + '.' + dec(message.transition % 10), editMessage2) << 's';
-		break;
-	case MessageType::AIR_TEMPERATURE:
-		if (editMessage1)
-			message.value.f = stepTemperature(message.value.f, delta);
-		stream << underline(displayTemperature(message.value.f), editMessage1) << getTemperatureUnit();
-		break;
-	case MessageType::SET_AIR_TEMPERATURE:
-		break;
-	case MessageType::AIR_PRESSURE:
-		if (editMessage1)
-			message.value.f = message.value.f + delta;
-		stream << underline(flt(message.value.f * 0.01f, 0), editMessage1) << "hPa";
-		break;
-	}*/
 }
 
 
@@ -1018,9 +937,9 @@ void RoomControl::editConvertSwitch2FloatCommand(Menu &menu, ConvertOptions &con
 		if (relative != lastRelative) {
 			// command was changed between absolute (set) and relative (increase, decrease)
 			if (!relative && lastRelative)
-				value += getDefaultFloat(dstUsage);
+				value += getDefaultFloatValue(dstUsage);
 			if (relative && !lastRelative)
-				value -= getDefaultFloat(dstUsage);
+				value -= getDefaultFloatValue(dstUsage);
 		}
 
 		if (command < array::count(commands)) {
@@ -1045,26 +964,27 @@ void RoomControl::editConvertSwitch2FloatCommand(Menu &menu, ConvertOptions &con
 	convertOptions.commands |= -1 << srcCommands.count() * 3;
 }
 
-void RoomControl::editConvertOptions(Menu &menu, ConvertOptions &convertOptions, MessageType2 dstType, MessageType2 srcType) {
+void RoomControl::editConvertOptions(Menu &menu, ConvertOptions &convertOptions, MessageType dstType, MessageType srcType) {
 	auto dstUsage = getUsage(dstType);
 	auto srcUsage = getUsage(srcType);
 
 	// check if destination is a switch
-	if ((dstType & MessageType2::CATEGORY) == MessageType2::SWITCH) {
+	if ((dstType & MessageType::CATEGORY) <= MessageType::TERNARY) {
 		auto dstStates = getSwitchStates(dstUsage);
 
-		switch (srcType & MessageType2::CATEGORY) {
-		case MessageType2::SWITCH:
+		switch (srcType & MessageType::CATEGORY) {
+		case MessageType::BINARY:
+		case MessageType::TERNARY:
 			// both are a switch
 			editConvertSwitch2Switch(menu, convertOptions, dstStates, getSwitchStates(srcUsage));
 			return;
-		case MessageType2::LEVEL:
-		case MessageType2::PHYSICAL:
-		case MessageType2::CONCENTRATION:
-		case MessageType2::LIGHTING:
+		case MessageType::LEVEL:
+		case MessageType::PHYSICAL:
+		case MessageType::CONCENTRATION:
+		case MessageType::LIGHTING:
 			editConvertFloat2Switch(menu, convertOptions, dstStates, srcUsage);
 			return;
-		case MessageType2::METERING:
+		case MessageType::METERING:
 			// todo
 			return;
 		default:;
@@ -1072,12 +992,12 @@ void RoomControl::editConvertOptions(Menu &menu, ConvertOptions &convertOptions,
 	}
 
 	// check if source is a switch
-	if ((srcType & MessageType2::CATEGORY) == MessageType2::SWITCH) {
-		switch (dstType & MessageType2::CATEGORY) {
-		case MessageType2::LEVEL:
-		case MessageType2::PHYSICAL:
-		case MessageType2::CONCENTRATION:
-		case MessageType2::LIGHTING:
+	if ((srcType & MessageType::CATEGORY) <= MessageType::TERNARY) {
+		switch (dstType & MessageType::CATEGORY) {
+		case MessageType::LEVEL:
+		case MessageType::PHYSICAL:
+		case MessageType::CONCENTRATION:
+		case MessageType::LIGHTING:
 			// source is a switch and destination is a value (with command)
 			editConvertSwitch2FloatCommand(menu, convertOptions, dstUsage, getSwitchStates(srcUsage));
 
@@ -1085,54 +1005,6 @@ void RoomControl::editConvertOptions(Menu &menu, ConvertOptions &convertOptions,
 		default:;
 		}
 	}
-
-/*
-	// check if both are a switch command
-	auto d = uint(dstType) - uint(MessageType::OFF_ON_IN);
-	auto s = uint(srcType) - uint(MessageType::OFF_ON_OUT);
-	bool dstIsCommand = d < SWITCH_COMMAND_COUNT;
-	bool srcIsCommand = s < SWITCH_COMMAND_COUNT;
-	if (dstIsCommand && srcIsCommand) {
-		editConvertSwitch2Switch(menu, convertOptions, switchCommands[d], switchCommands[s]);
-		return;
-	}
-
-	// check if source is a switch command and destination is a set command
-	if (srcIsCommand) {
-		switch (dstType) {
-		case MessageType::SET_LEVEL_IN:
-			editConvertSwitch2SetFloat(menu, convertOptions, switchCommands[s], 1.0f, 0.0f, 100.0f, -2, 1.0f, String());
-			return;
-		case MessageType::MOVE_TO_LEVEL_IN:
-			return;
-		case MessageType::SET_AIR_TEMPERATURE_IN:
-			editConvertSwitch2SetFloat(menu, convertOptions, switchCommands[s], 1.0f, -273.15f, 2.0f, -1, 10000.0f, "oC");
-			return;
-		default:;
-		}
-	}
-
-	// check if source is a simple value and destination is a switch command
-	if (dstIsCommand) {
-		switch (srcType) {
-		case MessageType::LEVEL_OUT:
-			editConvertFloat2Switch(menu, convertOptions, switchCommands[d], 1.0f, 0.0f, 100.0f, -2, 1.0f, String());
-			return;
-		case MessageType::AIR_TEMPERATURE_OUT:
-			editConvertFloat2Switch(menu, convertOptions, switchCommands[d], 1.0f, -273.15f, 2.0f, -1, 10000.0f, "oC");
-			return;
-		case MessageType::AIR_HUMIDITY_OUT:
-			editConvertFloat2Switch(menu, convertOptions, switchCommands[d], 100.0f, 0.0f, 1.0f, 0, 1.0f, "%");
-			return;
-		case MessageType::AIR_PRESSURE_OUT:
-			editConvertFloat2Switch(menu, convertOptions, switchCommands[d], 0.01f, 0.0f, 1.0f, 0, 2000.0f * 100.0f, "hPa");
-			return;
-		case MessageType::AIR_VOC_OUT:
-			editConvertFloat2Switch(menu, convertOptions, switchCommands[d], 1.0f, 0.0f, 0.1f, 1, 100.0f, "O");
-			return;
-		default:;
-		}
-	}*/
 }
 
 
@@ -1391,9 +1263,9 @@ AwaitableCoroutine RoomControl::endpointsMenu(Interface::Device &device) {
 			auto messageType = endpoints[i];
 			auto stream = menu.stream();
 			stream << dec(i) << ": " << getTypeLabel(messageType);
-			if ((messageType & MessageType2::DIRECTION_MASK) == MessageType2::IN)
+			if ((messageType & MessageType::DIRECTION_MASK) == MessageType::IN)
 				stream << " In";
-			if ((messageType & MessageType2::DIRECTION_MASK) == MessageType2::OUT)
+			if ((messageType & MessageType::DIRECTION_MASK) == MessageType::OUT)
 				stream << " Out";
 			menu.entry();
 		}
@@ -1422,8 +1294,8 @@ AwaitableCoroutine RoomControl::messageLogger(Interface::Device &device) {
 
 	// event queue
 	struct Event {
-		MessageInfo2 info;
-		Message2 message;
+		MessageInfo info;
+		Message message;
 	};
 	Queue<Event, 16> queue;
 	
@@ -1439,51 +1311,24 @@ AwaitableCoroutine RoomControl::messageLogger(Interface::Device &device) {
 			auto stream = menu.stream();
 			stream << dec(event.info.device.endpointIndex) << ": ";
 			auto usage = getUsage(event.info.type);
-			switch (event.info.type & MessageType2::CATEGORY) {
-			case MessageType2::SWITCH:
+			switch (event.info.type & MessageType::CATEGORY) {
+			case MessageType::BINARY:
+			case MessageType::TERNARY:
 				stream << getSwitchStates(usage)[event.message.value.u8];
 				break;
-			case MessageType2::LEVEL:
-			case MessageType2::PHYSICAL:
-			case MessageType2::CONCENTRATION:
-			case MessageType2::LIGHTING: {
-				bool relative = (event.info.type & MessageType2::CMD) != 0 && event.message.command != 0;
+			case MessageType::LEVEL:
+			case MessageType::PHYSICAL:
+			case MessageType::CONCENTRATION:
+			case MessageType::LIGHTING: {
+				bool relative = (event.info.type & MessageType::CMD) != 0 && event.message.command != 0;
 				stream << getDisplayValue(usage, relative, event.message.value.f) << getDisplayUnit(usage);
 				break;
 			}
-			case MessageType2::METERING:
+			case MessageType::METERING:
 				//stream << getDisplayValue(usage, event.message.value.u32) << getDisplayUnit(usage);
 				break;
 			default:;
 			}
-
-/*
-			switch (event.info.type & MessageType::TYPE_MASK) {
-			case MessageType::OFF_ON:
-				stream << commandNames[onOffCommands[event.message.command]];
-				break;
-			case MessageType::OFF_ON_TOGGLE:
-				stream << commandNames[onOffToggleCommands[event.message.command]];
-				break;
-			case MessageType::TRIGGER:
-				stream << commandNames[triggerCommands[event.message.command]];
-				break;
-			case MessageType::UP_DOWN:
-				stream << commandNames[upDownCommands[event.message.command]];
-				break;
-			case MessageType::OPEN_CLOSE:
-				stream << commandNames[openCloseCommands[event.message.command]];
-				break;
-			case MessageType::AIR_TEMPERATURE:
-				// todo: units
-				stream << flt(event.message.value.f - 273.15f, 1) << "oC";
-				break;
-			case MessageType::AIR_PRESSURE:
-				// todo: units
-				stream << flt(event.message.value.f * 0.01, 1) << "hPa";
-				break;
-			default:;
-			}*/
 			menu.entry();
 		}
 		
@@ -1495,7 +1340,7 @@ AwaitableCoroutine RoomControl::messageLogger(Interface::Device &device) {
 		for (int endpointIndex = 0; endpointIndex < min(endpoints.count(), array::count(subscribers)); ++endpointIndex) {
 			auto &subscriber = subscribers[endpointIndex];
 			auto messageType = endpoints[endpointIndex];
-			subscriber.destination.type = messageType ^ (MessageType2::OUT ^ MessageType2::IN);
+			subscriber.destination.type = messageType ^ (MessageType::OUT ^ MessageType::IN);
 			subscriber.convertOptions = getDefaultConvertOptions(messageType);
 		}
 
@@ -1515,8 +1360,8 @@ AwaitableCoroutine RoomControl::messageGenerator(Interface::Device &device) {
 	//! skip "in" endpoints -> or forward to subscriptions
 
 	uint8_t endpointIndex = 0;
-	MessageType2 lastMessageType = MessageType2::UNKNOWN;
-	Message2 message = {};
+	MessageType lastMessageType = MessageType::UNKNOWN;
+	Message message = {};
 	PublishInfo::Barrier *publishBarrier;
 
 	// menu loop
@@ -1546,15 +1391,16 @@ AwaitableCoroutine RoomControl::messageGenerator(Interface::Device &device) {
 				lastMessageType = messageType;
 
 				auto usage = getUsage(messageType);
-				switch (messageType & MessageType2::CATEGORY) {
-				case MessageType2::SWITCH:
+				switch (messageType & MessageType::CATEGORY) {
+				case MessageType::BINARY:
+				case MessageType::TERNARY:
 					message.value.u8 = 1;
 					break;
-				case MessageType2::LEVEL:
-				case MessageType2::PHYSICAL:
-				case MessageType2::CONCENTRATION:
-				case MessageType2::LIGHTING:
-					message.value.f = getDefaultFloat(usage);
+				case MessageType::LEVEL:
+				case MessageType::PHYSICAL:
+				case MessageType::CONCENTRATION:
+				case MessageType::LIGHTING:
+					message.value.f = getDefaultFloatValue(usage);
 					break;
 				}
 			}
@@ -1572,10 +1418,10 @@ AwaitableCoroutine RoomControl::messageGenerator(Interface::Device &device) {
 					p.info = {messageType, {.device = {device.getId(), endpointIndex}}};
 
 					// convert to destination message type and resume coroutine if conversion was successful
-					auto &dst = *reinterpret_cast<Message2 *>(p.message);
-					if ((messageType & MessageType2::CATEGORY) == MessageType2::SWITCH)
+					auto &dst = *reinterpret_cast<Message *>(p.message);
+					if ((messageType & MessageType::CATEGORY) <= MessageType::TERNARY)
 						dst.value.u8 = message.value.u8;
-					else if ((messageType & MessageType2::CMD) == 0)
+					else if ((messageType & MessageType::CMD) == 0)
 						dst.value = message.value;
 					else
 						dst = message;
@@ -1588,7 +1434,8 @@ AwaitableCoroutine RoomControl::messageGenerator(Interface::Device &device) {
 			break;
 			
 		// show menu
-		co_await select(menu.show(), Timer::sleep(250ms));
+		//co_await select(menu.show(), Timer::sleep(250ms));
+		co_await menu.show();
 	}
 }
 
@@ -1734,7 +1581,7 @@ AwaitableCoroutine RoomControl::functionMenu(int index, FunctionFlash &flash) {
 					for (int connectionIndex = 0; connectionIndex < flash.connectionCount; ++connectionIndex, ++it) {
 						auto &connection = it.getConnection();
 						auto &plug = functionInfo.plugs[connection.plugIndex];
-						if (plug.messageType == MessageType2::SWITCH_TERNARY_OPEN_CLOSE_OUT /*UP_DOWN_OUT*/ && !connection.isMqtt()) {
+						if (plug.messageType == MessageType::TERNARY_OPENING_BLIND_OUT /*UP_DOWN_OUT*/ && !connection.isMqtt()) {
 							auto &interface = getInterface(connection);
 							auto *device = interface.getDeviceById(connection.deviceId);
 							if (device != nullptr)
@@ -1861,7 +1708,7 @@ AwaitableCoroutine RoomControl::measureRunTime(Interface::Device &device, Connec
 			info.barrier->resumeFirst([&device, &connection, state] (PublishInfo::Parameters &p) {
 				auto dstType = device.getEndpoints()[connection.endpointIndex];
 				p.info = {dstType, {.device = {device.getId(), connection.endpointIndex}}};
-				auto &dst = *reinterpret_cast<Message2 *>(p.message);
+				auto &dst = *reinterpret_cast<Message *>(p.message);
 				return convertSwitch(dstType, dst, state, connection.convertOptions);
 			});
 
@@ -1885,126 +1732,6 @@ AwaitableCoroutine RoomControl::measureRunTime(Interface::Device &device, Connec
 		}
 	}
 }
-
-
-/*
-
-static void editConvertOptionsValue2Command(Menu &menu, ConvertOptions &convertOptions,
-	Array<uint8_t const> dstCommands)
-{
-	int delta = menu.getDelta();
-
-	// one menu entry for greater, equals, less
-	for (int i = 0; i < 3; ++i) {
-		auto stream = menu.stream();
-
-		// source command
-		stream << commandNames[compareCommands[i]] << " -> ";
-
-		// edit destination command
-		int offset = i * 3;
-		int command = (convertOptions.commands >> offset) & 7;
-		bool editCommand = menu.getEdit(1) == 1;
-		int commandCount = dstCommands.count();
-		if (editCommand) {
-			command += delta;
-			while (command > commandCount)
-				command -= commandCount + 1;
-			while (command < 0)
-				command += commandCount + 1;
-			if (command >= commandCount)
-				command = 7;
-			convertOptions.commands = (convertOptions.commands & ~(7 << offset)) | command << offset;
-		}
-
-		stream << underline(command < commandCount ? commandNames[dstCommands[command]] : "(ignore)", editCommand);
-		menu.entry();
-
-
-	}
-
-	// set remaining commands to invalid
-	convertOptions.commands |= -1 << array::count(compareCommands) * 3;
-}
-
-// edit convert optons for command messages (e.g. OFF_ON, UP_DOWN)
-static void editConvertOptionsCommand(Menu &menu, ConvertOptions &convertOptions, Array<uint8_t const> dstCommands,
-	MessageType srcType)
-{
-	switch (srcType & MessageType::TYPE_MASK) {
-	case MessageType::OFF_ON:
-		editConvertOptionsCommand2Command(menu, convertOptions, dstCommands, onOffCommands);
-		break;
-	case MessageType::OFF_ON_TOGGLE:
-		editConvertOptionsCommand2Command(menu, convertOptions, dstCommands, onOffToggleCommands);
-		break;
-	case MessageType::TRIGGER:
-		editConvertOptionsCommand2Command(menu, convertOptions, dstCommands, triggerCommands);
-		break;
-	case MessageType::UP_DOWN:
-		editConvertOptionsCommand2Command(menu, convertOptions, dstCommands, upDownCommands);
-		break;
-	case MessageType::OPEN_CLOSE:
-		editConvertOptionsCommand2Command(menu, convertOptions, dstCommands, openCloseCommands);
-		break;
-	case MessageType::AIR_TEMPERATURE:
-		editConvertOptionsValue2Command(menu, convertOptions, dstCommands);
-		break;
-	}
-}
-
-static bool hasSetCommand(uint16_t commands) {
-	for (int i = 0; i < 4; ++i) {
-		if ((commands & 7) == 0)
-			return true;
-		commands >>= 3;
-	}
-	return false;
-}
-
-static bool hasIncDecCommand(uint16_t commands) {
-	for (int i = 0; i < 4; ++i) {
-		int c = commands & 7;
-		if (c == 1 || c == 2)
-			return true;
-		commands >>= 3;
-	}
-	return false;
-}
-
-// edit convert options for "set float" messages (e.g. SET_LEVEL, SET_TEMPERATURE)
-static void editConvertOptionsSetFloat(Menu &menu, ConvertOptions &convertOptions,
-	MessageType srcType, float scale, float offset, float precision, float maxValue, int decimalCount, String unit)
-{
-	// edit convert options for set command (set, increase, decrease)
-	editConvertOptionsCommand(menu, convertOptions, setCommands, srcType);
-
-	// absolute value
-	int delta = menu.getDelta();
-	if (hasSetCommand(convertOptions.commands)) {
-		bool editLevel = menu.getEdit(1);
-		if (editLevel)
-			convertOptions.value.f[0] = clamp(float(iround((convertOptions.value.f[0] - offset) * precision) + delta)
-				/ precision + offset, 0.0f, maxValue);
-		menu.stream() << "Set: "
-			<< underline(flt(convertOptions.value.f[0] * scale - offset, decimalCount), editLevel)
-			<< ' ' << unit;
-		menu.entry();
-	}
-
-	// relative value
-	if (hasIncDecCommand(convertOptions.commands)) {
-		bool editLevel = menu.getEdit(1);
-		if (editLevel)
-			convertOptions.value.f[1] = clamp(float(iround((convertOptions.value.f[1]) * precision) + delta)
-				/ precision, 0.0f, maxValue);
-		menu.stream() << "Inc/Dec: "
-			<< underline(flt(convertOptions.value.f[1] * scale, decimalCount), editLevel)
-			<< ' ' << unit;
-		menu.entry();
-	}
-}
-*/
 
 AwaitableCoroutine RoomControl::editFunctionConnection(ConnectionIterator &it, Plug const &plug, Connection connection,
 	bool add)
@@ -2287,7 +2014,7 @@ struct OffOn {
 struct FloatValue {
 	float value = 0.0f;
 
-	void apply(Message2 const &message) {
+	void apply(Message const &message) {
 		switch (message.command) {
 			case 0:
 				// set
@@ -2325,7 +2052,7 @@ Coroutine RoomControl::SimpleSwitch::start(RoomControl &roomControl) {
 	// no references to flash allowed beyond this point as flash may be reallocated
 	while (true) {
 		// wait for message
-		MessageInfo2 info;
+		MessageInfo info;
 		uint8_t message;
 		co_await barrier.wait(info, &message);
 
@@ -2363,7 +2090,7 @@ Coroutine RoomControl::TimeoutSwitch::start(RoomControl &roomControl) {
 	// no references to flash allowed beyond this point as flash may be reallocated
 	while (true) {
 		// wait for message
-		MessageInfo2 info;
+		MessageInfo info;
 		uint8_t message;
 		if (state == 0) {
 			co_await barrier.wait(info, &message);
@@ -2448,8 +2175,8 @@ Coroutine RoomControl::TimedBlind::start(RoomControl &roomControl) {
 	// no references to flash allowed beyond this point as flash may be reallocated
 	while (true) {
 		// wait for message
-		MessageInfo2 info;
-		Message2 message;
+		MessageInfo info;
+		Message message;
 		if (state == 0) {
 			co_await barrier.wait(info, &message);
 		} else {
@@ -2601,8 +2328,8 @@ Coroutine RoomControl::HeatingControl::start(RoomControl &roomControl) {
 	// no references to flash allowed beyond this point as flash may be reallocated
 	while (true) {
 		// wait for message
-		MessageInfo2 info;
-		Message2 message;
+		MessageInfo info;
+		Message message;
 		co_await barrier.wait(info, &message);
 
 		// process message

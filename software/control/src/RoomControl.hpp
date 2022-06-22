@@ -81,13 +81,13 @@ public:
 		String name;
 
 		// message type that is expected/sent by the input/output
-		MessageType2 messageType;
+		MessageType messageType;
 
 		// flags: 1: indexed input
 		//uint8_t flags;
 
-		bool isInput() const {return (this->messageType & MessageType2::DIRECTION_MASK) == MessageType2::IN;}
-		bool isOutput() const {return (this->messageType & MessageType2::DIRECTION_MASK) == MessageType2::OUT;}
+		bool isInput() const {return (this->messageType & MessageType::DIRECTION_MASK) == MessageType::IN;}
+		bool isOutput() const {return (this->messageType & MessageType::DIRECTION_MASK) == MessageType::OUT;}
 	};
 
 	// maximum number of inputs/outputs of a function
@@ -358,14 +358,21 @@ public:
 
 	void printConnection(Menu::Stream &stream, Connection const &connection);
 
-	//float stepTemperature(float value, int delta);
-	//Flt displayTemperature(float kelvin);
-	//String getTemperatureUnit();
-
 	// get array of switch states
 	Array<String const> getSwitchStates(Usage usage);
 
-	float getDefaultFloat(Usage usage);
+	// get switch type (binary/ternary, stable/one-shot)
+	int getSwitchType(MessageType type);
+
+	// default convert options for message logger and generator
+	ConvertOptions getDefaultConvertOptions(MessageType type);
+
+	// default convert options for connections
+	ConvertOptions getDefaultConvertOptions(MessageType dstType, MessageType srcType);
+
+
+	// get default float value for given usage
+	float getDefaultFloatValue(Usage usage);
 
 	// do a step on a value
 	float stepValue(Usage usage, bool relative, float value, int delta);
@@ -376,8 +383,8 @@ public:
 	// get the unit for display, depending on user settings
 	String getDisplayUnit(Usage usage);
 
-	void editMessage(Menu::Stream &stream, MessageType2 messageType,
-		Message2 &message, bool editMessage1, bool editMessage2, int delta);
+	void editMessage(Menu::Stream &stream, MessageType messageType,
+		Message &message, bool editMessage1, bool editMessage2, int delta);
 
 	void editConvertSwitch2Switch(Menu &menu, ConvertOptions &convertOptions,
 		Array<String const> const &dstStates, Array<String const> const &srcStates);
@@ -388,7 +395,7 @@ public:
 	void editConvertSwitch2FloatCommand(Menu &menu, ConvertOptions &convertOptions, Usage dstUsage,
 		Array<String const> const &srcCommands);
 
-	void editConvertOptions(Menu &menu, ConvertOptions &convertOptions, MessageType2 dstType, MessageType2 srcType);
+	void editConvertOptions(Menu &menu, ConvertOptions &convertOptions, MessageType dstType, MessageType srcType);
 
 // Menu
 // ----

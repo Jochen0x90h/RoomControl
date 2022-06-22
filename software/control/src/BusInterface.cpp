@@ -63,51 +63,47 @@ Coroutine BusInterface::start() {
 		publish();
 }
 
-static bool readMessage(MessageType2 dstType, void *dstMessage, MessageType2 srcType, MessageReader r,
+static bool readMessage(MessageType dstType, void *dstMessage, MessageType srcType, MessageReader r,
 	ConvertOptions const &convertOptions)
 {
-	auto &dst = *reinterpret_cast<Message2 *>(dstMessage);
+	auto &dst = *reinterpret_cast<Message *>(dstMessage);
 
-	switch (srcType & MessageType2::CATEGORY) {
-	case MessageType2::SWITCH:
+	switch (srcType & MessageType::CATEGORY) {
+	case MessageType::BINARY:
+	case MessageType::TERNARY:
 		return convertSwitch(dstType, dst, r.u8(), convertOptions);
-	case MessageType2::MULTISTATE:
+	case MessageType::MULTISTATE:
 		// todo
 		break;
-	case MessageType2::LEVEL: {
+	case MessageType::LEVEL: {
 		// level: convert from 0 - 65535 to 0.0 - 1.0
 		float level = float(r.u16L()) / 65535.0f;
-		if ((srcType & MessageType2::CMD) == 0)
+		if ((srcType & MessageType::CMD) == 0)
 			return convertFloat(dstType, dst, level, convertOptions);
 		uint8_t command = r.u8();
 		return convertFloatCommand(dstType, dst, command, level, convertOptions);
 	}
-	case MessageType2::PHYSICAL:
-	case MessageType2::CONCENTRATION: {
+	case MessageType::PHYSICAL:
+	case MessageType::CONCENTRATION: {
 		float value = r.f32L();
-		if ((srcType & MessageType2::CMD) == 0)
+		if ((srcType & MessageType::CMD) == 0)
 			return convertFloat(dstType, dst, value, convertOptions);
 		uint8_t command = r.u8();
 		return convertFloatCommand(dstType, dst, command, value, convertOptions);
 	}
-	case MessageType2::LIGHTING: {
+	case MessageType::LIGHTING: {
 		// lighting: all values are normalized except color temperature
 		float value = r.u16L();
-		if ((srcType & MessageType2::LIGHTING_CATEGORY) != MessageType2::LIGHTING_COLOR_TEMPERATURE)
+		if ((srcType & MessageType::LIGHTING_CATEGORY) != MessageType::LIGHTING_COLOR_TEMPERATURE)
 			value /= 65535.0f;
-		if ((srcType & MessageType2::CMD) == 0)
+		if ((srcType & MessageType::CMD) == 0)
 			return convertFloat(dstType, dst, value, convertOptions);
 		uint8_t command = r.u8();
 		uint16_t transition = r.u16L();
 		return convertFloatTransition(dstType, dst, value, command, transition, convertOptions);
 	}
-	case MessageType2::METERING:
+	case MessageType::METERING:
 		// todo
-/*	case MessageType::AIR_TEMPERATURE_OUT: {
-		// convert temperature from 1/20 Kelvin to Kelvin
-		float temperature = float(r.u16L()) * 0.05f;
-		return convertFloatValue(dstType, dst, srcType, temperature, convertOptions);
-	}*/
 	default:
 		// conversion failed
 		return false;
@@ -168,8 +164,8 @@ Coroutine BusInterface::receive() {
 			flash.address = flash.interfaceId - 1;
 
 			// get endpoints
-			flash.endpointCount = r.getRemaining();
-			array::copy(flash.endpointCount, flash.endpoints, r.current);
+			flash.endpointCount = r.getRemaining() / 2;
+			r.data16L(flash.endpointCount, flash.endpoints);
 
 			// commission the device
 			constexpr int commissionLength =
@@ -201,7 +197,7 @@ Coroutine BusInterface::receive() {
 				w.u8(flash.address);
 
 				// key
-				w.data(*this->key);
+				w.data8(*this->key);
 
 				// only add message integrity code (mic) using default key, message stays unencrypted
 				w.setMessage();
@@ -234,7 +230,7 @@ Coroutine BusInterface::receive() {
 				if (flash.address == address) {
 					// get security counter
 					uint32_t securityCounter = r.u32L();
-					Terminal::out << "device " << dec(address) << " security counter " << hex(securityCounter) << '\n';
+					//Terminal::out << "device " << dec(address) << " security counter " << hex(securityCounter) << '\n';
 
 					// set start of encrypted message
 					r.setMessage();
@@ -270,61 +266,40 @@ Coroutine BusInterface::receive() {
 	}
 }
 
-static bool writeMessage(MessageWriter &w, MessageType2 type, Message2 &message) {
-	switch (type & MessageType2::CATEGORY) {
-	case bus::EndpointType2::SWITCH:
+static bool writeMessage(MessageWriter &w, MessageType type, Message &message) {
+	switch (type & MessageType::CATEGORY) {
+	case bus::EndpointType::BINARY:
+	case bus::EndpointType::TERNARY:
 		w.u8(message.value.u8);
 		break;
-	case MessageType2::MULTISTATE:
+	case MessageType::MULTISTATE:
 		// todo
 		break;
-	case MessageType2::LEVEL:
+	case MessageType::LEVEL:
 		w.u16L(clamp(int(message.value.f * 65535.0f + 0.5f), 0, 65535));
-		if ((type & MessageType2::CMD) != 0)
+		if ((type & MessageType::CMD) != 0)
 			w.u8(message.command);
 		break;
-	case MessageType2::PHYSICAL:
-	case MessageType2::CONCENTRATION:
+	case MessageType::PHYSICAL:
+	case MessageType::CONCENTRATION:
 		w.f32L(message.value.f);
-		if ((type & MessageType2::CMD) != 0)
+		if ((type & MessageType::CMD) != 0)
 			w.u8(message.command);
 		break;
-	case MessageType2::LIGHTING: {
+	case MessageType::LIGHTING: {
 		float value = message.value.f;
-		if ((type & MessageType2::LIGHTING_CATEGORY) != MessageType2::LIGHTING_COLOR_TEMPERATURE)
+		if ((type & MessageType::LIGHTING_CATEGORY) != MessageType::LIGHTING_COLOR_TEMPERATURE)
 			value *= 65535.0f;
 		w.u16L(clamp(int(value + 0.5f), 0, 65535));
-		if ((type & MessageType2::CMD) != 0) {
+		if ((type & MessageType::CMD) != 0) {
 			w.u8(message.command);
 			w.u16L(message.transition);
 		}
 		break;
 	}
-	case MessageType2::METERING:
+	case MessageType::METERING:
 		// todo
 		break;
-/*
-	case MessageType::SET_LEVEL_IN:
-	case MessageType::MOVE_TO_LEVEL_IN:
-		w.e8<bus::LevelControlCommand>(bus::LevelControlCommand(message.command));
-		w.u8(clamp(int(message.value.f * 255.0f + 0.5f), 0, 255));
-
-		if (messageType == MessageType::MOVE_TO_LEVEL_IN) {
-			// duration in 1/10s
-			w.u16L(message.transition);
-
-			// speed in 1 / 5000s
-			//w.u16L(clamp(int(src.moveToLevel.move * 5000.0f), 0, 65535));
-		}
-		break;
-	case MessageType::AIR_TEMPERATURE_IN:
-		w.u16L(clamp(int(message.value.f * 20.0f + 0.5f), 0, 65535));
-		break;
-	case MessageType::SET_AIR_TEMPERATURE_IN:
-		w.e8<bus::LevelControlCommand>(bus::LevelControlCommand(message.command));
-		w.u16L(clamp(int(message.value.f * 20.0f + 0.5f), 0, 65535));
-		break;
-*/
 	default:
 		// not supported
 		return false;
@@ -337,8 +312,8 @@ Coroutine BusInterface::publish() {
 	uint8_t inMessage[maxMessageLength];
 	while (true) {
 		// wait for message
-		MessageInfo2 info;
-		Message2 message;
+		MessageInfo info;
+		Message message;
 		co_await this->publishBarrier.wait(info, &message);
 
 		// find destination device
@@ -438,7 +413,7 @@ void BusInterface::BusDevice::setName(String name) {
 
 }
 
-Array<MessageType2 const> BusInterface::BusDevice::getEndpoints() const {
+Array<MessageType const> BusInterface::BusDevice::getEndpoints() const {
 	auto &flash = **this;
 	return {flash.endpointCount, flash.endpoints};
 }

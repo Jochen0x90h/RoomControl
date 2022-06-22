@@ -83,7 +83,7 @@ public:
 	 * @param deviceId device id
 	 * @param publisher subscriber to insert
 	 */
-	void subscribe(String topicName, MessageType2 type, Subscriber &subscriber);
+	void subscribe(String topicName, MessageType type, Subscriber &subscriber);
 
 	/**
 	 * Get publish info used to publish a message to an endpoint.
@@ -91,7 +91,7 @@ public:
 	 * @param type
 	 * @return publish info
 	 */
-	PublishInfo getPublishInfo(String topicName, MessageType2 type);
+	PublishInfo getPublishInfo(String topicName, MessageType type);
 
 	
 	struct PacketReader : public MessageReader {

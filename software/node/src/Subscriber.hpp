@@ -7,7 +7,7 @@
 
 struct Subscriber : public LinkedListNode<Subscriber>, public PublishInfo {
 	// message source, set by subscribe() method
-	MessageInfo2 source;
+	MessageInfo source;
 
 	// message convert options, depend on endpoint and message types
 	ConvertOptions convertOptions;

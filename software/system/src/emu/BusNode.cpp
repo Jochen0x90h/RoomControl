@@ -53,8 +53,8 @@ void handle(Gui &gui) {
 				return true;
 
 			// get endpoints
-			BusNode::endpointCount = r.getRemaining();
-			array::copy(BusNode::endpointCount, BusNode::endpoints, r.current);
+			BusNode::endpointCount = r.getRemaining() / 2;
+			r.data16L(BusNode::endpointCount, BusNode::endpoints);
 
 
 			// reply with commission message
@@ -71,7 +71,7 @@ void handle(Gui &gui) {
 			w.u8(5);
 
 			// key
-			w.data(bus::defaultKey);
+			w.data8(bus::defaultKey);
 
 			// only add message integrity code (mic) using default key, message stays unencrypted
 			w.setMessage();
@@ -108,14 +108,13 @@ void handle(Gui &gui) {
 			auto endpointType = BusNode::endpoints[endpointIndex];
 			uint8_t state = r.u8();
 			switch (endpointType) {
-			case bus::EndpointType::OFF_ON_IN:
-			case bus::EndpointType::OFF_ON_TOGGLE_IN:
+			case bus::EndpointType::BINARY_POWER_LIGHT_IN:
 				if (state <= 1)
 					BusNode::states[endpointIndex] = state;
 				else
 					BusNode::states[endpointIndex] ^= 1;
 				break;
-			case bus::EndpointType::UP_DOWN_IN:
+			case bus::EndpointType::TERNARY_OPENING_BLIND_IN:
 				BusNode::states[endpointIndex] = state;
 				break;
 			default:;
