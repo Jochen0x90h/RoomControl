@@ -507,6 +507,8 @@ Array<String const> RoomControl::getSwitchStates(Usage usage) {
 		return stoppedOpeningClosing;
 	case Usage::TILT_LOCK:
 		return unlockedTiltLocked;
+
+	default:;
 	}
 	return offOnToggle;
 }
@@ -769,6 +771,7 @@ Flt RoomControl::getDisplayValue(Usage usage, bool relative, float value) {
 	case Usage::PRESSURE_ATMOSPHERIC:
 		// todo: Unit
 		return flt(value * 0.01f, 0);
+	default:;
 	}
 	return {};
 }
@@ -828,6 +831,7 @@ void RoomControl::editMessage(Menu::Stream &stream, MessageType messageType,
 		// transition time in 1/10 s
 		stream << underline(dec(message.transition / 10) + '.' + dec(message.transition % 10), editMessage2) << 's';
 		break;
+	default:;
 	}
 }
 
@@ -1402,6 +1406,7 @@ AwaitableCoroutine RoomControl::messageGenerator(Interface::Device &device) {
 				case MessageType::LIGHTING:
 					message.value.f = getDefaultFloatValue(usage);
 					break;
+				default:;
 				}
 			}
 
@@ -1968,6 +1973,7 @@ void RoomControl::FunctionFlash::setType(Type type) {
 		config.runTime = 1000;
 		break;
 	}
+	default:;
 	}
 }
 
