@@ -76,3 +76,11 @@ constexpr int RADIO_MQTT = 1;
 
 constexpr int NETWORK_MQTT = 0;
 constexpr int NETWORK_MDNS = 1;
+
+
+// storage
+// -------
+
+constexpr int STORAGE_CONFIG = 0;
+constexpr int STORAGE_ID_RADIO1 = 0x100;
+constexpr int STORAGE_ID_RADIO2 = 0x200;

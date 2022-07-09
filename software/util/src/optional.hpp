@@ -9,10 +9,9 @@ public:
 	bool valid;
 	T value;
 
+	optional() : valid(false) {}
 	optional(NullType) : valid(false) {}
-
-	optional(T value) : valid(true), value(value) {
-	}
+	optional(T value) : valid(true), value(value) {}
 
 	T const &operator *() const {
 		return this->value;
@@ -51,5 +50,9 @@ public:
 
 	operator bool () const {
 		return this->valid;
+	}
+
+	T get(T const &defaultValue) const {
+		return this->valid ? this->value : defaultValue;
 	}
 };

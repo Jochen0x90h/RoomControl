@@ -201,6 +201,7 @@ if(POSIX)
 	set(LOOP system/src/Loop.hpp system/src/posix/Loop.cpp system/src/posix/Loop2.cpp)
 	set(NETWORK system/src/Network.hpp system/src/posix/Network.cpp)
 	set(OUTPUT system/src/Output.hpp system/src/posix/Output.cpp system/src/Debug.hpp)
+	set(STORAGE system/src/Storage2.hpp system/src/posix/Storage.cpp)
 	set(TERMINAL system/src/Terminal.hpp system/src/posix/Terminal.cpp)
 	set(TIMER system/src/SystemTime.hpp system/src/Timer.hpp system/src/posix/Timer.cpp)
 endif()
@@ -279,6 +280,7 @@ set(SYSTEM
 	${RADIO}
 	${RANDOM}
 	${SPI}
+	${STORAGE}
 	${TERMINAL}
 	${TIMER}
 	${USB_DEVICE}
@@ -536,6 +538,7 @@ add_system_test_executable(Poti)
 add_system_test_executable(Radio)
 add_system_test_executable(Random)
 add_system_test_executable(Spi)
+add_system_test_executable(Storage)
 add_system_test_executable(Timer)
 add_system_test_executable(UsbDevice)
 
@@ -656,7 +659,7 @@ target_link_libraries(SSD1309Test ${LIBRARIES})
 
 
 # test for Storage class
-add_executable(StorageTest
+add_executable(StorageTestOld
 	control/test/StorageTest.cpp
 	board/${BOARD}/boardConfig.hpp
 	${UTIL}
@@ -668,7 +671,7 @@ add_executable(StorageTest
 	node/src/Storage.hpp
 	system/src/emu/Flash.cpp
 )
-target_include_directories(StorageTest
+target_include_directories(StorageTestOld
 	PRIVATE
 	board/${BOARD} # boardConfig.hpp
 	font
@@ -679,7 +682,7 @@ target_include_directories(StorageTest
 	util/src
 	glad
 )
-target_link_libraries(StorageTest ${LIBRARIES})
+target_link_libraries(StorageTestOld ${LIBRARIES})
 
 endif() # ${BOARD} STREQUAL "emuControl"
 

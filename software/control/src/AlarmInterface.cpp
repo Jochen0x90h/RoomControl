@@ -58,12 +58,15 @@ Interface::Device &AlarmInterface::getDeviceByIndex(int index) {
 	return this->alarms[index];
 }
 
-Interface::Device *AlarmInterface::getDeviceById(uint8_t id) {
+Interface::Device *AlarmInterface::getDevice(uint8_t id) {
 	for (auto &alarm : this->alarms) {
 		if (alarm->interfaceId == id)
 			return &alarm;
 	}
 	return nullptr;
+}
+
+void AlarmInterface::eraseDevice(uint8_t id) {
 }
 
 AlarmInterface::AlarmFlash const &AlarmInterface::get(int index) const {
@@ -90,7 +93,7 @@ int AlarmInterface::getSubscriberCount(int index, int endpointCount, uint8_t com
 	assert(index >= 0 && index < this->alarms.count());
 	int count = 0;
 	for (auto &subscriber : this->alarms[index].subscribers) {
-		if (subscriber.source.device.endpointIndex >= endpointCount)
+		if (subscriber.source.device.plugIndex >= endpointCount)
 			continue;
 
 		Message dst;
@@ -105,7 +108,7 @@ void AlarmInterface::test(int index, int endpointCount, uint8_t command) {
 	auto &alarm = this->alarms[index];
 
 	for (auto &subscriber: alarm.subscribers) {
-		if (subscriber.source.device.endpointIndex >= endpointCount)
+		if (subscriber.source.device.plugIndex >= endpointCount)
 			continue;
 
 		// publish to subscriber
@@ -136,7 +139,7 @@ Coroutine AlarmInterface::tick() {
 				// alarm goes off: publish to subscribers of alarm
 				for (auto &subscriber: alarm.subscribers) {
 					auto const &flash = *alarm;
-					if (subscriber.source.device.endpointIndex >= flash.endpointCount)
+					if (subscriber.source.device.plugIndex >= flash.endpointCount)
 						break;
 
 					// publish to subscriber
@@ -193,14 +196,14 @@ void AlarmInterface::Alarm::setName(String name) {
 
 }
 
-Array<MessageType const> AlarmInterface::Alarm::getEndpoints() const {
+Array<MessageType const> AlarmInterface::Alarm::getPlugs() const {
 	auto &flash = **this;
-	return {flash.endpointCount, endpoints};//flash.endpoints};
+	return {flash.endpointCount, endpoints};
 }
 
 void AlarmInterface::Alarm::subscribe(uint8_t endpointIndex, Subscriber &subscriber) {
 	subscriber.remove();
-	subscriber.source.device.endpointIndex = endpointIndex;
+	subscriber.source.device.plugIndex = endpointIndex;
 	this->subscribers.add(subscriber);
 }
 

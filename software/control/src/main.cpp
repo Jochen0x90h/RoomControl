@@ -9,6 +9,7 @@
 #include <Debug.hpp>
 #include <Spi.hpp>
 #include <Loop.hpp>
+#include <Storage2.hpp>
 #include <iostream>
 #include <fstream>
 #include <vector>
@@ -23,7 +24,7 @@ struct DeviceData {
 	
 	struct Component {
 		RoomControl::Device::Component::Type type;
-		uint8_t endpointIndex;
+		uint8_t plugIndex;
 		uint8_t elementIndex;
 		SystemDuration duration;
 	};
@@ -84,7 +85,7 @@ void setDevices(Array<DeviceData const> deviceData, Storage::Array<RoomControl::
 			auto &component = editor.insert(type);
 			++device.componentCount;
 			
-			component.endpointIndex = componentData.endpointIndex;
+			component.plugIndex = componentData.plugIndex;
 			component.nameIndex = device.getNameIndex(type, i);
 			component.elementIndex = componentData.elementIndex;
 			
@@ -136,6 +137,7 @@ int main(int argc, const char **argv) {
 	Network::init();
 	Output::init();
 	Input::init();
+	Storage2::init();
 
 	Radio::start(15); // start on channel 15
 	Radio::enableReceiver(true); // enable baseband decoder

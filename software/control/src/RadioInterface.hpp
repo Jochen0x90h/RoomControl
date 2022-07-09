@@ -46,9 +46,263 @@ public:
 
 	int getDeviceCount() override;
 	Device &getDeviceByIndex(int index) override;
-	Device *getDeviceById(uint8_t id) override;
+	Device *getDevice(uint8_t id) override;
+	void eraseDevice(uint8_t id) override;
 
 private:
+
+	static constexpr int MAX_NAME_LENGTH = 16;
+
+	enum class DeviceType : uint8_t {
+		PTM215Z = 0x02,
+		PTM216Z = 0x07,
+		ZBEE = 0xff
+	};
+
+	struct DeviceData {
+		uint8_t id;
+
+		// device type
+		DeviceType deviceType;
+
+		// device name, zero-terminated if shorter than 16
+		char name[MAX_NAME_LENGTH];
+
+		// number of plugs
+		uint8_t plugCount;
+	};
+
+	struct GpDeviceData : public DeviceData {
+		// 32 bit green power id
+		uint32_t deviceId;
+
+		// device key
+		AesKey aesKey;
+
+		// plugs
+		MessageType plugs[4];
+
+		int size() {return offsetOf(GpDeviceData, plugs[this->plugCount]);}
+	};
+
+	class GpDevice : public Device {
+	public:
+		// takes ownership of the data
+		GpDevice(RadioInterface *interface, GpDeviceData *data)
+			: interface(interface), next(interface->gpDevices), data(data)
+		{
+			interface->gpDevices = this;
+		}
+
+		~GpDevice() override;
+
+		// Interface::Device
+		uint8_t getId() const override;
+		String getName() const override;
+		void setName(String name) override;
+		Array<MessageType const> getPlugs() const override;
+		void subscribe(uint8_t plugIndex, Subscriber &subscriber) override;
+		PublishInfo getPublishInfo(uint8_t plugIndex) override;
+
+		// back pointer to interface
+		RadioInterface *interface;
+
+		// next device
+		GpDevice *next;
+
+		// endpoint data that is stored in flash
+		GpDeviceData *data;
+
+		// last state to generate release messages
+		uint8_t state = 0;
+
+		// last security counter value of device
+		// todo: make persistent
+		uint32_t securityCounter = 0;
+
+		// subscriptions
+		SubscriberList subscribers;
+	};
+
+	struct PlugRange {
+		uint8_t offset;
+		uint8_t count;
+	};
+
+	struct ClusterInfo {
+		zb::ZclCluster cluster;
+		PlugRange plugs;
+	};
+
+	// zbee endpoint data that is stored in flash
+	struct ZbEndpointData : public DeviceData {
+		static constexpr int BUFFER_SIZE = 1024;
+
+		// id of zbee device this endpoint belongs to (for loading)
+		uint8_t deviceId;
+
+		// zbee device endpoint
+		uint8_t deviceEndpoint;
+
+		// number of server (input) and client (output) clusters
+		uint8_t serverClusterCount;
+		uint8_t clientClusterCount;
+
+		// data buffer
+		uint32_t buffer[BUFFER_SIZE / 4];
+
+		int size() {
+			int s1 = (this->plugCount * sizeof(MessageType) + 3) / 4;
+			int s2 = ((this->serverClusterCount + this->clientClusterCount) * sizeof(ClusterInfo) + 3) / 4;
+			return offsetOf(ZbEndpointData, buffer[s1 + s2]);
+		}
+	};
+
+	struct ZbEndpointDataBuilder {
+		static constexpr int MAX_CLUSTER_COUNT = 32;
+		static constexpr int MAX_PLUG_COUNT = 32;
+
+		//void setName(String name) {assign(this->name, name);}
+
+		void addPlug(MessageType plug) {this->plugs[plugCount++] = plug;}
+
+		void beginServerCluster(zb::ZclCluster cluster) {
+			auto &clusterInfo = this->clusterInfos[this->serverClusterIndex];
+			clusterInfo.cluster = cluster;
+			clusterInfo.plugs = {this->plugCount, 0};
+		}
+		void endServerCluster() {
+			auto &clusterInfo = this->clusterInfos[this->serverClusterIndex];
+			if ((clusterInfo.plugs.count = this->plugCount - clusterInfo.plugs.offset) > 0)
+				this->serverClusterIndex++;
+		}
+		void beginClientCluster(zb::ZclCluster cluster) {
+			auto &clusterInfo = this->clusterInfos[this->clientClusterIndex];
+			clusterInfo.cluster = cluster;
+			clusterInfo.plugs = {this->plugCount, 0};
+		}
+		void endClientCluster() {
+			auto &clusterInfo = this->clusterInfos[this->clientClusterIndex];
+			if ((clusterInfo.plugs.count = this->plugCount - clusterInfo.plugs.offset) > 0)
+				this->clientClusterIndex--;
+		}
+
+		int size();
+		void build(ZbEndpointData *data);
+
+		//char name[MAX_NAME_LENGTH];
+		uint8_t id;
+		uint8_t plugCount = 0;
+		uint8_t serverClusterIndex = 0;
+		uint8_t clientClusterIndex = MAX_CLUSTER_COUNT - 1;
+		MessageType plugs[MAX_PLUG_COUNT];
+		ClusterInfo clusterInfos[MAX_CLUSTER_COUNT];
+	};
+
+	class ZbDevice;
+	class ZbEndpoint : public Device {
+	public:
+		// takes ownership of the data
+		ZbEndpoint(ZbDevice *device, ZbEndpointData *data)
+			: device(device), next(device->endpoints), data(data)
+		{
+			device->endpoints = this;
+		}
+
+		~ZbEndpoint() override;
+
+		// Interface::Device
+		uint8_t getId() const override;
+		String getName() const override;
+		void setName(String name) override;
+		Array<MessageType const> getPlugs() const override;
+		void subscribe(uint8_t plugIndex, Subscriber &subscriber) override;
+		PublishInfo getPublishInfo(uint8_t plugIndex) override;
+
+		//Array<ClusterInfo const *> getServerClusters() const;
+		PlugRange findServerCluster(zb::ZclCluster cluster) const;
+		ClusterInfo getClientCluster(int plugIndex) const;
+
+		// back pointer to device
+		ZbDevice *device;
+
+		// next endpoint in list
+		ZbEndpoint *next;
+
+		// endpoint data that is stored in flash
+		ZbEndpointData *data;
+
+		// list of subscribers
+		SubscriberList subscribers;
+	};
+
+	// zbee device data that is stored in flash
+	struct ZbDeviceData {
+		uint8_t id;
+
+		// send flags for this device (wait for data request or not)
+		Radio::SendFlags sendFlags;
+
+		// short device address
+		uint16_t shortAddress;
+
+		// 64 bit ieee 802.15.4 long device address
+		uint64_t longAddress;
+	};
+
+	class ZbDevice {
+	public:
+		ZbDevice(ZbDeviceData const &data)
+			: data(data), sendFlags(data.sendFlags)
+		{}
+		ZbDevice(RadioInterface *interface, ZbDeviceData const &data)
+			: interface(interface), next(interface->zbDevices), data(data), sendFlags(data.sendFlags)
+		{
+			interface->zbDevices = this;
+		}
+
+		// back pointer to interface
+		RadioInterface *interface;
+
+		// next device
+		ZbDevice *next;
+
+		// zbee device data that is stored in flash
+		ZbDeviceData data;
+
+		// linked list of endpoints
+		ZbEndpoint *endpoints = nullptr;
+
+		// send flags for next hop in route (wait for data request or not)
+		Radio::SendFlags sendFlags;
+
+		// last security counter value of device
+		// todo: make persistent
+		uint32_t securityCounter = 0;
+
+		//std::vector<uint16_t> route;
+
+		// short address of router for this device (0xffff means that the route is unknown)
+		uint16_t routerAddress = 0xffff;
+
+		// cost of the route to the device
+		uint8_t cost;
+
+		static constexpr int MESSAGE_LENGTH = 80;
+
+
+		// barrier for waiting until a route is available
+		Barrier<> routeBarrier;
+	};
+
+	ZbDevice *getOrLoadZbDevice(uint8_t id);
+
+	int deviceCount = 0;
+	uint8_t deviceIds[MAX_DEVICE_COUNT];
+	GpDevice *gpDevices = nullptr;
+	ZbDevice *zbDevices = nullptr;
+
+
 
 	// start the interface
 	Coroutine start();
@@ -67,196 +321,17 @@ private:
 	DataBuffer<16> const *key = nullptr;
 	AesKey const *aesKey;
 
-	// self-powered devices
-	class GpDevice;
-
-	struct GpDeviceFlash {
-		static constexpr int MAX_ENDPOINT_COUNT = 32;
-
-		// 32 bit green power id
-		uint32_t deviceId;
-
-		// device key
-		AesKey aesKey;
-
-		// interface id
-		uint8_t interfaceId;
-
-		// device type from commissioning message
-		uint8_t deviceType;
-
-		// number of endpoints of the device
-		uint8_t endpointCount;
-
-		// endpoint types
-		MessageType endpoints[MAX_ENDPOINT_COUNT];
-
-		// note: endpoints must be the last member
-
-		/**
-		 * Returns the size in bytes needed to store the device configuration in flash
-		 * @return size in bytes
-		 */
-		int size() const;
-
-		/**
-		 * Allocates a state object
-		 * @return new state object
-		 */
-		GpDevice *allocate() const;
-	};
-
-	class GpDevice : public Device, public Storage::Element<GpDeviceFlash> {
-	public:
-		explicit GpDevice(GpDeviceFlash const &flash) : Storage::Element<GpDeviceFlash>(flash) {}
-		~GpDevice() override;
-
-		uint8_t getId() const override;
-		String getName() const override;
-		void setName(String name) override;
-		Array<MessageType const> getEndpoints() const override;
-		void subscribe(uint8_t endpointIndex, Subscriber &subscriber) override;
-		PublishInfo getPublishInfo(uint8_t endpointIndex) override;
-
-		// back pointer to interface
-		RadioInterface *interface;
-
-		// last security counter value of device
-		// todo: make persistent
-		uint32_t securityCounter = 0;
-
-		uint8_t state = 0;
-
-		// subscriptions
-		SubscriberList subscribers;
-	};
-
-
-	// zbee devices
-	class ZbDevice;
-
-	struct ZbDeviceFlash {
-		static constexpr int MAX_ENDPOINT_COUNT = 32;
-
-		// 64 bit ieee 802.15.4 long device address, also used as device id
-		uint64_t longAddress;
-
-		// short device address
-		uint16_t shortAddress;
-
-		// interface id
-		uint8_t interfaceId;
-
-		// send flags for this device (wait for data request or not)
-		Radio::SendFlags sendFlags;
-
-		// number of endpoints of the device
-		uint8_t endpointCount;
-
-		// endpoint types followed by pairs of endpoint info index and zbee endpoint index
-		uint16_t endpoints[MAX_ENDPOINT_COUNT * 3];
-
-		// note: endpoints must be the last member
-
-		/**
-		 * Returns the size in bytes needed to store the device configuration in flash
-		 * @return size in bytes
-		 */
-		int size() const;
-
-		/**
-		 * Allocates a state object
-		 * @return new state object
-		 */
-		ZbDevice *allocate() const;
-
-		// pairs of endpoint info index and zbee endpoint index
-		uint16_t const *getEndpointIndices() const {return this->endpoints + this->endpointCount;}
-	};
-
-	class ZbDevice : public Storage::Element<ZbDeviceFlash>, public Device {
-	public:
-		explicit ZbDevice(ZbDeviceFlash const &flash) : Storage::Element<ZbDeviceFlash>(flash) , sendFlags(flash.sendFlags) {}
-		~ZbDevice() override;
-
-		uint8_t getId() const override;
-		String getName() const override;
-		void setName(String name) override;
-		Array<MessageType const> getEndpoints() const override;
-		void subscribe(uint8_t endpointIndex, Subscriber &subscriber) override;
-		PublishInfo getPublishInfo(uint8_t endpointIndex) override;
-
-		// back pointer to interface
-		RadioInterface *interface = nullptr;
-
-		// send flags for next hop in route (wait for data request or not)
-		Radio::SendFlags sendFlags;
-
-		// last security counter value of device
-		// todo: make persistent
-		uint32_t securityCounter = 0;
-
-		//std::vector<uint16_t> route;
-
-		// short address of router for this device (0xffff means that the route is unknown)
-		uint16_t routerAddress = 0xffff;
-
-		// cost of the route to the device
-		uint8_t cost;
-
-		static constexpr int RESPONSE_LENGTH = 64;
-
-
-		struct ZdpResponse {
-			zb::ZdpCommand command;
-			uint8_t zdpCounter;
-			uint16_t& length;
-			uint8_t *response;
-		};
-
-		// a coroutine (handleAssociationRequest()) waits on this barrier until a zdp response arrives
-		Waitlist<ZdpResponse> zdpResponseBarrier;
-
-
-		struct ZclResponse {
-			uint8_t dstEndpoint;
-			zb::ZclCluster cluster;
-			zb::ZclProfile profile;
-			uint8_t srcEndpoint;
-			uint8_t zclCounter;
-			zb::ZclCommand command;
-			uint16_t& length;
-			uint8_t *response;
-		};
-
-		// a coroutine (handleAssociationRequest()) waits on this barrier until a zcl response arrives
-		Waitlist<ZclResponse> zclResponseBarrier;
-
-		// list of subscribers
-		SubscriberList subscribers;
-
-		// barrier for waiting until a route is available
-		Barrier<> routeBarrier;
-	};
-
-
-
 	// find zbee device by short address
 	ZbDevice *findZbDevice(uint16_t address);
 
-	void allocateInterfaceId();
-	void allocateNextAddress();
+	uint8_t allocateId();
+	uint8_t allocateZbDeviceId();
+	void allocateShortAddress();
 
-	// next interface id and short address "on stock" to be fast when a device sends an association request
-	uint8_t nextInterfaceId;
+	// next device id and short address "on stock" to be fast when a device sends an association request
 	uint16_t nextShortAddress;
 
 public:
-
-	// list of commissioned devices
-	Storage::Array<GpDevice> gpDevices;
-	Storage::Array<ZbDevice> zbDevices;
-
 
 	// data reader for radio packets
 	class PacketReader : public DecryptReader {
@@ -384,11 +459,14 @@ private:
 	void writeApsDataZdp(PacketWriter &w, zb::ZdpCommand response, uint8_t zdpCounter);
 	void writeApsAckZdp(PacketWriter &w, uint8_t apsCounter, zb::ZdpCommand command);
 
-	void writeApsDataZcl(PacketWriter &w, uint8_t destinationEndpoint, zb::ZclCluster clusterId, zb::ZclProfile profile,
-		uint8_t sourceEndpoint);
-	void writeApsAckZcl(PacketWriter &w, uint8_t destinationEndpoint, zb::ZclCluster clusterId,
-		zb::ZclProfile profile, uint8_t sourceEndpoint);
+	void writeApsDataZcl(PacketWriter &w, uint8_t dstEndpoint, zb::ZclCluster clusterId, zb::ZclProfile profile,
+		uint8_t srcEndpoint);
+	void writeApsAckZcl(PacketWriter &w, uint8_t dstEndpoint, zb::ZclCluster clusterId,
+		zb::ZclProfile profile, uint8_t srcEndpoint);
 	void writeFooter(PacketWriter &w, Radio::SendFlags sendFlags);
+
+	[[nodiscard]] AwaitableCoroutine readAttribute(uint8_t (&packet)[ZbDevice::MESSAGE_LENGTH], ZbDevice &device,
+		uint8_t dstEndpoint, zb::ZclCluster clusterId, zb::ZclProfile profile, uint8_t srcEndpoint, uint16_t attribute);
 
 
 	// coroutine that sends link status and many-to-one route request in a regular interval
@@ -412,7 +490,7 @@ private:
 	void handleZcl(PacketReader &r, ZbDevice &device, uint8_t destinationEndpoint);
 
 	// coroutine for handling association requests from new devices
-	AwaitableCoroutine handleAssociationRequest(uint64_t sourceAddress, Radio::SendFlags sendFlags);
+	[[nodiscard]] AwaitableCoroutine handleAssociationRequest(uint64_t deviceAddress, Radio::SendFlags sendFlags);
 
 	Coroutine publish();
 
@@ -424,6 +502,16 @@ private:
 	ZbDevice *tempDevice;
 
 
-	//Event publishEvent;
+	struct EndpointResponse {
+		uint16_t command;
+		uint8_t dstEndpoint;
+		uint8_t counter;
+		int& length;
+		uint8_t *response;
+	};
+
+	// a coroutine (e.g. handleAssociationRequest()) waits on this barrier until a response arrives at the endpoint which is identified by the counter
+	Waitlist<EndpointResponse> endpointResponseBarrier;
+
 	PublishInfo::Barrier publishBarrier;
 };

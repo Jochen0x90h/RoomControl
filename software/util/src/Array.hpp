@@ -218,7 +218,7 @@ public:
 	}
 
 	/**
-	 * Get pointer to data
+	 * Get pointer to the data
 	 */
 	T *data() {return this->buffer;}
 

@@ -29,24 +29,23 @@ void init();
 /**
  * Transfer data to/from SPI device
  * @param index index of spi context (number of channels defined by SPI_CONTEXTS in boardConfig.hpp)
- * @param writeLength length of data to write
- * @param writeData data to write (8/16/32 bit and ram-only dependent on driver)
- * @param readLength length of data to read
- * @param readData data to read (8/16/32 bit and ram-only dependent on driver)
- * @param command true if this is a command which gets indicated on a separate pin
+ * @param writeCount number of 8/16/32 bit values to write
+ * @param writeData array of 8/16/32 bit values to write (ram-only dependent on driver)
+ * @param readCount number of 8/16/32 bit values to read
+ * @param readData array of 8/16/32 bit values to read (ram-only dependent on driver)
  * @return use co_await on return value to await completion
  */
-[[nodiscard]] Awaitable<Parameters> transfer(int index, int writeLength, void const *writeData, int readLength, void *readData);
+[[nodiscard]] Awaitable<Parameters> transfer(int index, int writeCount, void const *writeData, int readCount, void *readData);
 
 /**
  * Write a command to an SPI device, e.g. a display, indicating a command using a separate data/command line if supported
  * @param index index of spi context
- * @param writeLength length of data to write
+ * @param writeCount length of data to write
  * @param writeData data to write
  * @return use co_await on return value to await completion
  */
-[[nodiscard]] inline Awaitable<Parameters> writeCommand(int index, int writeLength, void const *writeData) {
-	return transfer(index, writeLength | 0x80000000, writeData, 0, nullptr);
+[[nodiscard]] inline Awaitable<Parameters> writeCommand(int index, int writeCount, void const *writeData) {
+	return transfer(index, writeCount | 0x80000000, writeData, 0, nullptr);
 }
 
 } // namespace Spi

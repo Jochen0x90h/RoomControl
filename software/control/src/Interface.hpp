@@ -51,7 +51,7 @@ public:
 		 * Get endpoints (message type for each endpoint)
 		 * @return array of endpoints
 		 */
-		virtual Array<MessageType const> getEndpoints() const = 0;
+		virtual Array<MessageType const> getPlugs() const = 0;
 
 		/**
 		 * Subscribe to receive messages messages from an endpoint
@@ -69,23 +69,35 @@ public:
 	};
 
 	/**
-	 * Get number of devices connected to this interface
+	 * Get list of devices
+	 * @return list of device id's
 	 */
-	virtual int getDeviceCount() = 0;
+	//virtual Array<uint8_t const> getDevices() = 0;
 
-	/**
-	 * Get a device by index
-	 * @param index index of device
-	 * @return device
-	 */
-	virtual Device &getDeviceByIndex(int index) = 0;
+/**
+ * Get number of devices connected to this interface
+ */
+virtual int getDeviceCount() = 0;
+
+/**
+ * Get a device by index
+ * @param index index of device
+ * @return device
+ */
+virtual Device &getDeviceByIndex(int index) = 0;
 
 	/**
 	 * Get a device by id
 	 * @param id device id
 	 * @return device
 	 */
-	virtual Device *getDeviceById(uint8_t id) = 0;
+	virtual Device *getDevice(uint8_t id) = 0;
+
+	/**
+	 * Erase a device by id
+	 * @param id device id
+	 */
+	virtual void eraseDevice(uint8_t id) = 0;
 
 
 	// helper function: allocate a free interface id

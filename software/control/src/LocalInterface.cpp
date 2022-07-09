@@ -83,12 +83,16 @@ Interface::Device &LocalInterface::getDeviceByIndex(int index) {
 	return this->devices[index];
 }
 
-Interface::Device *LocalInterface::getDeviceById(uint8_t id) {
+Interface::Device *LocalInterface::getDevice(uint8_t id) {
 	for (auto &device : Array<LocalDevice>(this->deviceCount, this->devices)) {
 		if (device.interfaceId == id)
 			return &device;
 	}
 	return nullptr;
+}
+
+void LocalInterface::eraseDevice(uint8_t id) {
+	// not possible to erase local devices
 }
 
 Coroutine LocalInterface::readAirSensor() {
@@ -109,12 +113,12 @@ Coroutine LocalInterface::readAirSensor() {
 
 		// publish to subscribers of air sensor
 		for (auto &subscriber : device.subscribers) {
-			if (subscriber.source.device.endpointIndex >= array::count(bme680Endpoints))
+			if (subscriber.source.device.plugIndex >= array::count(bme680Endpoints))
 				break;
 
 			// get source message (measured value)
 			float src;
-			switch (subscriber.source.device.endpointIndex) {
+			switch (subscriber.source.device.plugIndex) {
 			case BME680_TEMPERATURE_ENDPOINT:
 				// get temperature in celsius
 				src = airSensor.getTemperature() + 273.15f;
@@ -138,7 +142,7 @@ Coroutine LocalInterface::readAirSensor() {
 
 				// convert to destination message type and resume coroutine if conversion was successful
 				auto &dst = *reinterpret_cast<Message *>(p.message);
-				auto srcType = bme680Endpoints[subscriber.source.device.endpointIndex];
+				auto srcType = bme680Endpoints[subscriber.source.device.plugIndex];
 				return convertFloat(subscriber.destination.type, dst, src, subscriber.convertOptions);
 			});
 		}
@@ -171,16 +175,16 @@ Coroutine LocalInterface::publish() {
 		case OUT_ID:
 			// set output
 			if (message.command <= 1)
-				Output::set(OUTPUT_EXT_INDEX + info.device.endpointIndex, message.command != 0);
+				Output::set(OUTPUT_EXT_INDEX + info.device.plugIndex, message.command != 0);
 			else
-				Output::toggle(OUTPUT_EXT_INDEX + info.device.endpointIndex);
+				Output::toggle(OUTPUT_EXT_INDEX + info.device.plugIndex);
 			break;
 		}
 
 		/*
 		// forward to subscribers
 		for (auto &subscriber : device.subscribers) {
-			if (subscriber.index == endpointIndex) {
+			if (subscriber.index == plugIndex) {
 				subscriber.barrier->resumeAll([&subscriber, &publisher] (Subscriber::Parameters &p) {
 					p.subscriptionIndex = subscriber.subscriptionIndex;
 
@@ -208,13 +212,13 @@ void LocalInterface::LocalDevice::setName(String name) {
 
 }
 
-Array<MessageType const> LocalInterface::LocalDevice::getEndpoints() const {
+Array<MessageType const> LocalInterface::LocalDevice::getPlugs() const {
 	return this->endpoints;
 }
 
 void LocalInterface::LocalDevice::subscribe(uint8_t endpointIndex, Subscriber &subscriber) {
 	subscriber.remove();
-	subscriber.source.device.endpointIndex = endpointIndex;
+	subscriber.source.device.plugIndex = endpointIndex;
 	this->subscribers.add(subscriber);
 }
 

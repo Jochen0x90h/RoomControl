@@ -129,7 +129,7 @@ public:
 
 		uint8_t endpointIndex;
 
-		// mqtt topic string follows here (first character stored in endpointIndex)
+		// mqtt topic string follows here (first character stored in plugIndex)
 
 		bool isMqtt() const {return this->interface == Interface::MQTT;}
 	};
@@ -224,6 +224,9 @@ public:
 		// buffer size in 32 bit units
 		uint16_t bufferSize = 0;
 
+		// buffer for config, inputs and outputs
+		uint32_t buffer[BUFFER_SIZE / 4];
+
 
 		FunctionFlash() = default;
 		FunctionFlash(FunctionFlash const &flash);
@@ -266,10 +269,6 @@ public:
 		 * @return new state object
 		 */
 		Function *allocate() const;
-	
-	
-		// buffer for config, inputs and outputs
-		uint32_t buffer[BUFFER_SIZE / 4];
 	};
 
 	class Function : public Storage::Element<FunctionFlash> {

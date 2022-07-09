@@ -17,7 +17,7 @@
 */
 namespace UsbDevice {
 
-std::function<Data (usb::DescriptorType)> getDescriptor;
+std::function<ConstData (usb::DescriptorType)> getDescriptor;
 std::function<void (uint8_t)> onSetConfiguration;
 std::function<bool (uint8_t, uint16_t, uint16_t)> onRequest;
 
@@ -104,12 +104,12 @@ void handle() {
 				if (bRequest == 0x06) {
 					// get descriptor from user code by using the callback
 					auto descriptorType = usb::DescriptorType(NRF_USBD->WVALUEH);
-					Data descriptor = UsbDevice::getDescriptor(descriptorType);
-					if (descriptor.size > 0) {
+					ConstData descriptor = UsbDevice::getDescriptor(descriptorType);
+					if (descriptor.size() > 0) {
 						// send descriptor
 						int wLength = (NRF_USBD->WLENGTHH << 8) | NRF_USBD->WLENGTHL;
-						int size = min(descriptor.size, wLength);
-						ep0Send(descriptor.data, size);
+						int size = min(descriptor.size(), wLength);
+						ep0Send(descriptor.data(), size);
 					} else {
 						// unsupported descriptor type: stall
 						NRF_USBD->TASKS_EP0STALL = TRIGGER;
@@ -294,7 +294,7 @@ void handle() {
 }
 
 void init(
-	std::function<Data (usb::DescriptorType)> const &getDescriptor,
+	std::function<ConstData (usb::DescriptorType)> const &getDescriptor,
 	std::function<void (uint8_t)> const &onSetConfiguration,
 	std::function<bool (uint8_t, uint16_t, uint16_t)> const &onRequest)
 {

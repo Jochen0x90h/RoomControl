@@ -146,11 +146,11 @@ int main(void) {
 		[](usb::DescriptorType descriptorType) {
 			switch (descriptorType) {
 			case usb::DescriptorType::DEVICE:
-				return Data(&deviceDescriptor);
+				return ConstData(&deviceDescriptor);
 			case usb::DescriptorType::CONFIGURATION:
-				return Data(&configurationDescriptor);
+				return ConstData(&configurationDescriptor);
 			default:
-				return Data();
+				return ConstData();
 			}
 		},
 		[](uint8_t bConfigurationValue) {

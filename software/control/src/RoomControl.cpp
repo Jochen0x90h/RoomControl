@@ -139,8 +139,8 @@ static bool isCompatible(RoomControl::Plug const &plug, MessageType messageType)
 // -----------
 
 RoomControl::RoomControl()
-	: storage(0, FLASH_PAGE_COUNT, configurations, busInterface.devices, radioInterface.gpDevices,
-		radioInterface.zbDevices, alarmInterface.alarms, functions)
+	: storage(0, FLASH_PAGE_COUNT, configurations, busInterface.devices, /*radioInterface.gpDevices,
+		radioInterface.zbDevices,*/ alarmInterface.alarms, functions)
 	, stateManager()
 	//, houseTopicId(), roomTopicId()
 	, busInterface(stateManager)
@@ -203,12 +203,12 @@ static void printDevices(Interface &interface) {
 	for (int i = 0; i < interface.getDeviceCount(); ++i) {
 		auto &device = interface.getDeviceByIndex(i);
 		Terminal::out << (hex(device.getId()) + '\n');
-		auto endpoints = device.getEndpoints();
-		for (auto endpoint : endpoints) {
-			Terminal::out << '\t' << getTypeLabel(endpoint);
-			if ((endpoint & MessageType::DIRECTION_MASK) == MessageType::IN)
+		auto plugs = device.getPlugs();
+		for (auto plug : plugs) {
+			Terminal::out << '\t' << getTypeLabel(plug);
+			if ((plug & MessageType::DIRECTION_MASK) == MessageType::IN)
 				Terminal::out << " In";
-			if ((endpoint & MessageType::DIRECTION_MASK) == MessageType::OUT)
+			if ((plug & MessageType::DIRECTION_MASK) == MessageType::OUT)
 				Terminal::out << " Out";
 			Terminal::out << '\n';
 		}
@@ -253,15 +253,15 @@ Coroutine RoomControl::testSwitch() {
 	for (int i = 0; i < interface.getDeviceCount(); ++i) {
 		auto &device = interface.getDeviceByIndex(i);
 		Array<MessageType const> endpoints = device.getEndpoints();
-		for (int endpointIndex = 0; endpointIndex < endpoints.count(); ++endpointIndex) {
-			auto endpointType = endpoints[endpointIndex];
+		for (int plugIndex = 0; plugIndex < endpoints.count(); ++plugIndex) {
+			auto endpointType = endpoints[plugIndex];
 			if (!haveIn && (endpointType == MessageType::OFF_ON_IN || endpointType == MessageType::UP_DOWN_IN)) {
 				haveIn = true;
-				device.addSubscriber(endpointIndex, subscriber);
+				device.addSubscriber(plugIndex, subscriber);
 			}
 			if (!haveOut && endpointType == MessageType::OFF_ON_OUT) {
 				haveOut = true;
-				device.addPublisher(endpointIndex, publisher);
+				device.addPublisher(plugIndex, publisher);
 			}
 		}
 	}
@@ -326,7 +326,7 @@ int RoomControl::connectFunction(RoomControl::FunctionFlash const &flash, Array<
 
 		// subscribe to device
 		auto &interface = getInterface(connection);
-		auto *device = interface.getDeviceById(connection.deviceId);
+		auto device = interface.getDevice(connection.deviceId);
 		if (device != nullptr)
 			device->subscribe(connection.endpointIndex, subscriber);
 
@@ -355,7 +355,7 @@ int RoomControl::connectFunction(RoomControl::FunctionFlash const &flash, Array<
 
 		// add publisher to device
 		auto &interface = getInterface(connection);
-		auto *device = interface.getDeviceById(connection.deviceId);
+		auto device = interface.getDevice(connection.deviceId);
 		if (device != nullptr) {
 			publisher.setInfo(device->getPublishInfo(connection.endpointIndex));
 			publisher.id = connection.plugIndex;
@@ -438,13 +438,13 @@ static MessageType nextAlarmMessageType(MessageType messageType, int delta) {
 
 void RoomControl::printConnection(Menu::Stream &stream, Connection const &connection) {
 	auto &interface = getInterface(connection);
-	auto device = interface.getDeviceById(connection.deviceId);
+	auto device = interface.getDevice(connection.deviceId);
 	if (device != nullptr) {
 		String deviceName = device->getName();
 		stream << deviceName << ':' << dec(connection.endpointIndex);
-		auto endpoints = device->getEndpoints();
-		if (connection.endpointIndex < endpoints.count()) {
-			String endpointName = getTypeLabel(endpoints[connection.endpointIndex]);
+		auto plugs = device->getPlugs();
+		if (connection.endpointIndex < plugs.count()) {
+			String endpointName = getTypeLabel(plugs[connection.endpointIndex]);
 			stream << " (" << endpointName << ')';
 		}
 	} else {
@@ -1082,7 +1082,7 @@ AwaitableCoroutine RoomControl::devicesMenu(Interface &interface) {
 AwaitableCoroutine RoomControl::deviceMenu(Interface::Device &device) {
 	Menu menu(this->swapChain);
 	while (true) {
-		if (menu.entry("Endpoints"))
+		if (menu.entry("Plugs"))
 			co_await endpointsMenu(device);
 		if (menu.entry("Message Logger"))
 			co_await messageLogger(device);
@@ -1262,9 +1262,9 @@ AwaitableCoroutine RoomControl::alarmActionsMenu(AlarmInterface::AlarmFlash &fla
 AwaitableCoroutine RoomControl::endpointsMenu(Interface::Device &device) {
 	Menu menu(this->swapChain);
 	while (true) {
-		auto endpoints = device.getEndpoints();
-		for (int i = 0; i < endpoints.count(); ++i) {
-			auto messageType = endpoints[i];
+		auto plugs = device.getPlugs();
+		for (int i = 0; i < plugs.count(); ++i) {
+			auto messageType = plugs[i];
 			auto stream = menu.stream();
 			stream << dec(i) << ": " << getTypeLabel(messageType);
 			if ((messageType & MessageType::DIRECTION_MASK) == MessageType::IN)
@@ -1291,7 +1291,7 @@ AwaitableCoroutine RoomControl::messageLogger(Interface::Device &device) {
 	// subscribe to all endpoints
 	for (int endpointIndex = 0; endpointIndex < array::count(subscribers); ++endpointIndex) {
 		auto &subscriber = subscribers[endpointIndex];
-		subscriber.destination.device.endpointIndex = endpointIndex;
+		subscriber.destination.device.plugIndex = endpointIndex;
 		subscriber.barrier = &barrier;
 		device.subscribe(endpointIndex, subscriber);
 	}
@@ -1313,7 +1313,7 @@ AwaitableCoroutine RoomControl::messageLogger(Interface::Device &device) {
 		for (int i = queue.count() - 2; i >= 0; --i) {
 			Event &event = queue[i];
 			auto stream = menu.stream();
-			stream << dec(event.info.device.endpointIndex) << ": ";
+			stream << dec(event.info.device.plugIndex) << ": ";
 			auto usage = getUsage(event.info.type);
 			switch (event.info.type & MessageType::CATEGORY) {
 			case MessageType::BINARY:
@@ -1340,10 +1340,10 @@ AwaitableCoroutine RoomControl::messageLogger(Interface::Device &device) {
 			break;
 
 		// update subscribers
-		auto endpoints = device.getEndpoints();
-		for (int endpointIndex = 0; endpointIndex < min(endpoints.count(), array::count(subscribers)); ++endpointIndex) {
+		auto plugs = device.getPlugs();
+		for (int endpointIndex = 0; endpointIndex < min(plugs.count(), array::count(subscribers)); ++endpointIndex) {
 			auto &subscriber = subscribers[endpointIndex];
-			auto messageType = endpoints[endpointIndex];
+			auto messageType = plugs[endpointIndex];
 			subscriber.destination.type = messageType ^ (MessageType::OUT ^ MessageType::IN);
 			subscriber.convertOptions = getDefaultConvertOptions(messageType);
 		}
@@ -1371,11 +1371,11 @@ AwaitableCoroutine RoomControl::messageGenerator(Interface::Device &device) {
 	// menu loop
 	Menu menu(this->swapChain);
 	while (true) {
-		auto endpoints = device.getEndpoints();
-		if (endpoints.count() > 0) {
+		auto plugs = device.getPlugs();
+		if (plugs.count() > 0) {
 			// get endpoint type
-			endpointIndex = clamp(endpointIndex, 0, endpoints.count() - 1);
-			auto messageType = endpoints[endpointIndex];
+			endpointIndex = clamp(endpointIndex, 0, plugs.count() - 1);
+			auto messageType = plugs[endpointIndex];
 
 			// get message component to edit (some messages such as MOVE_TO_LEVEL have two components)
 			int edit = menu.getEdit(1 + getComponentCount(messageType));
@@ -1386,8 +1386,8 @@ AwaitableCoroutine RoomControl::messageGenerator(Interface::Device &device) {
 
 			// edit endpoint index
 			if (editIndex) {
-				endpointIndex = clamp(endpointIndex + delta, 0, endpoints.count() - 1);
-				messageType = endpoints[endpointIndex];
+				endpointIndex = clamp(endpointIndex + delta, 0, plugs.count() - 1);
+				messageType = plugs[endpointIndex];
 			}
 
 			// set default message if type has changed
@@ -1588,7 +1588,7 @@ AwaitableCoroutine RoomControl::functionMenu(int index, FunctionFlash &flash) {
 						auto &plug = functionInfo.plugs[connection.plugIndex];
 						if (plug.messageType == MessageType::TERNARY_OPENING_BLIND_OUT /*UP_DOWN_OUT*/ && !connection.isMqtt()) {
 							auto &interface = getInterface(connection);
-							auto *device = interface.getDeviceById(connection.deviceId);
+							auto device = interface.getDevice(connection.deviceId);
 							if (device != nullptr)
 								co_await measureRunTime(*device, connection, config.runTime);
 							break;
@@ -1711,7 +1711,7 @@ AwaitableCoroutine RoomControl::measureRunTime(Interface::Device &device, Connec
 			}
 
 			info.barrier->resumeFirst([&device, &connection, state] (PublishInfo::Parameters &p) {
-				auto dstType = device.getEndpoints()[connection.endpointIndex];
+				auto dstType = device.getPlugs()[connection.endpointIndex];
 				p.info = {dstType, {.device = {device.getId(), connection.endpointIndex}}};
 				auto &dst = *reinterpret_cast<Message *>(p.message);
 				return convertSwitch(dstType, dst, state, connection.convertOptions);
@@ -1765,9 +1765,9 @@ AwaitableCoroutine RoomControl::editFunctionConnection(ConnectionIterator &it, P
 		}
 
 		// select convert options
-		auto *device = getInterface(connection).getDeviceById(connection.deviceId);
+		auto *device = getInterface(connection).getDevice(connection.deviceId);
 		if (device != nullptr) {
-			auto endpoints = device->getEndpoints();
+			auto endpoints = device->getPlugs();
 			auto messageType = endpoints[connection.endpointIndex];
 
 			menu.beginSection();
@@ -1814,9 +1814,9 @@ AwaitableCoroutine RoomControl::selectFunctionDevice(Connection &connection, Plu
 			auto &device = interface.getDeviceByIndex(i);
 
 			// check if the device has at least one compatible endpoint
-			auto endpoints = device.getEndpoints();
-			for (auto endpointType : endpoints) {
-				if (isCompatible(plug, endpointType) != 0) {
+			auto plugs = device.getPlugs();
+			for (auto plugType : plugs) {
+				if (isCompatible(plug, plugType) != 0) {
 					if (menu.entry(device.getName())) {
 						co_await selectFunctionEndpoint(device, connection, plug);
 						co_return;
@@ -1843,9 +1843,9 @@ AwaitableCoroutine RoomControl::selectFunctionEndpoint(Interface::Device &device
 		int delta = menu.getDelta();
 
 		// list all compatible endpoints of device
-		auto endpoints = device.getEndpoints();
-		for (int i = 0; i < endpoints.count(); ++i) {
-			auto messageType = endpoints[i];
+		auto plugs = device.getPlugs();
+		for (int i = 0; i < plugs.count(); ++i) {
+			auto messageType = plugs[i];
 			if (isCompatible(plug, messageType) != 0) {
 				// endpoint is compatible
 				String typeName = getTypeLabel(messageType);

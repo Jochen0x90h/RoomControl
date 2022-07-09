@@ -39,7 +39,7 @@ struct MessageInfo {
 		// source or destination interface device
 		struct {
 			uint8_t id;
-			uint8_t endpointIndex;
+			uint8_t plugIndex;
 		} device;
 
 		// source or destination mqtt topic

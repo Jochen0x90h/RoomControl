@@ -15,7 +15,8 @@ public:
 
 	int getDeviceCount() override;
 	Device &getDeviceByIndex(int index) override;
-	Device *getDeviceById(uint8_t id) override;
+	Device *getDevice(uint8_t id) override;
+	void eraseDevice(uint8_t id) override;
 
 protected:
 	class Alarm;
@@ -95,7 +96,7 @@ protected:
 		uint8_t getId() const override;
 		String getName() const override;
 		void setName(String name) override;
-		Array<MessageType const> getEndpoints() const override;
+		Array<MessageType const> getPlugs() const override;
 		void subscribe(uint8_t endpointIndex, Subscriber &subscriber) override;
 		PublishInfo getPublishInfo(uint8_t endpointIndex) override;
 

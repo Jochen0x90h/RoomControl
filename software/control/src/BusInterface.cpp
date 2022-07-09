@@ -45,12 +45,16 @@ Interface::Device &BusInterface::getDeviceByIndex(int index) {
 	return this->devices[index];
 }
 
-Interface::Device *BusInterface::getDeviceById(uint8_t id) {
+Interface::Device *BusInterface::getDevice(uint8_t id) {
 	for (auto &device: this->devices) {
 		if (device->interfaceId == id)
 			return &device;
 	}
 	return nullptr;
+}
+
+void BusInterface::eraseDevice(uint8_t id) {
+
 }
 
 Coroutine BusInterface::start() {
@@ -248,7 +252,7 @@ Coroutine BusInterface::receive() {
 					// publish to subscribers
 					for (auto &subscriber: device.subscribers) {
 						// check if this is the right endpoint
-						if (subscriber.source.device.endpointIndex == endpointIndex) {
+						if (subscriber.source.device.plugIndex == endpointIndex) {
 							auto srcType = flash.endpoints[endpointIndex];
 							subscriber.barrier->resumeFirst([&subscriber, &r, srcType](PublishInfo::Parameters &p) {
 								p.info = subscriber.destination;
@@ -322,7 +326,7 @@ Coroutine BusInterface::publish() {
 				continue;
 
 			// get endpoint info
-			uint8_t endpointIndex = info.device.endpointIndex;
+			uint8_t endpointIndex = info.device.plugIndex;
 			if (endpointIndex >= device->endpointCount)
 				break;
 			auto messageType = device->endpoints[endpointIndex];
@@ -413,14 +417,14 @@ void BusInterface::BusDevice::setName(String name) {
 
 }
 
-Array<MessageType const> BusInterface::BusDevice::getEndpoints() const {
+Array<MessageType const> BusInterface::BusDevice::getPlugs() const {
 	auto &flash = **this;
 	return {flash.endpointCount, flash.endpoints};
 }
 
 void BusInterface::BusDevice::subscribe(uint8_t endpointIndex, Subscriber &subscriber) {
 	subscriber.remove();
-	subscriber.source.device.endpointIndex = endpointIndex;
+	subscriber.source.device.plugIndex = endpointIndex;
 	this->subscribers.add(subscriber);
 }
 

@@ -118,7 +118,7 @@ public:
 	}
 
 	/**
-	 * Read a string until end of data
+	 * Read string until end of data
 	 * @return string
 	 */
 	String string() {
@@ -128,7 +128,18 @@ public:
 	}
 
 	/**
-	 * Read a string with given length
+	 * Read string with 8 bit length
+	 * @return string
+	 */
+	String string8() {
+		int length = u8();
+		auto str = this->current;
+		this->current += length;
+		return {length, str};
+	}
+
+	/**
+	 * Read string with given length
 	 * @param length length of string
 	 * @return string
 	 */
