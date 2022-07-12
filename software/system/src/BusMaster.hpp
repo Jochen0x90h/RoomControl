@@ -23,13 +23,13 @@
 	power cycle, depending on security requirements. All devices in commissioning mode will send an enumerate command,
 	simultaneous sending is resolved by bus arbitration. Commissioning command by master overrides all enumerate
 	commands (by sending a leading zero) and causes the commissioned device to leave commissioning mode.
-	Enumerate: 0 <encoded device id> <list of endpoints> <mic(default key)>
+	Enumerate: 0 <encoded device id> <protocol version> <endpoint count> <mic(default key)>
 	Commission: 0 0 <device id> <address> <key> <mic(default key)>
 
 	Message:
 	The message starts with the encoded device address for bus arbitration (always loses against commands as it never
 	starts with zero)
-	<encoded address> <security counter> <endpoint index> <message> <mic(key)>
+	<encoded address> <security counter> <endpoint index> <attribute or plug index> <message> <mic(key)>
 
 	Ack:
 	CRC-8 sent in response as acknowledgement

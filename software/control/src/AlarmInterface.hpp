@@ -8,13 +8,15 @@
 
 class AlarmInterface : public Interface {
 public:
+	// maximum number of alarms
+	static constexpr int MAX_ALARM_COUNT = 64;
+
 	AlarmInterface();
 	~AlarmInterface() override;
 
 	void setCommissioning(bool enabled) override;
 
-	int getDeviceCount() override;
-	Device &getDeviceByIndex(int index) override;
+	Array<uint8_t const> getDeviceIds() override;
 	Device *getDevice(uint8_t id) override;
 	void eraseDevice(uint8_t id) override;
 
@@ -22,95 +24,91 @@ protected:
 	class Alarm;
 
 public:
-	struct AlarmFlash {
-		static constexpr int MAX_ENDPOINT_COUNT = 4;
+	// alarm data that is stored in flash
+	struct AlarmData {
+		static constexpr int MAX_ENDPOINT_COUNT = 8;
 
-		AlarmTime time;
+		uint8_t id;
 
-		// interface id
-		uint8_t interfaceId;
+		// device name, zero-terminated if shorter than maximum length
+		char name[MAX_NAME_LENGTH];
 
 		// endpoints that send messages when the alarm goes off
-		uint8_t endpointCount = 1;
-		//MessageType endpoints[MAX_ENDPOINT_COUNT];
-		//Message messages[MAX_ENDPOINT_COUNT];
+		uint8_t plugCount = 1;
 
-		// note: messages must be the last member because of variable size allocation
-
-		AlarmFlash() = default;
-		AlarmFlash(AlarmFlash const &flash);
-
-		/**
-		 * Returns the size in bytes needed to store the device configuration in flash
-		 * @return size in bytes
-		 */
-		int size() const;
-
-		/**
-		 * Allocates a state object
-		 * @return new state object
-		 */
-		Alarm *allocate() const;
+		AlarmTime time;
 	};
 
 	/**
-	 * Get an alarm
-	 * @param index index of alarm
-	 * @return flash configuration of alarm
+	 * Get the data of an alarm
+	 * @param id id of alarm
+	 * @return configuration data of alarm
 	 */
-	AlarmFlash const &get(int index) const;
+	AlarmData const *get(uint8_t id) const;
 
 	/**
 	 * Set an alarm
-	 * @param index index of alarm
-	 * @param flash flash configuration of alarm
+	 * @param id id of alarm, new alarm with new id gets created if not found (use 0 for new alarms)
+	 * @param data configuration data of alarm
 	 */
-	void set(int index, AlarmFlash &flash);
-
-	/**
-	 * Erase an alarm
-	 * @param index index of alarm
-	 */
-	void erase(int index) {this->alarms.erase(index);}
+	void set(uint8_t id, AlarmData &data);
 
 	/**
 	 * Get number of subscribers of an alarm
-	 * @param index index of alarm
+	 * @param id id of alarm
+	 * @param plugCount override number of active plugs
+	 * @param command command: 0: deactivate, 1: activate
 	 * @return number of subscribers
 	 */
-	int getSubscriberCount(int index, int endpointCount, uint8_t command);
+	int getSubscriberCount(uint8_t id, int plugCount, uint8_t command);
 
 	/**
 	 * Test an alarm by publishing its messages using given configuration
-	 * @param index index of alarm
-	 * @param flash flash configuration of alarm
+	 * @param id id of alarm
+	 * @param endpointCount override number of active endpoints
+	 * @param command command: 0: deactivate, 1: activate
 	 */
-	void test(int index, int endpointCount, uint8_t command);
+	void test(uint8_t id, int endpointCount, uint8_t command);
 
 protected:
-	class Alarm : public Storage::Element<AlarmFlash>, public Device {
+
+	class Alarm : public Interface::Device {
 	public:
-		explicit Alarm(AlarmFlash const &flash) : Storage::Element<AlarmFlash>(flash) {}
+		Alarm(AlarmInterface *interface, AlarmData const &data)
+			: interface(interface), next(interface->alarms), data(data)
+		{
+			interface->alarms = this;
+		}
 		~Alarm() override;
 
 		uint8_t getId() const override;
 		String getName() const override;
 		void setName(String name) override;
 		Array<MessageType const> getPlugs() const override;
-		void subscribe(uint8_t endpointIndex, Subscriber &subscriber) override;
-		PublishInfo getPublishInfo(uint8_t endpointIndex) override;
+		void subscribe(uint8_t plugIndex, Subscriber &subscriber) override;
+		PublishInfo getPublishInfo(uint8_t plugIndex) override;
 
 		// back pointer to interface
 		AlarmInterface *interface;
 
+		// next alarm
+		Alarm *next;
+
+		// zbee device data that is stored in flash
+		AlarmData data;
+
+		// list of subscribers
 		SubscriberList subscribers;
+
+		// true when alarm is active
+		bool active = false;
 	};
 
-public:
-	// list of alarms
-	Storage::Array<Alarm> alarms;
+	int alarmCount = 0;
+	uint8_t alarmIds[MAX_ALARM_COUNT];
+	Alarm *alarms = nullptr;
 
-protected:
+	uint8_t allocateId();
 
 	Coroutine tick();
 };

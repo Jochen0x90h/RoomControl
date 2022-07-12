@@ -19,7 +19,7 @@ void init();
  * @param id id of entry
  * @return true on success, false on error
  */
-int getSize(int index, uint16_t id);
+int size(int index, uint16_t id);
 
 /**
  * Read an entry from the non-volatile storage into a given data buffer

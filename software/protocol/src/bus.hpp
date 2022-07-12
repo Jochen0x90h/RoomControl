@@ -12,8 +12,18 @@ extern uint8_t const defaultKey[16];
 extern AesKey const defaultAesKey;
 
 
+enum class Attribute : uint8_t {
+	FIRST_ATTRIBUTE = 0x80,
+	HW_VERSION = 0x80,
+	MANUFACTURER_NAME = 0x81,
+	MODEL_IDENTIFIER = 0x82,
+	DATE_CODE = 0x83,
+	POWER_SOURCE = 0x84,
+	PLUG_LIST = 0x85,
+};
 
-enum class EndpointType : uint16_t {
+
+enum class PlugType : uint16_t {
 	// direction
 	IN = 2 << 14,
 	OUT = 1 << 14,
@@ -648,7 +658,7 @@ enum class EndpointType : uint16_t {
 	METERING_GAS_IN = METERING_GAS | IN,
 	METERING_GAS_OUT = METERING_GAS | OUT,
 };
-FLAGS_ENUM(EndpointType)
+FLAGS_ENUM(PlugType)
 
 
 /*
@@ -685,6 +695,16 @@ public:
 	 * @return device id
 	 */
 	uint32_t id();
+
+	/**
+	 * Read an encoded address
+	 * @return address
+	 */
+	uint8_t address() {
+		auto a1 = arbiter();
+		auto a2 = arbiter();
+		return (a1 - 1) | (a2 << 3);
+	}
 };
 
 class MessageWriter : public EncryptWriter {
@@ -717,6 +737,19 @@ public:
 	 */
 	void id(uint32_t id);
 
+	/**
+	 * Write an ecoded address
+	 * @return
+	 */
+	void address(uint8_t address) {
+		arbiter((address & 7) + 1);
+		arbiter(address >> 3);
+	}
+
+	/**
+	 * Get number of bytes written so far
+	 * @return current length
+	 */
 	int getLength() {
 		int length = int(this->current - this->begin);
 #ifdef EMU

@@ -166,7 +166,7 @@ types = [4,
 ]
 
 
-def EndpointType(types, totalBitCount, bitIndex, tabs, parentPrefix, prefix):
+def PlugType(types, totalBitCount, bitIndex, tabs, parentPrefix, prefix):
 	bitCount = types[0]
 	bitIndex -= bitCount
 	if bitIndex < 0:
@@ -192,16 +192,16 @@ def EndpointType(types, totalBitCount, bitIndex, tabs, parentPrefix, prefix):
 			print(f"{tabs}{prefix}{name}_CMD_IN = {prefix}{name}_IN | CMD,")
 			print(f"{tabs}{prefix}{name}_CMD_OUT = {prefix}{name}_OUT | CMD,")
 		if len(type) >= 6:
-			EndpointType(type[5], totalBitCount, bitIndex, tabs + '\t', f"{prefix}{name} | ", f"{prefix}{name}_")
+			PlugType(type[5], totalBitCount, bitIndex, tabs + '\t', f"{prefix}{name} | ", f"{prefix}{name}_")
 		
 
 def getLabel(types, tabs, prefix, defaultLabel):
-	print(f"{tabs}switch (type & EndpointType::{prefix}CATEGORY) {{")
+	print(f"{tabs}switch (type & PlugType::{prefix}CATEGORY) {{")
 	for i in range(1, len(types)):
 		type = types[i]
 		name = type[0]
 		label = type[2]
-		print(f"{tabs}case EndpointType::{prefix}{name}:")
+		print(f"{tabs}case PlugType::{prefix}{name}:")
 		if len(type) >= 6:
 			getLabel(type[5], tabs + '\t', prefix + name + '_', f"\"{label}\"")
 		else:
@@ -237,7 +237,7 @@ def hasUsage(types):
 	
 	
 def getUsage(types, tabs, prefix, defaultUsage):
-	print(f"{tabs}switch (t & EndpointType::{prefix}CATEGORY) {{")
+	print(f"{tabs}switch (t & PlugType::{prefix}CATEGORY) {{")
 	for i in range(1, len(types)):
 		type = types[i]
 		name = type[0]
@@ -245,7 +245,7 @@ def getUsage(types, tabs, prefix, defaultUsage):
 		usage = type[3]
 		if not usage:
 			usage = defaultUsage
-		print(f"{tabs}case EndpointType::{prefix}{name}:")
+		print(f"{tabs}case PlugType::{prefix}{name}:")
 		if len(type) < 6 or not hasUsage(type[5]):
 			# leaf usage
 			if flags & TOGGLE:
@@ -253,7 +253,7 @@ def getUsage(types, tabs, prefix, defaultUsage):
 			else:
 				print(f"{tabs}\treturn Usage::{usage};")
 		else:
-			#print(f"{tabs}\tif (t == EndpointType::{prefix}{name}) return Usage::{usage};")
+			#print(f"{tabs}\tif (t == PlugType::{prefix}{name}) return Usage::{usage};")
 			getUsage(type[5], tabs + '\t', prefix + name + '_', usage)	
 	print(f"{tabs}default:")
 	print(f"{tabs}\treturn Usage::{defaultUsage};")
@@ -261,16 +261,16 @@ def getUsage(types, tabs, prefix, defaultUsage):
 
 
 def isCompatible(types, tabs, prefix):
-	print(f"{tabs}if ((src & EndpointType::{prefix}CATEGORY) == dst) return true;")
-	print(f"{tabs}switch (dst & EndpointType::{prefix}CATEGORY) {{")
+	print(f"{tabs}if ((src & PlugType::{prefix}CATEGORY) == dst) return true;")
+	print(f"{tabs}switch (dst & PlugType::{prefix}CATEGORY) {{")
 	for i in range(1, len(types)):
 		type = types[i]
 		name = type[0]
 		flags = type[1]
-		print(f"{tabs}case EndpointType::{prefix}{name}:")
+		print(f"{tabs}case PlugType::{prefix}{name}:")
 		if flags & COMPATIBLE or len(type) < 6:
 			# subtypes are compatible to this type
-			print(f"{tabs}\treturn (src & EndpointType::{prefix}CATEGORY) == EndpointType::{prefix}{name};")	
+			print(f"{tabs}\treturn (src & PlugType::{prefix}CATEGORY) == PlugType::{prefix}{name};")
 		else:
 			isCompatible(type[5], tabs + '\t', prefix + name + '_')	
 	print(f"{tabs}default:")
@@ -279,14 +279,14 @@ def isCompatible(types, tabs, prefix):
 
 
 
-# enum EndpointType
+# enum PlugType
 # -----------------
 
 f = open('endpointType.txt', 'w')
 sys.stdout = f
 
 print("""
-enum class EndpointType : uint16_t {
+enum class PlugType : uint16_t {
 	// direction
 	IN = 2 << 14,
 	OUT = 1 << 14,
@@ -298,9 +298,9 @@ enum class EndpointType : uint16_t {
 	// type
 	TYPE_MASK = 0x1fff,	
 	UNKNOWN = 0,""")
-EndpointType(types, 13, 13, "\t", "", "")
+PlugType(types, 13, 13, "\t", "", "")
 print("""};
-FLAGS_ENUM(EndpointType)
+FLAGS_ENUM(PlugType)
 """)
 
 
@@ -326,34 +326,34 @@ f = open('functions.txt', 'w')
 sys.stdout = f
 
 # getTypeLabel()
-print("String getTypeLabel(EndpointType type) {")
+print("String getTypeLabel(PlugType type) {")
 getLabel(types, "\t", "", "{}")
 print("}")
 
 # getUsage()
 print("""
-Usage getUsage(EndpointType type) {
-	bool cmd = (type & EndpointType::CMD) != 0;
-	auto t = type & EndpointType::TYPE_MASK;
+Usage getUsage(PlugType type) {
+	bool cmd = (type & PlugType::CMD) != 0;
+	auto t = type & PlugType::TYPE_MASK;
 """)
 getUsage(types, "\t", "", "NONE")
 print("}")
 
 # isCompatible()
 print("""
-bool isCompatible(EndpointType dstType, EndpointType srcType) {
-	if ((srcType & EndpointType::DIRECTION_MASK) != EndpointType::OUT || (dstType & EndpointType::DIRECTION_MASK) != EndpointType::IN)
+bool isCompatible(PlugType dstType, PlugType srcType) {
+	if ((srcType & PlugType::DIRECTION_MASK) != PlugType::OUT || (dstType & PlugType::DIRECTION_MASK) != PlugType::IN)
 		return false;
-	bool srcCommand = (srcType & EndpointType::CMD) != 0;
-	bool dstCommand = (dstType & EndpointType::CMD) != 0;
+	bool srcCommand = (srcType & PlugType::CMD) != 0;
+	bool dstCommand = (dstType & PlugType::CMD) != 0;
 	if (srcCommand && !dstCommand)
 		return false;
-	auto src = srcType & EndpointType::TYPE_MASK;
-	auto dst = dstType & EndpointType::TYPE_MASK;
-	auto srcCategory = src & EndpointType::CATEGORY;
-	auto dstCategory = dst & EndpointType::CATEGORY;
-	bool srcSwitch = srcCategory == EndpointType::BINARY || srcCategory == EndpointType::TERNARY;
-	bool dstSwitch = dstCategory == EndpointType::BINARY || dstCategory == EndpointType::TERNARY;
+	auto src = srcType & PlugType::TYPE_MASK;
+	auto dst = dstType & PlugType::TYPE_MASK;
+	auto srcCategory = src & PlugType::CATEGORY;
+	auto dstCategory = dst & PlugType::CATEGORY;
+	bool srcSwitch = srcCategory == PlugType::BINARY || srcCategory == PlugType::TERNARY;
+	bool dstSwitch = dstCategory == PlugType::BINARY || dstCategory == PlugType::TERNARY;
 	if (srcSwitch && dstSwitch)
 		return true;
 	if (srcSwitch && dstCommand)

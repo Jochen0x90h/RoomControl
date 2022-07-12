@@ -407,9 +407,8 @@ public:
 	[[nodiscard]] AwaitableCoroutine devicesMenu(Interface &interface);
 	[[nodiscard]] AwaitableCoroutine deviceMenu(Interface::Device &device);
 	[[nodiscard]] AwaitableCoroutine alarmsMenu(AlarmInterface &alarms);
-	[[nodiscard]] AwaitableCoroutine alarmMenu(AlarmInterface &alarms, int index, AlarmInterface::AlarmFlash &flash);
+	[[nodiscard]] AwaitableCoroutine alarmMenu(AlarmInterface &alarms, uint8_t id, AlarmInterface::AlarmData &data);
 	[[nodiscard]] AwaitableCoroutine alarmTimeMenu(AlarmTime &time);
-	//[[nodiscard]] AwaitableCoroutine alarmActionsMenu(AlarmInterface::AlarmFlash &flash);
 	[[nodiscard]] AwaitableCoroutine endpointsMenu(Interface::Device &device);
 	[[nodiscard]] AwaitableCoroutine messageLogger(Interface::Device &device);
 	[[nodiscard]] AwaitableCoroutine messageGenerator(Interface::Device &device);

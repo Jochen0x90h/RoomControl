@@ -52,15 +52,18 @@ constexpr MessageType outEndpoints[] = {
 
 
 LocalInterface::LocalInterface() {
+	this->devices[BME680_ID - 1].init(this, BME680_ID, bme680Endpoints);
+	this->devices[HEATING_ID - 1].init(this, HEATING_ID, heatingEndpoints);
+	this->devices[BRIGHTNESS_SENSOR_ID - 1].init(this, BRIGHTNESS_SENSOR_ID, brightnessSensorEndpoints);
+	this->devices[MOTION_DETECTOR_ID - 1].init(this, MOTION_DETECTOR_ID, motionDetectorEndpoints);
+	this->devices[IN_ID - 1].init(this, IN_ID, {INPUT_EXT_COUNT, inEndpoints});
+	this->devices[OUT_ID - 1].init(this, OUT_ID, {OUTPUT_EXT_COUNT, outEndpoints});
+
 	int i = 0;
-	this->devices[i++].init(this, BME680_ID, bme680Endpoints);
-	this->devices[i++].init(this, HEATING_ID, heatingEndpoints);
-	this->devices[i++].init(this, BRIGHTNESS_SENSOR_ID, brightnessSensorEndpoints);
-	this->devices[i++].init(this, MOTION_DETECTOR_ID, motionDetectorEndpoints);
-	if (INPUT_EXT_COUNT > 0)
-		this->devices[i++].init(this, IN_ID, {INPUT_EXT_COUNT, inEndpoints});
-	if (OUTPUT_EXT_COUNT > 0)
-		this->devices[i++].init(this, OUT_ID, {OUTPUT_EXT_COUNT, outEndpoints});
+	for (auto &device : this->devices) {
+		if (!device.plugs.isEmpty())
+			this->deviceIds[i++] = device.id;
+	}
 	this->deviceCount = i;
 
 	// start coroutines
@@ -74,26 +77,51 @@ LocalInterface::~LocalInterface() {
 void LocalInterface::setCommissioning(bool enabled) {
 }
 
-int LocalInterface::getDeviceCount() {
-	return this->deviceCount;
-}
-
-Interface::Device &LocalInterface::getDeviceByIndex(int index) {
-	assert(index >= 0 && index < this->deviceCount);
-	return this->devices[index];
+Array<uint8_t const> LocalInterface::getDeviceIds() {
+	return {this->deviceCount, this->deviceIds};
 }
 
 Interface::Device *LocalInterface::getDevice(uint8_t id) {
-	for (auto &device : Array<LocalDevice>(this->deviceCount, this->devices)) {
-		if (device.interfaceId == id)
-			return &device;
-	}
+	if (id >= 1 && id <= DEVICE_COUNT)
+		return &this->devices[id - 1];
 	return nullptr;
 }
 
 void LocalInterface::eraseDevice(uint8_t id) {
 	// not possible to erase local devices
 }
+
+// LocalInterface::LocalDevice
+
+uint8_t LocalInterface::LocalDevice::getId() const {
+	return this->id;
+}
+
+String LocalInterface::LocalDevice::getName() const {
+	int i = int(this->id) - 1;
+	return deviceNames[i];
+}
+
+void LocalInterface::LocalDevice::setName(String name) {
+}
+
+Array<MessageType const> LocalInterface::LocalDevice::getPlugs() const {
+	return this->plugs;
+}
+
+void LocalInterface::LocalDevice::subscribe(uint8_t plugIndex, Subscriber &subscriber) {
+	subscriber.remove();
+	subscriber.source.device.plugIndex = plugIndex;
+	this->subscribers.add(subscriber);
+}
+
+PublishInfo LocalInterface::LocalDevice::getPublishInfo(uint8_t plugIndex) {
+	if (plugIndex >= this->plugs.count())
+		return {};
+	return {{.type = this->plugs[plugIndex], .device = {this->id, plugIndex}},
+		&this->interface->publishBarrier};
+}
+
 
 Coroutine LocalInterface::readAirSensor() {
 	BME680 airSensor;
@@ -197,34 +225,3 @@ Coroutine LocalInterface::publish() {
 	}
 }
 
-// LocalInterface::LocalDevice
-
-uint8_t LocalInterface::LocalDevice::getId() const {
-	return this->interfaceId;
-}
-
-String LocalInterface::LocalDevice::getName() const {
-	int i = int(this->interfaceId) - 1;
-	return deviceNames[i];
-}
-
-void LocalInterface::LocalDevice::setName(String name) {
-
-}
-
-Array<MessageType const> LocalInterface::LocalDevice::getPlugs() const {
-	return this->endpoints;
-}
-
-void LocalInterface::LocalDevice::subscribe(uint8_t endpointIndex, Subscriber &subscriber) {
-	subscriber.remove();
-	subscriber.source.device.plugIndex = endpointIndex;
-	this->subscribers.add(subscriber);
-}
-
-PublishInfo LocalInterface::LocalDevice::getPublishInfo(uint8_t endpointIndex) {
-	if (endpointIndex >= this->endpoints.count())
-		return {};
-	return {{.type = this->endpoints[endpointIndex], .device = {this->interfaceId, endpointIndex}},
-		&this->interface->publishBarrier};
-}

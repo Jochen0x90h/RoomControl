@@ -139,8 +139,7 @@ static bool isCompatible(RoomControl::Plug const &plug, MessageType messageType)
 // -----------
 
 RoomControl::RoomControl()
-	: storage(0, FLASH_PAGE_COUNT, configurations, busInterface.devices, /*radioInterface.gpDevices,
-		radioInterface.zbDevices,*/ alarmInterface.alarms, functions)
+	: storage(0, FLASH_PAGE_COUNT, configurations, functions)
 	, stateManager()
 	//, houseTopicId(), roomTopicId()
 	, busInterface(stateManager)
@@ -200,8 +199,10 @@ void RoomControl::applyConfiguration() {
 // ---------
 
 static void printDevices(Interface &interface) {
-	for (int i = 0; i < interface.getDeviceCount(); ++i) {
-		auto &device = interface.getDeviceByIndex(i);
+	auto deviceIds = interface.getDeviceIds();
+	for (auto id : deviceIds) {
+	//for (int i = 0; i < interface.getDeviceCount(); ++i) {
+		auto &device = *interface.getDevice(id);
 		Terminal::out << (hex(device.getId()) + '\n');
 		auto plugs = device.getPlugs();
 		for (auto plug : plugs) {
@@ -1055,19 +1056,18 @@ AwaitableCoroutine RoomControl::devicesMenu(Interface &interface) {
 	interface.setCommissioning(true);
 	Menu menu(this->swapChain);
 	while (true) {
-		int count = interface.getDeviceCount();
-		for (int i = 0; i < count; ++i) {
-			auto &device = interface.getDeviceByIndex(i);
-			/*StringBuffer<16> b;
-			if (deviceId <= 0xffffffff)
-				b = hex(uint32_t(deviceId));
-			else
-				b = hex(deviceId);
-			if (menu.entry(b))*/
+		auto deviceIds = interface.getDeviceIds();
+		for (auto id : deviceIds) {
+			auto &device = *interface.getDevice(id);
+
 			auto stream = menu.stream();
 			stream << device.getName();
 			if (menu.entry()) {
+				// set commissioning to false when in deviceMenu to pevent deletion of device
+				interface.setCommissioning(false);
 				co_await deviceMenu(device);
+				interface.setCommissioning(true);
+				break;
 			}
 		}
 		if (menu.entry("Exit"))
@@ -1099,13 +1099,13 @@ AwaitableCoroutine RoomControl::deviceMenu(Interface::Device &device) {
 AwaitableCoroutine RoomControl::alarmsMenu(AlarmInterface &alarms) {
 	Menu menu(this->swapChain);
 	while (true) {
-		int count = alarms.getDeviceCount();
-		for (int i = 0; i < count; ++i) {
-			auto const &flash = alarms.get(i);
+		auto ids = alarms.getDeviceIds();
+		for (auto id : ids) {
+			auto const &data = *alarms.get(id);
 			auto stream = menu.stream();
 
 			// time
-			auto time = flash.time;
+			auto time = data.time;
 			stream << dec(time.getHours()) << ':' << dec(time.getMinutes(), 2);
 
 			// week days
@@ -1113,13 +1113,14 @@ AwaitableCoroutine RoomControl::alarmsMenu(AlarmInterface &alarms) {
 
 			//stream << interface.getDeviceName(i);
 			if (menu.entry()) {
-				AlarmInterface::AlarmFlash flash2(flash);
-				co_await alarmMenu(alarms, i, flash2);
+				AlarmInterface::AlarmData data2(data);
+				co_await alarmMenu(alarms, id, data2);
+				break;
 			}
 		}
 		if (menu.entry("Add")) {
-			AlarmInterface::AlarmFlash flash;
-			co_await alarmMenu(alarms, count, flash);
+			AlarmInterface::AlarmData data;
+			co_await alarmMenu(alarms, 0, data);
 		}
 		if (menu.entry("Exit"))
 			break;
@@ -1129,32 +1130,30 @@ AwaitableCoroutine RoomControl::alarmsMenu(AlarmInterface &alarms) {
 	}
 }
 
-AwaitableCoroutine RoomControl::alarmMenu(AlarmInterface &alarms, int index, AlarmInterface::AlarmFlash &flash) {
+AwaitableCoroutine RoomControl::alarmMenu(AlarmInterface &alarms, uint8_t id, AlarmInterface::AlarmData &data) {
 	Menu menu(this->swapChain);
 	while (true) {
 		if (menu.entry("Time"))
-			co_await alarmTimeMenu(flash.time);
-		//if (menu.entry("Actions"))
-		//	co_await alarmActionsMenu(flash);
+			co_await alarmTimeMenu(data.time);
 
-		if (index < alarms.getDeviceCount()) {
-			auto &device = alarms.getDeviceByIndex(index);
+		if (id != 0) {
+			auto &device = *alarms.getDevice(id);
 
 			if (menu.entry("Message Logger"))
 				co_await messageLogger(device);
 
 			// test alarm
-			menu.stream() << "Test Trigger (-> " << dec(alarms.getSubscriberCount(index, 1, 1)) << ')';
+			menu.stream() << "Test Trigger (-> " << dec(alarms.getSubscriberCount(id, 1, 1)) << ')';
 			if (menu.entry())
-				alarms.test(index, 1, 1);
-			menu.stream() << "Test Release (-> " << dec(alarms.getSubscriberCount(index, 1, 0)) << ')';
+				alarms.test(id, 1, 1);
+			menu.stream() << "Test Release (-> " << dec(alarms.getSubscriberCount(id, 1, 0)) << ')';
 			if (menu.entry())
-				alarms.test(index, 1, 0);
+				alarms.test(id, 1, 0);
 
 
 			if (menu.entry("Delete")) {
 				// delete alarm
-				alarms.erase(index);
+				alarms.eraseDevice(id);
 				break;
 			}
 		}
@@ -1162,7 +1161,7 @@ AwaitableCoroutine RoomControl::alarmMenu(AlarmInterface &alarms, int index, Ala
 			break;
 		if (menu.entry("Save")) {
 			// set alarm
-			alarms.set(index, flash);
+			alarms.set(id, data);
 			break;
 		}
 
@@ -1205,60 +1204,7 @@ AwaitableCoroutine RoomControl::alarmTimeMenu(AlarmTime &time) {
 		co_await menu.show();
 	}
 }
-/*
-AwaitableCoroutine RoomControl::alarmActionsMenu(AlarmInterface::AlarmFlash &flash) {
-	Menu menu(this->swapChain);
-	while (true) {
-		// actions: messages to send when alarm goes off
-		for (int i = 0; i < flash.endpointCount; ++i) {
-			auto messageType = flash.endpoints[i];
 
-			// get component to edit
-			int edit = menu.getEdit(1 + getComponentCount(messageType));
-			bool editMessageType = edit == 1;
-			bool editMessage1 = edit == 2;
-			bool editMessage2 = edit == 3;
-			int delta = menu.getDelta();
-
-			auto stream = menu.stream();
-
-			// edit endpoint type
-			if (editMessageType && delta != 0) {
-				messageType = nextAlarmMessageType(messageType, delta);
-				flash.endpoints[i] = messageType;
-				flash.messages[i] = getDefaultMessage(messageType);
-			}
-			stream << underline(getTypeName(messageType), editMessageType);
-			stream << ": ";
-
-			// edit message
-			editMessage(stream, messageType, flash.messages[i], editMessage1, editMessage2, delta);
-			menu.entry();
-		}
-
-		// add action
-		if (flash.endpointCount < AlarmInterface::AlarmFlash::MAX_ENDPOINT_COUNT && menu.entry("Add")) {
-			int i = flash.endpointCount;
-			auto messageType = MessageType::OFF_ON_IN;
-			flash.endpoints[i] = messageType;
-			flash.messages[i] = getDefaultMessage(messageType);
-			++flash.endpointCount;
-		}
-
-		// remove action
-		if (flash.endpointCount > 0 && menu.entry("Remove")) {
-			--flash.endpointCount;
-			menu.remove();
-		}
-
-		if (menu.entry("Ok"))
-			break;
-
-		// show menu
-		co_await menu.show();
-	}
-}
-*/
 AwaitableCoroutine RoomControl::endpointsMenu(Interface::Device &device) {
 	Menu menu(this->swapChain);
 	while (true) {
@@ -1810,8 +1756,10 @@ AwaitableCoroutine RoomControl::selectFunctionDevice(Connection &connection, Plu
 		int delta = menu.getDelta();
 
 		// list devices with at least one compatible endpoint
-		for (int i = 0; i < interface.getDeviceCount(); ++i) {
-			auto &device = interface.getDeviceByIndex(i);
+		auto deviceIds = interface.getDeviceIds();
+		for (auto id : deviceIds) {
+		//for (int i = 0; i < interface.getDeviceCount(); ++i) {
+			auto &device = *interface.getDevice(id);
 
 			// check if the device has at least one compatible endpoint
 			auto plugs = device.getPlugs();

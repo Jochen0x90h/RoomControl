@@ -16,10 +16,22 @@ Waitlist<SendParameters> sendWaitlist;
 
 constexpr int micLength = 4;
 uint32_t deviceId;
-int endpointCount;
-bus::EndpointType endpoints[32];
+int plugCount;
+bus::PlugType plugs[32];
 int states[32];
 uint32_t securityCounter = 0;
+
+
+void sendToNode(bus::MessageWriter &w) {
+	int length = w.getLength();
+	auto data = w.begin;
+	BusNode::receiveWaitlist.resumeFirst([length, data](ReceiveParameters &p) {
+		int len = min(length, *p.receiveLength);
+		array::copy(len, p.receiveData, data);
+		*p.receiveLength = len;
+		return true;
+	});
+}
 
 
 // event loop handler chain
@@ -38,9 +50,9 @@ void handle(Gui &gui) {
 		r.setHeader();
 
 		// get address
-		auto a1 = r.arbiter();
-		if (a1 == 0) {
+		if (r.peekU8() == 0) {
 			// node has sent an enumerate message
+			r.u8();
 
 			// get encoded device id
 			uint32_t deviceId = r.id();
@@ -52,43 +64,72 @@ void handle(Gui &gui) {
 			if (!r.decrypt(micLength, nonce, bus::defaultAesKey))
 				return true;
 
-			// get endpoints
-			BusNode::endpointCount = r.getRemaining() / 2;
-			r.data16L(BusNode::endpointCount, BusNode::endpoints);
+			// protocol version
+			r.u8();
 
+			// endpoint count
+			r.u8();
 
 			// reply with commission message
-			bus::MessageWriter w(data);
-			w.setHeader();
+			{
+				bus::MessageWriter w(data);
+				w.setHeader();
 
-			w.u8(0);
-			w.u8(0);
+				// prefix
+				w.u8(0);
+				w.u8(0);
 
-			// device id
-			w.u32L(deviceId);
+				// device id
+				w.u32L(deviceId);
 
-			// address that gets assigned to the device
-			w.u8(5);
+				// address that gets assigned to the device
+				w.u8(5);
 
-			// key
-			w.data8(bus::defaultKey);
+				// key
+				w.data8(bus::defaultKey);
 
-			// only add message integrity code (mic) using default key, message stays unencrypted
-			w.setMessage();
-			//Nonce nonce(deviceId, 0);
-			w.encrypt(micLength, nonce, bus::defaultAesKey);
+				// only add message integrity code (mic) using default key, message stays unencrypted
+				w.setMessage();
+				//Nonce nonce(deviceId, 0);
+				w.encrypt(micLength, nonce, bus::defaultAesKey);
 
-			int writeLength = w.getLength();
+				sendToNode(w);
+			}
 
-			BusNode::receiveWaitlist.resumeFirst([data, writeLength](ReceiveParameters &p) {
-				int length = min(writeLength, *p.receiveLength);
-				array::copy(length, p.receiveData, data);
-				*p.receiveLength = length;
-				return true;
-			});
+			// get list of plugs
+			{
+				bus::MessageWriter w(data);
+				w.setHeader();
+
+				// encoded address
+				w.address(5);
+
+				// security counter
+				w.u32L(securityCounter);
+
+				// set start of message
+				w.setMessage();
+
+				// endpoint index
+				w.u8(0);
+
+				// attribute
+				w.e8(bus::Attribute::PLUG_LIST);
+
+				// no message data to indicate that we want to read the attribute
+
+				// encrypt
+				Nonce nonce(5, securityCounter);
+				w.encrypt(micLength, nonce, bus::defaultAesKey);
+
+				// increment security counter
+				++securityCounter;
+
+				sendToNode(w);
+			}
 		} else {
 			// node has sent a data message
-			int address = a1 - 1 + (r.arbiter() << 3);
+			int address = r.address();
 			if (address != 5)
 				return true;
 
@@ -103,60 +144,70 @@ void handle(Gui &gui) {
 			if (!r.decrypt(micLength, nonce, bus::defaultAesKey))
 				return true;
 
-			// handle endpoint/state
-			uint8_t endpointIndex = r.u8() + 1;
-			auto endpointType = BusNode::endpoints[endpointIndex];
-			uint8_t state = r.u8();
-			switch (endpointType) {
-			case bus::EndpointType::BINARY_POWER_LIGHT_IN:
-				if (state <= 1)
-					BusNode::states[endpointIndex] = state;
-				else
-					BusNode::states[endpointIndex] ^= 1;
-				break;
-			case bus::EndpointType::TERNARY_OPENING_BLIND_IN:
-				BusNode::states[endpointIndex] = state;
-				break;
-			default:;
+			uint8_t endpointIndex = r.u8();
+			uint8_t attributeOrPlugIndex = r.u8();
+
+			if (attributeOrPlugIndex >= uint8_t(bus::Attribute::FIRST_ATTRIBUTE)) {
+				// attribute
+				auto attribute = bus::Attribute(attributeOrPlugIndex);
+				if (attribute == bus::Attribute::PLUG_LIST) {
+					BusNode::plugCount = r.getRemaining() / 2;
+					r.data16L(BusNode::plugCount, BusNode::plugs);
+				}
+			} else {
+				// plug
+				uint8_t plugIndex = attributeOrPlugIndex;
+
+				// handle pug/state
+				uint8_t nextPlugIndex = plugIndex + 1;
+				auto plugType = BusNode::plugs[nextPlugIndex];
+				uint8_t state = r.u8();
+				switch (plugType) {
+				case bus::PlugType::BINARY_POWER_LIGHT_IN:
+					if (state <= 1)
+						BusNode::states[nextPlugIndex] = state;
+					else
+						BusNode::states[nextPlugIndex] ^= 1;
+					break;
+				case bus::PlugType::TERNARY_OPENING_BLIND_IN:
+					BusNode::states[nextPlugIndex] = state;
+					break;
+				default:;
+				}
+
+				// loopback
+				bus::MessageWriter w(data);
+
+				// set start of header
+				w.setHeader();
+
+				// encoded address
+				w.address(address);
+
+				// security counter
+				w.u32L(BusNode::securityCounter);
+
+				// set start of message
+				w.setMessage();
+
+				// endpoint index
+				w.u8(endpointIndex);
+
+				// plug index
+				w.u8(nextPlugIndex);
+
+				// message data
+				w.u8(BusNode::states[nextPlugIndex]);
+
+				// encrypt
+				Nonce nonce2(address, BusNode::securityCounter);
+				w.encrypt(micLength, nonce2, bus::defaultAesKey);
+
+				// increment security counter
+				++BusNode::securityCounter;
+
+				sendToNode(w);
 			}
-
-			// loopback
-			bus::MessageWriter w(data);
-
-			// set start of header
-			w.setHeader();
-
-			// encoded address
-			w.arbiter((address & 7) + 1);
-			w.arbiter(address >> 3);
-
-			// security counter
-			w.u32L(BusNode::securityCounter);
-
-			// set start of message
-			w.setMessage();
-
-			// endpoint index
-			w.u8(endpointIndex);
-
-			// message data
-			w.u8(BusNode::states[endpointIndex]);
-
-			// encrypt
-			Nonce nonce2(address, BusNode::securityCounter);
-			w.encrypt(micLength, nonce2, bus::defaultAesKey);
-
-			// increment security counter
-			++BusNode::securityCounter;
-
-			int writeLength = w.getLength();
-
-			BusNode::receiveWaitlist.resumeFirst([data, writeLength](ReceiveParameters &p) {
-				int length = min(writeLength, *p.receiveLength);
-				array::copy(length, p.receiveData, data);
-				*p.receiveLength = length;
-				return true;
-			});
 		}
 		return true;
 	});

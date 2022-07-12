@@ -6,10 +6,10 @@
 #include <Storage.hpp>
 #include <Radio.hpp>
 #include <crypt.hpp>
+#include <zcl.hpp>
 #include <MessageReader.hpp>
 #include <MessageWriter.hpp>
 #include <Coroutine.hpp>
-#include <appConfig.hpp>
 
 
 /**
@@ -17,8 +17,8 @@
  */
 class RadioInterface : public Interface {
 public:
-	// maximum number of devices that can be commissioned
-	static constexpr int MAX_DEVICE_COUNT = 64;
+	// maximum number of devices that can be commissioned (each endpoint counts as one device)
+	static constexpr int MAX_DEVICE_COUNT = 128;
 
 	// number of coroutines for receiving and publishing
 	static constexpr int RECEIVE_COUNT = 4;
@@ -44,14 +44,14 @@ public:
 
 	void setCommissioning(bool enabled) override;
 
-	int getDeviceCount() override;
-	Device &getDeviceByIndex(int index) override;
+	Array<uint8_t const> getDeviceIds() override;
 	Device *getDevice(uint8_t id) override;
 	void eraseDevice(uint8_t id) override;
 
 private:
-
-	static constexpr int MAX_NAME_LENGTH = 16;
+	static constexpr int MAX_CLUSTER_COUNT = 32;
+	static constexpr int MAX_PLUG_COUNT = 64;
+	static constexpr int MESSAGE_LENGTH = 80;
 
 	enum class DeviceType : uint8_t {
 		PTM215Z = 0x02,
@@ -65,7 +65,7 @@ private:
 		// device type
 		DeviceType deviceType;
 
-		// device name, zero-terminated if shorter than 16
+		// device name, zero-terminated if shorter than maximum length
 		char name[MAX_NAME_LENGTH];
 
 		// number of plugs
@@ -85,7 +85,7 @@ private:
 		int size() {return offsetOf(GpDeviceData, plugs[this->plugCount]);}
 	};
 
-	class GpDevice : public Device {
+	class GpDevice : public Interface::Device {
 	public:
 		// takes ownership of the data
 		GpDevice(RadioInterface *interface, GpDeviceData *data)
@@ -124,118 +124,6 @@ private:
 		SubscriberList subscribers;
 	};
 
-	struct PlugRange {
-		uint8_t offset;
-		uint8_t count;
-	};
-
-	struct ClusterInfo {
-		zb::ZclCluster cluster;
-		PlugRange plugs;
-	};
-
-	// zbee endpoint data that is stored in flash
-	struct ZbEndpointData : public DeviceData {
-		static constexpr int BUFFER_SIZE = 1024;
-
-		// id of zbee device this endpoint belongs to (for loading)
-		uint8_t deviceId;
-
-		// zbee device endpoint
-		uint8_t deviceEndpoint;
-
-		// number of server (input) and client (output) clusters
-		uint8_t serverClusterCount;
-		uint8_t clientClusterCount;
-
-		// data buffer
-		uint32_t buffer[BUFFER_SIZE / 4];
-
-		int size() {
-			int s1 = (this->plugCount * sizeof(MessageType) + 3) / 4;
-			int s2 = ((this->serverClusterCount + this->clientClusterCount) * sizeof(ClusterInfo) + 3) / 4;
-			return offsetOf(ZbEndpointData, buffer[s1 + s2]);
-		}
-	};
-
-	struct ZbEndpointDataBuilder {
-		static constexpr int MAX_CLUSTER_COUNT = 32;
-		static constexpr int MAX_PLUG_COUNT = 32;
-
-		//void setName(String name) {assign(this->name, name);}
-
-		void addPlug(MessageType plug) {this->plugs[plugCount++] = plug;}
-
-		void beginServerCluster(zb::ZclCluster cluster) {
-			auto &clusterInfo = this->clusterInfos[this->serverClusterIndex];
-			clusterInfo.cluster = cluster;
-			clusterInfo.plugs = {this->plugCount, 0};
-		}
-		void endServerCluster() {
-			auto &clusterInfo = this->clusterInfos[this->serverClusterIndex];
-			if ((clusterInfo.plugs.count = this->plugCount - clusterInfo.plugs.offset) > 0)
-				this->serverClusterIndex++;
-		}
-		void beginClientCluster(zb::ZclCluster cluster) {
-			auto &clusterInfo = this->clusterInfos[this->clientClusterIndex];
-			clusterInfo.cluster = cluster;
-			clusterInfo.plugs = {this->plugCount, 0};
-		}
-		void endClientCluster() {
-			auto &clusterInfo = this->clusterInfos[this->clientClusterIndex];
-			if ((clusterInfo.plugs.count = this->plugCount - clusterInfo.plugs.offset) > 0)
-				this->clientClusterIndex--;
-		}
-
-		int size();
-		void build(ZbEndpointData *data);
-
-		//char name[MAX_NAME_LENGTH];
-		uint8_t id;
-		uint8_t plugCount = 0;
-		uint8_t serverClusterIndex = 0;
-		uint8_t clientClusterIndex = MAX_CLUSTER_COUNT - 1;
-		MessageType plugs[MAX_PLUG_COUNT];
-		ClusterInfo clusterInfos[MAX_CLUSTER_COUNT];
-	};
-
-	class ZbDevice;
-	class ZbEndpoint : public Device {
-	public:
-		// takes ownership of the data
-		ZbEndpoint(ZbDevice *device, ZbEndpointData *data)
-			: device(device), next(device->endpoints), data(data)
-		{
-			device->endpoints = this;
-		}
-
-		~ZbEndpoint() override;
-
-		// Interface::Device
-		uint8_t getId() const override;
-		String getName() const override;
-		void setName(String name) override;
-		Array<MessageType const> getPlugs() const override;
-		void subscribe(uint8_t plugIndex, Subscriber &subscriber) override;
-		PublishInfo getPublishInfo(uint8_t plugIndex) override;
-
-		//Array<ClusterInfo const *> getServerClusters() const;
-		PlugRange findServerCluster(zb::ZclCluster cluster) const;
-		ClusterInfo getClientCluster(int plugIndex) const;
-
-		// back pointer to device
-		ZbDevice *device;
-
-		// next endpoint in list
-		ZbEndpoint *next;
-
-		// endpoint data that is stored in flash
-		ZbEndpointData *data;
-
-		// list of subscribers
-		SubscriberList subscribers;
-	};
-
 	// zbee device data that is stored in flash
 	struct ZbDeviceData {
 		uint8_t id;
@@ -250,6 +138,7 @@ private:
 		uint64_t longAddress;
 	};
 
+	class ZbEndpoint;
 	class ZbDevice {
 	public:
 		ZbDevice(ZbDeviceData const &data)
@@ -267,7 +156,7 @@ private:
 		// next device
 		ZbDevice *next;
 
-		// zbee device data that is stored in flash
+		// device data that is stored in flash
 		ZbDeviceData data;
 
 		// linked list of endpoints
@@ -288,13 +177,117 @@ private:
 		// cost of the route to the device
 		uint8_t cost;
 
-		static constexpr int MESSAGE_LENGTH = 80;
-
-
 		// barrier for waiting until a route is available
 		Barrier<> routeBarrier;
 	};
 
+	struct PlugRange {
+		uint8_t offset;
+		uint8_t count;
+	};
+
+	struct ClusterInfo {
+		zcl::Cluster cluster;
+		PlugRange plugs;
+	};
+
+	// zbee endpoint data that is stored in flash
+	struct ZbEndpointData : public DeviceData {
+		static constexpr int BUFFER_SIZE = 1024;
+
+		// id of device this endpoint belongs to (used while loading from flash)
+		uint8_t deviceId;
+
+		// zbee device endpoint with which we communicate
+		uint8_t deviceEndpoint;
+
+		// number of server (input) and client (output) clusters
+		uint8_t serverClusterCount;
+		uint8_t clientClusterCount;
+
+		// data buffer
+		uint32_t buffer[BUFFER_SIZE / 4];
+
+		int size() {
+			int s1 = (this->plugCount * sizeof(MessageType) + 3) / 4;
+			int s2 = ((this->serverClusterCount + this->clientClusterCount) * sizeof(ClusterInfo) + 3) / 4;
+			return offsetOf(ZbEndpointData, buffer[s1 + s2]);
+		}
+	};
+
+	struct ZbEndpointDataBuilder {
+		void addPlug(MessageType plug) {this->plugs[plugCount++] = plug;}
+
+		void beginServerCluster(zcl::Cluster cluster) {
+			auto &clusterInfo = this->clusterInfos[this->serverClusterIndex];
+			clusterInfo.cluster = cluster;
+			clusterInfo.plugs = {this->plugCount, 0};
+		}
+		void endServerCluster() {
+			auto &clusterInfo = this->clusterInfos[this->serverClusterIndex];
+			if ((clusterInfo.plugs.count = this->plugCount - clusterInfo.plugs.offset) > 0)
+				this->serverClusterIndex++;
+		}
+		void beginClientCluster(zcl::Cluster cluster) {
+			auto &clusterInfo = this->clusterInfos[this->clientClusterIndex];
+			clusterInfo.cluster = cluster;
+			clusterInfo.plugs = {this->plugCount, 0};
+		}
+		void endClientCluster() {
+			auto &clusterInfo = this->clusterInfos[this->clientClusterIndex];
+			if ((clusterInfo.plugs.count = this->plugCount - clusterInfo.plugs.offset) > 0)
+				this->clientClusterIndex--;
+		}
+
+		int size();
+		void build(ZbEndpointData *data);
+
+		uint8_t id;
+		uint8_t plugCount = 0;
+		uint8_t serverClusterIndex = 0;
+		uint8_t clientClusterIndex = MAX_CLUSTER_COUNT - 1;
+		MessageType plugs[MAX_PLUG_COUNT];
+		ClusterInfo clusterInfos[MAX_CLUSTER_COUNT];
+	};
+
+	class ZbEndpoint : public Interface::Device {
+	public:
+		// takes ownership of the data
+		ZbEndpoint(ZbDevice *device, ZbEndpointData *data)
+			: device(device), next(device->endpoints), data(data)
+		{
+			device->endpoints = this;
+		}
+
+		~ZbEndpoint() override;
+
+		// Interface::Device
+		uint8_t getId() const override;
+		String getName() const override;
+		void setName(String name) override;
+		Array<MessageType const> getPlugs() const override;
+		void subscribe(uint8_t plugIndex, Subscriber &subscriber) override;
+		PublishInfo getPublishInfo(uint8_t plugIndex) override;
+
+		//Array<ClusterInfo const *> getServerClusters() const;
+		PlugRange findServerCluster(zcl::Cluster cluster) const;
+		ClusterInfo getClientCluster(int plugIndex) const;
+
+		// back pointer to device
+		ZbDevice *device;
+
+		// next endpoint in list
+		ZbEndpoint *next;
+
+		// endpoint data that is stored in flash
+		ZbEndpointData *data;
+
+		// list of subscribers
+		SubscriberList subscribers;
+	};
+
+	uint8_t allocateId();
+	uint8_t allocateZbDeviceId();
 	ZbDevice *getOrLoadZbDevice(uint8_t id);
 
 	int deviceCount = 0;
@@ -324,8 +317,6 @@ private:
 	// find zbee device by short address
 	ZbDevice *findZbDevice(uint16_t address);
 
-	uint8_t allocateId();
-	uint8_t allocateZbDeviceId();
 	void allocateShortAddress();
 
 	// next device id and short address "on stock" to be fast when a device sends an association request
@@ -459,14 +450,14 @@ private:
 	void writeApsDataZdp(PacketWriter &w, zb::ZdpCommand response, uint8_t zdpCounter);
 	void writeApsAckZdp(PacketWriter &w, uint8_t apsCounter, zb::ZdpCommand command);
 
-	void writeApsDataZcl(PacketWriter &w, uint8_t dstEndpoint, zb::ZclCluster clusterId, zb::ZclProfile profile,
+	void writeApsDataZcl(PacketWriter &w, uint8_t dstEndpoint, zcl::Cluster clusterId, zcl::Profile profile,
 		uint8_t srcEndpoint);
-	void writeApsAckZcl(PacketWriter &w, uint8_t dstEndpoint, zb::ZclCluster clusterId,
-		zb::ZclProfile profile, uint8_t srcEndpoint);
+	void writeApsAckZcl(PacketWriter &w, uint8_t dstEndpoint, zcl::Cluster clusterId,
+		zcl::Profile profile, uint8_t srcEndpoint);
 	void writeFooter(PacketWriter &w, Radio::SendFlags sendFlags);
 
-	[[nodiscard]] AwaitableCoroutine readAttribute(uint8_t (&packet)[ZbDevice::MESSAGE_LENGTH], ZbDevice &device,
-		uint8_t dstEndpoint, zb::ZclCluster clusterId, zb::ZclProfile profile, uint8_t srcEndpoint, uint16_t attribute);
+	[[nodiscard]] AwaitableCoroutine readAttribute(uint8_t (&packet)[MESSAGE_LENGTH], ZbDevice &device,
+		uint8_t dstEndpoint, zcl::Cluster clusterId, zcl::Profile profile, uint8_t srcEndpoint, uint16_t attribute);
 
 
 	// coroutine that sends link status and many-to-one route request in a regular interval
@@ -490,7 +481,7 @@ private:
 	void handleZcl(PacketReader &r, ZbDevice &device, uint8_t destinationEndpoint);
 
 	// coroutine for handling association requests from new devices
-	[[nodiscard]] AwaitableCoroutine handleAssociationRequest(uint64_t deviceAddress, Radio::SendFlags sendFlags);
+	[[nodiscard]] AwaitableCoroutine handleZbCommission(uint64_t deviceAddress, Radio::SendFlags sendFlags);
 
 	Coroutine publish();
 
@@ -498,20 +489,27 @@ private:
 	// true for commissioning mode, joining of new devices is allowed
 	bool commissioning = false;
 
-	AwaitableCoroutine associationCoroutine;
+	AwaitableCoroutine commissionCoroutine;
 	ZbDevice *tempDevice;
 
 
-	struct EndpointResponse {
+	struct Response {
+		// command we are waiting for
 		uint16_t command;
+
+		// our endpoint the response is for
 		uint8_t dstEndpoint;
+
+		// expected zdp or zcl counter of the response
 		uint8_t counter;
+
+		// response data
 		int& length;
 		uint8_t *response;
 	};
 
-	// a coroutine (e.g. handleAssociationRequest()) waits on this barrier until a response arrives at the endpoint which is identified by the counter
-	Waitlist<EndpointResponse> endpointResponseBarrier;
+	// a coroutine (e.g. handleZbCommission()) waits on this barrier until a response arrives
+	Waitlist<Response> responseBarrier;
 
 	PublishInfo::Barrier publishBarrier;
 };

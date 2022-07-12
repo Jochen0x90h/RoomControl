@@ -12,11 +12,11 @@
 #include <Pointer.hpp>
 #include <StringOperators.hpp>
 #include <util.hpp>
-#include <iostream>
+#include <appConfig.hpp>
 
 
 // timeout to wait for a response (e.g. default response or route reply)
-constexpr SystemDuration timeout = 500ms;
+constexpr SystemDuration timeout = 1s;
 
 // number of retries when a send fails
 constexpr int MAX_RETRY = 2;
@@ -29,20 +29,24 @@ constexpr zb::SecurityControl securityLevel = zb::SecurityControl::LEVEL_ENC_MIC
 RadioInterface::RadioInterface(PersistentStateManager &stateManager)
 	: securityCounter(stateManager)
 {
+	// load list of device ids
+	int deviceCount = Storage2::read(STORAGE_CONFIG, STORAGE_ID_RADIO1, sizeof(this->deviceIds), this->deviceIds);
+
 	// load devices
-	this->deviceCount = Storage2::read(STORAGE_CONFIG, STORAGE_ID_RADIO1, sizeof(this->deviceIds), this->deviceIds);
 	int j = 0;
-	for (int i = 0; i < this->deviceCount; ++i) {
+	for (int i = 0; i < deviceCount; ++i) {
 		uint8_t id = this->deviceIds[i];
 
 		// determine size
-		int size = Storage2::getSize(STORAGE_CONFIG, STORAGE_ID_RADIO1 | id);
+		int size = Storage2::size(STORAGE_CONFIG, STORAGE_ID_RADIO1 | id);
 		if (size < sizeof(DeviceData))
 			continue;
 
 		// allocate and read
 		auto data = reinterpret_cast<DeviceData *>(malloc(size));
-		Storage2::read(STORAGE_CONFIG, id | STORAGE_ID_RADIO1, size, data);
+		Storage2::read(STORAGE_CONFIG, STORAGE_ID_RADIO1 | id, size, data);
+
+		// check id
 		if (data->id != id) {
 			// id is inconsistent, delete device
 			free(data);
@@ -55,6 +59,7 @@ RadioInterface::RadioInterface(PersistentStateManager &stateManager)
 
 			// check size
 			if (deviceData->size() != size) {
+				// size is inconsistent, delete device
 				free(data);
 				continue;
 			}
@@ -66,6 +71,7 @@ RadioInterface::RadioInterface(PersistentStateManager &stateManager)
 
 			// check size
 			if (endpointData->size() != size) {
+				// size is inconsistent, delete device
 				free(data);
 				continue;
 			}
@@ -104,32 +110,18 @@ void RadioInterface::setConfiguration(uint16_t panId, DataBuffer<16> const &key,
 }
 
 void RadioInterface::setCommissioning(bool enabled) {
-	this->commissioning = enabled && getDeviceCount() < MAX_DEVICE_COUNT;
+	this->commissioning = enabled && this->deviceCount < MAX_DEVICE_COUNT;
 	if (this->commissioning) {
-		// allocate next interface id and short address
-		//allocateInterfaceId();
+		// allocate next short address
 		allocateShortAddress();
 	} else {
 		// cancel current association coroutine if it is still running
-		this->associationCoroutine.cancel();
+		this->commissionCoroutine.cancel();
 	}
 }
 
-int RadioInterface::getDeviceCount() {
-	return this->deviceCount;
-}
-
-Interface::Device &RadioInterface::getDeviceByIndex(int index) {
-	assert(index >= 0 && index < this->deviceCount);
-	uint8_t id = this->deviceIds[index];
-	return *getDevice(id);
-
-	/*int gpDeviceCount = this->gpDevices.count();
-	assert(index >= 0 && index < gpDeviceCount + this->zbDevices.count());
-
-	if (index < gpDeviceCount)
-		return this->gpDevices[index];
-	return this->zbDevices[index - gpDeviceCount];*/
+Array<uint8_t const> RadioInterface::getDeviceIds() {
+	return {this->deviceCount, this->deviceIds};
 }
 
 Interface::Device *RadioInterface::getDevice(uint8_t id) {
@@ -149,6 +141,7 @@ Interface::Device *RadioInterface::getDevice(uint8_t id) {
 			while (endpoint != nullptr) {
 				if (endpoint->data->id == id)
 					return endpoint;
+				endpoint = endpoint->next;
 			}
 			device = device->next;
 		}
@@ -248,7 +241,7 @@ void RadioInterface::GpDevice::setName(String name) {
 	assign(this->data->name, name);
 
 	// write to flash
-	Storage2::write(STORAGE_CONFIG, this->data->id | STORAGE_ID_RADIO1, this->data->size(), this->data);
+	Storage2::write(STORAGE_CONFIG, STORAGE_ID_RADIO1 | this->data->id, this->data->size(), this->data);
 }
 
 Array<MessageType const> RadioInterface::GpDevice::getPlugs() const {
@@ -305,7 +298,6 @@ void RadioInterface::ZbEndpointDataBuilder::build(ZbEndpointData *data) {
 	}
 }
 
-
 // ZbEndpoint
 RadioInterface::ZbEndpoint::~ZbEndpoint() {
 	free(data);
@@ -323,7 +315,7 @@ void RadioInterface::ZbEndpoint::setName(String name) {
 	assign(this->data->name, name);
 
 	// write to flash
-	Storage2::write(STORAGE_CONFIG, this->data->id | STORAGE_ID_RADIO1, this->data->size(), this->data);
+	Storage2::write(STORAGE_CONFIG, STORAGE_ID_RADIO1 | this->data->id, this->data->size(), this->data);
 }
 
 Array<MessageType const> RadioInterface::ZbEndpoint::getPlugs() const {
@@ -345,7 +337,7 @@ PublishInfo RadioInterface::ZbEndpoint::getPublishInfo(uint8_t plugIndex) {
 		&this->device->interface->publishBarrier};
 }
 
-RadioInterface::PlugRange RadioInterface::ZbEndpoint::findServerCluster(zb::ZclCluster cluster) const {
+RadioInterface::PlugRange RadioInterface::ZbEndpoint::findServerCluster(zcl::Cluster cluster) const {
 	// get clusterInfos array
 	int s1 = (this->data->plugCount * sizeof(MessageType) + 3) / 4;
 	auto clusterInfos = reinterpret_cast<ClusterInfo *>(&this->data->buffer[s1]);
@@ -373,9 +365,38 @@ RadioInterface::ClusterInfo RadioInterface::ZbEndpoint::getClientCluster(int plu
 	}
 
 	// not found
-	return {zb::ZclCluster::BASIC, {0, 0}};
+	return {zcl::Cluster::BASIC, {0, 0}};
 }
 
+uint8_t RadioInterface::allocateId() {
+	// find a free id
+	int id;
+	for (id = 1; id < 256; ++id) {
+		for (int j = 0; j < this->deviceCount; ++j) {
+			if (this->deviceIds[j] == id)
+				goto found;
+		}
+		break;
+		found:;
+	}
+	return id;
+}
+
+uint8_t RadioInterface::allocateZbDeviceId() {
+	// find a free id
+	int id;
+	for (id = 1; id < 256; ++id) {
+		auto device = this->zbDevices;
+		while (device != nullptr) {
+			if (device->data.id == id)
+				goto found;
+			device = device->next;
+		}
+		break;
+		found:;
+	}
+	return id;
+}
 
 RadioInterface::ZbDevice *RadioInterface::getOrLoadZbDevice(uint8_t id) {
 	auto device = this->zbDevices;
@@ -384,9 +405,17 @@ RadioInterface::ZbDevice *RadioInterface::getOrLoadZbDevice(uint8_t id) {
 			return device;
 		device = device->next;
 	}
+
+	// load data
 	ZbDeviceData data;
 	if (Storage2::read(STORAGE_CONFIG, STORAGE_ID_RADIO2 | id, sizeof(data), &data) != sizeof(data))
 		return nullptr;
+
+	// check id
+	if (data.id != id)
+		return nullptr;
+
+	// create device
 	return new ZbDevice(this, data);
 }
 
@@ -418,36 +447,6 @@ RadioInterface::ZbDevice *RadioInterface::findZbDevice(uint16_t address) {
 		device = device->next;
 	}
 	return nullptr;
-}
-
-uint8_t RadioInterface::allocateId() {
-	// find a free id
-	int id;
-	for (id = 1; id < 256; ++id) {
-		for (int j = 0; j < this->deviceCount; ++j) {
-			if (this->deviceIds[j] == id)
-				goto found;
-		}
-		break;
-	found:;
-	}
-	return id;
-}
-
-uint8_t RadioInterface::allocateZbDeviceId() {
-	// find a free id
-	int id;
-	for (id = 1; id < 256; ++id) {
-		auto device = this->zbDevices;
-		while (device != nullptr) {
-			if (device->data.id == id)
-				goto found;
-			device = device->next;
-		}
-		break;
-	found:;
-	}
-	return id;
 }
 
 void RadioInterface::allocateShortAddress() {
@@ -756,8 +755,8 @@ void RadioInterface::writeApsAckZdp(PacketWriter &w, uint8_t apsCounter, zb::Zdp
 	w.u8(apsCounter);
 }
 
-void RadioInterface::writeApsDataZcl(PacketWriter &w, uint8_t dstEndpoint, zb::ZclCluster clusterId,
-	zb::ZclProfile profile, uint8_t srcEndpoint)
+void RadioInterface::writeApsDataZcl(PacketWriter &w, uint8_t dstEndpoint, zcl::Cluster clusterId,
+	zcl::Profile profile, uint8_t srcEndpoint)
 {
 	// application support layer frame control field
 	w.e8(zb::ApsFrameControl::TYPE_DATA
@@ -779,8 +778,8 @@ void RadioInterface::writeApsDataZcl(PacketWriter &w, uint8_t dstEndpoint, zb::Z
 	w.u8(this->apsCounter++);
 }
 
-void RadioInterface::writeApsAckZcl(PacketWriter &w, uint8_t dstEndpoint, zb::ZclCluster clusterId,
-	zb::ZclProfile profile, uint8_t srcEndpoint)
+void RadioInterface::writeApsAckZcl(PacketWriter &w, uint8_t dstEndpoint, zcl::Cluster clusterId,
+	zcl::Profile profile, uint8_t srcEndpoint)
 {
 	// application support layer frame control field
 	w.e8(zb::ApsFrameControl::TYPE_ACK
@@ -804,34 +803,34 @@ void RadioInterface::writeApsAckZcl(PacketWriter &w, uint8_t dstEndpoint, zb::Zc
 
 static void writeZclCommand(RadioInterface::PacketWriter &w, uint8_t zclCounter) {
 	// zbee cluster library frame
-	w.e8(zb::ZclFrameControl::TYPE_CLUSTER_SPECIFIC
-		| zb::ZclFrameControl::DIRECTION_CLIENT_TO_SERVER);
+	w.e8(zcl::FrameControl::TYPE_CLUSTER_SPECIFIC
+		| zcl::FrameControl::DIRECTION_CLIENT_TO_SERVER);
 	w.u8(zclCounter);
 }
 
 static void writeZclAttribute(RadioInterface::PacketWriter &w, uint8_t zclCounter) {
 	// zbee cluster library frame
-	w.e8(zb::ZclFrameControl::TYPE_PROFILE_WIDE
-		| zb::ZclFrameControl::DIRECTION_CLIENT_TO_SERVER);
+	w.e8(zcl::FrameControl::TYPE_PROFILE_WIDE
+		| zcl::FrameControl::DIRECTION_CLIENT_TO_SERVER);
 	w.u8(zclCounter);
-	w.e8(zb::ZclCommand::WRITE_ATTRIBUTES);
+	w.e8(zcl::Command::WRITE_ATTRIBUTES);
 }
 
 static bool writeZclCommand(RadioInterface::PacketWriter &w, uint8_t zclCounter, int plugIndex,
-	zb::ZclCluster cluster, Message &message)
+	zcl::Cluster cluster, Message &message)
 {
 	writeZclCommand(w, zclCounter);
 	switch (cluster) {
-	case zb::ZclCluster::ON_OFF:
+	case zcl::Cluster::ON_OFF:
 		w.u8(message.value.u8);
 		break;
-	case zb::ZclCluster::LEVEL_CONTROL: {
+	case zcl::Cluster::LEVEL_CONTROL: {
 		if (message.command == 0) {
 			// set level
-			w.e8(zb::ZclLevelControlCommand::MOVE_TO_LEVEL_WITH_ON_OFF);
+			w.e8(zcl::LevelControlCommand::MOVE_TO_LEVEL_WITH_ON_OFF);
 		} else {
 			// increase/decrease level
-			w.e8(zb::ZclLevelControlCommand::STEP_WITH_ON_OFF);
+			w.e8(zcl::LevelControlCommand::STEP_WITH_ON_OFF);
 			w.u8(message.command == 1 ? 0x00 : 0x01);
 		}
 		w.u8(clamp(int(message.value.f * 254.0f + 0.5f), 0, 254));
@@ -848,25 +847,25 @@ static bool writeZclCommand(RadioInterface::PacketWriter &w, uint8_t zclCounter,
 }
 
 static bool writeZclAttribute(RadioInterface::PacketWriter &w, uint8_t zclCounter, int plugIndex,
-	zb::ZclCluster cluster, Message &message)
+	zcl::Cluster cluster, Message &message)
 {
 	switch (cluster) {
-	case zb::ZclCluster::ON_OFF:
+	case zcl::Cluster::ON_OFF:
 		// on/off, do via command
 		writeZclCommand(w, zclCounter);
 		w.u8(message.value.u8);
 		break;
-	case zb::ZclCluster::LEVEL_CONTROL: {
+	case zcl::Cluster::LEVEL_CONTROL: {
 		// set level, do via command
 		writeZclCommand(w, zclCounter);
-		w.e8(zb::ZclLevelControlCommand::MOVE_TO_LEVEL_WITH_ON_OFF);
+		w.e8(zcl::LevelControlCommand::MOVE_TO_LEVEL_WITH_ON_OFF);
 		w.u8(clamp(int(message.value.f * 254.0f + 0.5f), 0, 254));
 
 		// transition time in 1/10s
 		w.u16L(0);
 		break;
 	}
-	case zb::ZclCluster::COLOR_CONTROL: {
+	case zcl::Cluster::COLOR_CONTROL: {
 
 		break;
 	}
@@ -882,28 +881,28 @@ bool writeZclClusterSpecific(RadioInterface::PacketWriter &w, uint8_t zclCounter
 	MessageType messageType, Message &message)
 {
 	// zbee cluster library frame
-	w.e8(zb::ZclFrameControl::TYPE_CLUSTER_SPECIFIC
-		| zb::ZclFrameControl::DIRECTION_CLIENT_TO_SERVER);
+	w.e8(zcl::FrameControl::TYPE_CLUSTER_SPECIFIC
+		| zcl::FrameControl::DIRECTION_CLIENT_TO_SERVER);
 	w.u8(zclCounter);
 
 	//MessageType srcType = publisher.messageType;
 	//auto &src = *reinterpret_cast<Message const *>(publisher.message);
 
 	switch (info.cluster) {
-	case zb::ZclCluster::ON_OFF:
+	case zcl::Cluster::ON_OFF:
 		w.u8(message.command);
 		break;
 		//return convertCommandOut(w.u8(), srcType, src, publisher.convertOptions);
-	case zb::ZclCluster::LEVEL_CONTROL: {
+	case zcl::Cluster::LEVEL_CONTROL: {
 		//Message level;
 		//if (!convertSetFloatValueOut(MessageType::MOVE_TO_LEVEL_OUT, level, srcType, src, publisher.convertOptions))
 		//	return false; // conversion failed
 		if (message.command == 0) {
 			// set level
-			w.e8(zb::ZclLevelControlCommand::MOVE_TO_LEVEL_WITH_ON_OFF);
+			w.e8(zcl::LevelControlCommand::MOVE_TO_LEVEL_WITH_ON_OFF);
 		} else {
 			// increase/decrease level
-			w.e8(zb::ZclLevelControlCommand::STEP_WITH_ON_OFF);
+			w.e8(zcl::LevelControlCommand::STEP_WITH_ON_OFF);
 			w.u8(message.command == 1 ? 0x00 : 0x01);
 		}
 		w.u8(clamp(int(message.value.f * 254.0f + 0.5f), 0, 254));
@@ -918,10 +917,10 @@ bool writeZclClusterSpecific(RadioInterface::PacketWriter &w, uint8_t zclCounter
 		case MessageType::MOVE_TO_LEVEL:
 			if (!src.level.getFlag()) {
 				// absolute level
-				w.e8(zb::ZclLevelControlCommand::MOVE_TO_LEVEL_WITH_ON_OFF);
+				w.e8(zcl::LevelControlCommand::MOVE_TO_LEVEL_WITH_ON_OFF);
 			} else {
 				// increase/decrease level
-				w.e8(zb::ZclLevelControlCommand::STEP_WITH_ON_OFF);
+				w.e8(zcl::LevelControlCommand::STEP_WITH_ON_OFF);
 				w.u8(src.level >= 0 ? 0x00 : 0x01);
 			}
 			w.u8(clamp(abs(int(src.level * 255.0f)), 0, 254));
@@ -983,8 +982,8 @@ void RadioInterface::writeFooter(PacketWriter &w, Radio::SendFlags sendFlags) {
 	w.finish(sendFlags);
 }
 
-AwaitableCoroutine RadioInterface::readAttribute(uint8_t (&packet)[ZbDevice::MESSAGE_LENGTH], ZbDevice &device,
-	uint8_t dstEndpoint, zb::ZclCluster clusterId, zb::ZclProfile profile, uint8_t srcEndpoint, uint16_t attribute)
+AwaitableCoroutine RadioInterface::readAttribute(uint8_t (&packet)[MESSAGE_LENGTH], ZbDevice &device,
+	uint8_t dstEndpoint, zcl::Cluster clusterId, zcl::Profile profile, uint8_t srcEndpoint, uint16_t attribute)
 {
 	uint8_t zclCounter = this->zclCounter++;
 	for (int retry = 0;; ++retry) {
@@ -999,11 +998,11 @@ AwaitableCoroutine RadioInterface::readAttribute(uint8_t (&packet)[ZbDevice::MES
 			writeApsDataZcl(w, dstEndpoint, clusterId, profile, srcEndpoint);
 
 			// zcl profile wide
-			w.e8(zb::ZclFrameControl::TYPE_PROFILE_WIDE
-				| zb::ZclFrameControl::DIRECTION_CLIENT_TO_SERVER
-				| zb::ZclFrameControl::DISABLE_DEFAULT_RESPONSE);
+			w.e8(zcl::FrameControl::TYPE_PROFILE_WIDE
+				| zcl::FrameControl::DIRECTION_CLIENT_TO_SERVER
+				| zcl::FrameControl::DISABLE_DEFAULT_RESPONSE);
 			w.u8(zclCounter);
-			w.e8(zb::ZclCommand::READ_ATTRIBUTES);
+			w.e8(zcl::Command::READ_ATTRIBUTES);
 			w.u16L(attribute);
 
 			writeFooter(w, device.sendFlags);
@@ -1014,7 +1013,7 @@ AwaitableCoroutine RadioInterface::readAttribute(uint8_t (&packet)[ZbDevice::MES
 			// wait for a response from the device
 			int length;
 			int r = co_await select(
-				this->endpointResponseBarrier.wait(uint16_t(zb::ZclCommand::READ_ATTRIBUTES_RESPONSE),
+				this->responseBarrier.wait(uint16_t(zcl::Command::READ_ATTRIBUTES_RESPONSE),
 					srcEndpoint, zclCounter, length, packet), Timer::sleep(timeout));
 
 			// check if response was received
@@ -1037,7 +1036,7 @@ optional<T> getEnum8(uint8_t (&packet)[N]) {
 	auto attribute = r.u16L();
 	uint8_t status = r.u8();
 	if (status == 0) {
-		auto type = r.e8<zb::ZclDataType>();
+		auto type = r.e8<zcl::DataType>();
 		return r.e8<T>();
 	}
 	return {};
@@ -1049,7 +1048,7 @@ optional<String> getString(uint8_t (&packet)[N]) {
 	auto attribute = r.u16L();
 	uint8_t status = r.u8();
 	if (status == 0) {
-		auto type = r.e8<zb::ZclDataType>();
+		auto type = r.e8<zcl::DataType>();
 		return r.string8();
 	}
 	return {};
@@ -1179,7 +1178,7 @@ Coroutine RadioInterface::sendBeacon() {
 	}
 }
 
-static bool handleZclCommand(MessageType dstType, void *dstMessage, int plugIndex, zb::ZclCluster cluster,
+static bool handleZclCommand(MessageType dstType, void *dstMessage, int plugIndex, zcl::Cluster cluster,
 	MessageReader r, ConvertOptions const &convertOptions)
 {
 	// get command
@@ -1187,17 +1186,17 @@ static bool handleZclCommand(MessageType dstType, void *dstMessage, int plugInde
 
 	auto &dst = *reinterpret_cast<Message *>(dstMessage);
 	switch (cluster) {
-	case zb::ZclCluster::ON_OFF:
+	case zcl::Cluster::ON_OFF:
 		return convertSwitch(dstType, dst, command, convertOptions);
-	case zb::ZclCluster::LEVEL_CONTROL: {
+	case zcl::Cluster::LEVEL_CONTROL: {
 		uint8_t command = 0;
-		switch (zb::ZclLevelControlCommand(command)) {
-		case zb::ZclLevelControlCommand::STEP:
-		case zb::ZclLevelControlCommand::STEP_WITH_ON_OFF:
+		switch (zcl::LevelControlCommand(command)) {
+		case zcl::LevelControlCommand::STEP:
+		case zcl::LevelControlCommand::STEP_WITH_ON_OFF:
 			command = r.u8() == 0 ? 1 : 2; // increase/decrease
 			// fall through
-		case zb::ZclLevelControlCommand::MOVE_TO_LEVEL:
-		case zb::ZclLevelControlCommand::MOVE_TO_LEVEL_WITH_ON_OFF: {
+		case zcl::LevelControlCommand::MOVE_TO_LEVEL:
+		case zcl::LevelControlCommand::MOVE_TO_LEVEL_WITH_ON_OFF: {
 			float value = float(r.u8()) / 254.0f;
 			uint16_t transition = r.u16L(); // transition time in 1/10 s
 			return convertFloatTransition(dstType, dst, value, command, transition, convertOptions);
@@ -1207,13 +1206,13 @@ static bool handleZclCommand(MessageType dstType, void *dstMessage, int plugInde
 			return false;
 		}
 	}
-	case zb::ZclCluster::COLOR_CONTROL: {
+	case zcl::Cluster::COLOR_CONTROL: {
 		uint8_t command = 0;
-		switch (zb::ZclColorControlCommand(command)) {
-		case zb::ZclColorControlCommand::STEP_COLOR:
+		switch (zcl::ColorControlCommand(command)) {
+		case zcl::ColorControlCommand::STEP_COLOR:
 			command = r.u8() == 0 ? 1 : 2; // increase/decrease
 			// fall through
-		case zb::ZclColorControlCommand::MOVE_TO_COLOR: {
+		case zcl::ColorControlCommand::MOVE_TO_COLOR: {
 			auto x = r.u8();
 			auto y = r.u8();
 			float value = float(plugIndex == 0 ? x : y) / 254.0f;
@@ -1240,17 +1239,17 @@ static bool handleZclClusterSpecific(MessageType dstType, void *dstMessage, Endp
 
 	auto &dst = *reinterpret_cast<Message *>(dstMessage);
 	switch (info.cluster) {
-	case zb::ZclCluster::ON_OFF:
+	case zcl::Cluster::ON_OFF:
 		return convertSwitch(dstType, dst, command, convertOptions);
-	case zb::ZclCluster::LEVEL_CONTROL: {
+	case zcl::Cluster::LEVEL_CONTROL: {
 		uint8_t command = 0;
-		switch (zb::ZclLevelControlCommand(command)) {
-		case zb::ZclLevelControlCommand::STEP:
-		case zb::ZclLevelControlCommand::STEP_WITH_ON_OFF:
+		switch (zcl::LevelControlCommand(command)) {
+		case zcl::LevelControlCommand::STEP:
+		case zcl::LevelControlCommand::STEP_WITH_ON_OFF:
 			command = r.u8() == 0 ? 1 : 2; // increase/decrease
 			// fall through
-		case zb::ZclLevelControlCommand::MOVE_TO_LEVEL:
-		case zb::ZclLevelControlCommand::MOVE_TO_LEVEL_WITH_ON_OFF: {
+		case zcl::LevelControlCommand::MOVE_TO_LEVEL:
+		case zcl::LevelControlCommand::MOVE_TO_LEVEL_WITH_ON_OFF: {
 			float value = float(r.u8()) / 254.0f;
 			uint16_t transition = r.u16L(); // transition time in 1/10 s
 			return convertFloatTransition(dstType, dst, value, command, transition, convertOptions);
@@ -1262,9 +1261,9 @@ static bool handleZclClusterSpecific(MessageType dstType, void *dstMessage, Endp
 / *
 		if (dstType != MessageType::MOVE_TO_LEVEL)
 			return false; // conversion failed
-		switch (zb::ZclLevelControlCommand(command)) {
-		case zb::ZclLevelControlCommand::MOVE_TO_LEVEL:
-		case zb::ZclLevelControlCommand::MOVE_TO_LEVEL_WITH_ON_OFF: {
+		switch (zcl::LevelControlCommand(command)) {
+		case zcl::LevelControlCommand::MOVE_TO_LEVEL:
+		case zcl::LevelControlCommand::MOVE_TO_LEVEL_WITH_ON_OFF: {
 			uint8_t level = r.u8();
 			uint16_t transitionTime = r.u16L();
 
@@ -1272,8 +1271,8 @@ static bool handleZclClusterSpecific(MessageType dstType, void *dstMessage, Endp
 			dst.moveToLevel.move = float(transitionTime) / 10.0f;
 			break;
 		}
-		case zb::ZclLevelControlCommand::STEP:
-		case zb::ZclLevelControlCommand::STEP_WITH_ON_OFF: {
+		case zcl::LevelControlCommand::STEP:
+		case zcl::LevelControlCommand::STEP_WITH_ON_OFF: {
 			bool up = r.u8() == 0;
 			int diff = r.u8();
 			uint16_t transitionTime = r.u16L();
@@ -1367,14 +1366,14 @@ Terminal::out << ("Beacon Request\n");
 				// check for association request with no broadcast
 				if (this->commissioning && !destinationBroadcast && command == ieee::Command::ASSOCIATION_REQUEST) {
 					// cancel current association coroutine
-					this->associationCoroutine.cancel();
+					this->commissionCoroutine.cancel();
 
 					// start new association request
 					auto deviceInfo = r.e8<ieee::DeviceInfo>();
 					bool receiveOnWhenIdle = (deviceInfo & ieee::DeviceInfo::RX_ON_WHEN_IDLE) != 0;
 					auto sendFlags = receiveOnWhenIdle ? Radio::SendFlags::NONE : Radio::SendFlags::AWAIT_DATA_REQUEST;
 Terminal::out << ("Association Request Receive On When Idle: " + dec(receiveOnWhenIdle) + '\n');
-					this->associationCoroutine = handleAssociationRequest(sourceAddress, sendFlags);
+					this->commissionCoroutine = handleZbCommission(sourceAddress, sendFlags);
 				}
 			}
 			continue;
@@ -1396,7 +1395,7 @@ Terminal::out << ("Association Request Receive On When Idle: " + dec(receiveOnWh
 			pDevice = findZbDevice(sourceAddress);
 
 			// check if there is an active association coroutine and address matches the temp device
-			if (this->associationCoroutine.isAlive()) {
+			if (this->commissionCoroutine.isAlive()) {
 				if (this->tempDevice->data.shortAddress == sourceAddress) {
 					pDevice = this->tempDevice;
 				}
@@ -1991,10 +1990,10 @@ Terminal::out << ("Association Request Receive On When Idle: " + dec(receiveOnWh
 					}
 				} else {
 					// zdp response: forward response to the coroutine that initiated the request (handleAssociationRequest())
+					int length = min(r.getRemaining(), MESSAGE_LENGTH);
 					uint8_t *response = r.current;
-					int length = min(r.getRemaining(), ZbDevice::MESSAGE_LENGTH);
-					this->endpointResponseBarrier.resumeFirst(
-						[command, zdpCounter, length, response](EndpointResponse &r)
+					this->responseBarrier.resumeFirst(
+						[command, zdpCounter, length, response](Response &r)
 					{
 						if (r.command == command && r.dstEndpoint == 0 && r.counter == zdpCounter) {
 							r.length = length;
@@ -2010,25 +2009,25 @@ Terminal::out << ("Association Request Receive On When Idle: " + dec(receiveOnWh
 
 			// zcl
 			// ---
-			auto cluster = r.e16L<zb::ZclCluster>();
-			auto profile = r.e16L<zb::ZclProfile>();
+			auto cluster = r.e16L<zcl::Cluster>();
+			auto profile = r.e16L<zcl::Profile>();
 			uint8_t srcEndpoint = r.u8();
 			uint8_t apsCounter = r.u8();
 
 
 			// zcl frame starts here
-			auto frameControl = r.e8<zb::ZclFrameControl>();
+			auto frameControl = r.e8<zcl::FrameControl>();
 			uint8_t zclCounter = r.u8();
 
-			auto frameType = frameControl & zb::ZclFrameControl::TYPE_MASK;
-			if (frameType == zb::ZclFrameControl::TYPE_PROFILE_WIDE) {
+			auto frameType = frameControl & zcl::FrameControl::TYPE_MASK;
+			if (frameType == zcl::FrameControl::TYPE_PROFILE_WIDE) {
 				// profile wide commands such as "read attribute response"
 				uint8_t command = r.u8();
 				uint8_t *response = r.current;
-				int length = min(r.getRemaining(), ZbDevice::MESSAGE_LENGTH);
+				int length = min(r.getRemaining(), MESSAGE_LENGTH);
 
-				this->endpointResponseBarrier.resumeFirst(
-					[command, dstEndpoint, zclCounter, length, response] (EndpointResponse &r)
+				this->responseBarrier.resumeFirst(
+					[command, dstEndpoint, zclCounter, length, response] (Response &r)
 				{
 					if (r.command == command && r.dstEndpoint == dstEndpoint && r.counter == zclCounter) {
 						r.length = length;
@@ -2037,7 +2036,7 @@ Terminal::out << ("Association Request Receive On When Idle: " + dec(receiveOnWh
 					}
 					return false;
 				});
-			} else if (frameType == zb::ZclFrameControl::TYPE_CLUSTER_SPECIFIC) {
+			} else if (frameType == zcl::FrameControl::TYPE_CLUSTER_SPECIFIC) {
 				// lookup destination endpoint
 				auto endpoint = device.endpoints;
 				while (endpoint != nullptr && endpoint->data->id != dstEndpoint) {
@@ -2047,7 +2046,7 @@ Terminal::out << ("Association Request Receive On When Idle: " + dec(receiveOnWh
 					continue;
 
 				// cluster specific commands such as "on", "off"
-				bool sendDefaultResponse = (frameControl & zb::ZclFrameControl::DISABLE_DEFAULT_RESPONSE) == 0;
+				bool sendDefaultResponse = (frameControl & zcl::FrameControl::DISABLE_DEFAULT_RESPONSE) == 0;
 
 				// debug-print command
 				uint8_t command = r.peekU8();
@@ -2092,11 +2091,11 @@ Terminal::out << ("Association Request Receive On When Idle: " + dec(receiveOnWh
 						writeApsDataZcl(w, srcEndpoint, cluster, profile, dstEndpoint);
 
 						// zcl profile wide
-						w.e8(zb::ZclFrameControl::TYPE_PROFILE_WIDE
-							| zb::ZclFrameControl::DIRECTION_SERVER_TO_CLIENT
-							| zb::ZclFrameControl::DISABLE_DEFAULT_RESPONSE);
+						w.e8(zcl::FrameControl::TYPE_PROFILE_WIDE
+							| zcl::FrameControl::DIRECTION_SERVER_TO_CLIENT
+							| zcl::FrameControl::DISABLE_DEFAULT_RESPONSE);
 						w.u8(zclCounter);
-						w.e8(zb::ZclCommand::DEFAULT_RESPONSE);
+						w.e8(zcl::Command::DEFAULT_RESPONSE);
 
 						// response to command
 						w.u8(command);
@@ -2414,19 +2413,19 @@ void RadioInterface::handleGpCommission(uint32_t deviceId, PacketReader& r) {
 	device = new GpDevice(this, d);
 	device->securityCounter = securityCounter;
 
-	// store device in flash
+	// store device to flash
 	Storage2::write(STORAGE_CONFIG, STORAGE_ID_RADIO1 | data.id, size, d);
 }
 
-AwaitableCoroutine RadioInterface::handleAssociationRequest(uint64_t deviceLongAddress, Radio::SendFlags sendFlags) {
+AwaitableCoroutine RadioInterface::handleZbCommission(uint64_t deviceLongAddress, Radio::SendFlags sendFlags) {
 Terminal::out << "handleAssociationRequest\n";
 
 	uint16_t deviceShortAddress = this->nextShortAddress;
 	uint64_t thisLongAddress = Radio::getLongAddress();
 
 
-	uint8_t packet1[ZbDevice::MESSAGE_LENGTH];
-	uint8_t packet2[ZbDevice::MESSAGE_LENGTH];
+	uint8_t packet1[MESSAGE_LENGTH];
+	uint8_t packet2[MESSAGE_LENGTH];
 	uint8_t sendResult;
 	zb::ZdpCommand zdpCommand;
 	int length;
@@ -2481,12 +2480,6 @@ Terminal::out << ("Send Association Response Result " + dec(sendResult) + '\n');
 		od = &device->next;
 	}
 	auto oldDevice = *od;
-/*
-	auto oldDevice = this->zbDevices;
-	while (oldDevice != nullptr) {
-		if (oldDevice->data.longAddress == deviceLongAddress)
-			break;
-	}*/
 
 	// create new device
 	ZbDeviceData deviceData;
@@ -2498,13 +2491,11 @@ Terminal::out << ("Send Association Response Result " + dec(sendResult) + '\n');
 	// use pointer in case the coroutine gets cancelled
 	Pointer<ZbDevice> device = new ZbDevice(deviceData);
 
-	// set first hop
-	device->routerAddress = deviceData.shortAddress;
-
-	// set pointers so that we can forward responses
+	// set pointer so that we can forward responses
 	this->tempDevice = device.ptr;
 
-	int deviceCount = this->deviceCount;
+	// set first hop
+	device->routerAddress = deviceData.shortAddress;
 
 	// send network key
 	for (int retry = 0; ; ++retry) {
@@ -2565,8 +2556,8 @@ Terminal::out << ("Send Key Result " + dec(sendResult) + '\n');
 Terminal::out << ("Send Node Descriptor Request Result " + dec(sendResult) + '\n');
 		if (sendResult != 0) {
 			// wait for a response from the device
-			int r = co_await select(this->endpointResponseBarrier.wait(uint16_t(zb::ZdpCommand::NODE_DESCRIPTOR_RESPONSE),
-				uint8_t(0), zdpCounter, length, packet1), Timer::sleep(1s));
+			int r = co_await select(this->responseBarrier.wait(uint16_t(zb::ZdpCommand::NODE_DESCRIPTOR_RESPONSE),
+				uint8_t(0), zdpCounter, length, packet1), Timer::sleep(timeout));
 
 			// check if response was received
 			if (r == 1)
@@ -2606,8 +2597,8 @@ Terminal::out << ("Node Descriptor Status " + dec(status) + '\n');
 		co_await Radio::send(RADIO_ZBEE, packet1, sendResult);
 		if (sendResult != 0) {
 			// wait for a response from the device
-			int r = co_await select(this->endpointResponseBarrier.wait(uint16_t(zb::ZdpCommand::ACTIVE_ENDPOINT_RESPONSE),
-				uint8_t(0), zdpCounter, length, packet1), Timer::sleep(1s));
+			int r = co_await select(this->responseBarrier.wait(uint16_t(zb::ZdpCommand::ACTIVE_ENDPOINT_RESPONSE),
+				uint8_t(0), zdpCounter, length, packet1), Timer::sleep(timeout));
 
 			// check if response was received
 			if (r == 1)
@@ -2628,6 +2619,7 @@ Terminal::out << ("active endpoints status " + dec(status) + '\n');
 	// get descriptor of each endpoint (packet1)
 	ZbEndpoint *oldEndpoint = oldDevice != nullptr ? oldDevice->endpoints : nullptr;
 	uint8_t endpointCount = endpoints.u8();
+	int deviceCount = this->deviceCount;
 	for (int endpointIndex = 0; endpointIndex < endpointCount; ++endpointIndex) {
 		// get device endpoint (packet1)
 		uint8_t deviceEndpoint = endpoints.u8();
@@ -2641,12 +2633,9 @@ Terminal::out << ("active endpoints status " + dec(status) + '\n');
 		}
 
 		// get power source (packet2)
-		co_await readAttribute(packet2, *device, deviceEndpoint, zb::ZclCluster::BASIC, zb::ZclProfile::HOME_AUTOMATION,
-			builder.id, uint16_t(zb::ZclBasicAttribute::POWER_SOURCE));
-		auto ps = getEnum8<zb::ZclBasicPowerSourceType>(packet2);
-		auto powerSource = ps ? *ps : zb::ZclBasicPowerSourceType::MAINS;
-		Terminal::out << "Power Source: Status " << dec(bool(ps)) << " Source " << dec(powerSource)
-			<< '\n';
+		co_await readAttribute(packet2, *device, deviceEndpoint, zcl::Cluster::BASIC, zcl::Profile::HOME_AUTOMATION,
+			builder.id, uint16_t(zcl::BasicAttribute::POWER_SOURCE));
+		auto powerSource = getEnum8<zcl::BasicPowerSourceType>(packet2).get(zcl::BasicPowerSourceType::MAINS);
 
 		// get endpoint descriptor (packet2)
 		uint8_t zdpCounter;
@@ -2672,7 +2661,7 @@ Terminal::out << ("active endpoints status " + dec(status) + '\n');
 			co_await Radio::send(RADIO_ZBEE, packet2, sendResult);
 			if (sendResult != 0) {
 				// wait for a response from the device
-				int r = co_await select(this->endpointResponseBarrier.wait(uint16_t(zb::ZdpCommand::SIMPLE_DESCRIPTOR_RESPONSE),
+				int r = co_await select(this->responseBarrier.wait(uint16_t(zb::ZdpCommand::SIMPLE_DESCRIPTOR_RESPONSE),
 					uint8_t(0), zdpCounter, length, packet2), Timer::sleep(timeout));
 
 				// check if response was received
@@ -2685,42 +2674,41 @@ Terminal::out << ("active endpoints status " + dec(status) + '\n');
 
 
 		// handle endpoint descriptor (packet2)
-		PacketReader endpointDescriptor(length, packet2);
+		MessageReader endpointDescriptor(length, packet2);
 		{
 			uint8_t status = endpointDescriptor.u8();
 			uint16_t addressOfInterest = endpointDescriptor.u16L();
 			uint8_t descriptorLength = endpointDescriptor.u8();
 			uint8_t endpoint2 = endpointDescriptor.u8();
-			zb::ZclProfile profile = endpointDescriptor.e16L<zb::ZclProfile>();
+			zcl::Profile profile = endpointDescriptor.e16L<zcl::Profile>();
 			uint16_t applicationDevice = endpointDescriptor.u16L();
 			uint8_t applicationVersion = endpointDescriptor.u8();
 			Terminal::out << "Endpoint Descriptor " << dec(deviceEndpoint) << " Status " << dec(status) << '\n';
 		}
 
 
-
 		// iterate over input/server clusters of device and create the counterparts (packet2)
 		uint8_t inputClusterCount = endpointDescriptor.u8();
 		for (int i = 0; i < inputClusterCount && endpointDescriptor.getRemaining() >= 3; ++i) {
-			zb::ZclCluster cluster = endpointDescriptor.e16L<zb::ZclCluster>();
+			zcl::Cluster cluster = endpointDescriptor.e16L<zcl::Cluster>();
 
 			builder.beginClientCluster(cluster);
 			switch (cluster) {
-			case zb::ZclCluster::BASIC:
+			case zcl::Cluster::BASIC:
 				break;
-			case zb::ZclCluster::POWER_CONFIGURATION:
-				if (powerSource == zb::ZclBasicPowerSourceType::BATTERY) {
+			case zcl::Cluster::POWER_CONFIGURATION:
+				if (powerSource == zcl::BasicPowerSourceType::BATTERY) {
 					builder.addPlug(MessageType::LEVEL_BATTERY_IN);
 					builder.addPlug(MessageType::PHYSICAL_VOLTAGE_MEASURED_LOW_IN);
 				}
 				break;
-			case zb::ZclCluster::ON_OFF:
+			case zcl::Cluster::ON_OFF:
 				builder.addPlug(MessageType::BINARY_POWER_CMD_IN);
 				break;
-			case zb::ZclCluster::LEVEL_CONTROL:
+			case zcl::Cluster::LEVEL_CONTROL:
 				builder.addPlug(MessageType::LEVEL_CMD_IN);
 				break;
-			case zb::ZclCluster::COLOR_CONTROL:
+			case zcl::Cluster::COLOR_CONTROL:
 				builder.addPlug(MessageType::LIGHTING_COLOR_PARAMETER_CHROMATICITY_X_CMD_IN);
 				builder.addPlug(MessageType::LIGHTING_COLOR_PARAMETER_CHROMATICITY_Y_CMD_IN);
 				break;
@@ -2732,19 +2720,19 @@ Terminal::out << ("active endpoints status " + dec(status) + '\n');
 		// iterate over output/client clusters and create counterparts (client sends commands to manipulate attributes in server) (packet2)
 		uint8_t outputClusterCount = endpointDescriptor.u8();
 		for (int i = 0; i < outputClusterCount && endpointDescriptor.getRemaining() >= 2; ++i) {
-			zb::ZclCluster cluster = endpointDescriptor.e16L<zb::ZclCluster>();
+			zcl::Cluster cluster = endpointDescriptor.e16L<zcl::Cluster>();
 
 			builder.beginServerCluster(cluster);
 			switch (cluster) {
-			case zb::ZclCluster::BASIC:
+			case zcl::Cluster::BASIC:
 				break;
-			case zb::ZclCluster::ON_OFF:
+			case zcl::Cluster::ON_OFF:
 				builder.addPlug(MessageType::BINARY_POWER_CMD_OUT);
 				break;
-			case zb::ZclCluster::LEVEL_CONTROL:
+			case zcl::Cluster::LEVEL_CONTROL:
 				builder.addPlug(MessageType::LEVEL_CMD_OUT);
 				break;
-			case zb::ZclCluster::COLOR_CONTROL:
+			case zcl::Cluster::COLOR_CONTROL:
 				builder.addPlug(MessageType::LIGHTING_COLOR_PARAMETER_CHROMATICITY_X_CMD_OUT);
 				builder.addPlug(MessageType::LIGHTING_COLOR_PARAMETER_CHROMATICITY_Y_CMD_OUT);
 				break;
@@ -2753,14 +2741,17 @@ Terminal::out << ("active endpoints status " + dec(status) + '\n');
 			builder.endServerCluster();
 		}
 
+		// allocate endpoint data
 		auto data = reinterpret_cast<ZbEndpointData *>(malloc(builder.size()));
+
+		// set data
 		builder.build(data);
 		data->deviceId = device->data.id;
 		data->deviceEndpoint = deviceEndpoint;
 
 		// get model identifier (packet2)
-		co_await readAttribute(packet2, *device, deviceEndpoint, zb::ZclCluster::BASIC, zb::ZclProfile::HOME_AUTOMATION,
-			builder.id, uint16_t(zb::ZclBasicAttribute::MODEL_IDENTIFIER));
+		co_await readAttribute(packet2, *device, deviceEndpoint, zcl::Cluster::BASIC, zcl::Profile::HOME_AUTOMATION,
+			builder.id, uint16_t(zcl::BasicAttribute::MODEL_IDENTIFIER));
 		auto modelIdentifier = getString(packet2).get("Device");
 		assign(data->name, modelIdentifier);
 
@@ -2805,7 +2796,7 @@ Terminal::out << ("active endpoints status " + dec(status) + '\n');
 				co_await Radio::send(RADIO_ZBEE, packet2, sendResult);
 				if (sendResult != 0) {
 					// wait for a response from the device
-					int r = co_await select(this->endpointResponseBarrier.wait(uint16_t(zb::ZdpCommand::BIND_RESPONSE),
+					int r = co_await select(this->responseBarrier.wait(uint16_t(zb::ZdpCommand::BIND_RESPONSE),
 						uint8_t(0), zdpCounter, length, packet2), Timer::sleep(timeout));
 
 					// check if response was received
@@ -2838,6 +2829,21 @@ Terminal::out << ("active endpoints status " + dec(status) + '\n');
 		oldEndpoint = oldEndpoint->next;
 	}
 
+	// delete old device and its endpoints
+	if (oldDevice != nullptr) {
+		// remove device from linked list
+		*od = oldDevice->next;
+
+		// delete old endpoints
+		auto endpoint = oldDevice->endpoints;
+		while (endpoint != nullptr) {
+			auto e = endpoint;
+			endpoint = endpoint->next;
+			delete e;
+		}
+		delete oldDevice;
+	}
+
 	// store device list
 	if (this->deviceCount != deviceCount) {
 		this->deviceCount = deviceCount;
@@ -2854,27 +2860,11 @@ Terminal::out << ("active endpoints status " + dec(status) + '\n');
 	// store device
 	Storage2::write(STORAGE_CONFIG, STORAGE_ID_RADIO2 | device->data.id, sizeof(device->data), &device->data);
 
-	// delete old device and its endpoints
-	if (oldDevice != nullptr) {
-		// remove device from linked list
-		*od = oldDevice->next;
-
-		// delete old endpoints
-		auto endpoint = oldDevice->endpoints;
-		while (endpoint != nullptr) {
-			auto e = endpoint;
-			endpoint = endpoint->next;
-			delete e;
-		}
-		delete oldDevice;
-	}
-
 	// transfer ownership of device to devices list
 	device->interface = this;
 	device->next = this->zbDevices;
 	this->zbDevices = device.ptr;
 	device.ptr = nullptr;
-	this->tempDevice = nullptr;
 
 	// allocate next short address and interface id
 	allocateShortAddress();
@@ -2972,7 +2962,7 @@ Coroutine RadioInterface::publish() {
 
 							// aps data
 							writeApsDataZcl(w, endpoint->data->deviceEndpoint, clusterInfo.cluster,
-								zb::ZclProfile::HOME_AUTOMATION, endpoint->data->id);
+								zcl::Profile::HOME_AUTOMATION, endpoint->data->id);
 
 							if ((messageType & MessageType::CMD) == 0) {
 								// write attribute (maybe using a command if the attribute is read only)
@@ -2993,7 +2983,7 @@ Coroutine RadioInterface::publish() {
 						if (sendResult != 0) {
 							// wait for a response from the device
 							int length;
-							int r = co_await select(this->endpointResponseBarrier.wait(uint16_t(zb::ZclCommand::DEFAULT_RESPONSE),
+							int r = co_await select(this->responseBarrier.wait(uint16_t(zcl::Command::DEFAULT_RESPONSE),
 								endpoint->data->id, zclCounter, length, packet), Timer::sleep(timeout));
 
 							// check if response was received

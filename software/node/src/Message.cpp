@@ -212,7 +212,7 @@ bool convert(MessageType dstType, void *dstMessage, MessageType srcType, void co
 */
 
 
-using EndpointType = bus::EndpointType;
+using EndpointType = bus::PlugType;
 String getTypeLabel(EndpointType type) {
 	switch (type & EndpointType::CATEGORY) {
 	case EndpointType::BINARY:

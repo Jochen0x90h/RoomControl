@@ -59,7 +59,7 @@ void init() {
 }
 
 
-int getSize(int index, uint16_t id) {
+int size(int index, uint16_t id) {
 	assert(Storage2::inited && uint(index) < STORAGE_CONTEXT_COUNT);
 	auto &context = Storage2::contexts[index];
 

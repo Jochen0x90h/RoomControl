@@ -7,7 +7,7 @@
 /**
 * Reuse endpoint type for now
 */
-using MessageType = bus::EndpointType;
+using MessageType = bus::PlugType;
 
 inline bool isInput(MessageType type) {
 	return (type & MessageType::DIRECTION_MASK) == MessageType::IN;
