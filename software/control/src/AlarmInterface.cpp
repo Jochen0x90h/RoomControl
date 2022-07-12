@@ -2,7 +2,7 @@
 #include <Timer.hpp>
 #include <Calendar.hpp>
 #include <Output.hpp>
-#include <Storage2.hpp>
+#include <Storage.hpp>
 #include <util.hpp>
 #include <appConfig.hpp>
 
@@ -16,7 +16,7 @@ static_assert(array::count(endpoints) >= AlarmInterface::AlarmData::MAX_ENDPOINT
 
 AlarmInterface::AlarmInterface() {
 	// load list of device ids
-	int deviceCount = Storage2::read(STORAGE_CONFIG, STORAGE_ID_ALARM, sizeof(this->alarmIds), this->alarmIds);
+	int deviceCount = Storage::read(STORAGE_CONFIG, STORAGE_ID_ALARM, sizeof(this->alarmIds), this->alarmIds);
 
 	// load devices
 	int j = 0;
@@ -25,7 +25,7 @@ AlarmInterface::AlarmInterface() {
 
 		// load data
 		AlarmData data;
-		if (Storage2::read(STORAGE_CONFIG, STORAGE_ID_ALARM | id, sizeof(data), &data) != sizeof(data))
+		if (Storage::read(STORAGE_CONFIG, STORAGE_ID_ALARM | id, sizeof(data), &data) != sizeof(data))
 			continue;
 
 		// check id
@@ -74,7 +74,7 @@ void AlarmInterface::eraseDevice(uint8_t id) {
 			*d = device->next;
 
 			// erase from flash
-			Storage2::erase(STORAGE_CONFIG, STORAGE_ID_ALARM | id);
+			Storage::erase(STORAGE_CONFIG, STORAGE_ID_ALARM | id);
 
 			// delete device
 			delete device;
@@ -96,7 +96,7 @@ list:
 		}
 	}
 	this->alarmCount = j;
-	Storage2::write(STORAGE_CONFIG, STORAGE_ID_ALARM, j, this->alarmIds);
+	Storage::write(STORAGE_CONFIG, STORAGE_ID_ALARM, j, this->alarmIds);
 }
 
 AlarmInterface::AlarmData const *AlarmInterface::get(uint8_t id) const {
@@ -116,7 +116,7 @@ void AlarmInterface::set(uint8_t id, AlarmData &data) {
 			alarm->data = data;
 
 			// store alarm to flash
-			Storage2::write(STORAGE_CONFIG, STORAGE_ID_ALARM | id, sizeof(alarm->data), &alarm->data);
+			Storage::write(STORAGE_CONFIG, STORAGE_ID_ALARM | id, sizeof(alarm->data), &alarm->data);
 			return;
 		}
 	}
@@ -125,13 +125,13 @@ void AlarmInterface::set(uint8_t id, AlarmData &data) {
 
 	// add alarm to list of alarms
 	this->alarmIds[this->alarmCount++] = data.id;
-	Storage2::write(STORAGE_CONFIG, STORAGE_ID_ALARM, this->alarmCount, this->alarmIds);
+	Storage::write(STORAGE_CONFIG, STORAGE_ID_ALARM, this->alarmCount, this->alarmIds);
 
 	// create alarm
 	alarm = new Alarm(this, data);
 
 	// store alarm to flash
-	Storage2::write(STORAGE_CONFIG, STORAGE_ID_ALARM | data.id, sizeof(alarm->data), &alarm->data);
+	Storage::write(STORAGE_CONFIG, STORAGE_ID_ALARM | data.id, sizeof(alarm->data), &alarm->data);
 }
 
 int AlarmInterface::getSubscriberCount(uint8_t id, int endpointCount, uint8_t command) {
@@ -191,7 +191,7 @@ void AlarmInterface::Alarm::setName(String name) {
 	assign(this->data.name, name);
 
 	// write to flash
-	Storage2::write(STORAGE_CONFIG, STORAGE_ID_ALARM | this->data.id, sizeof(this->data), &this->data);
+	Storage::write(STORAGE_CONFIG, STORAGE_ID_ALARM | this->data.id, sizeof(this->data), &this->data);
 }
 
 Array<MessageType const> AlarmInterface::Alarm::getPlugs() const {

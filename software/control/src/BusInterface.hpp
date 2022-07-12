@@ -1,7 +1,6 @@
 #pragma once
 
 #include "Interface.hpp"
-#include "Storage.hpp"
 #include <MessageReader.hpp>
 #include <MessageWriter.hpp>
 #include <State.hpp>
@@ -14,7 +13,7 @@
 class BusInterface : public Interface {
 public:
 	// maximum number of devices that can be commissioned (each endpoint counts as one device)
-	static constexpr int MAX_DEVICE_COUNT = 64;
+	static constexpr int MAX_DEVICE_COUNT = 128;
 
 	// number of coroutines for publishing
 	static constexpr int PUBLISH_COUNT = 4;

@@ -9,6 +9,7 @@
 #include <Random.hpp>
 #include <Radio.hpp>
 #include <Output.hpp>
+#include <Storage.hpp>
 #include <Terminal.hpp>
 #include <Timer.hpp>
 #include <crypt.hpp>
@@ -19,20 +20,6 @@
 
 constexpr String weekdaysLong[7] = {"Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"};
 constexpr String weekdaysShort[7] = {"M", "T", "W", "T", "F", "S", "S"};
-
-/*
-static String const commandNames[] = {"off", "on", "toggle", "release", "trigger", "up", "down","open", "close",
-	"set", "add", "sub", ">", "<", "else"};
-static uint8_t const onOffCommands[] = {0, 1};
-static uint8_t const onOffToggleCommands[] = {0, 1, 2};
-static uint8_t const triggerCommands[] = {3, 4};
-static uint8_t const upDownCommands[] = {3, 5, 6};
-static uint8_t const openCloseCommands[] = {7, 8};
-static uint8_t const setCommands[] = {9, 10, 11};
-static uint8_t const compareCommands[] = {12, 13, 14};
-
-static Array<uint8_t const> switchCommands[] = {onOffCommands, onOffToggleCommands, triggerCommands, upDownCommands, openCloseCommands};
-*/
 
 static String const releasedPressed[] = {"released", "pressed"};
 static String const offOnToggle[] = {"off", "on", "toggle"};
@@ -139,16 +126,16 @@ static bool isCompatible(RoomControl::Plug const &plug, MessageType messageType)
 // -----------
 
 RoomControl::RoomControl()
-	: storage(0, FLASH_PAGE_COUNT, configurations, functions)
+	: storage(0, FLASH_PAGE_COUNT, functions)
 	, stateManager()
 	//, houseTopicId(), roomTopicId()
 	, busInterface(stateManager)
 	, radioInterface(stateManager)
 {
-	// set default configuration if necessary
-	if (configurations.isEmpty()) {
-		ConfigurationFlash configuration;
-		
+	// load configuration
+	if (Storage::read(STORAGE_CONFIG, 0, sizeof(Configuration), &this->configuration) != sizeof(Configuration)) {
+		auto &configuration = this->configuration;
+
 		// name
 		assign(configuration.name, "room");
 		
@@ -171,7 +158,7 @@ RoomControl::RoomControl()
 
 		
 		// write to flash
-		configurations.write(0, new Configuration(configuration));
+		Storage::write(STORAGE_CONFIG, 0, sizeof(Configuration), &configuration);
 	}
 
 	applyConfiguration();
@@ -188,7 +175,7 @@ RoomControl::~RoomControl() {
 }
 
 void RoomControl::applyConfiguration() {
-	auto const &configuration = *this->configurations[0];
+	auto const &configuration = this->configuration;//*this->configurations[0];
 	this->busInterface.setConfiguration(configuration.key, configuration.aesKey);
 	Radio::setLongAddress(configuration.ieeeLongAddress);
 	this->radioInterface.setConfiguration(configuration.zbeePanId, configuration.key, configuration.aesKey);
@@ -201,7 +188,6 @@ void RoomControl::applyConfiguration() {
 static void printDevices(Interface &interface) {
 	auto deviceIds = interface.getDeviceIds();
 	for (auto id : deviceIds) {
-	//for (int i = 0; i < interface.getDeviceCount(); ++i) {
 		auto &device = *interface.getDevice(id);
 		Terminal::out << (hex(device.getId()) + '\n');
 		auto plugs = device.getPlugs();
@@ -2275,7 +2261,7 @@ Coroutine RoomControl::HeatingControl::start(RoomControl &roomControl) {
 	OffOn on;
 	OffOn night;
 	OffOn summer;
-	uint32_t windows = 0xffffffff;
+	uint32_t windows = 0;
 	FloatValue setTemperature = {20.0f + CELSIUS_OFFSET};
 	float temperature = 20.0f + 273.15f;
 
@@ -2302,7 +2288,7 @@ Coroutine RoomControl::HeatingControl::start(RoomControl &roomControl) {
 			break;
 		case 3:
 			// windows in
-			Terminal::out << "window " << dec(info.plug.connectionIndex) << (message.value.u8 ? " close\n" : " open\n");
+			Terminal::out << "window " << dec(info.plug.connectionIndex) << (message.value.u8 ? " open\n" : " closed\n");
 			if (message.value.u8 == 0)
 				windows &= ~(1 << info.plug.connectionIndex);
 			else
@@ -2321,7 +2307,7 @@ Coroutine RoomControl::HeatingControl::start(RoomControl &roomControl) {
 		}
 
 		// check if on and all windows closed
-		if (on == 1 && windows == 0xffffffff) {
+		if (on == 1 && windows == 0) {
 			// determine state of valve (simple two-position controller)
 			if (valve == 0) {
 				// switch on when current temperature below set temperature
@@ -2332,6 +2318,7 @@ Coroutine RoomControl::HeatingControl::start(RoomControl &roomControl) {
 					valve = 0;
 			}
 		} else {
+			// switch off because a window is open
 			valve = 0;
 		}
 

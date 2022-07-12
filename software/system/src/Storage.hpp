@@ -6,7 +6,7 @@
  * ESP-32: https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/storage/nvs_flash.html
  * Zephyr: https://docs.zephyrproject.org/latest/services/storage/nvs/nvs.html
  */
-namespace Storage2 {
+namespace Storage {
 
 /**
  * Initialize and "mount" the storage

@@ -1,5 +1,5 @@
 #include <State.hpp>
-#include <Storage.hpp>
+#include <ArrayStorage.hpp>
 #include <Loop.hpp>
 #include <Timer.hpp>
 #include <Spi.hpp>
@@ -22,9 +22,9 @@ struct DeviceFlash {
 	Device *allocate() const;
 };
 
-class Device : public Storage::Element<DeviceFlash> {
+class Device : public ArrayStorage::Element<DeviceFlash> {
 public:
-	Device(DeviceFlash const &flash) : Storage::Element<DeviceFlash>(flash) {
+	Device(DeviceFlash const &flash) : ArrayStorage::Element<DeviceFlash>(flash) {
 		++counter;
 	}
 	~Device() {
@@ -41,7 +41,7 @@ Device *DeviceFlash::allocate() const {
 	return new Device(*this);
 }
 
-void printDevices(Storage::Array<Device> const &devices, std::string s) {
+void printDevices(ArrayStorage::Array<Device> const &devices, std::string s) {
 	std::cout << s << std::endl;
 	for (auto &d : devices) {
 		std::cout << "\tflash: " << d->foo << " ram: " << d.bar << std::endl;
@@ -57,8 +57,8 @@ void testStorage() {
 	//	flash::erase(i);
 	
 	// array
-	Storage::Array<Device> devices;
-	Storage storage(0, FLASH_PAGE_COUNT, devices);
+	ArrayStorage::Array<Device> devices;
+	ArrayStorage storage(0, FLASH_PAGE_COUNT, devices);
 	
 
 	// print loaded devices

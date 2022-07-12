@@ -25,13 +25,13 @@ bool compare() {
 
 Coroutine store() {
 	// read from last run
-	Storage2::read(0, 5, 4, readData);
+	Storage::read(0, 5, 4, readData);
 	compare();
 
 	co_await Timer::sleep(1s);
 
-	Storage2::write(0, 5, 4, writeData);
-	Storage2::read(0, 5, 4, readData);
+	Storage::write(0, 5, 4, writeData);
+	Storage::read(0, 5, 4, readData);
 	compare();
 
 	while (true) {
@@ -43,7 +43,7 @@ Coroutine store() {
 int main(void) {
 	Loop::init();
 	Timer::init();
-	Storage2::init();
+	Storage::init();
 	Output::init(); // for debug led's
 
 	store();

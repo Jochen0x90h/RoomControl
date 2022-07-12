@@ -8,7 +8,7 @@
 #include "Menu.hpp"
 #include <MqttSnBroker.hpp> // include at first because of strange compiler error
 #include <State.hpp>
-#include <Storage.hpp>
+#include <ArrayStorage.hpp>
 #include <ClockTime.hpp>
 #include <Coroutine.hpp>
 #include <StringBuffer.hpp>
@@ -33,14 +33,13 @@ public:
 
 	~RoomControl();
 
-	void applyConfiguration();
 
 
 // Storage
 // -------
 
 	// manager for flash storage
-	Storage storage;
+	ArrayStorage storage;
 
 	PersistentStateManager stateManager;
 	
@@ -48,19 +47,9 @@ public:
 // Configuration
 // -------------
 
-	String getRoomName() {return this->configurations[0]->name;}
+	void applyConfiguration();
 
-	// global configuration for this room control, see Configuration.hpp (array contains only one entry)
-	Storage::Array<Configuration> configurations;
-
-	// network key
-	//AesKey networkKey;
-
-	// topic id for list of rooms in house (topic: enum)
-	//uint16_t houseTopicId;
-
-	// topic id for list of devices in room (topic: enum/<room>)
-	//uint16_t roomTopicId;
+	Configuration configuration;
 
 
 // Interfaces
@@ -74,6 +63,8 @@ public:
 
 // Functions
 // ---------
+
+	static constexpr int MAX_FUNCTION_COUNT = 128;
 
 	// plug, describes an input/output of a function
 	struct Plug {
@@ -271,9 +262,9 @@ public:
 		Function *allocate() const;
 	};
 
-	class Function : public Storage::Element<FunctionFlash> {
+	class Function : public ArrayStorage::Element<FunctionFlash> {
 	public:
-		explicit Function(FunctionFlash const &flash) : Storage::Element<FunctionFlash>(flash) {}
+		explicit Function(FunctionFlash const &flash) : ArrayStorage::Element<FunctionFlash>(flash) {}
 		virtual ~Function();
 
 		// start the function coroutine
@@ -349,7 +340,7 @@ public:
 		Array<Publisher, MAX_OUTPUT_COUNT> publishers);
 
 	// list of functions
-	Storage::Array<Function> functions;
+	ArrayStorage::Array<Function> functions;
 
 
 // Menu Helpers

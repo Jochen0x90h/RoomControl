@@ -3,7 +3,6 @@
 #include "Interface.hpp"
 #include <Configuration.hpp>
 #include <State.hpp>
-#include <Storage.hpp>
 #include <Radio.hpp>
 #include <crypt.hpp>
 #include <zcl.hpp>

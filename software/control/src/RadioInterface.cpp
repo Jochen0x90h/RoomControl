@@ -1,7 +1,7 @@
 #include "RadioInterface.hpp"
 #include <Radio.hpp>
 #include <Random.hpp>
-#include <Storage2.hpp>
+#include <Storage.hpp>
 #include <Terminal.hpp>
 #include <Timer.hpp>
 #include <Nonce.hpp>
@@ -30,7 +30,7 @@ RadioInterface::RadioInterface(PersistentStateManager &stateManager)
 	: securityCounter(stateManager)
 {
 	// load list of device ids
-	int deviceCount = Storage2::read(STORAGE_CONFIG, STORAGE_ID_RADIO1, sizeof(this->deviceIds), this->deviceIds);
+	int deviceCount = Storage::read(STORAGE_CONFIG, STORAGE_ID_RADIO1, sizeof(this->deviceIds), this->deviceIds);
 
 	// load devices
 	int j = 0;
@@ -38,13 +38,13 @@ RadioInterface::RadioInterface(PersistentStateManager &stateManager)
 		uint8_t id = this->deviceIds[i];
 
 		// determine size
-		int size = Storage2::size(STORAGE_CONFIG, STORAGE_ID_RADIO1 | id);
+		int size = Storage::size(STORAGE_CONFIG, STORAGE_ID_RADIO1 | id);
 		if (size < sizeof(DeviceData))
 			continue;
 
 		// allocate and read
 		auto data = reinterpret_cast<DeviceData *>(malloc(size));
-		Storage2::read(STORAGE_CONFIG, STORAGE_ID_RADIO1 | id, size, data);
+		Storage::read(STORAGE_CONFIG, STORAGE_ID_RADIO1 | id, size, data);
 
 		// check id
 		if (data->id != id) {
@@ -159,7 +159,7 @@ void RadioInterface::eraseDevice(uint8_t id) {
 				*d = device->next;
 
 				// erase from flash
-				Storage2::erase(STORAGE_CONFIG, STORAGE_ID_RADIO1 | id);
+				Storage::erase(STORAGE_CONFIG, STORAGE_ID_RADIO1 | id);
 
 				// delete device
 				delete device;
@@ -188,14 +188,14 @@ void RadioInterface::eraseDevice(uint8_t id) {
 						*d = device->next;
 
 						// erase device from flash
-						Storage2::erase(STORAGE_CONFIG, STORAGE_ID_RADIO2 | device->data.id);
+						Storage::erase(STORAGE_CONFIG, STORAGE_ID_RADIO2 | device->data.id);
 
 						// delete device
 						delete device;
 					}
 
 					// erase endpoint from flash
-					Storage2::erase(STORAGE_CONFIG, STORAGE_ID_RADIO1 | id);
+					Storage::erase(STORAGE_CONFIG, STORAGE_ID_RADIO1 | id);
 
 					// delete endpoint
 					delete endpoint;
@@ -219,7 +219,7 @@ list:
 		}
 	}
 	this->deviceCount = j;
-	Storage2::write(STORAGE_CONFIG, STORAGE_ID_RADIO1, j, this->deviceIds);
+	Storage::write(STORAGE_CONFIG, STORAGE_ID_RADIO1, j, this->deviceIds);
 }
 
 // private:
@@ -241,7 +241,7 @@ void RadioInterface::GpDevice::setName(String name) {
 	assign(this->data->name, name);
 
 	// write to flash
-	Storage2::write(STORAGE_CONFIG, STORAGE_ID_RADIO1 | this->data->id, this->data->size(), this->data);
+	Storage::write(STORAGE_CONFIG, STORAGE_ID_RADIO1 | this->data->id, this->data->size(), this->data);
 }
 
 Array<MessageType const> RadioInterface::GpDevice::getPlugs() const {
@@ -315,7 +315,7 @@ void RadioInterface::ZbEndpoint::setName(String name) {
 	assign(this->data->name, name);
 
 	// write to flash
-	Storage2::write(STORAGE_CONFIG, STORAGE_ID_RADIO1 | this->data->id, this->data->size(), this->data);
+	Storage::write(STORAGE_CONFIG, STORAGE_ID_RADIO1 | this->data->id, this->data->size(), this->data);
 }
 
 Array<MessageType const> RadioInterface::ZbEndpoint::getPlugs() const {
@@ -408,7 +408,7 @@ RadioInterface::ZbDevice *RadioInterface::getOrLoadZbDevice(uint8_t id) {
 
 	// load data
 	ZbDeviceData data;
-	if (Storage2::read(STORAGE_CONFIG, STORAGE_ID_RADIO2 | id, sizeof(data), &data) != sizeof(data))
+	if (Storage::read(STORAGE_CONFIG, STORAGE_ID_RADIO2 | id, sizeof(data), &data) != sizeof(data))
 		return nullptr;
 
 	// check id
@@ -2402,7 +2402,7 @@ void RadioInterface::handleGpCommission(uint32_t deviceId, PacketReader& r) {
 
 	// add device to list of devices
 	this->deviceIds[this->deviceCount++] = data.id;
-	Storage2::write(STORAGE_CONFIG, STORAGE_ID_RADIO1, this->deviceCount, this->deviceIds);
+	Storage::write(STORAGE_CONFIG, STORAGE_ID_RADIO1, this->deviceCount, this->deviceIds);
 
 	// allocate data
 	int size = data.size();
@@ -2414,7 +2414,7 @@ void RadioInterface::handleGpCommission(uint32_t deviceId, PacketReader& r) {
 	device->securityCounter = securityCounter;
 
 	// store device to flash
-	Storage2::write(STORAGE_CONFIG, STORAGE_ID_RADIO1 | data.id, size, d);
+	Storage::write(STORAGE_CONFIG, STORAGE_ID_RADIO1 | data.id, size, d);
 }
 
 AwaitableCoroutine RadioInterface::handleZbCommission(uint64_t deviceLongAddress, Radio::SendFlags sendFlags) {
@@ -2847,18 +2847,18 @@ Terminal::out << ("active endpoints status " + dec(status) + '\n');
 	// store device list
 	if (this->deviceCount != deviceCount) {
 		this->deviceCount = deviceCount;
-		Storage2::write(STORAGE_CONFIG, STORAGE_ID_RADIO1, deviceCount, this->deviceIds);
+		Storage::write(STORAGE_CONFIG, STORAGE_ID_RADIO1, deviceCount, this->deviceIds);
 	}
 
 	// store endpoints
 	auto endpoint = device->endpoints;
 	while (endpoint != nullptr) {
-		Storage2::write(STORAGE_CONFIG, STORAGE_ID_RADIO1 | endpoint->data->id, endpoint->data->size(), endpoint->data);
+		Storage::write(STORAGE_CONFIG, STORAGE_ID_RADIO1 | endpoint->data->id, endpoint->data->size(), endpoint->data);
 		endpoint = endpoint->next;
 	}
 
 	// store device
-	Storage2::write(STORAGE_CONFIG, STORAGE_ID_RADIO2 | device->data.id, sizeof(device->data), &device->data);
+	Storage::write(STORAGE_CONFIG, STORAGE_ID_RADIO2 | device->data.id, sizeof(device->data), &device->data);
 
 	// transfer ownership of device to devices list
 	device->interface = this;

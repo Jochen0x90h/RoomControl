@@ -1,6 +1,5 @@
 #pragma once
 
-#include <Storage.hpp>
 #include <Network.hpp>
 #include <crypt.hpp>
 #include <String.hpp>
@@ -12,7 +11,7 @@ class Configuration;
 /**
  * Global configuration
  */
-struct ConfigurationFlash {
+struct Configuration {
 	
 	// name of this node
 	char name[16];
@@ -29,7 +28,7 @@ struct ConfigurationFlash {
 // bus
 
 	// state offsets for bus interface
-	uint16_t busSecurityCounterOffset;
+	//uint16_t busSecurityCounterOffset;
 
 
 // radio
@@ -41,7 +40,7 @@ struct ConfigurationFlash {
 	uint16_t zbeePanId;
 
 	// state offsets for radio interface
-	uint16_t zbeeSecurityCounterOffset;
+	//uint16_t zbeeSecurityCounterOffset;
 
 
 // network
@@ -51,25 +50,5 @@ struct ConfigurationFlash {
 	Network::Endpoint mqttGateway;
 
 
-
-	/**
-	 * Returns the size in bytes needed to store the configuration in flash
-	 * @return size in bytes
-	 */
-	int size() const {return sizeof(ConfigurationFlash);}
-	
 	String getName() const {return String(this->name);}
-	
-	/**
-	 * Allocate configuration
-	 */
-	[[nodiscard]] Configuration *allocate() const;
 };
-
-class Configuration : public Storage::Element<ConfigurationFlash> {
-public:
-
-	Configuration(ConfigurationFlash const &flash) : Storage::Element<ConfigurationFlash>(flash) {}
-};
-
-inline Configuration *ConfigurationFlash::allocate() const {return new Configuration(*this);}

@@ -1,4 +1,4 @@
-#include "../Storage2.hpp"
+#include "../Storage.hpp"
 #include <util.hpp>
 #include <boardConfig.hpp>
 #include <vector>
@@ -7,7 +7,7 @@
 #include <memory.h>
 
 
-namespace Storage2 {
+namespace Storage {
 
 struct Context {
 	std::map<uint16_t, std::vector<uint8_t>> entries;
@@ -53,23 +53,23 @@ void writeData(Context &context) {
 }
 
 void init() {
-	Storage2::inited = true;
+	Storage::inited = true;
 
-	readData(Storage2::contexts[0]);
+	readData(Storage::contexts[0]);
 }
 
 
 int size(int index, uint16_t id) {
-	assert(Storage2::inited && uint(index) < STORAGE_CONTEXT_COUNT);
-	auto &context = Storage2::contexts[index];
+	assert(Storage::inited && uint(index) < STORAGE_CONTEXT_COUNT);
+	auto &context = Storage::contexts[index];
 
 	auto &entry = context.entries[id];
 	return entry.size();
 }
 
 int read(int index, uint16_t id, int size, void *data) {
-	assert(Storage2::inited && uint(index) < STORAGE_CONTEXT_COUNT);
-	auto &context = Storage2::contexts[index];
+	assert(Storage::inited && uint(index) < STORAGE_CONTEXT_COUNT);
+	auto &context = Storage::contexts[index];
 
 	auto &entry = context.entries[id];
 	int len = min(size, int(entry.size()));
@@ -78,8 +78,8 @@ int read(int index, uint16_t id, int size, void *data) {
 }
 
 bool write(int index, uint16_t id, int size, void const *data) {
-	assert(Storage2::inited && uint(index) < STORAGE_CONTEXT_COUNT);
-	auto &context = Storage2::contexts[index];
+	assert(Storage::inited && uint(index) < STORAGE_CONTEXT_COUNT);
+	auto &context = Storage::contexts[index];
 
 	auto &entry = context.entries[id];
 	auto begin = reinterpret_cast<uint8_t const *>(data);
@@ -90,8 +90,8 @@ bool write(int index, uint16_t id, int size, void const *data) {
 }
 
 bool erase(int index, uint16_t id) {
-	assert(Storage2::inited && uint(index) < STORAGE_CONTEXT_COUNT);
-	auto &context = Storage2::contexts[index];
+	assert(Storage::inited && uint(index) < STORAGE_CONTEXT_COUNT);
+	auto &context = Storage::contexts[index];
 
 	context.entries.erase(id);
 
@@ -100,8 +100,8 @@ bool erase(int index, uint16_t id) {
 }
 
 bool clear(int index) {
-	assert(Storage2::inited && uint(index) < STORAGE_CONTEXT_COUNT);
-	auto &context = Storage2::contexts[index];
+	assert(Storage::inited && uint(index) < STORAGE_CONTEXT_COUNT);
+	auto &context = Storage::contexts[index];
 
 	context.entries.clear();
 

@@ -87,3 +87,4 @@ constexpr int STORAGE_ID_BUS2 = 0x0200;
 constexpr int STORAGE_ID_RADIO1 = 0x0300;
 constexpr int STORAGE_ID_RADIO2 = 0x0400;
 constexpr int STORAGE_ID_ALARM = 0x0500;
+constexpr int STORAGE_ID_FUNCTIONS = 0x0600;

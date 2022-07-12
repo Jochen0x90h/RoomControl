@@ -1,10 +1,11 @@
 #include "BusInterface.hpp"
 #include <BusMaster.hpp>
-#include <Storage2.hpp>
+#include <Storage.hpp>
 #include <Terminal.hpp>
 #include <Timer.hpp>
 #include <Nonce.hpp>
 #include <StringOperators.hpp>
+#include <Pointer.hpp>
 #include <util.hpp>
 #include <appConfig.hpp>
 
@@ -25,7 +26,7 @@ BusInterface::BusInterface(PersistentStateManager &stateManager)
 	: securityCounter(stateManager)
 {
 	// load list of device ids
-	int deviceCount = Storage2::read(STORAGE_CONFIG, STORAGE_ID_BUS1, sizeof(this->deviceIds), this->deviceIds);
+	int deviceCount = Storage::read(STORAGE_CONFIG, STORAGE_ID_BUS1, sizeof(this->deviceIds), this->deviceIds);
 
 	// load devices
 	int j = 0;
@@ -33,13 +34,13 @@ BusInterface::BusInterface(PersistentStateManager &stateManager)
 		uint8_t id = this->deviceIds[i];
 
 		// determine size
-		int size = Storage2::size(STORAGE_CONFIG, STORAGE_ID_BUS1 | id);
+		int size = Storage::size(STORAGE_CONFIG, STORAGE_ID_BUS1 | id);
 		if (size < sizeof(DeviceData))
 			continue;
 
 		// allocate and read
 		auto endpointData = reinterpret_cast<EndpointData *>(malloc(size));
-		Storage2::read(STORAGE_CONFIG, STORAGE_ID_BUS1 | id, size, endpointData);
+		Storage::read(STORAGE_CONFIG, STORAGE_ID_BUS1 | id, size, endpointData);
 
 		// check id
 		if (endpointData->id != id) {
@@ -129,14 +130,14 @@ void BusInterface::eraseDevice(uint8_t id) {
 					*d = device->next;
 
 					// erase device from flash
-					Storage2::erase(STORAGE_CONFIG, STORAGE_ID_BUS2 | device->data.id);
+					Storage::erase(STORAGE_CONFIG, STORAGE_ID_BUS2 | device->data.id);
 
 					// delete device
 					delete device;
 				}
 
 				// erase endpoint from flash
-				Storage2::erase(STORAGE_CONFIG, STORAGE_ID_BUS1 | id);
+				Storage::erase(STORAGE_CONFIG, STORAGE_ID_BUS1 | id);
 
 				// delete endpoint
 				delete endpoint;
@@ -159,7 +160,7 @@ list:
 		}
 	}
 	this->deviceCount = j;
-	Storage2::write(STORAGE_CONFIG, STORAGE_ID_BUS1, j, this->deviceIds);
+	Storage::write(STORAGE_CONFIG, STORAGE_ID_BUS1, j, this->deviceIds);
 }
 
 // private:
@@ -181,7 +182,7 @@ void BusInterface::Endpoint::setName(String name) {
 	assign(this->data->name, name);
 
 	// write to flash
-	Storage2::write(STORAGE_CONFIG, STORAGE_ID_BUS1 | this->data->id, this->data->size(), this->data);
+	Storage::write(STORAGE_CONFIG, STORAGE_ID_BUS1 | this->data->id, this->data->size(), this->data);
 }
 
 Array<MessageType const> BusInterface::Endpoint::getPlugs() const {
@@ -242,7 +243,7 @@ BusInterface::BusDevice *BusInterface::getOrLoadDevice(uint8_t id) {
 
 	// load data
 	DeviceData data;
-	if (Storage2::read(STORAGE_CONFIG, STORAGE_ID_BUS2 | id, sizeof(data), &data) != sizeof(data))
+	if (Storage::read(STORAGE_CONFIG, STORAGE_ID_BUS2 | id, sizeof(data), &data) != sizeof(data))
 		return nullptr;
 
 	// check id
@@ -503,11 +504,18 @@ AwaitableCoroutine BusInterface::handleCommission(uint32_t deviceId, uint8_t end
 		co_await readAttribute(length, message, *device, endpointIndex, bus::Attribute::PLUG_LIST);
 		if (length == -1)
 			co_return;
-
 		int plugCount = length / 2;
 
 		// allocate endpoint data
 		auto data = reinterpret_cast<EndpointData *>(malloc(offsetOf(EndpointData, plugs[plugCount])));
+
+		// set plugs
+		data->plugCount = plugCount;
+		MessageReader plugs(length, message);
+		for (int i = 0; i < plugCount; ++i) {
+			data->plugs[i] = plugs.e16L<MessageType>();
+			//Terminal::out << getTypeLabel(data->plugs[i]) << "\n";
+		}
 
 		// set id
 		if (oldEndpoint != nullptr) {
@@ -526,13 +534,6 @@ AwaitableCoroutine BusInterface::handleCommission(uint32_t deviceId, uint8_t end
 			assign(data->name, String(length, message));
 		else
 			assign(data->name, "Device");
-
-		// set plugs
-		data->plugCount = plugCount;
-		MessageReader plugs(length, message);
-		for (int i = 0; i < plugCount; ++i) {
-			data->plugs[i] = plugs.e16L<MessageType>();
-		}
 
 		// create endpoint, device takes ownership
 		auto endpoint = new Endpoint(device.ptr, data);
@@ -571,18 +572,18 @@ AwaitableCoroutine BusInterface::handleCommission(uint32_t deviceId, uint8_t end
 	// store device list
 	if (this->deviceCount != deviceCount) {
 		this->deviceCount = deviceCount;
-		Storage2::write(STORAGE_CONFIG, STORAGE_ID_BUS1, deviceCount, this->deviceIds);
+		Storage::write(STORAGE_CONFIG, STORAGE_ID_BUS1, deviceCount, this->deviceIds);
 	}
 
 	// store endpoints
 	auto endpoint = device->endpoints;
 	while (endpoint != nullptr) {
-		Storage2::write(STORAGE_CONFIG, STORAGE_ID_BUS1 | endpoint->data->id, endpoint->data->size(), endpoint->data);
+		Storage::write(STORAGE_CONFIG, STORAGE_ID_BUS1 | endpoint->data->id, endpoint->data->size(), endpoint->data);
 		endpoint = endpoint->next;
 	}
 
 	// store device
-	Storage2::write(STORAGE_CONFIG, STORAGE_ID_BUS2 | device->data.id, sizeof(device->data), &device->data);
+	Storage::write(STORAGE_CONFIG, STORAGE_ID_BUS2 | device->data.id, sizeof(device->data), &device->data);
 
 	// transfer ownership of device to devices list
 	device->interface = this;

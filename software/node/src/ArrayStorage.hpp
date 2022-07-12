@@ -9,7 +9,7 @@
 /**
  * Flash based storage of multiple arrays of elements with variable size
  */
-class Storage {
+class ArrayStorage {
 public:
 
 	// maximum number of elements for all arrays
@@ -18,7 +18,7 @@ public:
 
 
 	// delete copy constructor
-	Storage(Storage const &) = delete;
+	ArrayStorage(ArrayStorage const &) = delete;
 
 	/**
 	 * Constructor
@@ -27,7 +27,7 @@ public:
 	 * @param arrays arrays that use this flash storage
 	 */
 	template <typename ...Arrays>
-	Storage(uint8_t pageStart, uint8_t pageCount, Arrays &...arrays) {
+	ArrayStorage(uint8_t pageStart, uint8_t pageCount, Arrays &...arrays) {
 		assert(pageStart >= 0 && pageStart + pageCount <= FLASH_PAGE_COUNT);
 		assert(pageCount >= 2);
 		this->pageStart = pageStart;
@@ -145,7 +145,7 @@ protected:
 	static_assert(sizeof(FlashHeader) == 4);
 
 	struct ArrayData {
-		Storage *storage;
+		ArrayStorage *storage;
 
 		// next array in a linked list
 		ArrayData *next;

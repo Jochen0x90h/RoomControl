@@ -201,7 +201,7 @@ if(POSIX)
 	set(LOOP system/src/Loop.hpp system/src/posix/Loop.cpp system/src/posix/Loop2.cpp)
 	set(NETWORK system/src/Network.hpp system/src/posix/Network.cpp)
 	set(OUTPUT system/src/Output.hpp system/src/posix/Output.cpp system/src/Debug.hpp)
-	set(STORAGE system/src/Storage2.hpp system/src/posix/Storage.cpp)
+	set(STORAGE system/src/Storage.hpp system/src/posix/Storage.cpp)
 	set(TERMINAL system/src/Terminal.hpp system/src/posix/Terminal.cpp)
 	set(TIMER system/src/SystemTime.hpp system/src/Timer.hpp system/src/posix/Timer.cpp)
 endif()
@@ -299,8 +299,8 @@ set(NODE
 	node/src/Publisher.hpp
 	node/src/State.cpp
 	node/src/State.hpp
-	node/src/Storage.cpp
-	node/src/Storage.hpp
+	node/src/ArrayStorage.cpp
+	node/src/ArrayStorage.hpp
 	node/src/Subscriber.hpp
 )
 source_group(node FILES ${NODE})
@@ -667,8 +667,8 @@ add_executable(StorageTestOld
 	${SYSTEM}
 	node/src/State.cpp
 	node/src/State.hpp
-	node/src/Storage.cpp
-	node/src/Storage.hpp
+	node/src/ArrayStorage.cpp
+	node/src/ArrayStorage.hpp
 	system/src/emu/Flash.cpp
 )
 target_include_directories(StorageTestOld
