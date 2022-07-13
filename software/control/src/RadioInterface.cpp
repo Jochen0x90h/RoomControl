@@ -858,45 +858,6 @@ static bool writeZclAttribute(RadioInterface::PacketWriter &w, uint8_t zclCounte
 	case zcl::Cluster::LEVEL_CONTROL: {
 		// set level, do via command
 		writeZclCommand(w, zclCounter);
-		w.e8(zcl::LevelControlCommand::MOVE_TO_LEVEL_WITH_ON_OFF);
-		w.u8(clamp(int(message.value.f * 254.0f + 0.5f), 0, 254));
-
-		// transition time in 1/10s
-		w.u16L(0);
-		break;
-	}
-	case zcl::Cluster::COLOR_CONTROL: {
-
-		break;
-	}
-	default:
-		// not supported
-		return false;
-	}
-	return true;
-}
-
-/*
-bool writeZclClusterSpecific(RadioInterface::PacketWriter &w, uint8_t zclCounter, EndpointInfo const &info,
-	MessageType messageType, Message &message)
-{
-	// zbee cluster library frame
-	w.e8(zcl::FrameControl::TYPE_CLUSTER_SPECIFIC
-		| zcl::FrameControl::DIRECTION_CLIENT_TO_SERVER);
-	w.u8(zclCounter);
-
-	//MessageType srcType = publisher.messageType;
-	//auto &src = *reinterpret_cast<Message const *>(publisher.message);
-
-	switch (info.cluster) {
-	case zcl::Cluster::ON_OFF:
-		w.u8(message.command);
-		break;
-		//return convertCommandOut(w.u8(), srcType, src, publisher.convertOptions);
-	case zcl::Cluster::LEVEL_CONTROL: {
-		//Message level;
-		//if (!convertSetFloatValueOut(MessageType::MOVE_TO_LEVEL_OUT, level, srcType, src, publisher.convertOptions))
-		//	return false; // conversion failed
 		if (message.command == 0) {
 			// set level
 			w.e8(zcl::LevelControlCommand::MOVE_TO_LEVEL_WITH_ON_OFF);
@@ -911,37 +872,16 @@ bool writeZclClusterSpecific(RadioInterface::PacketWriter &w, uint8_t zclCounter
 		w.u16L(min(int(message.transition), 65534));
 		break;
 	}
-/ *
-		switch (srcType) {
-		case MessageType::LEVEL:
-		case MessageType::MOVE_TO_LEVEL:
-			if (!src.level.getFlag()) {
-				// absolute level
-				w.e8(zcl::LevelControlCommand::MOVE_TO_LEVEL_WITH_ON_OFF);
-			} else {
-				// increase/decrease level
-				w.e8(zcl::LevelControlCommand::STEP_WITH_ON_OFF);
-				w.u8(src.level >= 0 ? 0x00 : 0x01);
-			}
-			w.u8(clamp(abs(int(src.level * 255.0f)), 0, 254));
-			if (srcType == MessageType::LEVEL)
-				w.u16L(0);
-			else if (!src.moveToLevel.move.getFlag())
-				w.u16L(clamp(int(src.moveToLevel.move * 10.0f), 0, 65534));
-			else
-				return false; // conversion failed
-			break;
-		default:
-			// conversion failed
-			return false;
-		}
-		break;* /
+	case zcl::Cluster::COLOR_CONTROL: {
+
+		break;
+	}
 	default:
 		// not supported
 		return false;
 	}
 	return true;
-}*/
+}
 
 void RadioInterface::writeFooter(PacketWriter &w, Radio::SendFlags sendFlags) {
 	if (w.hasSecurity()) {
@@ -1013,8 +953,8 @@ AwaitableCoroutine RadioInterface::readAttribute(uint8_t (&packet)[MESSAGE_LENGT
 			// wait for a response from the device
 			int length;
 			int r = co_await select(
-				this->responseBarrier.wait(uint16_t(zcl::Command::READ_ATTRIBUTES_RESPONSE),
-					srcEndpoint, zclCounter, length, packet), Timer::sleep(timeout));
+				this->responseBarrier.wait(length, packet, srcEndpoint, zclCounter,
+					uint16_t(zcl::Command::READ_ATTRIBUTES_RESPONSE)), Timer::sleep(timeout));
 
 			// check if response was received
 			if (r == 1)
@@ -1189,17 +1129,17 @@ static bool handleZclCommand(MessageType dstType, void *dstMessage, int plugInde
 	case zcl::Cluster::ON_OFF:
 		return convertSwitch(dstType, dst, command, convertOptions);
 	case zcl::Cluster::LEVEL_CONTROL: {
-		uint8_t command = 0;
+		uint8_t cmd = 0;
 		switch (zcl::LevelControlCommand(command)) {
 		case zcl::LevelControlCommand::STEP:
 		case zcl::LevelControlCommand::STEP_WITH_ON_OFF:
-			command = r.u8() == 0 ? 1 : 2; // increase/decrease
+			cmd = r.u8() == 0 ? 1 : 2; // increase/decrease
 			// fall through
 		case zcl::LevelControlCommand::MOVE_TO_LEVEL:
 		case zcl::LevelControlCommand::MOVE_TO_LEVEL_WITH_ON_OFF: {
 			float value = float(r.u8()) / 254.0f;
 			uint16_t transition = r.u16L(); // transition time in 1/10 s
-			return convertFloatTransition(dstType, dst, value, command, transition, convertOptions);
+			return convertFloatTransition(dstType, dst, value, cmd, transition, convertOptions);
 		}
 		default:
 			// conversion failed
@@ -1207,17 +1147,25 @@ static bool handleZclCommand(MessageType dstType, void *dstMessage, int plugInde
 		}
 	}
 	case zcl::Cluster::COLOR_CONTROL: {
-		uint8_t command = 0;
 		switch (zcl::ColorControlCommand(command)) {
-		case zcl::ColorControlCommand::STEP_COLOR:
-			command = r.u8() == 0 ? 1 : 2; // increase/decrease
-			// fall through
-		case zcl::ColorControlCommand::MOVE_TO_COLOR: {
-			auto x = r.u8();
-			auto y = r.u8();
-			float value = float(plugIndex == 0 ? x : y) / 254.0f;
+		case zcl::ColorControlCommand::STEP_COLOR: {
+			auto x = r.i16L();
+			auto y = r.i16L();
+			float value = float(plugIndex == 0 ? x : y) / 65279.0f;
+			uint8_t cmd = 1;
+			if (value < 0) {
+				cmd = 2;
+				value = -value;
+			}
 			uint16_t transition = r.u16L(); // transition time in 1/10 s
-			return convertFloatTransition(dstType, dst, value, command, transition, convertOptions);
+			return convertFloatTransition(dstType, dst, value, cmd, transition, convertOptions);
+		}
+		case zcl::ColorControlCommand::MOVE_TO_COLOR: {
+			auto x = r.u16L();
+			auto y = r.u16L();
+			float value = float(plugIndex == 0 ? x : y) / 65279.0f;
+			uint16_t transition = r.u16L(); // transition time in 1/10 s
+			return convertFloatTransition(dstType, dst, value, 0, transition, convertOptions);
 		}
 		default:
 			// conversion failed
@@ -1230,72 +1178,6 @@ static bool handleZclCommand(MessageType dstType, void *dstMessage, int plugInde
 	// conversion failed
 	return false;
 }
-/*
-static bool handleZclClusterSpecific(MessageType dstType, void *dstMessage, EndpointInfo const &info, MessageReader r,
-	ConvertOptions const &convertOptions)
-{
-	// get command
-	uint8_t command = r.u8();
-
-	auto &dst = *reinterpret_cast<Message *>(dstMessage);
-	switch (info.cluster) {
-	case zcl::Cluster::ON_OFF:
-		return convertSwitch(dstType, dst, command, convertOptions);
-	case zcl::Cluster::LEVEL_CONTROL: {
-		uint8_t command = 0;
-		switch (zcl::LevelControlCommand(command)) {
-		case zcl::LevelControlCommand::STEP:
-		case zcl::LevelControlCommand::STEP_WITH_ON_OFF:
-			command = r.u8() == 0 ? 1 : 2; // increase/decrease
-			// fall through
-		case zcl::LevelControlCommand::MOVE_TO_LEVEL:
-		case zcl::LevelControlCommand::MOVE_TO_LEVEL_WITH_ON_OFF: {
-			float value = float(r.u8()) / 254.0f;
-			uint16_t transition = r.u16L(); // transition time in 1/10 s
-			return convertFloatTransition(dstType, dst, value, command, transition, convertOptions);
-		}
-		default:
-			// conversion failed
-			return false;
-		}
-/ *
-		if (dstType != MessageType::MOVE_TO_LEVEL)
-			return false; // conversion failed
-		switch (zcl::LevelControlCommand(command)) {
-		case zcl::LevelControlCommand::MOVE_TO_LEVEL:
-		case zcl::LevelControlCommand::MOVE_TO_LEVEL_WITH_ON_OFF: {
-			uint8_t level = r.u8();
-			uint16_t transitionTime = r.u16L();
-
-			dst.moveToLevel.level = float(level) / 254.0f;
-			dst.moveToLevel.move = float(transitionTime) / 10.0f;
-			break;
-		}
-		case zcl::LevelControlCommand::STEP:
-		case zcl::LevelControlCommand::STEP_WITH_ON_OFF: {
-			bool up = r.u8() == 0;
-			int diff = r.u8();
-			uint16_t transitionTime = r.u16L();
-
-			dst.moveToLevel.level.set(float(up ? diff : -diff) / 254.0f, true);
-			dst.moveToLevel.move = float(transitionTime) / 10.0f;
-			break;
-		}
-		default:
-			// conversion failed
-			return false;
-		}* /
-		break;
-	}
-		default:
-			// conversion failed
-			return false;
-	}
-
-	// conversion successful
-	return true;
-}
-*/
 
 Coroutine RadioInterface::receive() {
 	while (true) {
@@ -1372,7 +1254,7 @@ Terminal::out << ("Beacon Request\n");
 					auto deviceInfo = r.e8<ieee::DeviceInfo>();
 					bool receiveOnWhenIdle = (deviceInfo & ieee::DeviceInfo::RX_ON_WHEN_IDLE) != 0;
 					auto sendFlags = receiveOnWhenIdle ? Radio::SendFlags::NONE : Radio::SendFlags::AWAIT_DATA_REQUEST;
-Terminal::out << ("Association Request Receive On When Idle: " + dec(receiveOnWhenIdle) + '\n');
+Terminal::out << "Association Request: Receive On When Idle: " << dec(receiveOnWhenIdle) << '\n';
 					this->commissionCoroutine = handleZbCommission(sourceAddress, sendFlags);
 				}
 			}
@@ -1992,10 +1874,9 @@ Terminal::out << ("Association Request Receive On When Idle: " + dec(receiveOnWh
 					// zdp response: forward response to the coroutine that initiated the request (handleAssociationRequest())
 					int length = min(r.getRemaining(), MESSAGE_LENGTH);
 					uint8_t *response = r.current;
-					this->responseBarrier.resumeFirst(
-						[command, zdpCounter, length, response](Response &r)
+					this->responseBarrier.resumeFirst([length, response, zdpCounter, command](Response &r)
 					{
-						if (r.command == command && r.dstEndpoint == 0 && r.counter == zdpCounter) {
+						if (r.dstEndpoint == 0 && r.counter == zdpCounter && r.command == command) {
 							r.length = length;
 							array::copy(length, r.response, response);
 							return true;
@@ -2026,10 +1907,9 @@ Terminal::out << ("Association Request Receive On When Idle: " + dec(receiveOnWh
 				uint8_t *response = r.current;
 				int length = min(r.getRemaining(), MESSAGE_LENGTH);
 
-				this->responseBarrier.resumeFirst(
-					[command, dstEndpoint, zclCounter, length, response] (Response &r)
+				this->responseBarrier.resumeFirst([length, response, dstEndpoint, zclCounter, command] (Response &r)
 				{
-					if (r.command == command && r.dstEndpoint == dstEndpoint && r.counter == zclCounter) {
+					if (r.dstEndpoint == dstEndpoint && r.counter == zclCounter && r.command == command) {
 						r.length = length;
 						array::copy(length, r.response, response);
 						return true;
@@ -2556,8 +2436,8 @@ Terminal::out << ("Send Key Result " + dec(sendResult) + '\n');
 Terminal::out << ("Send Node Descriptor Request Result " + dec(sendResult) + '\n');
 		if (sendResult != 0) {
 			// wait for a response from the device
-			int r = co_await select(this->responseBarrier.wait(uint16_t(zb::ZdpCommand::NODE_DESCRIPTOR_RESPONSE),
-				uint8_t(0), zdpCounter, length, packet1), Timer::sleep(timeout));
+			int r = co_await select(this->responseBarrier.wait(length, packet1, uint8_t(0), zdpCounter,
+				uint16_t(zb::ZdpCommand::NODE_DESCRIPTOR_RESPONSE)), Timer::sleep(timeout));
 
 			// check if response was received
 			if (r == 1)
@@ -2597,8 +2477,8 @@ Terminal::out << ("Node Descriptor Status " + dec(status) + '\n');
 		co_await Radio::send(RADIO_ZBEE, packet1, sendResult);
 		if (sendResult != 0) {
 			// wait for a response from the device
-			int r = co_await select(this->responseBarrier.wait(uint16_t(zb::ZdpCommand::ACTIVE_ENDPOINT_RESPONSE),
-				uint8_t(0), zdpCounter, length, packet1), Timer::sleep(timeout));
+			int r = co_await select(this->responseBarrier.wait(length, packet1, uint8_t(0), zdpCounter,
+				uint16_t(zb::ZdpCommand::ACTIVE_ENDPOINT_RESPONSE)), Timer::sleep(timeout));
 
 			// check if response was received
 			if (r == 1)
@@ -2661,8 +2541,8 @@ Terminal::out << ("active endpoints status " + dec(status) + '\n');
 			co_await Radio::send(RADIO_ZBEE, packet2, sendResult);
 			if (sendResult != 0) {
 				// wait for a response from the device
-				int r = co_await select(this->responseBarrier.wait(uint16_t(zb::ZdpCommand::SIMPLE_DESCRIPTOR_RESPONSE),
-					uint8_t(0), zdpCounter, length, packet2), Timer::sleep(timeout));
+				int r = co_await select(this->responseBarrier.wait(length, packet2, uint8_t(0), zdpCounter,
+					uint16_t(zb::ZdpCommand::SIMPLE_DESCRIPTOR_RESPONSE)), Timer::sleep(timeout));
 
 				// check if response was received
 				if (r == 1)
@@ -2796,8 +2676,8 @@ Terminal::out << ("active endpoints status " + dec(status) + '\n');
 				co_await Radio::send(RADIO_ZBEE, packet2, sendResult);
 				if (sendResult != 0) {
 					// wait for a response from the device
-					int r = co_await select(this->responseBarrier.wait(uint16_t(zb::ZdpCommand::BIND_RESPONSE),
-						uint8_t(0), zdpCounter, length, packet2), Timer::sleep(timeout));
+					int r = co_await select(this->responseBarrier.wait(length, packet2, uint8_t(0), zdpCounter,
+						uint16_t(zb::ZdpCommand::BIND_RESPONSE)), Timer::sleep(timeout));
 
 					// check if response was received
 					if (r == 1)
@@ -2983,8 +2863,8 @@ Coroutine RadioInterface::publish() {
 						if (sendResult != 0) {
 							// wait for a response from the device
 							int length;
-							int r = co_await select(this->responseBarrier.wait(uint16_t(zcl::Command::DEFAULT_RESPONSE),
-								endpoint->data->id, zclCounter, length, packet), Timer::sleep(timeout));
+							int r = co_await select(this->responseBarrier.wait(length, packet, endpoint->data->id,
+								zclCounter, uint16_t(zcl::Command::DEFAULT_RESPONSE)), Timer::sleep(timeout));
 
 							// check if response was received
 							if (r == 1) {

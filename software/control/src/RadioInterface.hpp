@@ -493,8 +493,9 @@ private:
 
 
 	struct Response {
-		// command we are waiting for
-		uint16_t command;
+		// response data
+		int& length;
+		uint8_t *response;
 
 		// our endpoint the response is for
 		uint8_t dstEndpoint;
@@ -502,9 +503,8 @@ private:
 		// expected zdp or zcl counter of the response
 		uint8_t counter;
 
-		// response data
-		int& length;
-		uint8_t *response;
+		// command we are waiting for
+		uint16_t command;
 	};
 
 	// a coroutine (e.g. handleZbCommission()) waits on this barrier until a response arrives

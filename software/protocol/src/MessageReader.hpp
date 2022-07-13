@@ -37,16 +37,23 @@ public:
 		return T(this->current[0]);
 	}
 
-	uint16_t u16L() {
+	int16_t i16L() {
 		auto current = this->current;
 		int16_t value = current[0] | (current[1] << 8);
 		this->current += 2;
 		return value;
 	}
 
+	uint16_t u16L() {
+		auto current = this->current;
+		uint16_t value = current[0] | (current[1] << 8);
+		this->current += 2;
+		return value;
+	}
+
 	uint16_t u16B() {
 		auto current = this->current;
-		int16_t value = (current[0] << 8) | current[1];
+		uint16_t value = (current[0] << 8) | current[1];
 		this->current += 2;
 		return value;
 	}
