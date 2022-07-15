@@ -2087,7 +2087,7 @@ void RadioInterface::handleGp(uint8_t const *mac, PacketReader &r) {
 			return;
 		}
 
-		int endpointIndex = -1;
+		int plugIndex = -1;
 		uint8_t message = 0;
 		switch (device->data->deviceType) {
 		case DeviceType::PTM215Z:
@@ -2097,43 +2097,43 @@ void RadioInterface::handleGp(uint8_t const *mac, PacketReader &r) {
 				// A
 				case 0x14:
 				case 0x15:
-					endpointIndex = 0;
+					plugIndex = 0;
 					message = 0;
 					break;
 				case 0x10:
-					endpointIndex = 0;
+					plugIndex = 0;
 					message = 1;
 					break;
 				case 0x11:
-					endpointIndex = 0;
+					plugIndex = 0;
 					message = 2;
 					break;
 				// B
 				case 0x17:
 				case 0x16:
-					endpointIndex = 1;
+					plugIndex = 1;
 					message = 0;
 					break;
 				case 0x13:
-					endpointIndex = 1;
+					plugIndex = 1;
 					message = 1;
 					break;
 				case 0x12:
-					endpointIndex = 1;
+					plugIndex = 1;
 					message = 2;
 					break;
 				// AB
 				case 0x65:
 				case 0x63:
-					endpointIndex = 2;
+					plugIndex = 2;
 					message = 0;
 					break;
 				case 0x64:
-					endpointIndex = 2;
+					plugIndex = 2;
 					message = 1;
 					break;
 				case 0x62:
-					endpointIndex = 2;
+					plugIndex = 2;
 					message = 2;
 					break;
 				}
@@ -2148,30 +2148,31 @@ void RadioInterface::handleGp(uint8_t const *mac, PacketReader &r) {
 
 				// check AB0 and AB1 (A and B pressed simultaneously)
 				if (change == 0x5 || change == 0xa) {
-					endpointIndex = 2;
+					plugIndex = 2;
 					message = buttons & 0x3;
 				} else {
 					// check A0 and A1
 					if (change & 0x3) {
-						endpointIndex = 0;
+						plugIndex = 0;
 						message = buttons & 0x3;
 					}
 
 					// check B0 and B1
 					if (change & 0xc) {
-						endpointIndex = 1;
+						plugIndex = 1;
 						message = (buttons >> 2) & 0x3;
 					}
 				}
 
 				device->state = buttons;
 			}
+		default:;
 		}
 
 		// publish to subscribers
 		for (auto &subscriber : device->subscribers) {
 			// check if this is the right endpoint
-			if (subscriber.source.device.plugIndex == endpointIndex) {
+			if (subscriber.source.device.plugIndex == plugIndex) {
 				subscriber.barrier->resumeFirst([&subscriber, message] (PublishInfo::Parameters &p) {
 					p.info = subscriber.destination;
 
