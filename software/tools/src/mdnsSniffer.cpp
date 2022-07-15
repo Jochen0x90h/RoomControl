@@ -66,7 +66,7 @@ void handleServer(DnsReader &r) {
 	handleName(r);
 }
 
-void printTypeAndFlags2(dns::Type type, dns::Flags2 flags2) {
+void printType(dns::Type type) {
 	switch (type) {
 	case dns::Type::A:
 		Terminal::out << " A ";
@@ -95,8 +95,6 @@ void printTypeAndFlags2(dns::Type type, dns::Flags2 flags2) {
 	default:
 		Terminal::out << " Unknown";
 	}
-	if ((flags2 & dns::Flags2::FLUSH) != 0)
-		Terminal::out << "flush ";
 }
 
 // handle resource record (RR)
@@ -110,8 +108,11 @@ bool handleResourceRecord(DnsReader &r) {
 		return false;
 	}
 	auto type = r.e16B<dns::Type>();
+	printType(type);
 	auto flags2 = r.e16B<dns::Flags2>();
-	printTypeAndFlags2(type, flags2);
+	if ((flags2 & dns::Flags2::FLUSH) != 0)
+		Terminal::out << "flush ";
+
 	auto ttl = r.u32B();
 	auto length = r.u16B();
 
@@ -165,8 +166,10 @@ void handleDns(DnsReader &r) {
 		}
 
 		auto type = r.e16B<dns::Type>();
+		printType(type);
 		auto flags2 = r.e16B<dns::Flags2>();
-		printTypeAndFlags2(type, flags2);
+		if ((flags2 & dns::Flags2::UNICAST) != 0)
+			Terminal::out << "unicast ";
 		Terminal::out << '\n';
 	}
 

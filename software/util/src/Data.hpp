@@ -5,20 +5,36 @@
 /**
  * Data wrapper, only references the data
  */
-struct Data {
-	void const *const data;
-	int const size;
-		
-	constexpr Data() : data(nullptr), size(0) {}
+class ConstData {
+public:
+
+	constexpr ConstData() : s(0), d(nullptr) {}
+
+	ConstData(void const *data, int size) : s(size), d(data) {}
 
 	template <typename T>
-	constexpr Data(T const *data) : data(data), size(sizeof(T)) {}
+	constexpr ConstData(T const *data) : s(sizeof(T)), d(data) {}
 
-	Data(void const *data, int size) : data(data), size(size) {}
+	/**
+	 * Get size of data in bytes
+	 * @return size
+	 */
+	int size() {return this->s;}
+
+	/**
+	 * Get pointer to the data
+	 * @return data
+	 */
+	void const *data() {return this->d;}
 
 	template <typename T>
-	T const &cast() {
-		assert(sizeof(T) >= this->size);
-		return *reinterpret_cast<T const *>(this->data);
+	T const *cast() {
+		assert(sizeof(T) >= this->s);
+		return reinterpret_cast<T const *>(this->d);
 	}
+
+protected:
+
+	int const s;
+	void const *const d;
 };

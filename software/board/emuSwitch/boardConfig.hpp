@@ -47,3 +47,9 @@ constexpr int RADIO_MAX_PAYLOAD_LENGTH = 125; // payload length without leading 
 // -------
 
 constexpr int NETWORK_CONTEXT_COUNT = 1;
+
+
+// storage
+// -------
+
+constexpr int STORAGE_CONTEXT_COUNT = 1;

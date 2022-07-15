@@ -23,9 +23,9 @@ public:
 
 	void setCommissioning(bool enabled) override;
 
-	int getDeviceCount() override;
-	Device &getDeviceByIndex(int index) override;
-	Device *getDeviceById(uint8_t id) override;
+	Array<uint8_t const> getDeviceIds() override;
+	Device *getDevice(uint8_t id) override;
+	void eraseDevice(uint8_t id) override;
 
 protected:
 
@@ -34,24 +34,23 @@ protected:
 		uint8_t getId() const override;
 		String getName() const override;
 		void setName(String name) override;
-		Array<MessageType const> getEndpoints() const override;
-		void subscribe(uint8_t endpointIndex, Subscriber &subscriber) override;
-		PublishInfo getPublishInfo(uint8_t endpointIndex) override;
+		Array<MessageType const> getPlugs() const override;
+		void subscribe(uint8_t plugIndex, Subscriber &subscriber) override;
+		PublishInfo getPublishInfo(uint8_t plugIndex) override;
 
-		void init(LocalInterface *interface, uint8_t interfaceId, Array<MessageType const> endpoints) {
+		void init(LocalInterface *interface, uint8_t id, Array<MessageType const> plugs) {
 			this->interface = interface;
-			this->interfaceId = interfaceId;
-			this->endpoints = endpoints;
+			this->id = id;
+			this->plugs = plugs;
 		}
 
 		// back pointer to interface
 		LocalInterface *interface;
 
-		// interface id
-		uint8_t interfaceId;
+		uint8_t id;
 
-		// endpoints
-		Array<MessageType const> endpoints;
+		// plugs
+		Array<MessageType const> plugs;
 
 		// subscribers and publishers
 		SubscriberList subscribers;
@@ -63,6 +62,7 @@ protected:
 	Coroutine publish();
 
 	uint8_t deviceCount;
+	uint8_t deviceIds[DEVICE_COUNT];
 	LocalDevice devices[DEVICE_COUNT];
 
 	PublishInfo::Barrier publishBarrier;

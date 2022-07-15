@@ -61,9 +61,14 @@ enum class Flags2 : uint16_t {
 	CLASS_IN = 1,
 	CLASS_MASK = 0x7fff,
 
-	// query: unicast-response desired, resource record: cache-flush of outdated records
+	// multicast dns extension
 	// https://en.wikipedia.org/wiki/Multicast_DNS
+	// https://datatracker.ietf.org/doc/html/rfc6762
+
+	// query: unicast-response desired
 	UNICAST = 0x8000,
+
+	// resource record: cache-flush of outdated records
 	FLUSH = 0x8000
 };
 FLAGS_ENUM(Flags2)

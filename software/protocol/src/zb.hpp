@@ -193,155 +193,15 @@ enum class ZdpNodeDescriptorServerFlags : uint16_t {
 FLAGS_ENUM(ZdpNodeDescriptorServerFlags)
 
 
-// cluster library (zcl)
-// ---------------------
-
-enum class ZclProfile : uint16_t {
-	HOME_AUTOMATION = 0x0104,
-	GREEN_POWER = 0xa1e0,
-	ZB_LIGHT_LINK = 0xc05e,
-};
-
-enum class ZclCluster : uint16_t {
-	BASIC = 0x0000,
-	POWER_CONFIGURATION = 0x0001,
-	IDENTIFY = 0x0003,
-	GROUPS = 0x0004,
-	SCENES = 0x0005,
-	ON_OFF = 0x0006,
-	LEVEL_CONTROL = 0x0008,
-	OTA_UPGRADE = 0x0019,
-	GREEN_POWER = 0x0021,
-	ZLL_COMMISSIONING = 0x1000,
-};
-
-enum class ZclFrameControl : uint8_t {
-	TYPE_MASK = 3,
-	TYPE_PROFILE_WIDE = 0,
-	TYPE_CLUSTER_SPECIFIC = 1,
-
-	MANUFACTURER_SPECIFIC = 1 << 2,
-
-	DIRECTION_MASK = 1 << 3,
-	DIRECTION_SERVER_TO_CLIENT = 1 << 3,
-	DIRECTION_CLIENT_TO_SERVER = 0,
-
-	DISABLE_DEFAULT_RESPONSE = 1 << 4
-};
-FLAGS_ENUM(ZclFrameControl)
-
-// profile wide commands
-enum class ZclCommand : uint8_t {
-	READ_ATTRIBUTES = 0x00,
-	READ_ATTRIBUTES_RESPONSE = 0x01,
-	CONFIGURE_REPORTING = 0x06,
-	CONFIGURE_REPORTING_RESPONSE = 0x07,
-	REPORT_ATTRIBUTES = 0x0a,
-	DEFAULT_RESPONSE = 0x0b
-};
-
-enum class ZclStatus : uint8_t {
-	SUCCESS = 0x00,
-	UNSUPPORTED_ATTRIBUTE = 0x86
-};
-
-enum class ZclDataType : uint8_t  {
-	UINT8 = 0x20,
-	STRING = 0x42
-};
-
-// basic cluster
-// -------------
-
-// attributes of basic cluster
-enum class ZclBasicAttribute : uint16_t {
-	ZCL_VERSION = 0x0000,
-	APPLICATION_VERSION = 0x0001,
-	STACK_VERSION = 0x0002,
-	HW_VERSION = 0x0003,
-	MANUFACTURER_NAME = 0x0004,
-	MODEL_IDENTIFIER = 0x0005,
-	DATE_CODE = 0x0006,
-	POWER_SOURCE = 0x0007,
-	SOFTWARE_BUILD_ID = 0x4000
-};
-
-// types of attribute POWER_SOURCE of basic cluster
-enum class ZclPowerSourceType : uint8_t {
-	// mains (single phase)
-	MAINS = 1,
-
-	// battery
-	BATTERY = 3
-};
-
-// power configuration cluster
-// ---------------------------
-
-// attributes of power configuration cluster
-enum ZclPowerConfigurationAttribute : uint16_t {
-	BATTERY_VOLTAGE = 0x0020,
-	BATTERY_PERCENTAGE = 0x0021,
-};
-
-// on off cluster
-// --------------
-
-// attributes of on off cluster
-enum ZclOnOffAttribute : uint16_t {
-	ON_OFF = 0x0000,
-	GLOBAL_SCENE_CONTROL = 0x4000,
-	ON_TIME = 0x4001,
-	OFF_WAIT_TIME = 0x4002
-};
-
-enum ZclOnOffCommand : uint8_t {
-	OFF = 0x00,
-	ON = 0x01,
-	TOGGLE = 0x02,
-	OFF_WITH_EFFECT = 0x40,
-	ON_WITH_RECALL_GLOBAL_SCENE = 0x41
-};
-
-// level control cluster
-// ---------------------
-
-// attributes of level control cluster
-enum ZclLevelControlAttribute : uint16_t {
-	CURRENT_LEVEL = 0x0000,
-	REMAINING_TIME = 0x0001,
-	ON_OFF_TRANSITION_TIME = 0x0010,
-	ON_LEVEL = 0x0011,
-	ON_TRANSITION_TIME = 0x0012,
-	OFF_TRANSITION_TIME = 0x0013,
-	DEFAULT_MOVE_RATE = 0x0014
-};
-
-enum ZclLevelControlCommand : uint8_t {
-	MOVE_TO_LEVEL = 0x00,
-	MOVE = 0x01,
-	STEP = 0x02,
-	STOP = 0x03,
-	MOVE_TO_LEVEL_WITH_ON_OFF = 0x04,
-	MOVE_WITH_ON_OFF = 0x05,
-	STEP_WITH_ON_OFF = 0x06,
-	STOP_WITH_ON_OFF = 0x07,
-};
-
 // security
 // --------
-
-/*
-	network key: used in standard communication in nwk layer
-
-*/
 
 // standard key type (table 4.9)
 enum class StandardKeyType : uint8_t  {
 	// network key used in nwk, is defined by the coordinator and distributed with TRANSPORT_KEY aps messages
 	NETWORK = 1,
 
-	// application link key used in aps for communicatin between two devices
+	// application link key used in aps for communication between two devices
 	APPLICATION_LINK = 3,
 
 	// trust-center link key used in aps, default is 5A:69:67:42:65:65:41:6C:6C:69:61:6E:63:65:30:39

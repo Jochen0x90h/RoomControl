@@ -1,10 +1,10 @@
 #include "util.hpp"
-#include "Storage.hpp"
+#include "ArrayStorage.hpp"
 
 
 // Storage::ArrayData
 
-void Storage::ArrayData::enlarge(int count) {
+void ArrayStorage::ArrayData::enlarge(int count) {
 	// update number of elements of this array and of storage
 	this->count += count;
 	this->storage->elementCount += count;
@@ -28,7 +28,7 @@ void Storage::ArrayData::enlarge(int count) {
 	}
 }
 
-void Storage::ArrayData::shrink(int index, int count) {
+void ArrayStorage::ArrayData::shrink(int index, int count) {
 	ElementInternal **elements = this->elements;
 
 	// update number of elements of this array and of storage
@@ -59,7 +59,7 @@ void Storage::ArrayData::shrink(int index, int count) {
 	}
 }
 
-bool Storage::ArrayData::hasSpace(void const *flashElement) {
+bool ArrayStorage::ArrayData::hasSpace(void const *flashElement) {
 	auto storage = this->storage;
 	if (storage->elementCount >= MAX_ELEMENT_COUNT)
 		return false;
@@ -70,7 +70,7 @@ bool Storage::ArrayData::hasSpace(void const *flashElement) {
 	return true;
 }
 
-Storage::ElementInternal *Storage::ArrayData::write(int index, ElementInternal *element) {
+ArrayStorage::ElementInternal *ArrayStorage::ArrayData::write(int index, ElementInternal *element) {
 	auto storage = this->storage;
 	void const *flashElement = element->flash;
 
@@ -136,7 +136,7 @@ Storage::ElementInternal *Storage::ArrayData::write(int index, ElementInternal *
 	return oldElement;
 }
 
-Storage::ElementInternal *Storage::ArrayData::erase(int index) {
+ArrayStorage::ElementInternal *ArrayStorage::ArrayData::erase(int index) {
 	auto storage = this->storage;
 
 	ElementInternal *oldElement = this->elements[index];
@@ -162,11 +162,11 @@ Storage::ElementInternal *Storage::ArrayData::erase(int index) {
 	return oldElement;
 }
 
-void Storage::ArrayData::move(int index, int newIndex) {
+void ArrayStorage::ArrayData::move(int index, int newIndex) {
 	if (index == newIndex)
 		return;
 
-	Storage *storage = this->storage;
+	auto *storage = this->storage;
 
 	ElementInternal **e = this->elements;
 	ElementInternal *element = e[index];
@@ -199,9 +199,9 @@ void Storage::ArrayData::move(int index, int newIndex) {
 }
 
 
-// Storage
+// ArrayStorage
 
-void Storage::init() {
+void ArrayStorage::init() {
 	// detect current flash region by checking if op of first header is valid
 	int pageCount = this->pageCount;
 	const uint8_t *p = Flash::getAddress(this->pageStart + pageCount);
@@ -315,12 +315,12 @@ void Storage::init() {
 	};
 }
 
-/*bool Storage::hasSpace(int elementCount, int byteSize) const {
+/*bool ArrayStorage::hasSpace(int elementCount, int byteSize) const {
 	return this->elementCount + elementCount <= ::size(this->elements)
 		&& (this->elementCount + 1) * (align(HEADER_SIZE) + WRITE_ALIGN) + this->elementsSize + byteSize < this->pageCount * FLASH_PAGE_SIZE;
 }*/
 
-void Storage::switchFlashRegions() {
+void ArrayStorage::switchFlashRegions() {
 	// switch flash regions
 	int pageCount = this->pageCount;
 	const uint8_t *p = Flash::getAddress(this->pageStart + pageCount);

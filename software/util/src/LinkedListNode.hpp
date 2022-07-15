@@ -1,6 +1,10 @@
 #pragma once
 
 
+/**
+ * Linked list node that list elements inherit from
+ * @tparam T list element that inherits LinkedListNode, e.g class Element : public LinkedListNode<Element>
+ */
 template <typename T>
 struct LinkedListNode {
 	T *next;
@@ -60,12 +64,25 @@ struct LinkedListNode {
 
 	/**
 	 * Add a node before this node (add at end of list if this is the list head)
+	 * @param node node to add, must not be part of another list already
 	 */
 	void add(T &node) {
 		node.next = static_cast<T *>(this);
 		node.prev = this->prev;
 		this->prev->next = &node;
 		this->prev = &node;
+	}
+
+	/**
+	 * Add one or more nodes at end of list if this is the list head
+	 * @param list list to insert
+	 */
+	void insert(LinkedListNode &list) {
+		auto p = list.prev;
+		list.prev->next = static_cast<T *>(this);
+		list.prev = this->prev;
+		this->prev->next = static_cast<T *>(&list);
+		this->prev = p;
 	}
 
 	/**

@@ -62,7 +62,7 @@ struct String {
 	String(String const &str) = default;
 
 	/**
-	 * Construct from c-string
+	 * Construct from c-string or char array
 	 */
 	template <typename T> requires CString<T>
 	constexpr String(T const &str) noexcept

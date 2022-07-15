@@ -6,6 +6,7 @@
 #include <Nonce.hpp>
 #include <ieee.hpp>
 #include <zb.hpp>
+#include <zcl.hpp>
 #include <gp.hpp>
 #include <pcap.hpp>
 #include <enum.hpp>
@@ -740,39 +741,39 @@ void handleZdp(PacketReader &r) {
 }
 
 void handleZcl(PacketReader &r, uint8_t destinationEndpoint) {
-	zb::ZclCluster cluster = r.e16L<zb::ZclCluster>();
-	zb::ZclProfile profile = r.e16L<zb::ZclProfile>();
+	zcl::Cluster cluster = r.e16L<zcl::Cluster>();
+	zcl::Profile profile = r.e16L<zcl::Profile>();
 	uint8_t sourceEndpoint = r.u8();
 	uint8_t apsCounter = r.u8();
 
 	// cluster library frame
-	auto frameControl = r.e8<zb::ZclFrameControl>();
-	auto frameType = frameControl & zb::ZclFrameControl::TYPE_MASK;
-	bool manufacturerSpecificFlag = (frameControl & zb::ZclFrameControl::MANUFACTURER_SPECIFIC) != 0;
+	auto frameControl = r.e8<zcl::FrameControl>();
+	auto frameType = frameControl & zcl::FrameControl::TYPE_MASK;
+	bool manufacturerSpecificFlag = (frameControl & zcl::FrameControl::MANUFACTURER_SPECIFIC) != 0;
 	//bool directionFlag = frameControl & 0x80; // false: client to server, true: server to client
 
 	uint8_t zclCounter = r.u8();
 
 	Terminal::out << ("ZclCnt " + dec(zclCounter) + "; ");
 
-	if (frameType == zb::ZclFrameControl::TYPE_PROFILE_WIDE && !manufacturerSpecificFlag) {
-		auto command = r.e8<zb::ZclCommand>();
+	if (frameType == zcl::FrameControl::TYPE_PROFILE_WIDE && !manufacturerSpecificFlag) {
+		auto command = r.e8<zcl::Command>();
 		switch (command) {
-		case zb::ZclCommand::CONFIGURE_REPORTING:
+		case zcl::Command::CONFIGURE_REPORTING:
 			Terminal::out << ("Configure Reporting\n");
 			break;
-		case zb::ZclCommand::CONFIGURE_REPORTING_RESPONSE:
+		case zcl::Command::CONFIGURE_REPORTING_RESPONSE:
 			Terminal::out << ("Configure Reporting Response\n");
 			break;
-		case zb::ZclCommand::READ_ATTRIBUTES:
+		case zcl::Command::READ_ATTRIBUTES:
 			Terminal::out << ("Read Attributes; ");
 			switch (cluster) {
-			case zb::ZclCluster::BASIC:
+			case zcl::Cluster::BASIC:
 				{
-					auto attribute = r.e16L<zb::ZclBasicAttribute>();
+					auto attribute = r.e16L<zcl::BasicAttribute>();
 
 					switch (attribute) {
-					case zb::ZclBasicAttribute::MODEL_IDENTIFIER:
+					case zcl::BasicAttribute::MODEL_IDENTIFIER:
 						Terminal::out << ("Model Identifier\n");
 						break;
 					default:
@@ -780,12 +781,12 @@ void handleZcl(PacketReader &r, uint8_t destinationEndpoint) {
 					}
 				}
 				break;
-			case zb::ZclCluster::POWER_CONFIGURATION:
+			case zcl::Cluster::POWER_CONFIGURATION:
 				{
-					auto attribute = r.e16L<zb::ZclPowerConfigurationAttribute>();
+					auto attribute = r.e16L<zcl::PowerConfigurationAttribute>();
 
 					switch (attribute) {
-					case zb::ZclPowerConfigurationAttribute::BATTERY_VOLTAGE:
+					case zcl::PowerConfigurationAttribute::BATTERY_VOLTAGE:
 						Terminal::out << ("Battery Voltage\n");
 						break;
 					default:
@@ -793,29 +794,29 @@ void handleZcl(PacketReader &r, uint8_t destinationEndpoint) {
 					}
 				}
 				break;
-			case zb::ZclCluster::IDENTIFY:
+			case zcl::Cluster::IDENTIFY:
 				Terminal::out << ("Unknown Attribute\n");
 				break;
-			case zb::ZclCluster::ON_OFF:
+			case zcl::Cluster::ON_OFF:
 				Terminal::out << ("Unknown Attribute\n");
 				break;
 			default:
 				Terminal::out << ("Unknown Attribute\n");
 			}
 			break;
-		case zb::ZclCommand::READ_ATTRIBUTES_RESPONSE:
+		case zcl::Command::READ_ATTRIBUTES_RESPONSE:
 			Terminal::out << ("Read Attributes Response; ");
 			switch (cluster) {
-			case zb::ZclCluster::BASIC:
+			case zcl::Cluster::BASIC:
 				{
-					auto attribute = r.e16L<zb::ZclBasicAttribute>();
+					auto attribute = r.e16L<zcl::BasicAttribute>();
 					uint8_t status = r.u8();
 
 					if (status == 0) {
-						auto dataType = r.e8<zb::ZclDataType>();
+						auto dataType = r.e8<zcl::DataType>();
 
 						switch (attribute) {
-						case zb::ZclBasicAttribute::MODEL_IDENTIFIER:
+						case zcl::BasicAttribute::MODEL_IDENTIFIER:
 							{
 								Terminal::out << ("Model Identifier: " + r.string() + '\n');
 							}
@@ -828,20 +829,20 @@ void handleZcl(PacketReader &r, uint8_t destinationEndpoint) {
 					}
 				}
 				break;
-			case zb::ZclCluster::POWER_CONFIGURATION:
+			case zcl::Cluster::POWER_CONFIGURATION:
 				{
-					auto attribute = r.e16L<zb::ZclPowerConfigurationAttribute>();
+					auto attribute = r.e16L<zcl::PowerConfigurationAttribute>();
 					uint8_t status = r.u8();
 
 					if (status == 0) {
-						auto dataType = r.e8<zb::ZclDataType>();
+						auto dataType = r.e8<zcl::DataType>();
 
 						switch (attribute) {
-						case zb::ZclPowerConfigurationAttribute::BATTERY_VOLTAGE:
+						case zcl::PowerConfigurationAttribute::BATTERY_VOLTAGE:
 							{
 								int value;
 								switch (dataType) {
-								case zb::ZclDataType::UINT8:
+								case zcl::DataType::UINT8:
 									value = uint8_t(r.u8());
 									break;
 								default:
@@ -859,34 +860,34 @@ void handleZcl(PacketReader &r, uint8_t destinationEndpoint) {
 					}
 				}
 				break;
-			case zb::ZclCluster::IDENTIFY:
+			case zcl::Cluster::IDENTIFY:
 				Terminal::out << ("Unknown Attribute\n");
 				break;
-			case zb::ZclCluster::ON_OFF:
+			case zcl::Cluster::ON_OFF:
 				Terminal::out << ("Unknown Attribute\n");
 				break;
 			default:
 				Terminal::out << ("Unknown Attribute\n");
 			}
 			break;
-		case zb::ZclCommand::REPORT_ATTRIBUTES:
+		case zcl::Command::REPORT_ATTRIBUTES:
 			Terminal::out << "Report Attributes\n";
 			break;
-		case zb::ZclCommand::DEFAULT_RESPONSE:
+		case zcl::Command::DEFAULT_RESPONSE:
 			Terminal::out << "Default Response\n";
 			break;
 		default:
 			Terminal::out << "Unknown ZCL Command\n";
 		}
-	} else if (frameType == zb::ZclFrameControl::TYPE_CLUSTER_SPECIFIC && !manufacturerSpecificFlag) {
+	} else if (frameType == zcl::FrameControl::TYPE_CLUSTER_SPECIFIC && !manufacturerSpecificFlag) {
 		switch (cluster) {
-		case zb::ZclCluster::BASIC:
+		case zcl::Cluster::BASIC:
 			Terminal::out << ("Cluster: Basic\n");
 			break;
-		case zb::ZclCluster::POWER_CONFIGURATION:
+		case zcl::Cluster::POWER_CONFIGURATION:
 			Terminal::out << ("Cluster: Power Configuration\n");
 			break;
-		case zb::ZclCluster::ON_OFF:
+		case zcl::Cluster::ON_OFF:
 			Terminal::out << ("Cluster: On/Off; ");
 			{
 				uint8_t command = r.u8();
@@ -905,7 +906,7 @@ void handleZcl(PacketReader &r, uint8_t destinationEndpoint) {
 				}
 			}
 			break;
-		case zb::ZclCluster::GREEN_POWER:
+		case zcl::Cluster::GREEN_POWER:
 			Terminal::out << ("Cluster: Green Power; ");
 			{
 				uint8_t command = r.u8();

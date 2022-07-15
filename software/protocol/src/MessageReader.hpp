@@ -37,16 +37,23 @@ public:
 		return T(this->current[0]);
 	}
 
-	uint16_t u16L() {
+	int16_t i16L() {
 		auto current = this->current;
 		int16_t value = current[0] | (current[1] << 8);
 		this->current += 2;
 		return value;
 	}
 
+	uint16_t u16L() {
+		auto current = this->current;
+		uint16_t value = current[0] | (current[1] << 8);
+		this->current += 2;
+		return value;
+	}
+
 	uint16_t u16B() {
 		auto current = this->current;
-		int16_t value = (current[0] << 8) | current[1];
+		uint16_t value = (current[0] << 8) | current[1];
 		this->current += 2;
 		return value;
 	}
@@ -118,7 +125,7 @@ public:
 	}
 
 	/**
-	 * Read a string until end of data
+	 * Read string until end of data
 	 * @return string
 	 */
 	String string() {
@@ -128,7 +135,18 @@ public:
 	}
 
 	/**
-	 * Read a string with given length
+	 * Read string with 8 bit length
+	 * @return string
+	 */
+	String string8() {
+		int length = u8();
+		auto str = this->current;
+		this->current += length;
+		return {length, str};
+	}
+
+	/**
+	 * Read string with given length
 	 * @param length length of string
 	 * @return string
 	 */

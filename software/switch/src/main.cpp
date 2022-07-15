@@ -19,9 +19,9 @@
 constexpr SystemDuration RELAY_TIME = 10ms;
 
 
-constexpr auto ROCKER = bus::EndpointType::TERNARY_BUTTON_OUT;
-constexpr auto LIGHT = bus::EndpointType::BINARY_POWER_LIGHT_IN;
-constexpr auto BLIND = bus::EndpointType::TERNARY_OPENING_BLIND_IN;
+constexpr auto ROCKER = bus::PlugType::TERNARY_BUTTON_OUT;
+constexpr auto LIGHT = bus::PlugType::BINARY_POWER_LIGHT_IN;
+constexpr auto BLIND = bus::PlugType::TERNARY_OPENING_BLIND_IN;
 
 enum class Mode : uint8_t {
 	LIGHT = 1,
@@ -31,16 +31,16 @@ enum class Mode : uint8_t {
 Mode modeA = Mode::LIGHT;
 Mode modeB = Mode::LIGHT;
 
-bus::EndpointType const endpointsLight[] = {ROCKER, LIGHT};
-bus::EndpointType const endpointsDoubleLight[] = {ROCKER, LIGHT, LIGHT};
-bus::EndpointType const endpointsBlind[] = {ROCKER, BLIND};
-int const endpointCounts[4] = {0, 2, 3, 2};
+bus::PlugType const plugsLight[] = {ROCKER, LIGHT};
+bus::PlugType const plugsDoubleLight[] = {ROCKER, LIGHT, LIGHT};
+bus::PlugType const plugsBlind[] = {ROCKER, BLIND};
+int const plugCounts[4] = {0, 2, 3, 2};
 
-Array<bus::EndpointType const> const endpoints[] = {
-	Array<bus::EndpointType>(),
-	endpointsLight,
-	endpointsDoubleLight,
-	endpointsBlind
+Array<bus::PlugType const> const plugs[] = {
+	{},
+	plugsLight,
+	plugsDoubleLight,
+	plugsBlind
 };
 
 
@@ -123,49 +123,49 @@ public:
 				if ((index & 2) == 0) {
 					// A
 					switch (modeA) {
-						case Mode::LIGHT:
-							if (state) {
-								this->relays &= ~0x11;
-								this->relays |= 1 - index;
-							}
-							break;
-						case Mode::DOUBLE_LIGHT:
-							this->relays &= ~0x10 << index;
-							if (state)
-								this->relays ^= 1 << index;
-							break;
-						case Mode::BLIND:
-							if (state) {
-								this->relays &= ~0x33;
-								this->relays |= 1 << index;
-							}
-							break;
-						default:
-							break;
+					case Mode::LIGHT:
+						if (state) {
+							this->relays &= ~0x11;
+							this->relays |= 1 - index;
+						}
+						break;
+					case Mode::DOUBLE_LIGHT:
+						this->relays &= ~0x10 << index;
+						if (state)
+							this->relays ^= 1 << index;
+						break;
+					case Mode::BLIND:
+						if (state) {
+							this->relays &= ~0x33;
+							this->relays |= 1 << index;
+						}
+						break;
+					default:
+						break;
 					}
 				} else {
 					// B
 					index &= 1;
 					switch (modeB) {
-						case Mode::LIGHT:
-							if (state) {
-								this->relays &= ~0x44;
-								this->relays |= (1 - index) << 2;
-							}
-							break;
-						case Mode::DOUBLE_LIGHT:
-							this->relays &= ~0x40 << index;
-							if (state)
-								this->relays ^= (1 << index) << 2;
-							break;
-						case Mode::BLIND:
-							if (state) {
-								this->relays &= ~0xcc;
-								this->relays |= (1 << index) << 2;
-							}
-							break;
-						default:
-							break;
+					case Mode::LIGHT:
+						if (state) {
+							this->relays &= ~0x44;
+							this->relays |= (1 - index) << 2;
+						}
+						break;
+					case Mode::DOUBLE_LIGHT:
+						this->relays &= ~0x40 << index;
+						if (state)
+							this->relays ^= (1 << index) << 2;
+						break;
+					case Mode::BLIND:
+						if (state) {
+							this->relays &= ~0xcc;
+							this->relays |= (1 << index) << 2;
+						}
+						break;
+					default:
+						break;
 					}
 				}
 				this->relayBarrier.resumeFirst();
@@ -173,7 +173,7 @@ public:
 				// bus mode: report state change on bus
 
 				// endpoint index
-				uint8_t endpointIndex = (index & 2) == 0 ? 0 : endpointCounts[int(modeA)];//(index >> 1) & 1;
+				uint8_t endpointIndex = (index & 2) == 0 ? 0 : plugCounts[int(modeA)];//(index >> 1) & 1;
 
 				// value
 				uint8_t value = int(state) << (index & 1);
@@ -199,31 +199,73 @@ public:
 			bus::MessageWriter w(sendData);
 			w.setHeader();
 
-			if (element.endpointIndex == 255) {
-				// enumerate message
+			if (element.plugIndex == 255) {
+				if (element.value == 255) {
+					// send enumerate message
 
-				// prefix with zero
-				w.u8(0);
+					// prefix with zero
+					w.u8(0);
 
-				// encoded device id
-				w.id(deviceId);
+					// encoded device id
+					w.id(deviceId);
 
-				// list of endpoints of part A and B
-				w.data16L(endpoints[int(modeA)]);
-				w.data16L(endpoints[int(modeB)]);
+					// protocol version
+					w.u8(0);
 
-				// encrypt
-				w.setMessage();
-				Nonce nonce(deviceId, 0);
-				w.encrypt(micLength, nonce, bus::defaultAesKey);
+					// number of endpoints
+					w.u8(1);
 
-				securityCounter = 0;
+					// encrypt
+					w.setMessage();
+					Nonce nonce(deviceId, 0);
+					w.encrypt(micLength, nonce, bus::defaultAesKey);
+
+					securityCounter = 0;
+				} else {
+					// send attribute
+					auto attribute = bus::Attribute(element.value);
+
+					// encoded address
+					w.address(address);
+
+					// security counter
+					w.u32L(securityCounter);
+
+					// set start of message
+					w.setMessage();
+
+					// "escaped" endpoint index
+					w.u8(255);
+					w.u8(0);
+
+					// attribute
+					w.e8(attribute);
+
+					switch (attribute) {
+					case bus::Attribute::MODEL_IDENTIFIER:
+						w.string("Switch");
+						break;
+					case bus::Attribute::PLUG_LIST:
+						// list of plugs
+						// list of plugs of part A and B
+						w.data16L(plugs[int(modeA)]);
+						w.data16L(plugs[int(modeB)]);
+						break;
+					default:;
+					}
+
+					// encrypt
+					Nonce nonce(address, securityCounter);
+					w.encrypt(micLength, nonce, aesKey);
+
+					// increment security counter
+					++securityCounter;
+				}
 			} else {
-				// data message
+				// send plug message
 
 				// encoded address
-				w.arbiter((address & 7) + 1);
-				w.arbiter(address >> 3);
+				w.address(address);
 
 				// security counter
 				w.u32L(securityCounter);
@@ -232,7 +274,10 @@ public:
 				w.setMessage();
 
 				// endpoint index
-				w.u8(element.endpointIndex);
+				w.u8(0);
+
+				// plug index
+				w.u8(element.plugIndex);
 
 				// value
 				w.u8(element.value);
@@ -261,13 +306,12 @@ public:
 			bus::MessageReader r(length, receiveData);
 			r.setHeader();
 
-			// skip command prefix (0) and arbitration byte (0)
-			auto a1 = r.arbiter();
-			if (a1 == 0) {
+			// check for command prefix (0)
+			if (r.peekU8() == 0) {
 				// received command message
-				auto a2 = r.u8();
-				if (a2 == 0) {
-					// commission
+				r.u8();
+				if (r.u8() == 0) {
+					// 0 0: commission
 
 					// check device id
 					auto id = r.u32L();
@@ -288,11 +332,8 @@ public:
 					setKey(aesKey, r.data8<16>());
 				}
 			} else {
-				// received data message
-				auto a2 = r.arbiter();
-
-				// check address
-				int addr = (a1 - 1) | (a2 << 3);
+				// received data message: check address
+				int addr = r.address();
 				if (addr != address)
 					continue;
 
@@ -307,27 +348,38 @@ public:
 				if (!r.decrypt(micLength, nonce, aesKey))
 					break;
 
+				// get endpoint index (255 for read attribute)
 				uint8_t endpointIndex = r.u8();
+				if (endpointIndex == 255) {
+					// attribute
+					endpointIndex = r.u8();
+					auto attribute = r.e8<bus::Attribute>();
+					if (r.atEnd() && endpointIndex == 0) {
+						this->sendQueue.addBack(SendElement{255, uint8_t(attribute)});
+						this->sendBarrier.resumeFirst();
+					}
+				} else if (endpointIndex == 0) {
+					// plug
+					uint8_t plugIndex = r.u8();
+					int plugCountA = plugCounts[int(modeA)];
+					int plugCountB = plugCounts[int(modeB)];
+					if (plugIndex >= plugCountA + plugCountB)
+						break;
 
-				int endpointCountA = endpointCounts[int(modeA)];
-				int endpointCountB = endpointCounts[int(modeB)];
-				if (endpointIndex >= endpointCountA + endpointCountB)
-					break;
+					bus::PlugType plugType;
+					int relayIndex;
+					if (plugIndex < plugCountA) {
+						plugType = plugs[int(modeA)][plugIndex];
+						relayIndex = plugIndex == 2 ? 1 : 0;
+					} else {
+						plugIndex -= plugCountA;
+						plugType = plugs[int(modeB)][plugIndex];
+						relayIndex = plugIndex == 2 ? 3 : 2;
+					}
 
-				bus::EndpointType endpointType;
-				int relayIndex;
-				if (endpointIndex < endpointCountA) {
-					endpointType = endpoints[int(modeA)][endpointIndex];
-					relayIndex = endpointIndex == 2 ? 1 : 0;
-				} else {
-					endpointIndex -= endpointCountA;
-					endpointType = endpoints[int(modeB)][endpointIndex];
-					relayIndex = endpointIndex == 2 ? 3 : 2;
-				}
+					int &state = outputStates[relayIndex];
 
-				int &state = outputStates[relayIndex];
-
-				switch (endpointType) {
+					switch (plugType) {
 					case LIGHT: {
 						// 0: off, 1: on, 2: toggle
 						uint8_t s = r.u8();
@@ -351,6 +403,7 @@ public:
 					}
 					default:
 						break;
+					}
 				}
 			}
 		}
@@ -441,7 +494,7 @@ public:
 	bool configure = false;
 
 	// sending over bus
-	struct SendElement {uint8_t endpointIndex; uint8_t value;};
+	struct SendElement {uint8_t plugIndex; uint8_t value;};
 	Queue<SendElement, 8> sendQueue;
 	Barrier<> sendBarrier;
 

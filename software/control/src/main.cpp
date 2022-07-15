@@ -9,6 +9,7 @@
 #include <Debug.hpp>
 #include <Spi.hpp>
 #include <Loop.hpp>
+#include <Storage.hpp>
 #include <iostream>
 #include <fstream>
 #include <vector>
@@ -23,7 +24,7 @@ struct DeviceData {
 	
 	struct Component {
 		RoomControl::Device::Component::Type type;
-		uint8_t endpointIndex;
+		uint8_t plugIndex;
 		uint8_t elementIndex;
 		SystemDuration duration;
 	};
@@ -84,7 +85,7 @@ void setDevices(Array<DeviceData const> deviceData, Storage::Array<RoomControl::
 			auto &component = editor.insert(type);
 			++device.componentCount;
 			
-			component.endpointIndex = componentData.endpointIndex;
+			component.plugIndex = componentData.plugIndex;
 			component.nameIndex = device.getNameIndex(type, i);
 			component.elementIndex = componentData.elementIndex;
 			
@@ -136,92 +137,26 @@ int main(int argc, const char **argv) {
 	Network::init();
 	Output::init();
 	Input::init();
+	Storage::init();
 
 	Radio::start(15); // start on channel 15
 	Radio::enableReceiver(true); // enable baseband decoder
 
+	// set default configuration
+	Configuration configuration;
+	if (Storage::read(STORAGE_CONFIG, 0, sizeof(Configuration), &configuration) != sizeof(Configuration)) {
+		static uint8_t const networkKey[] = {0xe6, 0x63, 0x2b, 0xa3, 0x55, 0xd4, 0x76, 0x82, 0x63, 0xe8, 0xb5, 0x9a, 0x2a, 0x6b, 0x41, 0x44};
+		configuration.key.setData(0, 16, networkKey);
+		setKey(configuration.aesKey, configuration.key);
+		configuration.ieeeLongAddress = UINT64_C(0x00124b00214f3c55);
+		configuration.mqttLocalPort = 1337;
+		configuration.mqttGateway = {Network::Address::fromString("::1"), 10000};
+
+		Storage::write(STORAGE_CONFIG, 0, sizeof(Configuration), &configuration);
+	}
+
 	// the room control application
 	RoomControl roomControl;
-
-	// set configuration
-	ConfigurationFlash configuration = *roomControl.configurations[0];
-	static uint8_t const networkKey[] = {0xe6, 0x63, 0x2b, 0xa3, 0x55, 0xd4, 0x76, 0x82, 0x63, 0xe8, 0xb5, 0x9a, 0x2a, 0x6b, 0x41, 0x44};
-	configuration.key.setData(0, 16, networkKey);
-	setKey(configuration.aesKey, configuration.key);
-	configuration.ieeeLongAddress = UINT64_C(0x00124b00214f3c55);
-	configuration.mqttLocalPort = 1337;
-	configuration.mqttGateway = {Network::Address::fromString("::1"), 10000};
-	roomControl.configurations.write(0, configuration);
-	roomControl.applyConfiguration();
-/*
-	// add test data
-	setDevices(localDeviceData, roomControl.localDevices);
-	setDevices(busDeviceData, roomControl.busDevices);
-	for (auto r : routeData) {
-		RoomControl::Route route = {};
-		route.setSrcTopic(r[0]);
-		route.setDstTopic(r[1]);
-		roomControl.routes.write(roomControl.routes.size(), &route);
-	}
-	for (auto t : timerData) {
-		RoomControl::Timer timer = {};
-		RoomControl::TimerState timerState = {};
-		timer.time = t.time;
-		
-		// add commands
-		{
-			RoomControl::CommandEditor editor(timer, timerState);
-			editor.insert();
-			editor.setTopic(t.topic);
-			editor.setValueType(RoomControl::Command::ValueType::SWITCH);
-			++timer.commandCount;
-			editor.next();
-		}
-		
-		roomControl.timers.write(roomControl.timers.size(), &timer);
-	}
-
-	// debug print devices
-	for (auto e : roomControl.busDevices) {
-		RoomControl::Device const &device = *e.flash;
-		RoomControl::DeviceState &deviceState = *e.ram;
-		std::cout << device.getName() << std::endl;
-		for (RoomControl::ComponentIterator it(device, deviceState); !it.atEnd(); it.next()) {
-			auto &component = it.getComponent();
-			StringBuffer<8> b = component.getName();
-			std::cout << "\t" << b << std::endl;
-		}
-	}
-
-	// debug print timers
-	for (auto e : roomControl.timers) {
-		RoomControl::Timer const &timer = *e.flash;
-		RoomControl::TimerState &timerState = *e.ram;
-		
-		int minutes = timer.time.getMinutes();
-		int hours = timer.time.getHours();
-		StringBuffer<16> b = dec(hours) + ':' + dec(minutes, 2);
-		std::cout << b << std::endl;
-		for (RoomControl::CommandIterator it(timer, timerState); !it.atEnd(); it.next()) {
-			auto &command = it.getCommand();
-			std::cout << "\t" << it.getTopic() << std::endl;
-			std::cout << "\t";
-			switch (command.valueType) {
-			case RoomControl::Command::ValueType::BUTTON:
-				std::cout << "BUTTON";
-				break;
-			case RoomControl::Command::ValueType::SWITCH:
-				std::cout << "SWITCH";
-				break;
-			}
-			std::cout << std::endl;
-		}
-	}
-
-	// subscribe devices after test data has been added
-	//roomControl.subscribeInterface(roomControl.localInterface, roomControl.localDevices);
-	roomControl.subscribeAll();
-*/
 
 	Loop::run();
 

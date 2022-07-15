@@ -7,7 +7,7 @@
 /**
 * Reuse endpoint type for now
 */
-using MessageType = bus::EndpointType;
+using MessageType = bus::PlugType;
 
 inline bool isInput(MessageType type) {
 	return (type & MessageType::DIRECTION_MASK) == MessageType::IN;
@@ -39,7 +39,7 @@ struct MessageInfo {
 		// source or destination interface device
 		struct {
 			uint8_t id;
-			uint8_t endpointIndex;
+			uint8_t plugIndex;
 		} device;
 
 		// source or destination mqtt topic

@@ -12,14 +12,18 @@
 // emulator implementation of bus uses virtual devices on user interface
 namespace BusMaster {
 
-using EndpointType = bus::EndpointType;
+using PlugType = bus::PlugType;
 
 constexpr int micLength = 4;
 
 
+struct Endpoint {
+	Array<PlugType const> plugs;
+};
+
 struct Device {
 	struct Flash {
-		uint8_t commissioning = 0;
+		uint8_t commissioning;
 		uint8_t address;
 		AesKey aesKey;
 	};
@@ -27,39 +31,51 @@ struct Device {
 	// device id
 	uint32_t id;
 
-	// two sets of endpoints to test reconfiguration of device
-	Array<EndpointType const> endpoints[2];
+	// two endpoint lists to test reconfiguration of device
+	Array<Endpoint const> endpoints[2];
 
 	Flash flash;
 	uint8_t commissioning;
 	uint32_t securityCounter;
+
+	// attribute reading
+	bool readAttribute;
+	uint8_t endpointIndex;
+	bus::Attribute attribute;
+
+	// state
 	int states[16];
 };
 
-constexpr auto SWITCH = EndpointType::BINARY_SWITCH_WALL_OUT;
-constexpr auto BUTTON = EndpointType::BINARY_BUTTON_OUT;
-constexpr auto ROCKER = EndpointType::TERNARY_BUTTON_OUT;
-constexpr auto LIGHT = EndpointType::BINARY_POWER_LIGHT_CMD_IN;
-constexpr auto BLIND = EndpointType::TERNARY_OPENING_BLIND_IN;
+constexpr auto SWITCH = PlugType::BINARY_SWITCH_WALL_OUT;
+constexpr auto BUTTON = PlugType::BINARY_BUTTON_OUT;
+constexpr auto ROCKER = PlugType::TERNARY_BUTTON_OUT;
+constexpr auto LIGHT = PlugType::BINARY_POWER_LIGHT_CMD_IN;
+constexpr auto BLIND = PlugType::TERNARY_OPENING_BLIND_IN;
 
-const EndpointType endpoints1a[] = {
-	ROCKER, ROCKER, LIGHT, LIGHT, LIGHT,
-};
-const EndpointType endpoints1b[] = {
-	ROCKER, ROCKER, ROCKER,BLIND, BLIND,
-};
-const EndpointType endpoints2[] = {
-	ROCKER, BUTTON, BLIND, ROCKER, BUTTON, BLIND, LIGHT, LIGHT,
-};
-const EndpointType endpoints3a[] = {
-	EndpointType::PHYSICAL_TEMPERATURE_MEASURED_ROOM_OUT
-};
+
+const PlugType device1Plugs[] = {BUTTON, BUTTON, BLIND, BLIND};
+const PlugType buttonPlugs[] = {BUTTON, BUTTON};
+const PlugType rockerPlugs[] = {ROCKER, ROCKER};
+const PlugType lightPlugs[] = {LIGHT, LIGHT};
+const PlugType blindPlugs[] = {BLIND, BLIND};
+const PlugType temperaturePlugs[] = {PlugType::PHYSICAL_TEMPERATURE_MEASURED_ROOM_OUT};
+
+// device 1
+const Endpoint endpoint1a[] = {rockerPlugs, lightPlugs};
+const Endpoint endpoint1b[] = {device1Plugs};//, blindPlugs};
+
+// device 2
+const Endpoint endpoint2[] = {buttonPlugs, rockerPlugs, blindPlugs, lightPlugs};
+
+// device 3
+const Endpoint endpoint3a[] = {temperaturePlugs};
 
 
 Device devices[] = {
-	{0x00000001, {endpoints1a, endpoints1b}},
-	{0x00000002, {endpoints2, endpoints2}},
-	{0x00000003, {endpoints3a, Array<EndpointType>()}},
+	{0x00000001, {endpoint1a, endpoint1b}},
+	{0x00000002, {endpoint2, endpoint2}},
+	{0x00000003, {endpoint3a, Array<Endpoint>()}},
 };
 
 
@@ -70,6 +86,39 @@ std::chrono::steady_clock::time_point time;
 
 Waitlist<ReceiveParameters> receiveWaitlist;
 Waitlist<SendParameters> sendWaitlist;
+
+
+void setHeader(bus::MessageWriter &w, Device &device) {
+	w.setHeader();
+
+	// encoded address
+	w.address(device.flash.address);
+
+	// security counter
+	w.u32L(device.securityCounter);
+
+	// set start of message
+	w.setMessage();
+}
+
+void sendToMaster(bus::MessageWriter &w, Device &device) {
+	// encrypt
+	Nonce nonce(device.flash.address, device.securityCounter);
+	w.encrypt(4, nonce, device.flash.aesKey);
+
+	// increment security counter
+	++device.securityCounter;
+
+	// send to bus master (resume coroutine waiting to receive from device)
+	int length = w.getLength();
+	auto data = w.begin;
+	BusMaster::receiveWaitlist.resumeFirst([length, data](ReceiveParameters &p) {
+		int len = min(*p.receiveLength, length);
+		array::copy(len, p.receiveData, data);
+		*p.receiveLength = len;
+		return true;
+	});
+}
 
 
 // event loop handler chain
@@ -88,10 +137,10 @@ void handle(Gui &gui) {
 		r.setHeader();
 
 		// get address
-		auto a1 = r.arbiter();
-		if (a1 == 0) {
+		if (r.peekU8() == 0) {
+			r.u8();
 			if (r.u8() == 0) {
-				// master has sent a commissioning message
+				// 0 0: master has sent a commissioning message
 
 				// search device with given device id
 				uint32_t deviceId = r.u32L();
@@ -126,7 +175,7 @@ void handle(Gui &gui) {
 			}
 		} else {
 			// master has sent a data message
-			int address = a1 - 1 + (r.arbiter() << 3);
+			int address = r.address();
 
 			// search device
 			for (Device &device : BusMaster::devices) {
@@ -142,32 +191,42 @@ void handle(Gui &gui) {
 					if (!r.decrypt(4, nonce, device.flash.aesKey))
 						break;
 
+					// get endpoint index
 					uint8_t endpointIndex = r.u8();
-					auto endpoints = device.endpoints[device.flash.commissioning - 1];
-					if (endpointIndex < endpoints.count()) {
-						auto endpointType = endpoints[endpointIndex];
-						int &state = device.states[endpointIndex];
+					if (endpointIndex == 255) {
+						// attribute
+						device.endpointIndex = r.u8();
+						device.attribute = r.e8<bus::Attribute>();
+						device.readAttribute = r.atEnd();
+					} else {
+						// plug
+						uint8_t plugIndex = r.u8();
+						auto plugs = device.endpoints[device.flash.commissioning - 1][endpointIndex].plugs;
+						if (plugIndex < plugs.count()) {
+							auto plugType = plugs[plugIndex];
+							int &state = device.states[endpointIndex * 4 + plugIndex];
 
-						switch (endpointType) {
-						case LIGHT: {
-							// 0: off, 1: on, 2: toggle
-							uint8_t s = r.u8();
-							if (s < 2)
-								state = s;
-							else if (s == 2)
-								state ^= 1;
-							break;
-						}
-						case BLIND: {
-							// 0: inactive, 1: up, 2: down
-							uint8_t s = r.u8();
-							state = (state & ~3) | s;
-							break;
-						}
-						case EndpointType::PHYSICAL_TEMPERATURE_MEASURED_ROOM_IN:
-							state = r.u16L();
-							break;
-						default:;
+							switch (plugType) {
+							case LIGHT: {
+								// 0: off, 1: on, 2: toggle
+								uint8_t s = r.u8();
+								if (s < 2)
+									state = s;
+								else if (s == 2)
+									state ^= 1;
+								break;
+							}
+							case BLIND: {
+								// 0: inactive, 1: up, 2: down
+								uint8_t s = r.u8();
+								state = (state & ~3) | s;
+								break;
+							}
+							case PlugType::PHYSICAL_TEMPERATURE_MEASURED_ROOM_IN:
+								state = r.u16L();
+								break;
+							default:;
+							}
 						}
 					}
 					break;
@@ -196,6 +255,35 @@ void handle(Gui &gui) {
 
 		uint8_t sendData[64];
 
+		// check if there is a pending read attribute
+		if (device.readAttribute) {
+			device.readAttribute = false;
+
+			// send data message
+			bus::MessageWriter w(sendData);
+			setHeader(w, device);
+
+			// "escaped" endpoint index
+			w.u8(255);
+			w.u8(device.endpointIndex);
+
+			// attribute
+			w.e8(device.attribute);
+
+			switch (device.attribute) {
+			case bus::Attribute::MODEL_IDENTIFIER:
+				w.string("Bus");
+				break;
+			case bus::Attribute::PLUG_LIST:
+				// list of plugs
+				w.data16L(device.endpoints[device.commissioning - 1][device.endpointIndex].plugs);
+				break;
+			default:;
+			}
+
+			sendToMaster(w, device);
+		}
+
 		// commissioning can be triggered by a small commissioning button in the user interface
 		auto value = gui.button(id++, 0.2f);
 		if (value && *value == 1) {
@@ -212,8 +300,11 @@ void handle(Gui &gui) {
 			// encoded device id
 			w.id(device.id);
 
-			// list of endpoints
-			w.data16L(device.endpoints[device.commissioning - 1]);
+			// protocol version
+			w.u8(0);
+
+			// number of endpoints
+			w.u8(device.endpoints[device.commissioning - 1].count());
 
 			// add message integrity code (mic) using default key, message stays unencrypted
 			w.setMessage();
@@ -234,28 +325,23 @@ void handle(Gui &gui) {
  		if (device.flash.commissioning != 0) {
 			auto endpoints = device.endpoints[device.flash.commissioning - 1];
 			for (int endpointIndex = 0; endpointIndex < endpoints.count(); ++endpointIndex) {
-				EndpointType endpointType = endpoints[endpointIndex];
-				int &state = device.states[endpointIndex];
+				auto plugs = endpoints[endpointIndex].plugs;
+				for (int plugIndex = 0; plugIndex < plugs.count(); ++plugIndex) {
+					auto endpointType = plugs[plugIndex];
+					int &state = device.states[endpointIndex * 4 + plugIndex];
 
-				// send data message
-				bus::MessageWriter w(sendData);
-				w.setHeader();
+					// send data message
+					bus::MessageWriter w(sendData);
+					setHeader(w, device);
 
-				// encoded address
-				w.arbiter((device.flash.address & 7) + 1);
-				w.arbiter(device.flash.address >> 3);
+					// endpoint index
+					w.u8(endpointIndex);
 
-				// security counter
-				w.u32L(device.securityCounter);
+					// plug index
+					w.u8(plugIndex);
 
-				// set start of message
-				w.setMessage();
-
-				// endpoint index
-				w.u8(endpointIndex);
-
-				bool send = false;
-				switch (endpointType) {
+					bool send = false;
+					switch (endpointType) {
 					case SWITCH: {
 						// switch
 						auto value = gui.onOff(id++);
@@ -294,14 +380,14 @@ void handle(Gui &gui) {
 						// blind
 						int blind = state >> 2;
 						if (state & 1)
-							blind = std::min(blind + us, 100*65536);
+							blind = std::min(blind + us, 100 * 65536);
 						else if (state & 2)
 							blind = std::max(blind - us, 0);
 						gui.blind(blind >> 16);
 						state = (state & 3) | (blind << 2);
 						break;
 					}
-					case EndpointType::PHYSICAL_TEMPERATURE_MEASURED_ROOM_OUT: {
+					case PlugType::PHYSICAL_TEMPERATURE_MEASURED_ROOM_OUT: {
 						// temperature sensor
 						auto temperature = gui.temperatureSensor(id++);
 						if (temperature) {
@@ -316,25 +402,11 @@ void handle(Gui &gui) {
 
 					default:
 						break;
-				}
+					}
 
-				// check if we actually have to send the message
-				if (send) {
-					// encrypt
-					Nonce nonce(device.flash.address, device.securityCounter);
-					w.encrypt(4, nonce, device.flash.aesKey);
-
-					// increment security counter
-					++device.securityCounter;
-
-					// send to bus master (resume coroutine waiting to receive from device)
-					int sendLength = w.getLength();
-					BusMaster::receiveWaitlist.resumeFirst([sendLength, sendData](ReceiveParameters &p) {
-						int length = min(*p.receiveLength, sendLength);
-						array::copy(length, p.receiveData, sendData);
-						*p.receiveLength = length;
-						return true;
-					});
+					// check if we actually have to send the message
+					if (send)
+						sendToMaster(w, device);
 				}
 			}
 		}

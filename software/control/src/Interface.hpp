@@ -13,6 +13,8 @@
 class Interface {
 public:
 
+	static constexpr int MAX_NAME_LENGTH = 16;
+
 	/**
 	 * Destructor
 	 */
@@ -51,57 +53,39 @@ public:
 		 * Get endpoints (message type for each endpoint)
 		 * @return array of endpoints
 		 */
-		virtual Array<MessageType const> getEndpoints() const = 0;
+		virtual Array<MessageType const> getPlugs() const = 0;
 
 		/**
 		 * Subscribe to receive messages messages from an endpoint
-		 * @param endpointIndex endpoint index
+		 * @param plugIndex plug index
 		 * @param subscriber subscriber to insert, gets internally inserted into a linked list
 		 */
-		virtual void subscribe(uint8_t endpointIndex, Subscriber &subscriber) = 0;
+		virtual void subscribe(uint8_t plugIndex, Subscriber &subscriber) = 0;
 
 		/**
 		 * Get publish info used to publish a message to an endpoint
-		 * @param endpointIndex
+		 * @param plugIndex plug index
 		 * @return publish info
 		 */
-		virtual PublishInfo getPublishInfo(uint8_t endpointIndex) = 0;
+		virtual PublishInfo getPublishInfo(uint8_t plugIndex) = 0;
 	};
 
 	/**
-	 * Get number of devices connected to this interface
+	 * Get list of device id's
+	 * @return list of device id's
 	 */
-	virtual int getDeviceCount() = 0;
-
-	/**
-	 * Get a device by index
-	 * @param index index of device
-	 * @return device
-	 */
-	virtual Device &getDeviceByIndex(int index) = 0;
+	virtual Array<uint8_t const> getDeviceIds() = 0;
 
 	/**
 	 * Get a device by id
 	 * @param id device id
 	 * @return device
 	 */
-	virtual Device *getDeviceById(uint8_t id) = 0;
+	virtual Device *getDevice(uint8_t id) = 0;
 
-
-	// helper function: allocate a free interface id
-	template <typename T>
-	static uint8_t allocateInterfaceId(T const &devices) {
-		// find a free id
-		int id;
-		for (id = 1; id < 256; ++id) {
-			for (auto &device : devices) {
-				if (device->interfaceId == id)
-					goto found;
-			}
-			break;
-		found:
-			;
-		}
-		return id;
-	}
+	/**
+	 * Erase a device by id
+	 * @param id device id
+	 */
+	virtual void eraseDevice(uint8_t id) = 0;
 };
