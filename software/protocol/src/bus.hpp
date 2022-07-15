@@ -13,13 +13,12 @@ extern AesKey const defaultAesKey;
 
 
 enum class Attribute : uint8_t {
-	FIRST_ATTRIBUTE = 0xc0,
-	HW_VERSION = 0xc0,
-	MANUFACTURER_NAME = 0xc1,
-	MODEL_IDENTIFIER = 0xc2,
-	DATE_CODE = 0xc3,
-	POWER_SOURCE = 0xc4,
-	PLUG_LIST = 0xc5,
+	HW_VERSION = 0,
+	MANUFACTURER_NAME = 1,
+	MODEL_IDENTIFIER = 2,
+	DATE_CODE = 3,
+	POWER_SOURCE = 4,
+	PLUG_LIST = 5,
 };
 
 

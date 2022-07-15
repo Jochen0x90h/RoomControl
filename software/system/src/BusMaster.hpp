@@ -28,8 +28,9 @@
 
 	Message:
 	The message starts with the encoded device address for bus arbitration (always loses against commands as it never
-	starts with zero)
-	<encoded address> <security counter> <endpoint index> <attribute or plug index> <message> <mic(key)>
+	starts with zero) and contains either an attribute read request, attribute data or a plug message
+	<encoded address> <security counter> <255> <endpoint index> <attribute index> <data> <mic(key)>
+	<encoded address> <security counter> <endpoint index> <plug index> <message> <mic(key)>
 
 	Ack:
 	CRC-8 sent in response as acknowledgement

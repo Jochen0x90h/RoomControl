@@ -19,7 +19,7 @@ constexpr int micLength = 4;
 
 struct Device {
 	struct Flash {
-		uint8_t commissioning = 0;
+		uint8_t commissioning;
 		uint8_t address;
 		AesKey aesKey;
 	};
@@ -33,7 +33,8 @@ struct Device {
 	Flash flash;
 	uint8_t commissioning;
 	uint32_t securityCounter;
-	uint8_t readAttribute;
+	bool readAttribute;
+	bus::Attribute attribute;
 	int states[16];
 };
 
@@ -160,7 +161,7 @@ void handle(Gui &gui) {
 			}
 		} else {
 			// master has sent a data message
-			int address = r.address();//a1 - 1 + (r.arbiter() << 3);
+			int address = r.address();
 
 			// search device
 			for (Device &device : BusMaster::devices) {
@@ -176,16 +177,16 @@ void handle(Gui &gui) {
 					if (!r.decrypt(4, nonce, device.flash.aesKey))
 						break;
 
-					// get endpoint index and attribute or plug index
+					// get endpoint index
 					uint8_t endpointIndex = r.u8();
-					uint8_t attributeOrPlugIndex = r.u8();
-					if (attributeOrPlugIndex >= uint8_t(bus::Attribute::FIRST_ATTRIBUTE)) {
+					if (endpointIndex == 255) {
 						// attribute
-						if (r.atEnd())
-							device.readAttribute = uint8_t(attributeOrPlugIndex);
+						endpointIndex = r.u8();
+						device.attribute = r.e8<bus::Attribute>();
+						device.readAttribute = r.atEnd();
 					} else {
 						// plug
-						uint8_t plugIndex = attributeOrPlugIndex;
+						uint8_t plugIndex = r.u8();
 						auto plugs = device.plugs[device.flash.commissioning - 1];
 						if (plugIndex < plugs.count()) {
 							auto plugType = plugs[plugIndex];
@@ -241,21 +242,21 @@ void handle(Gui &gui) {
 		uint8_t sendData[64];
 
 		// check if there is a pending read attribute
-		if (device.readAttribute != 0) {
-			auto attribute = bus::Attribute(device.readAttribute);
-			device.readAttribute = 0;
+		if (device.readAttribute) {
+			device.readAttribute = false;
 
 			// send data message
 			bus::MessageWriter w(sendData);
 			setHeader(w, device);
 
-			// endpoint index
+			// "escaped" endpoint index
+			w.u8(255);
 			w.u8(0);
 
 			// attribute
-			w.e8(attribute);
+			w.e8(device.attribute);
 
-			switch (attribute) {
+			switch (device.attribute) {
 			case bus::Attribute::MODEL_IDENTIFIER:
 				w.string("Bus");
 				break;

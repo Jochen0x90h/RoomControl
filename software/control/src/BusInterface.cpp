@@ -277,23 +277,36 @@ static bool readMessage(MessageType dstType, void *dstMessage, MessageType srcTy
 	case MessageType::MULTISTATE:
 		// todo
 		break;
-	case MessageType::LEVEL: {
+	/*case MessageType::LEVEL: {
 		// level: convert from 0 - 65535 to 0.0 - 1.0
 		float level = float(r.u16L()) / 65535.0f;
 		if ((srcType & MessageType::CMD) == 0)
 			return convertFloat(dstType, dst, level, convertOptions);
 		uint8_t command = r.u8();
+		if (command > 1) {
+			// negative step
+			command = 1;
+			level = -level;
+		}
 		return convertFloatCommand(dstType, dst, command, level, convertOptions);
-	}
+	}*/
+	case MessageType::LEVEL:
 	case MessageType::PHYSICAL:
 	case MessageType::CONCENTRATION: {
 		float value = r.f32L();
 		if ((srcType & MessageType::CMD) == 0)
 			return convertFloat(dstType, dst, value, convertOptions);
 		uint8_t command = r.u8();
-		return convertFloatCommand(dstType, dst, command, value, convertOptions);
+		return convertFloatCommand(dstType, dst, value, command, convertOptions);
 	}
 	case MessageType::LIGHTING: {
+		float value = r.f32L();
+		if ((srcType & MessageType::CMD) == 0)
+			return convertFloat(dstType, dst, value, convertOptions);
+		uint8_t command = r.u8();
+		uint16_t transition = r.u16L();
+		return convertFloatTransition(dstType, dst, value, command, transition, convertOptions);
+/*
 		// lighting: all values are normalized except color temperature
 		float value = r.u16L();
 		if ((srcType & MessageType::LIGHTING_CATEGORY) != MessageType::LIGHTING_COLOR_TEMPERATURE)
@@ -303,6 +316,7 @@ static bool readMessage(MessageType dstType, void *dstMessage, MessageType srcTy
 		uint8_t command = r.u8();
 		uint16_t transition = r.u16L();
 		return convertFloatTransition(dstType, dst, value, command, transition, convertOptions);
+*/
 	}
 	case MessageType::METERING:
 		// todo
@@ -380,21 +394,24 @@ Coroutine BusInterface::receive() {
 
 			// get endpoint index
 			uint8_t endpointIndex = r.u8();
+			if (endpointIndex == 255) {
+				endpointIndex = r.u8();
 
-			// check if there is a device in the commissioning process
-			if (this->commissionCoroutine.isAlive() && this->tempDevice->data.id == address) {
-				auto attribute = r.e8<bus::Attribute>();
-				int length = min(r.getRemaining(), MESSAGE_LENGTH);
-				uint8_t *response = r.current;
-				this->responseBarrier.resumeFirst([length, response, address, endpointIndex, attribute](Response &r)
-					{
-						if (r.address == address && r.endpointIndex == endpointIndex && r.attribute == attribute) {
-							r.length = length;
-							array::copy(length, r.response, response);
-							return true;
-						}
-						return false;
-					});
+				// check if there is a device in the commissioning process
+				if (this->commissionCoroutine.isAlive() && this->tempDevice->data.id == address) {
+					auto attribute = r.e8<bus::Attribute>();
+					int length = min(r.getRemaining(), MESSAGE_LENGTH);
+					uint8_t *response = r.current;
+					this->responseBarrier.resumeFirst(
+						[length, response, address, endpointIndex, attribute](Response &r) {
+							if (r.address == address && r.endpointIndex == endpointIndex && r.attribute == attribute) {
+								r.length = length;
+								array::copy(length, r.response, response);
+								return true;
+							}
+							return false;
+						});
+				}
 			} else {
 				// search device with address
 				auto device = this->devices;
@@ -542,7 +559,7 @@ AwaitableCoroutine BusInterface::handleCommission(uint32_t deviceId, uint8_t end
 			oldEndpoint = oldEndpoint->next;
 	}
 
-	// remove old endpoints from device list
+	// remove remaining old endpoints from device list
 	while (oldEndpoint != nullptr) {
 		int j = 0;
 		for (int i = 0; i < deviceCount; ++i) {
@@ -560,10 +577,16 @@ AwaitableCoroutine BusInterface::handleCommission(uint32_t deviceId, uint8_t end
 		*od = oldDevice->next;
 
 		// delete old endpoints
-		auto endpoint = oldDevice->endpoints;
-		while (endpoint != nullptr) {
-			auto e = endpoint;
-			endpoint = endpoint->next;
+		auto endpoint = device->endpoints;
+		auto oldEndpoint = oldDevice->endpoints;
+		while (oldEndpoint != nullptr) {
+			// move subscribers from old to new endpoint
+			if (endpoint != nullptr) {
+				endpoint->subscribers.insert(oldEndpoint->subscribers);
+				endpoint = endpoint->next;
+			}
+			auto e = oldEndpoint;
+			oldEndpoint = oldEndpoint->next;
 			delete e;
 		}
 		delete oldDevice;
@@ -612,7 +635,8 @@ AwaitableCoroutine BusInterface::readAttribute(int &length, uint8_t (&message)[M
 			// set start of message
 			w.setMessage();
 
-			// endpoint index
+			// "escaped" endpoint index
+			w.u8(255);
 			w.u8(endpointIndex);
 
 			// attribute
@@ -657,11 +681,22 @@ static bool writeMessage(MessageWriter &w, MessageType type, Message &message) {
 	case MessageType::MULTISTATE:
 		// todo
 		break;
-	case MessageType::LEVEL:
-		w.u16L(clamp(int(message.value.f * 65535.0f + 0.5f), 0, 65535));
+	/*case MessageType::LEVEL: {
+		float value = message.value.f;
+		uint8_t cmd = 0;
+		if ((type & MessageType::CMD) != 0) {
+			cmd = message.command;
+			if (value < 0 && cmd != 0) {
+				value = -value;
+				cmd = 2;
+			}
+		}
+		w.u16L(clamp(int(value * 65535.0f + 0.5f), 0, 65535));
 		if ((type & MessageType::CMD) != 0)
-			w.u8(message.command);
+			w.u8(cmd);
 		break;
+	}*/
+	case MessageType::LEVEL:
 	case MessageType::PHYSICAL:
 	case MessageType::CONCENTRATION:
 		w.f32L(message.value.f);
@@ -669,6 +704,13 @@ static bool writeMessage(MessageWriter &w, MessageType type, Message &message) {
 			w.u8(message.command);
 		break;
 	case MessageType::LIGHTING: {
+		w.f32L(message.value.f);
+		if ((type & MessageType::CMD) != 0) {
+			w.u8(message.command);
+			w.u16L(message.transition);
+		}
+		break;
+/*
 		float value = message.value.f;
 		if ((type & MessageType::LIGHTING_CATEGORY) != MessageType::LIGHTING_COLOR_TEMPERATURE)
 			value *= 65535.0f;
@@ -677,7 +719,7 @@ static bool writeMessage(MessageWriter &w, MessageType type, Message &message) {
 			w.u8(message.command);
 			w.u16L(message.transition);
 		}
-		break;
+		break;*/
 	}
 	case MessageType::METERING:
 		// todo

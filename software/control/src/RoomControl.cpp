@@ -35,14 +35,14 @@ static String const stoppedOpeningClosing[] = {"stopped", "opening", "closing"};
 static String const unlockedTiltLocked[] = {"unlocked", "tilt", "locked"};
 
 static String const compareOperators[] = {">", "<", "else"};
-static String const commands[] = {"set", "add", "sub"};
+static String const setStep[] = {"set", "step"};
 
 // functions
 
 // function plugs
 static RoomControl::Plug const switchPlugs[] = {
-	{"Power", MessageType::BINARY_POWER_LIGHT_CMD_IN},
-	{"Power", MessageType::BINARY_POWER_LIGHT_OUT}};
+	{"On/Off", MessageType::BINARY_POWER_LIGHT_CMD_IN},
+	{"On/Off", MessageType::BINARY_POWER_LIGHT_OUT}};
 static RoomControl::Plug const blindPlugs[] = {
 	{"Up/Down",     MessageType::TERNARY_BUTTON_IN},
 	{"Trigger",     MessageType::BINARY_BUTTON_IN},
@@ -700,13 +700,13 @@ static float step(float value, int delta, float increment, float lo, float hi) {
 	return clamp(float(iround(value / increment) + delta) * increment, lo, hi);
 }
 
-static float step(float value, int delta, float increment, float lo, float hi, bool relative, float rhi) {
-	return step(value, delta, increment, relative ? 0.0f : lo, relative ? rhi : hi);
+static float step(float value, int delta, float increment, float lo, float hi, bool relative, float range) {
+	return step(value, delta, increment, relative ? -range : lo, relative ? range : hi);
 }
 
-static float stepCelsius(float value, int delta, float increment, float lo, float hi, bool relative, float rhi) {
+static float stepCelsius(float value, int delta, float increment, float lo, float hi, bool relative, float range) {
 	if (relative)
-		return step(value, delta, increment, 0.0f, rhi);
+		return step(value, delta, increment, -range, range);
 	return step(value - CELSIUS_OFFSET, delta, increment, lo, hi) + CELSIUS_OFFSET;
 }
 
@@ -714,7 +714,7 @@ float RoomControl::stepValue(Usage usage, bool relative, float value, int delta)
 	switch (usage) {
 	case Usage::UNIT_INTERVAL:
 	case Usage::PERCENT:
-		return step(value, delta, 0.05f, 0.0f, 1.0f, relative, 1.0f);
+		return step(value, delta, 0.01f, 0.0f, 1.0f, relative, 1.0f);
 	case Usage::TEMPERATURE:
 		return stepCelsius(value, delta, 1.0f, -273.0f, 5000.0f, relative, 100.0f);
 	case Usage::TEMPERATURE_FREEZER:
@@ -722,7 +722,7 @@ float RoomControl::stepValue(Usage usage, bool relative, float value, int delta)
 	case Usage::TEMPERATURE_FRIDGE:
 		return stepCelsius(value, delta, 0.5f, 0.0f, 20.0f, relative, 10.0f);
 	case Usage::TEMPERATURE_OUTDOOR:
-		return step(value - CELSIUS_OFFSET, delta, 1.0f, -50.0f, 60.0f) + CELSIUS_OFFSET;
+		return stepCelsius(value, delta, 1.0f, -50.0f, 60.0f, relative, 10.0f);
 	case Usage::TEMPERATURE_OVEN:
 		return stepCelsius(value, delta, 5.0f, 50.0f, 500.0f, relative, 200.0f);
 	case Usage::TEMPERATURE_ROOM:
@@ -831,6 +831,8 @@ static int editDestinationCommand(Menu::Stream &stream, ConvertOptions &convertO
 	int command = (convertOptions.commands >> offset) & 7;
 	int commandCount = dstCommands.count();
 	if (editCommand) {
+		if (command >= commandCount)
+			command = commandCount;
 		command += delta;
 		while (command > commandCount)
 			command -= commandCount + 1;
@@ -906,7 +908,7 @@ void RoomControl::editConvertFloat2Switch(Menu &menu, ConvertOptions &convertOpt
 void RoomControl::editConvertSwitch2FloatCommand(Menu &menu, ConvertOptions &convertOptions, Usage dstUsage,
 	Array<String const> const &srcCommands)
 {
-	static_assert(array::count(commands) <= ConvertOptions::MAX_VALUE_COUNT);
+	static_assert(array::count(setStep) <= ConvertOptions::MAX_VALUE_COUNT);
 
 	int delta = menu.getDelta();
 
@@ -918,10 +920,10 @@ void RoomControl::editConvertSwitch2FloatCommand(Menu &menu, ConvertOptions &con
 		// source command
 		stream << srcCommands[i] << " -> ";
 
-		// edit destination command
+		// edit destination command (directly in convertOptions)
 		bool editCommand = menu.getEdit(2) == 1;
 		bool lastRelative = convertOptions.getCommand(i) != 0;
-		int command = editDestinationCommand(stream, convertOptions, i, commands, editCommand, delta);
+		int command = editDestinationCommand(stream, convertOptions, i, setStep, editCommand, delta);
 		bool relative = command != 0;
 
 		float value = convertOptions.value.f[i];
@@ -933,7 +935,7 @@ void RoomControl::editConvertSwitch2FloatCommand(Menu &menu, ConvertOptions &con
 				value -= getDefaultFloatValue(dstUsage);
 		}
 
-		if (command < array::count(commands)) {
+		if (command < array::count(setStep)) {
 			// edit set-value
 			bool editValue = menu.getEdit(2) == 2;
 			if (editValue)
@@ -1938,7 +1940,7 @@ RoomControl::Function::~Function() {
 	this->coroutine.destroy();
 }
 
-struct OffOn {
+struct OnOff {
 	uint8_t state = 0;
 
 	void apply(uint8_t command) {
@@ -1955,19 +1957,12 @@ struct FloatValue {
 	float value = 0.0f;
 
 	void apply(Message const &message) {
-		switch (message.command) {
-			case 0:
-				// set
-				this->value = message.value.f;
-				break;
-			case 1:
-				// increase
-				this->value += message.value.f;
-				break;
-			case 2:
-				// decrease
-				this->value -= message.value.f;
-				break;
+		if (message.command == 0) {
+			// set
+			this->value = message.value.f;
+		} else {
+			// step
+			this->value += message.value.f;
 		}
 	}
 
@@ -1984,7 +1979,7 @@ Coroutine RoomControl::SimpleSwitch::start(RoomControl &roomControl) {
 	PublishInfo::Barrier barrier;
 
 	Publisher publishers[MAX_OUTPUT_COUNT];
-	OffOn state;
+	OnOff state;
 
 	// connect inputs and outputs
 	int outputCount = roomControl.connectFunction(**this, switchPlugs, subscribers, barrier, publishers);
@@ -2018,7 +2013,7 @@ Coroutine RoomControl::TimeoutSwitch::start(RoomControl &roomControl) {
 	PublishInfo::Barrier barrier;
 
 	Publisher publishers[MAX_OUTPUT_COUNT];
-	OffOn state;
+	OnOff state;
 
 	// connect inputs and outputs
 	int outputCount = roomControl.connectFunction(**this, switchPlugs, subscribers, barrier, publishers);
@@ -2119,14 +2114,17 @@ Coroutine RoomControl::TimedBlind::start(RoomControl &roomControl) {
 		Message message;
 		if (state == 0) {
 			co_await barrier.wait(info, &message);
+			//Terminal::out << "plug " << dec(info.plug.id) << '\n';
 		} else {
 			auto d = targetPosition - position;
 
-			// set invalid id in case timeout occurs
-			info.plug.id = 255;
-
 			// wait for event or timeout with a maximum to regularly report the current position
 			int s = co_await select(barrier.wait(info, &message), Timer::sleep(min(up ? -d : d, 200ms)));
+
+			// set invalid plug id when timeout occurred
+			if (s != 1)
+				info.plug.id = 255;
+			//Terminal::out << "select " << dec(s) << " plug " << dec(info.plug.id) << '\n';
 
 			// get time since last time
 			auto time = Timer::now();
@@ -2177,21 +2175,14 @@ Coroutine RoomControl::TimedBlind::start(RoomControl &roomControl) {
 		case 2: {
 			// position in
 			auto p = maxPosition * message.value.f;
-			switch (message.command) {
-			case 0:
+			if (message.command == 0) {
 				// set position
 				Terminal::out << "set position " << flt(message.value.f) << '\n';
 				targetPosition = p;
-				break;
-			case 1:
-				// increase position
-				Terminal::out << "increase position " << flt(message.value.f) << '\n';
+			} else {
+				// step position
+				Terminal::out << "step position " << flt(message.value.f) << '\n';
 				targetPosition += p;
-				break;
-			case 2:
-				// decrease position
-				Terminal::out << "decrease position " << flt(message.value.f) << '\n';
-				targetPosition -= p;
 				break;
 			}
 			if (targetPosition < 0s)
@@ -2258,9 +2249,9 @@ Coroutine RoomControl::HeatingControl::start(RoomControl &roomControl) {
 	// connect inputs and outputs
 	int outputCount = roomControl.connectFunction(**this, heatingControlPlugs, subscribers, barrier, publishers);
 
-	OffOn on;
-	OffOn night;
-	OffOn summer;
+	OnOff on;
+	OnOff night;
+	OnOff summer;
 	uint32_t windows = 0;
 	FloatValue setTemperature = {20.0f + CELSIUS_OFFSET};
 	float temperature = 20.0f + 273.15f;

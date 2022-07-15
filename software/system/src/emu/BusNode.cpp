@@ -110,7 +110,8 @@ void handle(Gui &gui) {
 				// set start of message
 				w.setMessage();
 
-				// endpoint index
+				// "escaped" endpoint index
+				w.u8(255);
 				w.u8(0);
 
 				// attribute
@@ -145,18 +146,17 @@ void handle(Gui &gui) {
 				return true;
 
 			uint8_t endpointIndex = r.u8();
-			uint8_t attributeOrPlugIndex = r.u8();
-
-			if (attributeOrPlugIndex >= uint8_t(bus::Attribute::FIRST_ATTRIBUTE)) {
+			if (endpointIndex == 255) {
 				// attribute
-				auto attribute = bus::Attribute(attributeOrPlugIndex);
+				endpointIndex = r.u8();
+				auto attribute = r.e8<bus::Attribute>();
 				if (attribute == bus::Attribute::PLUG_LIST) {
 					BusNode::plugCount = r.getRemaining() / 2;
 					r.data16L(BusNode::plugCount, BusNode::plugs);
 				}
 			} else {
 				// plug
-				uint8_t plugIndex = attributeOrPlugIndex;
+				uint8_t plugIndex = r.u8();
 
 				// handle pug/state
 				uint8_t nextPlugIndex = plugIndex + 1;

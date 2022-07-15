@@ -1138,6 +1138,10 @@ static bool handleZclCommand(MessageType dstType, void *dstMessage, int plugInde
 		case zcl::LevelControlCommand::MOVE_TO_LEVEL:
 		case zcl::LevelControlCommand::MOVE_TO_LEVEL_WITH_ON_OFF: {
 			float value = float(r.u8()) / 254.0f;
+			if (cmd == 2) {
+				cmd = 1;
+				value = -value;
+			}
 			uint16_t transition = r.u16L(); // transition time in 1/10 s
 			return convertFloatTransition(dstType, dst, value, cmd, transition, convertOptions);
 		}
@@ -1152,13 +1156,8 @@ static bool handleZclCommand(MessageType dstType, void *dstMessage, int plugInde
 			auto x = r.i16L();
 			auto y = r.i16L();
 			float value = float(plugIndex == 0 ? x : y) / 65279.0f;
-			uint8_t cmd = 1;
-			if (value < 0) {
-				cmd = 2;
-				value = -value;
-			}
 			uint16_t transition = r.u16L(); // transition time in 1/10 s
-			return convertFloatTransition(dstType, dst, value, cmd, transition, convertOptions);
+			return convertFloatTransition(dstType, dst, value, 1, transition, convertOptions);
 		}
 		case zcl::ColorControlCommand::MOVE_TO_COLOR: {
 			auto x = r.u16L();
@@ -2715,10 +2714,16 @@ Terminal::out << ("active endpoints status " + dec(status) + '\n');
 		*od = oldDevice->next;
 
 		// delete old endpoints
-		auto endpoint = oldDevice->endpoints;
-		while (endpoint != nullptr) {
-			auto e = endpoint;
-			endpoint = endpoint->next;
+		auto endpoint = device->endpoints;
+		auto oldEndpoint = oldDevice->endpoints;
+		while (oldEndpoint != nullptr) {
+			// move subscribers from old to new endpoint
+			if (endpoint != nullptr) {
+				endpoint->subscribers.insert(oldEndpoint->subscribers);
+				endpoint = endpoint->next;
+			}
+			auto e = oldEndpoint;
+			oldEndpoint = oldEndpoint->next;
 			delete e;
 		}
 		delete oldDevice;

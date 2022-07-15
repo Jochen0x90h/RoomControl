@@ -113,7 +113,7 @@ public:
 				address = -1;
 
 				// add enumerate to send queue
-				this->sendQueue.addBack(SendElement{255, 0});
+				this->sendQueue.addBack(SendElement{255, 255});
 				this->sendBarrier.resumeFirst();
 			}
 
@@ -200,7 +200,7 @@ public:
 			w.setHeader();
 
 			if (element.plugIndex == 255) {
-				if (element.value == 0) {
+				if (element.value == 255) {
 					// send enumerate message
 
 					// prefix with zero
@@ -234,7 +234,8 @@ public:
 					// set start of message
 					w.setMessage();
 
-					// endpoint index
+					// "escaped" endpoint index
+					w.u8(255);
 					w.u8(0);
 
 					// attribute
@@ -347,17 +348,19 @@ public:
 				if (!r.decrypt(micLength, nonce, aesKey))
 					break;
 
+				// get endpoint index (255 for read attribute)
 				uint8_t endpointIndex = r.u8();
-				uint8_t attributeOrPlugIndex = r.u8();
-				if (attributeOrPlugIndex >= uint8_t(bus::Attribute::FIRST_ATTRIBUTE)) {
+				if (endpointIndex == 255) {
 					// attribute
-					if (r.atEnd()) {
-						this->sendQueue.addBack(SendElement{255, attributeOrPlugIndex});
+					endpointIndex = r.u8();
+					auto attribute = r.e8<bus::Attribute>();
+					if (r.atEnd() && endpointIndex == 0) {
+						this->sendQueue.addBack(SendElement{255, uint8_t(attribute)});
 						this->sendBarrier.resumeFirst();
 					}
-				} else {
+				} else if (endpointIndex == 0) {
 					// plug
-					uint8_t plugIndex = attributeOrPlugIndex;
+					uint8_t plugIndex = r.u8();
 					int plugCountA = plugCounts[int(modeA)];
 					int plugCountB = plugCounts[int(modeB)];
 					if (plugIndex >= plugCountA + plugCountB)
