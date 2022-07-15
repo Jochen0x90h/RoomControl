@@ -368,11 +368,11 @@ RadioInterface::ClusterInfo RadioInterface::ZbEndpoint::getClientCluster(int plu
 	return {zcl::Cluster::BASIC, {0, 0}};
 }
 
-uint8_t RadioInterface::allocateId() {
+uint8_t RadioInterface::allocateId(int deviceCount) {
 	// find a free id
 	int id;
 	for (id = 1; id < 256; ++id) {
-		for (int j = 0; j < this->deviceCount; ++j) {
+		for (int j = 0; j < deviceCount; ++j) {
 			if (this->deviceIds[j] == id)
 				goto found;
 		}
@@ -2189,7 +2189,7 @@ void RadioInterface::handleGpCommission(uint32_t deviceId, PacketReader& r) {
 	r.u8();
 
 	GpDeviceData data;
-	data.id = allocateId();
+	data.id = allocateId(this->deviceCount);
 	assign(data.name, "Switch");
 	data.deviceId = deviceId;
 
@@ -2507,7 +2507,7 @@ Terminal::out << ("active endpoints status " + dec(status) + '\n');
 		if (oldEndpoint != nullptr) {
 			builder.id = oldEndpoint->data->id;
 		} else {
-			builder.id = allocateId();
+			builder.id = allocateId(deviceCount);
 			this->deviceIds[deviceCount++] = builder.id;
 		}
 

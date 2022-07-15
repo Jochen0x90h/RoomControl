@@ -103,9 +103,13 @@ private:
 	public:
 		// takes ownership of the data
 		Endpoint(BusDevice *device, EndpointData *data)
-			: device(device), next(device->endpoints), data(data)
+			: device(device), next(nullptr), data(data)
 		{
-			device->endpoints = this;
+			// add new endpoint at end of linked list of device
+			auto e = &device->endpoints;
+			while (*e != nullptr)
+				e = &(*e)->next;
+			*e = this;
 		}
 
 		~Endpoint() override;
@@ -131,7 +135,7 @@ private:
 		SubscriberList subscribers;
 	};
 
-	uint8_t allocateId();
+	uint8_t allocateId(int deviceCount);
 	uint8_t allocateDeviceId();
 	BusDevice *getOrLoadDevice(uint8_t id);
 

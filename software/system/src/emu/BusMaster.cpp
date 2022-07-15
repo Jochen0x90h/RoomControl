@@ -17,6 +17,10 @@ using PlugType = bus::PlugType;
 constexpr int micLength = 4;
 
 
+struct Endpoint {
+	Array<PlugType const> plugs;
+};
+
 struct Device {
 	struct Flash {
 		uint8_t commissioning;
@@ -27,14 +31,19 @@ struct Device {
 	// device id
 	uint32_t id;
 
-	// two sets of endpoints to test reconfiguration of device
-	Array<PlugType const> plugs[2];
+	// two endpoint lists to test reconfiguration of device
+	Array<Endpoint const> endpoints[2];
 
 	Flash flash;
 	uint8_t commissioning;
 	uint32_t securityCounter;
+
+	// attribute reading
 	bool readAttribute;
+	uint8_t endpointIndex;
 	bus::Attribute attribute;
+
+	// state
 	int states[16];
 };
 
@@ -44,24 +53,29 @@ constexpr auto ROCKER = PlugType::TERNARY_BUTTON_OUT;
 constexpr auto LIGHT = PlugType::BINARY_POWER_LIGHT_CMD_IN;
 constexpr auto BLIND = PlugType::TERNARY_OPENING_BLIND_IN;
 
-const PlugType endpoints1a[] = {
-	ROCKER, ROCKER, LIGHT, LIGHT, LIGHT,
-};
-const PlugType endpoints1b[] = {
-	ROCKER, ROCKER, ROCKER,BLIND, BLIND,
-};
-const PlugType endpoints2[] = {
-	ROCKER, BUTTON, BLIND, ROCKER, BUTTON, BLIND, LIGHT, LIGHT,
-};
-const PlugType endpoints3a[] = {
-	PlugType::PHYSICAL_TEMPERATURE_MEASURED_ROOM_OUT
-};
+
+const PlugType device1Plugs[] = {BUTTON, BUTTON, BLIND, BLIND};
+const PlugType buttonPlugs[] = {BUTTON, BUTTON};
+const PlugType rockerPlugs[] = {ROCKER, ROCKER};
+const PlugType lightPlugs[] = {LIGHT, LIGHT};
+const PlugType blindPlugs[] = {BLIND, BLIND};
+const PlugType temperaturePlugs[] = {PlugType::PHYSICAL_TEMPERATURE_MEASURED_ROOM_OUT};
+
+// device 1
+const Endpoint endpoint1a[] = {rockerPlugs, lightPlugs};
+const Endpoint endpoint1b[] = {device1Plugs};//, blindPlugs};
+
+// device 2
+const Endpoint endpoint2[] = {buttonPlugs, rockerPlugs, blindPlugs, lightPlugs};
+
+// device 3
+const Endpoint endpoint3a[] = {temperaturePlugs};
 
 
 Device devices[] = {
-	{0x00000001, {endpoints1a, endpoints1b}},
-	{0x00000002, {endpoints2, endpoints2}},
-	{0x00000003, {endpoints3a, Array<PlugType>()}},
+	{0x00000001, {endpoint1a, endpoint1b}},
+	{0x00000002, {endpoint2, endpoint2}},
+	{0x00000003, {endpoint3a, Array<Endpoint>()}},
 };
 
 
@@ -181,16 +195,16 @@ void handle(Gui &gui) {
 					uint8_t endpointIndex = r.u8();
 					if (endpointIndex == 255) {
 						// attribute
-						endpointIndex = r.u8();
+						device.endpointIndex = r.u8();
 						device.attribute = r.e8<bus::Attribute>();
 						device.readAttribute = r.atEnd();
 					} else {
 						// plug
 						uint8_t plugIndex = r.u8();
-						auto plugs = device.plugs[device.flash.commissioning - 1];
+						auto plugs = device.endpoints[device.flash.commissioning - 1][endpointIndex].plugs;
 						if (plugIndex < plugs.count()) {
 							auto plugType = plugs[plugIndex];
-							int &state = device.states[plugIndex];
+							int &state = device.states[endpointIndex * 4 + plugIndex];
 
 							switch (plugType) {
 							case LIGHT: {
@@ -251,7 +265,7 @@ void handle(Gui &gui) {
 
 			// "escaped" endpoint index
 			w.u8(255);
-			w.u8(0);
+			w.u8(device.endpointIndex);
 
 			// attribute
 			w.e8(device.attribute);
@@ -262,7 +276,7 @@ void handle(Gui &gui) {
 				break;
 			case bus::Attribute::PLUG_LIST:
 				// list of plugs
-				w.data16L(device.plugs[device.commissioning - 1]);
+				w.data16L(device.endpoints[device.commissioning - 1][device.endpointIndex].plugs);
 				break;
 			default:;
 			}
@@ -290,7 +304,7 @@ void handle(Gui &gui) {
 			w.u8(0);
 
 			// number of endpoints
-			w.u8(1);
+			w.u8(device.endpoints[device.commissioning - 1].count());
 
 			// add message integrity code (mic) using default key, message stays unencrypted
 			w.setMessage();
@@ -309,88 +323,91 @@ void handle(Gui &gui) {
 
 		// add device endpoints to gui if device is commissioned
  		if (device.flash.commissioning != 0) {
-			auto plugs = device.plugs[device.flash.commissioning - 1];
-			for (int plugIndex = 0; plugIndex < plugs.count(); ++plugIndex) {
-				auto endpointType = plugs[plugIndex];
-				int &state = device.states[plugIndex];
+			auto endpoints = device.endpoints[device.flash.commissioning - 1];
+			for (int endpointIndex = 0; endpointIndex < endpoints.count(); ++endpointIndex) {
+				auto plugs = endpoints[endpointIndex].plugs;
+				for (int plugIndex = 0; plugIndex < plugs.count(); ++plugIndex) {
+					auto endpointType = plugs[plugIndex];
+					int &state = device.states[endpointIndex * 4 + plugIndex];
 
-				// send data message
-				bus::MessageWriter w(sendData);
-				setHeader(w, device);
+					// send data message
+					bus::MessageWriter w(sendData);
+					setHeader(w, device);
 
-				// endpoint index
-				w.u8(0);
+					// endpoint index
+					w.u8(endpointIndex);
 
-				// plug index
-				w.u8(plugIndex);
+					// plug index
+					w.u8(plugIndex);
 
-				bool send = false;
-				switch (endpointType) {
-				case SWITCH: {
-					// switch
-					auto value = gui.onOff(id++);
-					if (value) {
-						state = *value;
-						w.u8(state);
-						send = true;
+					bool send = false;
+					switch (endpointType) {
+					case SWITCH: {
+						// switch
+						auto value = gui.onOff(id++);
+						if (value) {
+							state = *value;
+							w.u8(state);
+							send = true;
+						}
+						break;
 					}
-					break;
-				}
-				case BUTTON: {
-					// button
-					auto value = gui.button(id++);
-					if (value) {
-						state = *value;
-						w.u8(state);
-						send = true;
+					case BUTTON: {
+						// button
+						auto value = gui.button(id++);
+						if (value) {
+							state = *value;
+							w.u8(state);
+							send = true;
+						}
+						break;
 					}
-					break;
-				}
-				case ROCKER: {
-					// rocker
-					auto value = gui.rocker(id++);
-					if (value) {
-						state = *value;
-						w.u8(state);
-						send = true;
+					case ROCKER: {
+						// rocker
+						auto value = gui.rocker(id++);
+						if (value) {
+							state = *value;
+							w.u8(state);
+							send = true;
+						}
+						break;
 					}
-					break;
-				}
-				case LIGHT:
-					// light
-					gui.light(state & 1, 100);
-					break;
-				case BLIND: {
-					// blind
-					int blind = state >> 2;
-					if (state & 1)
-						blind = std::min(blind + us, 100*65536);
-					else if (state & 2)
-						blind = std::max(blind - us, 0);
-					gui.blind(blind >> 16);
-					state = (state & 3) | (blind << 2);
-					break;
-				}
-				case PlugType::PHYSICAL_TEMPERATURE_MEASURED_ROOM_OUT: {
-					// temperature sensor
-					auto temperature = gui.temperatureSensor(id++);
-					if (temperature) {
-						// convert temperature from Celsius to 1/20 Kelvin
-						//state = int((*temperature + 273.15f) * 20.0f + 0.5f);
-						w.f32L(*temperature + 273.15f);
-						send = true;
-						//w.u16L(state);
+					case LIGHT:
+						// light
+						gui.light(state & 1, 100);
+						break;
+					case BLIND: {
+						// blind
+						int blind = state >> 2;
+						if (state & 1)
+							blind = std::min(blind + us, 100 * 65536);
+						else if (state & 2)
+							blind = std::max(blind - us, 0);
+						gui.blind(blind >> 16);
+						state = (state & 3) | (blind << 2);
+						break;
 					}
-					break;
-				}
+					case PlugType::PHYSICAL_TEMPERATURE_MEASURED_ROOM_OUT: {
+						// temperature sensor
+						auto temperature = gui.temperatureSensor(id++);
+						if (temperature) {
+							// convert temperature from Celsius to 1/20 Kelvin
+							//state = int((*temperature + 273.15f) * 20.0f + 0.5f);
+							w.f32L(*temperature + 273.15f);
+							send = true;
+							//w.u16L(state);
+						}
+						break;
+					}
 
-				default:
-					break;
-				}
+					default:
+						break;
+					}
 
-				// check if we actually have to send the message
-				if (send)
-					sendToMaster(w, device);
+					// check if we actually have to send the message
+					if (send)
+						sendToMaster(w, device);
+				}
 			}
 		}
 	}

@@ -203,11 +203,11 @@ PublishInfo BusInterface::Endpoint::getPublishInfo(uint8_t plugIndex) {
 }
 
 
-uint8_t BusInterface::allocateId() {
+uint8_t BusInterface::allocateId(int deviceCount) {
 	// find a free id
 	int id;
 	for (id = 1; id < 256; ++id) {
-		for (int j = 0; j < this->deviceCount; ++j) {
+		for (int j = 0; j < deviceCount; ++j) {
 			if (this->deviceIds[j] == id)
 				goto found;
 		}
@@ -531,14 +531,14 @@ AwaitableCoroutine BusInterface::handleCommission(uint32_t deviceId, uint8_t end
 		MessageReader plugs(length, message);
 		for (int i = 0; i < plugCount; ++i) {
 			data->plugs[i] = plugs.e16L<MessageType>();
-			//Terminal::out << getTypeLabel(data->plugs[i]) << "\n";
+			Terminal::out << dec(endpointIndex) << " " << getTypeLabel(data->plugs[i]) << "\n";
 		}
 
 		// set id
 		if (oldEndpoint != nullptr) {
 			data->id = oldEndpoint->data->id;
 		} else {
-			data->id = allocateId();
+			data->id = allocateId(deviceCount);
 			this->deviceIds[deviceCount++] = data->id;
 		}
 

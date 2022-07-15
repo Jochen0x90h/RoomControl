@@ -285,7 +285,7 @@ private:
 		SubscriberList subscribers;
 	};
 
-	uint8_t allocateId();
+	uint8_t allocateId(int deviceCount);
 	uint8_t allocateZbDeviceId();
 	ZbDevice *getOrLoadZbDevice(uint8_t id);
 
