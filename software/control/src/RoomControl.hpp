@@ -179,26 +179,31 @@ public:
 		static constexpr int BUFFER_SIZE = 1024;
 		
 		enum class Type : uint8_t {
-			// simple on/off switch
-			SIMPLE_SWITCH = 1,
+			// on/off switch with timeout
+			SWITCH = 1,
 
-			// switch that turns off after a configured time
-			TIMEOUT_SWITCH = 2,
+			// light with timeout and on/off transition times
+			LIGHT = 2,
+
+			// color light with timeout and on/off transition times
+			COLOR_LIGHT = 3,
+
+			ANIMATED_LIGHT = 4,
 
 			// blind with known position using timing
 			TIMED_BLIND = 10,
 			
 			HEATING_CONTROL = 20,
 		};
-
+/*
 		enum class TypeClass : uint8_t {
 			SWITCH = 1,
 			BLIND = 2,
 			HEATING_CONTROL = 3,
 		};
-
+*/
 		// function type
-		Type type = Type::SIMPLE_SWITCH;
+		Type type = Type::SWITCH;
 	
 		// name is at offset 0 in buffer
 		uint8_t nameLength = 0;
@@ -274,7 +279,7 @@ public:
 		Coroutine coroutine;
 	};
 
-
+/*
 	// simple switch
 	class SimpleSwitch : public Function {
 	public:
@@ -283,18 +288,99 @@ public:
 
 		Coroutine start(RoomControl &roomControl) override;
 	};
+*/
 
-
-	// timeout switch
-	class TimeoutSwitch : public Function {
+	// switch with optional timeout
+	class Switch : public Function {
 	public:
 		struct Config {
 			// timeout duration in 1/100 s
-			uint32_t duration;
+			uint32_t timeout;
 		};
 
-		explicit TimeoutSwitch(FunctionFlash const &flash) : Function(flash) {}
-		~TimeoutSwitch() override;
+		explicit Switch(FunctionFlash const &flash) : Function(flash) {}
+		~Switch() override;
+
+		Coroutine start(RoomControl &roomControl) override;
+	};
+
+
+	// light
+	class Light : public Function {
+	public:
+		struct Config {
+			// timeout duration in 1/100 s
+			uint32_t timeout;
+
+			struct Setting {
+				uint8_t brightness;
+				uint16_t fade; // 1/10s
+			};
+
+			Setting settings[4];
+
+			// brightness
+			//uint8_t brightness;
+
+			// fade times in 1/10 s
+			//uint16_t onFade;
+			uint16_t offFade;
+			uint16_t timeoutFade;
+		};
+
+		explicit Light(FunctionFlash const &flash) : Function(flash) {}
+		~Light() override;
+
+		Coroutine start(RoomControl &roomControl) override;
+	};
+
+
+	struct ColorSetting {
+		uint8_t brightness;
+		uint8_t hue;
+		uint8_t saturation;
+		uint16_t fade; // 1/10s
+	};
+
+	// color light
+	class ColorLight : public Function {
+	public:
+		struct Config {
+			// timeout duration in 1/100 s
+			uint32_t timeout;
+
+			ColorSetting settings[4];
+
+			// fade times in 1/10 s
+			uint16_t offFade;
+			uint16_t timeoutFade;
+		};
+
+		explicit ColorLight(FunctionFlash const &flash) : Function(flash) {}
+		~ColorLight() override;
+
+		Coroutine start(RoomControl &roomControl) override;
+	};
+
+
+	// animated color light
+	class AnimatedLight : public Function {
+	public:
+		struct Config {
+			// timeout duration in 1/100 s
+			uint32_t timeout;
+
+			uint8_t stepCount;
+			ColorSetting steps[16];
+
+			// fade times in 1/10 s
+			uint16_t onFade;
+			uint16_t offFade;
+			uint16_t timeoutFade;
+		};
+
+		explicit AnimatedLight(FunctionFlash const &flash) : Function(flash) {}
+		~AnimatedLight() override;
 
 		Coroutine start(RoomControl &roomControl) override;
 	};
@@ -396,17 +482,17 @@ public:
 	Coroutine idleDisplay();
 	[[nodiscard]] AwaitableCoroutine mainMenu();
 	[[nodiscard]] AwaitableCoroutine devicesMenu(Interface &interface);
-	[[nodiscard]] AwaitableCoroutine deviceMenu(Interface::Device &device);
+	[[nodiscard]] AwaitableCoroutine deviceMenu(Interface &interface, uint8_t id);
 	[[nodiscard]] AwaitableCoroutine alarmsMenu(AlarmInterface &alarms);
 	[[nodiscard]] AwaitableCoroutine alarmMenu(AlarmInterface &alarms, uint8_t id, AlarmInterface::AlarmData &data);
 	[[nodiscard]] AwaitableCoroutine alarmTimeMenu(AlarmTime &time);
-	[[nodiscard]] AwaitableCoroutine endpointsMenu(Interface::Device &device);
-	[[nodiscard]] AwaitableCoroutine messageLogger(Interface::Device &device);
-	[[nodiscard]] AwaitableCoroutine messageGenerator(Interface::Device &device);
+	[[nodiscard]] AwaitableCoroutine plugsMenu(Interface &interface, uint8_t id);
+	[[nodiscard]] AwaitableCoroutine messageLogger(Interface &interface, uint8_t id);
+	[[nodiscard]] AwaitableCoroutine messageGenerator(Interface &interface, uint8_t id);
 	[[nodiscard]] AwaitableCoroutine functionsMenu();
 	[[nodiscard]] AwaitableCoroutine functionMenu(int index, FunctionFlash &flash);
-	[[nodiscard]] AwaitableCoroutine measureRunTime(Interface::Device &device, Connection const &connection, uint16_t &measureRunTime);
+	[[nodiscard]] AwaitableCoroutine measureRunTime(Interface &interface, uint8_t id, Connection const &connection, uint16_t &measureRunTime);
 	[[nodiscard]] AwaitableCoroutine editFunctionConnection(ConnectionIterator &it, Plug const &plug, Connection connection, bool add);
 	[[nodiscard]] AwaitableCoroutine selectFunctionDevice(Connection &connection, Plug const &plug);
-	[[nodiscard]] AwaitableCoroutine selectFunctionEndpoint(Interface::Device &device, Connection &connection, Plug const &plug);
+	[[nodiscard]] AwaitableCoroutine selectFunctionPlug(Interface &interface, uint8_t id, Connection &connection, Plug const &plug);
 };

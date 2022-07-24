@@ -1,6 +1,6 @@
 #pragma once
 
-#include <cstdint>
+#include <util.hpp>
 
 
 /**
@@ -55,8 +55,22 @@ constexpr SystemDuration operator *(SystemDuration a, int b) {
 	return {a.value * b};
 }
 
+constexpr SystemDuration operator *(uint32_t a, SystemDuration b) {
+	return {int32_t(a * b.value)};
+}
+
+constexpr SystemDuration operator *(SystemDuration a, uint32_t b) {
+	return {int32_t(a.value * b)};
+}
+
+constexpr SystemDuration operator *(float a, SystemDuration b) {
+	float f = a * float(b.value);
+	return {iround(f)};
+}
+
 constexpr SystemDuration operator *(SystemDuration a, float b) {
-	return {int(float(a.value) * b + (a.value < 0 ? -0.5f : 0.5f))};
+	float f = float(a.value) * b;
+	return {iround(f)};
 }
 
 constexpr SystemDuration operator /(SystemDuration a, int b) {

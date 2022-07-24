@@ -189,10 +189,10 @@ enum class ColorControlAttribute : uint16_t {
 	REPORTING_STATUS = 0xFFFE // (ENUM8)
 };
 
-enum class ColorControlCommand : uint16_t {
-	MOVE_TO_COLOR = 0x07, // (required)
+enum class ColorControlCommand : uint8_t {
+	MOVE_TO_COLOR = 0x07, // (INT16U, required)
 	MOVE_COLOR = 0x08, // (required)
-	STEP_COLOR = 0x09, // (required)
+	STEP_COLOR = 0x09, // (INT16S, required)
 	STOP_MOVE_STEP = 0x47
 };
 

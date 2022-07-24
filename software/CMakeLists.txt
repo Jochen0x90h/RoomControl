@@ -137,6 +137,8 @@ set(UTIL
 	util/src/BitField.hpp
 	util/src/Bitmap.cpp
 	util/src/Bitmap.hpp
+	util/src/Cie1931.cpp
+	util/src/Cie1931.hpp
 	util/src/convert.cpp
 	util/src/convert.hpp
 	util/src/Coroutine.hpp

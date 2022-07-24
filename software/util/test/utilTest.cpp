@@ -11,6 +11,7 @@
 #include <StringSet.hpp>
 #include <StringOperators.hpp>
 #include <TopicBuffer.hpp>
+#include <Cie1931.hpp>
 #include <gtest/gtest.h>
 #include <random>
 
@@ -887,6 +888,12 @@ TEST(utilTest, Semaphore) {
 	}
 }
 
+TEST(utilTest, color) {
+
+	auto xy1 = hueToCie(0.0f, 0.0f);
+	auto xy2 = hueToCie(0.0f, 1.0f);
+	auto xy3 = hueToCie(359.0f, 1.0f);
+}
 
 
 int main(int argc, char **argv) {

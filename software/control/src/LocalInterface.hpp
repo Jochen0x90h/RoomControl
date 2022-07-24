@@ -24,34 +24,17 @@ public:
 	void setCommissioning(bool enabled) override;
 
 	Array<uint8_t const> getDeviceIds() override;
-	Device *getDevice(uint8_t id) override;
-	void eraseDevice(uint8_t id) override;
+	//Device *getDevice(uint8_t id) override;
+	String getName(uint8_t id) const override;
+	void setName(uint8_t id, String name) override;
+	Array<MessageType const> getPlugs(uint8_t id) const override;
+	void subscribe(uint8_t id, uint8_t plugIndex, Subscriber &subscriber) override;
+	PublishInfo getPublishInfo(uint8_t id, uint8_t plugIndex) override;
+	void erase(uint8_t id) override;
 
 protected:
 
-	class LocalDevice : public Device {
-	public:
-		uint8_t getId() const override;
-		String getName() const override;
-		void setName(String name) override;
-		Array<MessageType const> getPlugs() const override;
-		void subscribe(uint8_t plugIndex, Subscriber &subscriber) override;
-		PublishInfo getPublishInfo(uint8_t plugIndex) override;
-
-		void init(LocalInterface *interface, uint8_t id, Array<MessageType const> plugs) {
-			this->interface = interface;
-			this->id = id;
-			this->plugs = plugs;
-		}
-
-		// back pointer to interface
-		LocalInterface *interface;
-
-		uint8_t id;
-
-		// plugs
-		Array<MessageType const> plugs;
-
+	struct LocalDevice {
 		// subscribers and publishers
 		SubscriberList subscribers;
 	};
