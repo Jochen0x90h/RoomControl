@@ -697,12 +697,12 @@ static bool writeMessage(MessageWriter &w, MessageType type, Message &message) {
 	case MessageType::LEVEL:
 	case MessageType::PHYSICAL:
 	case MessageType::CONCENTRATION:
-		w.f32L(message.value.f);
+		w.f32L(message.value.f32);
 		if ((type & MessageType::CMD) != 0)
 			w.u8(message.command);
 		break;
 	case MessageType::LIGHTING: {
-		w.f32L(message.value.f);
+		w.f32L(message.value.f32);
 		if ((type & MessageType::CMD) != 0) {
 			w.u8(message.command);
 			w.u16L(message.transition);

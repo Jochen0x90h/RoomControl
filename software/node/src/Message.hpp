@@ -19,8 +19,8 @@ inline bool isOutput(MessageType type) {
 
 union Value {
 	uint8_t u8;
-	uint32_t i32;
-	float f;
+	uint16_t u16;
+	float f32;
 };
 
 struct Message {
@@ -73,44 +73,7 @@ struct ConvertOptions {
 // get human readable label of message type
 String getTypeLabel(MessageType type);
 
-enum class Usage : uint8_t {
-	ACTIVATION,
-	AMPERE,
-	CLOSED_OPEN,
-	CLOSED_OPEN_TOGGLE,
-	COUNTER,
-	ELECTRIC_METER,
-	ENABLED,
-	LOCK,
-	LOCK_TOGGLE,
-	LUX,
-	NONE,
-	OCCUPANCY,
-	OFF_ON,
-	OFF_ON1_ON2,
-	OFF_ON_TOGGLE,
-	PASCAL,
-	PERCENT,
-	PRESSURE_ATMOSPHERIC,
-	RELEASED_PRESSED,
-	RELEASED_UP_DOWN,
-	STOPPED_OPENING_CLOSING,
-	TEMPERATURE,
-	TEMPERATURE_COLOR,
-	TEMPERATURE_FEEZER,
-	TEMPERATURE_FREEZER,
-	TEMPERATURE_FRIDGE,
-	TEMPERATURE_OUTDOOR,
-	TEMPERATURE_OVEN,
-	TEMPERATURE_ROOM,
-	TILT_LOCK,
-	UNIT_INTERVAL,
-	VOLTAGE,
-	VOLTAGE_HIGH,
-	VOLTAGE_LOW,
-	VOLTAGE_MAINS,
-	WATT,
-};
+#include "Usage.generated.hpp"
 
 // get usage
 Usage getUsage(MessageType type);

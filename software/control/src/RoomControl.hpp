@@ -179,6 +179,8 @@ public:
 		static constexpr int BUFFER_SIZE = 1024;
 		
 		enum class Type : uint8_t {
+			INVALID = 0,
+
 			// on/off switch with timeout
 			SWITCH = 1,
 
@@ -203,7 +205,7 @@ public:
 		};
 */
 		// function type
-		Type type = Type::SWITCH;
+		Type type = Type::INVALID;
 	
 		// name is at offset 0 in buffer
 		uint8_t nameLength = 0;

@@ -1,17 +1,19 @@
 #include "LocalInterface.hpp"
 #include <Timer.hpp>
 #include <Output.hpp>
+#include <Sound.hpp>
 #include <util.hpp>
 
 
 // device names
 constexpr String deviceNames[] = {
 	"Air Sensor",
+	"Digital Inputs",
+	"Digital Outputs",
 	"Heating",
+	"Audio",
 	"Brightness Sensor",
 	"Motion Detector",
-	"Digital Inputs",
-	"Digital Outputs"
 };
 
 // air sensor endpoints
@@ -20,7 +22,7 @@ constexpr int BME680_HUMIDITY_ENDPOINT = 1;
 constexpr int BME680_PRESSURE_ENDPOINT = 2;
 constexpr int BME680_VOC_ENDPOINT = 3;
 
-// endpoint type arrays for getEndpoints()
+// air sensor plugs
 constexpr MessageType bme680Plugs[] = {
 	MessageType::PHYSICAL_TEMPERATURE_MEASURED_ROOM_OUT,
 	MessageType::CONCENTRATION_RELATIVE_HUMIDITY_MEASURED_AIR_OUT,
@@ -28,39 +30,62 @@ constexpr MessageType bme680Plugs[] = {
 	MessageType::CONCENTRATION_VOC_OUT,
 };
 
-constexpr MessageType heatingPlugs[] = {
-	MessageType::BINARY_OPEN_VALVE_CMD_OUT
-};
-
-constexpr MessageType brightnessSensorPlugs[] = {
-	MessageType::PHYSICAL_ILLUMINANCE_OUT,
-};
-
-constexpr MessageType motionDetectorPlugs[] = {
-	MessageType::BINARY_OCCUPANCY_OUT,
-};
-
-// binary inputs (have out endpoints)
+// binary inputs (max 4)
 constexpr MessageType inPlugs[] = {
 	MessageType::BINARY_OUT, MessageType::BINARY_OUT, MessageType::BINARY_OUT, MessageType::BINARY_OUT
 };
 
-// binary outputs (have in enpoitns)
+// binary outputs (max 4)
 constexpr MessageType outPlugs[] = {
 	MessageType::BINARY_CMD_IN, MessageType::BINARY_CMD_IN, MessageType::BINARY_CMD_IN, MessageType::BINARY_CMD_IN
 };
 
+// heating plugs (max 2)
+constexpr MessageType heatingPlugs[] = {
+	MessageType::BINARY_OPEN_VALVE_CMD_OUT, MessageType::BINARY_OPEN_VALVE_CMD_OUT
+};
+
+// audio plugs (max 32)
+constexpr MessageType audioPlugs[] = {
+	MessageType::BINARY_IN, MessageType::BINARY_IN, MessageType::BINARY_IN, MessageType::BINARY_IN,
+	MessageType::BINARY_IN, MessageType::BINARY_IN, MessageType::BINARY_IN, MessageType::BINARY_IN,
+	MessageType::BINARY_IN, MessageType::BINARY_IN, MessageType::BINARY_IN, MessageType::BINARY_IN,
+	MessageType::BINARY_IN, MessageType::BINARY_IN, MessageType::BINARY_IN, MessageType::BINARY_IN,
+	MessageType::BINARY_IN, MessageType::BINARY_IN, MessageType::BINARY_IN, MessageType::BINARY_IN,
+	MessageType::BINARY_IN, MessageType::BINARY_IN, MessageType::BINARY_IN, MessageType::BINARY_IN,
+	MessageType::BINARY_IN, MessageType::BINARY_IN, MessageType::BINARY_IN, MessageType::BINARY_IN,
+	MessageType::BINARY_IN, MessageType::BINARY_IN, MessageType::BINARY_IN, MessageType::BINARY_IN,
+};
+
+// brightness sensor plugs
+constexpr MessageType brightnessSensorPlugs[] = {
+	MessageType::PHYSICAL_ILLUMINANCE_OUT,
+};
+
+// motion detector plugs
+constexpr MessageType motionDetectorPlugs[] = {
+	MessageType::BINARY_OCCUPANCY_OUT,
+};
+
+
 
 LocalInterface::LocalInterface() {
+	int audioCount = Sound::count();
+	this->audioCount = audioCount;
+	//this->audioPlug = MessageType::ENUM_CMD_IN | MessageType(audioCount + 1);
+
 	int i = 0;
 	this->deviceIds[i++] = BME680_ID;
-	this->deviceIds[i++] = HEATING_ID;
-	this->deviceIds[i++] = BRIGHTNESS_SENSOR_ID;
-	this->deviceIds[i++] = MOTION_DETECTOR_ID;
 	if (INPUT_EXT_COUNT > 0)
 		this->deviceIds[i++] = IN_ID;
 	if (OUTPUT_EXT_COUNT > 0)
 		this->deviceIds[i++] = OUT_ID;
+	if (OUTPUT_HEATING_COUNT > 0)
+		this->deviceIds[i++] = HEATING_ID;
+	if (audioCount > 0)
+		this->deviceIds[i++] = AUDIO_ID;
+	this->deviceIds[i++] = BRIGHTNESS_SENSOR_ID;
+	this->deviceIds[i++] = MOTION_DETECTOR_ID;
 	this->deviceCount = i;
 
 	// start coroutines
@@ -91,16 +116,19 @@ Array<MessageType const> LocalInterface::getPlugs(uint8_t id) const {
 	switch (id) {
 	case BME680_ID:
 		return bme680Plugs;
-	case HEATING_ID:
-		return heatingPlugs;
-	case BRIGHTNESS_SENSOR_ID:
-		return brightnessSensorPlugs;
-	case MOTION_DETECTOR_ID:
-		return motionDetectorPlugs;
 	case IN_ID:
 		return {INPUT_EXT_COUNT, inPlugs};
 	case OUT_ID:
 		return {OUTPUT_EXT_COUNT, outPlugs};
+	case HEATING_ID:
+		return {OUTPUT_HEATING_COUNT, heatingPlugs};
+	case AUDIO_ID:
+		return {this->audioCount, audioPlugs};
+		//return {1, &this->audioPlug};
+	case BRIGHTNESS_SENSOR_ID:
+		return brightnessSensorPlugs;
+	case MOTION_DETECTOR_ID:
+		return motionDetectorPlugs;
 	default:
 		return {};
 	}
@@ -196,19 +224,39 @@ Coroutine LocalInterface::publish() {
 
 		// set to device
 		switch (info.device.id) {
-		case HEATING_ID:
-			// set output
-			if (message.command <= 1)
-				Output::set(OUTPUT_HEATING, message.command != 0);
-			else
-				Output::toggle(OUTPUT_HEATING);
-			break;
 		case OUT_ID:
-			// set output
-			if (message.command <= 1)
-				Output::set(OUTPUT_EXT_INDEX + info.device.plugIndex, message.command != 0);
-			else
-				Output::toggle(OUTPUT_EXT_INDEX + info.device.plugIndex);
+			// set "ext" output
+			if (info.device.plugIndex < OUTPUT_EXT_COUNT) {
+				if (message.value.u8 <= 1)
+					Output::set(OUTPUT_EXT_INDEX + info.device.plugIndex, message.value.u8 != 0);
+				else
+					Output::toggle(OUTPUT_EXT_INDEX + info.device.plugIndex);
+			}
+			break;
+		case HEATING_ID:
+			// set heating output
+			if (info.device.plugIndex < OUTPUT_HEATING_COUNT) {
+				if (message.value.u8 <= 1)
+					Output::set(OUTPUT_HEATING_INDEX, message.value.u8 != 0);
+				else
+					Output::toggle(OUTPUT_HEATING_INDEX);
+			}
+			break;
+		case AUDIO_ID:
+			// start audio
+			if (info.device.plugIndex < this->audioCount) {
+				if (message.value.u8 != 0)
+					Sound::play(info.device.plugIndex);
+				else
+					Sound::stop(info.device.plugIndex);
+			}
+			/*
+			if (info.device.plugIndex == 0) {
+				if (message.value.u16 == 0)
+					Audio::stop();
+				else
+					Audio::play(message.value.u16 - 1);
+			}*/
 			break;
 		}
 

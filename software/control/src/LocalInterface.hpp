@@ -9,12 +9,13 @@ public:
 	// device id's
 	enum DeviceIds {
 		BME680_ID = 1, // air sensor
-		HEATING_ID = 2, // heating
-		BRIGHTNESS_SENSOR_ID = 3,
-		MOTION_DETECTOR_ID = 4,
-		IN_ID = 5, // generic binary input
-		OUT_ID = 6, // generic binary output
-		DEVICE_COUNT = 6
+		IN_ID = 2, // generic binary input
+		OUT_ID = 3, // generic binary output
+		HEATING_ID = 4, // heating
+		AUDIO_ID = 5, // audio via built-in (or bluetooth) speaker
+		BRIGHTNESS_SENSOR_ID = 6,
+		MOTION_DETECTOR_ID = 7,
+		DEVICE_COUNT = 7
 	};
 
 	LocalInterface();
@@ -24,7 +25,6 @@ public:
 	void setCommissioning(bool enabled) override;
 
 	Array<uint8_t const> getDeviceIds() override;
-	//Device *getDevice(uint8_t id) override;
 	String getName(uint8_t id) const override;
 	void setName(uint8_t id, String name) override;
 	Array<MessageType const> getPlugs(uint8_t id) const override;
@@ -49,4 +49,7 @@ protected:
 	LocalDevice devices[DEVICE_COUNT];
 
 	PublishInfo::Barrier publishBarrier;
+
+	//MessageType audioPlug;
+	int audioCount;
 };

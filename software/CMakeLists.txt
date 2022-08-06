@@ -63,10 +63,17 @@ if(POSIX)
 	#message("*** posix")
 	find_package(Boost CONFIG)
 	find_package(libusb CONFIG)
+	find_package(miniaudio CONFIG)
+	find_package(Opus CONFIG)
+	find_package(Ogg CONFIG)
 	find_package(GTest CONFIG)
 	set(LIBRARIES
 		Boost::headers
+		Boost::filesystem
 		libusb::libusb
+		miniaudio::miniaudio
+		Opus::opus
+		Ogg::ogg
 		gtest::gtest
 	)
 
@@ -203,6 +210,7 @@ if(POSIX)
 	set(LOOP system/src/Loop.hpp system/src/posix/Loop.cpp system/src/posix/Loop2.cpp)
 	set(NETWORK system/src/Network.hpp system/src/posix/Network.cpp)
 	set(OUTPUT system/src/Output.hpp system/src/posix/Output.cpp system/src/Debug.hpp)
+	set(SOUND system/src/Sound.hpp system/src/posix/Sound.cpp)
 	set(STORAGE system/src/Storage.hpp system/src/posix/Storage.cpp)
 	set(TERMINAL system/src/Terminal.hpp system/src/posix/Terminal.cpp)
 	set(TIMER system/src/SystemTime.hpp system/src/Timer.hpp system/src/posix/Timer.cpp)
@@ -281,6 +289,7 @@ set(SYSTEM
 	${POTI}
 	${RADIO}
 	${RANDOM}
+	${SOUND}
 	${SPI}
 	${STORAGE}
 	${TERMINAL}
@@ -539,6 +548,7 @@ add_system_test_executable(Network)
 add_system_test_executable(Poti)
 add_system_test_executable(Radio)
 add_system_test_executable(Random)
+add_system_test_executable(Sound)
 add_system_test_executable(Spi)
 add_system_test_executable(Storage)
 add_system_test_executable(Timer)

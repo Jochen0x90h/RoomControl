@@ -12,14 +12,14 @@ COMPATIBLE = 4
 
 # type infos (name, flags, label, usage, description)
 types = [4,
-	["BINARY", CMD | COMPATIBLE, "Binary", "OFF_ON", "binary category (byte)", [4,
+	["BINARY", CMD | TOGGLE | COMPATIBLE, "Binary", "OFF_ON", "binary category (byte)", [4,
 		["BUTTON", 0, "Button", "RELEASED_PRESSED", "button returns to inactive state when released (0: released, 1: pressed)", [3,
 			["WALL", 0, "Wall Button", None, "mechanical button mounted on the wall"],
 		]],		
 		["SWITCH", 0, "Switch", None, "switch with two stable states (0: off, 1: on)", [3,	
 			["WALL", 0, "Wall Switch", None, "mechanical switch mounted on the wall"],
 		]],
-		["POWER", CMD | TOGGLE, "On/Off", None, "power on/off (0: off, 1: on, 2: toggle command)", [4,
+		["POWER", CMD, "On/Off", None, "power on/off (0: off, 1: on, 2: toggle command)", [4,
 			["LIGHT", CMD, "Light On", None, "light"],		
 			["FREEZER", CMD, "Freezer On", None, "freezer on"],		
 			["FRIDGE", CMD, "Fridge On", None, "fridge on"],		
@@ -48,6 +48,16 @@ types = [4,
 		["OCCUPANCY", 0, "Occupancy", "OCCUPANCY", "occupancy measured by e.g. PIR sensor (0: unoccupied, 1: occupied)"],
 		["ALARM", 0, "Alarm", "ACTIVATION", "activation of alarm (0: deactivated, 1: activated)"],
 		#["START_STOP", CMD | TOGGLE, "Start/Stop", "STOP_START", "start/stop (0: stop, 1: start, 2: toggle command)"],
+		["SOUND", 0, "Sound", "SOUND", "sound (0: stop, 1: play)", [4,
+			["EVENT", CMD, "Event Sound", None, "event sound"],
+			["ACTIVATION", CMD, "Activation Sound", None, "activation sound"],
+			["DEACTIVATION", CMD, "Deactivation Sound", None, "deactivation sound"],
+			["INFORMATION", CMD, "Information Sound", None, "information sound"],
+			["WARNING", CMD, "Warning Sound", None, "warning sound"],
+			["DOORBELL", CMD, "Doorbell Sound", None, "dorbell sound"],
+			["CALL", CMD, "Call Sound", None, "call sound"],
+			["ALARM", CMD, "Alarm Sound", None, "alarm sound"],
+		]],
 		["ENABLE_CLOSE", 0, "Enable Close", "ENABLED", "closing of blind/lock enabled (0: disabled, 1: enabled)"],
 	]],
 	["TERNARY", CMD | COMPATIBLE, "Ternary", "OFF_ON1_ON2", "ternary category (byte)", [4,
@@ -65,14 +75,15 @@ types = [4,
 			["SLAT", 0, "Slat Drive", None, "slat drive"],
 			["VALVE", 0, "Valve Drive", None, "valve drive"],
 		]],	
-		["LOCK", CMD, "Lock State", "TILT_LOCK", "lock state of door, window, (0: unlocked, 1: tilt, 2: locked)", [3,	
-			["DOOR", CMD, "Door Lock", None, "door"],
-			["WINDOW", CMD, "Window Lock", None, "window"],
+		["LOCK", 0, "Lock State", "TILT_LOCK", "lock state of door, window, (0: unlocked, 1: tilt, 2: locked)", [3,
+			["DOOR", 0, "Door Lock", None, "door"],
+			["WINDOW", 0, "Window Lock", None, "window"],
 		]],			
 	]],	
 	["MULTISTATE", CMD, "Multistate", None, "multi-state category (int)", [2,
 		["THERMOSTAT_MODE", 0, "Mode", None, "thermostat mode (0: heat, 1: cool, 2: auto)"],
 	]],
+	["ENUM", CMD, "Enum", None, "enumeration (int)"],
 	["LEVEL", CMD, "Level", "PERCENT", "level category (float, range 0-1, displayed as 0-100%)", [3,
 		["OPEN", CMD | COMPATIBLE, "Open Level", None, "open level of gate, door, window, blind, slat or valve", [3,	
 			["GATE", CMD, "Gate Level", None, "gate level"],
@@ -95,7 +106,7 @@ types = [4,
 				["OVEN", 0, "Measured Temp.", "TEMPERATURE_OVEN", "measured oven temperature"],
 			]],
 			["SETPOINT", CMD | COMPATIBLE, "Setpoint Temp.", None, "setpoint temperature", [3,
-				["FREEZER", CMD, "Measured Temp.", "TEMPERATURE_FEEZER", "cooling setpoint for freezer (-30oC - 0oC)"], 
+				["FREEZER", CMD, "Measured Temp.", "TEMPERATURE_FREEZER", "cooling setpoint for freezer (-30oC - 0oC)"],
 				["FRIDGE", CMD, "Measured Temp.", "TEMPERATURE_FRIDGE", "cooling setpoint for fridge (0oC - 20oC)"], 
 				["COOLER", CMD, "Measured Temp.", "TEMPERATURE_ROOM", "cooling setpoint for hvac (8oC - 30oC)"],
 				["HEATER", CMD, "Measured Temp.", "TEMPERATURE_ROOM", "heating setpoint for hvac (8oC - 30oC)"],
@@ -282,7 +293,7 @@ def isCompatible(types, tabs, prefix):
 # enum PlugType
 # -----------------
 
-f = open('endpointType.txt', 'w')
+f = open('PlugType.generated.hpp', 'w')
 sys.stdout = f
 
 print("""
@@ -308,7 +319,7 @@ FLAGS_ENUM(PlugType)
 # enum Usage
 # ----------
 
-f = open('usage.txt', 'w')
+f = open('../../node/src/Usage.generated.hpp', 'w')
 sys.stdout = f
 
 usages = {"NONE"}
@@ -322,7 +333,7 @@ print("};")
 
 # functions
 # ---------
-f = open('functions.txt', 'w')
+f = open('../../node/src/functions.generated.cpp', 'w')
 sys.stdout = f
 
 # getTypeLabel()
@@ -342,24 +353,29 @@ print("}")
 # isCompatible()
 print("""
 bool isCompatible(PlugType dstType, PlugType srcType) {
+	// output must connect to input
 	if ((srcType & PlugType::DIRECTION_MASK) != PlugType::OUT || (dstType & PlugType::DIRECTION_MASK) != PlugType::IN)
 		return false;
 	bool srcCommand = (srcType & PlugType::CMD) != 0;
 	bool dstCommand = (dstType & PlugType::CMD) != 0;
-	if (srcCommand && !dstCommand)
-		return false;
 	auto src = srcType & PlugType::TYPE_MASK;
 	auto dst = dstType & PlugType::TYPE_MASK;
 	auto srcCategory = src & PlugType::CATEGORY;
 	auto dstCategory = dst & PlugType::CATEGORY;
 	bool srcSwitch = srcCategory == PlugType::BINARY || srcCategory == PlugType::TERNARY;
 	bool dstSwitch = dstCategory == PlugType::BINARY || dstCategory == PlugType::TERNARY;
+	// all switch messages can generate any other switch message
 	if (srcSwitch && dstSwitch)
 		return true;
+	// all switch messages can generate a command message
 	if (srcSwitch && dstCommand)
 		return true;
+	// all value messages can generate a switch message (comparison against threshold)
 	if (!srcCommand && dstSwitch)
 		return true;
+	// command messages can't generate value messages
+	if (srcCommand && !dstCommand)
+		return false;
 """)
 isCompatible(types, "\t", "")
 print("}")
