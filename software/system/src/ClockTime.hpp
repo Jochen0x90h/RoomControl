@@ -137,6 +137,31 @@ public:
 	}
 };
 
+
+/**
+ * Duration in minutes
+ */
+struct MinuteDuration {
+	uint8_t fraction; // 1/10s or 1/100s
+	uint8_t seconds;
+	uint8_t minutes;
+};
+
+inline MinuteDuration unpackMinuteDuration(uint32_t duration, int resolution) {
+	MinuteDuration d;
+	d.fraction = duration % resolution;
+	duration /= resolution;
+	d.seconds = duration % 60;
+	duration /= 60;
+	d.minutes = duration;
+	return d;
+}
+
+inline uint32_t packMinuteDuration(MinuteDuration const &duration, int resoluton) {
+	return duration.fraction + (duration.seconds + (duration.minutes) * 60) * resoluton;
+}
+
+
 /**
  * Duration in hours with 1/100s resolution
  */

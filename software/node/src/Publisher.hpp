@@ -54,4 +54,15 @@ struct Publisher : public PublishInfo {
 			return convertFloat(this->destination.type, dst, src, this->convertOptions);
 		});
 	}
+	void publishFloatTransition(float src, uint8_t command, uint16_t transition) {
+		if (this->barrier == nullptr)
+			return;
+		this->barrier->resumeFirst([this, src, command, transition] (PublishInfo::Parameters &p) {
+			p.info = this->destination;
+
+			// convert to destination message type and resume coroutine if conversion was successful
+			auto &dst = *reinterpret_cast<Message *>(p.message);
+			return convertFloatTransition(this->destination.type, dst, src, command, transition, this->convertOptions);
+		});
+	}
 };

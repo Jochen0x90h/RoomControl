@@ -16,8 +16,13 @@ public:
 	void setCommissioning(bool enabled) override;
 
 	Array<uint8_t const> getDeviceIds() override;
-	Device *getDevice(uint8_t id) override;
-	void eraseDevice(uint8_t id) override;
+	//Device *getDevice(uint8_t id) override;
+	String getName(uint8_t id) const override;
+	void setName(uint8_t id, String name) override;
+	Array<MessageType const> getPlugs(uint8_t id) const override;
+	void subscribe(uint8_t id, uint8_t plugIndex, Subscriber &subscriber) override;
+	PublishInfo getPublishInfo(uint8_t id, uint8_t plugIndex) override;
+	void erase(uint8_t id) override;
 
 protected:
 	class Alarm;
@@ -25,7 +30,7 @@ protected:
 public:
 	// alarm data that is stored in flash
 	struct AlarmData {
-		static constexpr int MAX_ENDPOINT_COUNT = 8;
+		static constexpr int MAX_PLUG_COUNT = 8;
 
 		uint8_t id;
 
@@ -71,24 +76,13 @@ public:
 
 protected:
 
-	class Alarm : public Interface::Device {
+	class Alarm {
 	public:
 		Alarm(AlarmInterface *interface, AlarmData const &data)
-			: interface(interface), next(interface->alarms), data(data)
+			: next(interface->alarms), data(data)
 		{
 			interface->alarms = this;
 		}
-		~Alarm() override;
-
-		uint8_t getId() const override;
-		String getName() const override;
-		void setName(String name) override;
-		Array<MessageType const> getPlugs() const override;
-		void subscribe(uint8_t plugIndex, Subscriber &subscriber) override;
-		PublishInfo getPublishInfo(uint8_t plugIndex) override;
-
-		// back pointer to interface
-		AlarmInterface *interface;
 
 		// next alarm
 		Alarm *next;
@@ -102,6 +96,8 @@ protected:
 		// true when alarm is active
 		bool active = false;
 	};
+
+	Alarm *getAlarm(uint8_t id) const;
 
 	int alarmCount = 0;
 	uint8_t alarmIds[MAX_ALARM_COUNT];

@@ -3,6 +3,3 @@
 
 Interface::~Interface() {
 }
-
-Interface::Device::~Device() {
-}

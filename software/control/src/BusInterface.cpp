@@ -96,22 +96,49 @@ Array<uint8_t const> BusInterface::getDeviceIds() {
 	return {this->deviceCount, this->deviceIds};
 }
 
-Interface::Device *BusInterface::getDevice(uint8_t id) {
-	auto device = this->devices;
-	while (device != nullptr) {
-		// iterate over endpoints, each endpoint is exposed as a device
-		auto endpoint = device->endpoints;
-		while (endpoint != nullptr) {
-			if (endpoint->data->id == id)
-				return endpoint;
-			endpoint = endpoint->next;
-		}
-		device = device->next;
-	}
-	return nullptr;
+String BusInterface::getName(uint8_t id) const {
+	auto endpoint = getEndpoint(id);
+	if (endpoint != nullptr)
+		return String(endpoint->data->name);
+	return {};
 }
 
-void BusInterface::eraseDevice(uint8_t id) {
+void BusInterface::setName(uint8_t id, String name) {
+	auto endpoint = getEndpoint(id);
+	if (endpoint != nullptr) {
+		assign(endpoint->data->name, name);
+
+		// write to flash
+		Storage::write(STORAGE_CONFIG, STORAGE_ID_BUS1 | endpoint->data->id, endpoint->data->size(), endpoint->data);
+	}
+}
+
+Array<MessageType const> BusInterface::getPlugs(uint8_t id) const {
+	auto endpoint = getEndpoint(id);
+	if (endpoint != nullptr)
+		return {endpoint->data->plugCount, endpoint->data->plugs};
+	return {};
+}
+
+void BusInterface::subscribe(uint8_t id, uint8_t plugIndex, Subscriber &subscriber) {
+	subscriber.remove();
+	auto endpoint = getEndpoint(id);
+	if (endpoint != nullptr) {
+		subscriber.source.device = {id, plugIndex};
+		endpoint->subscribers.add(subscriber);
+	}
+}
+
+PublishInfo BusInterface::getPublishInfo(uint8_t id, uint8_t plugIndex) {
+	auto endpoint = getEndpoint(id);
+	if (endpoint != nullptr) {
+		if (plugIndex < endpoint->data->plugCount)
+			return {{.type = endpoint->data->plugs[plugIndex], .device = {id, plugIndex}}, &this->publishBarrier};
+	}
+	return {};
+}
+
+void BusInterface::erase(uint8_t id) {
 	auto d = &this->devices;
 	while (*d != nullptr) {
 		auto device = *d;
@@ -151,57 +178,41 @@ void BusInterface::eraseDevice(uint8_t id) {
 list:
 
 	// erase from list of device id's
-	int j = 0;
-	for (int i = 0; i < this->deviceCount; ++i) {
-		uint8_t id2 = this->deviceIds[i];
-		if (id2 != id) {
-			this->deviceIds[j] = id;
-			++j;
-		}
-	}
-	this->deviceCount = j;
-	Storage::write(STORAGE_CONFIG, STORAGE_ID_BUS1, j, this->deviceIds);
+	this->deviceCount = eraseId(this->deviceCount, this->deviceIds, id);
+	Storage::write(STORAGE_CONFIG, STORAGE_ID_BUS1, this->deviceCount, this->deviceIds);
 }
 
 // private:
+
+// BusDevice
+BusInterface::BusDevice::~BusDevice() {
+	// delete endpoints
+	auto endpoint = this->endpoints;
+	while (endpoint != nullptr) {
+		auto e = endpoint;
+		endpoint = endpoint->next;
+		delete e;
+	}
+}
 
 // Endpoint
 BusInterface::Endpoint::~Endpoint() {
 	free(data);
 }
 
-uint8_t BusInterface::Endpoint::getId() const {
-	return this->data->id;
+BusInterface::Endpoint *BusInterface::getEndpoint(uint8_t id) const {
+	auto device = this->devices;
+	while (device != nullptr) {
+		auto endpoint = device->endpoints;
+		while (endpoint != nullptr) {
+			if (endpoint->data->id == id)
+				return endpoint;
+			endpoint = endpoint->next;
+		}
+		device = device->next;
+	}
+	return nullptr;
 }
-
-String BusInterface::Endpoint::getName() const {
-	return String(this->data->name);
-}
-
-void BusInterface::Endpoint::setName(String name) {
-	assign(this->data->name, name);
-
-	// write to flash
-	Storage::write(STORAGE_CONFIG, STORAGE_ID_BUS1 | this->data->id, this->data->size(), this->data);
-}
-
-Array<MessageType const> BusInterface::Endpoint::getPlugs() const {
-	return {this->data->plugCount, this->data->plugs};
-}
-
-void BusInterface::Endpoint::subscribe(uint8_t plugIndex, Subscriber &subscriber) {
-	subscriber.remove();
-	subscriber.source.device.plugIndex = plugIndex;
-	this->subscribers.add(subscriber);
-}
-
-PublishInfo BusInterface::Endpoint::getPublishInfo(uint8_t plugIndex) {
-	if (plugIndex >= this->data->plugCount)
-		return {};
-	return {{.type = this->data->plugs[plugIndex], .device = {this->data->id, plugIndex}},
-		&this->device->interface->publishBarrier};
-}
-
 
 uint8_t BusInterface::allocateId(int deviceCount) {
 	// find a free id
@@ -561,42 +572,30 @@ AwaitableCoroutine BusInterface::handleCommission(uint32_t deviceId, uint8_t end
 
 	// remove remaining old endpoints from device list
 	while (oldEndpoint != nullptr) {
-		int j = 0;
-		for (int i = 0; i < deviceCount; ++i) {
-			auto id = this->deviceIds[i];
-			if (id != oldEndpoint->data->id)
-				this->deviceIds[j++] = id;
-		}
-		deviceCount = j;
+		deviceCount = eraseId(deviceCount, this->deviceIds, oldEndpoint->data->id);
 		oldEndpoint = oldEndpoint->next;
 	}
 
-	// delete old device and its endpoints
+	// delete old device
 	if (oldDevice != nullptr) {
 		// remove device from linked list
 		*od = oldDevice->next;
 
-		// delete old endpoints
-		auto endpoint = device->endpoints;
+		// move subscribers from old to new endpoints
 		auto oldEndpoint = oldDevice->endpoints;
-		while (oldEndpoint != nullptr) {
-			// move subscribers from old to new endpoint
-			if (endpoint != nullptr) {
-				endpoint->subscribers.insert(oldEndpoint->subscribers);
-				endpoint = endpoint->next;
-			}
-			auto e = oldEndpoint;
+		auto endpoint = device->endpoints;
+		while (oldEndpoint != nullptr && endpoint != nullptr) {
+			endpoint->subscribers.add(static_cast<Subscriber &>(oldEndpoint->subscribers));
 			oldEndpoint = oldEndpoint->next;
-			delete e;
+			endpoint = endpoint->next;
 		}
+
 		delete oldDevice;
 	}
 
 	// store device list
-	if (this->deviceCount != deviceCount) {
-		this->deviceCount = deviceCount;
-		Storage::write(STORAGE_CONFIG, STORAGE_ID_BUS1, deviceCount, this->deviceIds);
-	}
+	this->deviceCount = deviceCount;
+	Storage::write(STORAGE_CONFIG, STORAGE_ID_BUS1, deviceCount, this->deviceIds);
 
 	// store endpoints
 	auto endpoint = device->endpoints;
@@ -609,7 +608,6 @@ AwaitableCoroutine BusInterface::handleCommission(uint32_t deviceId, uint8_t end
 	Storage::write(STORAGE_CONFIG, STORAGE_ID_BUS2 | device->data.id, sizeof(device->data), &device->data);
 
 	// transfer ownership of device to devices list
-	device->interface = this;
 	device->next = this->devices;
 	this->devices = device.ptr;
 	device.ptr = nullptr;

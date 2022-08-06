@@ -21,49 +21,46 @@ constexpr int BME680_PRESSURE_ENDPOINT = 2;
 constexpr int BME680_VOC_ENDPOINT = 3;
 
 // endpoint type arrays for getEndpoints()
-constexpr MessageType bme680Endpoints[] = {
+constexpr MessageType bme680Plugs[] = {
 	MessageType::PHYSICAL_TEMPERATURE_MEASURED_ROOM_OUT,
 	MessageType::CONCENTRATION_RELATIVE_HUMIDITY_MEASURED_AIR_OUT,
 	MessageType::PHYSICAL_PRESSURE_MEASURED_ATMOSPHERE_OUT,
 	MessageType::CONCENTRATION_VOC_OUT,
 };
 
-constexpr MessageType heatingEndpoints[] = {
+constexpr MessageType heatingPlugs[] = {
 	MessageType::BINARY_OPEN_VALVE_CMD_OUT
 };
 
-constexpr MessageType brightnessSensorEndpoints[] = {
+constexpr MessageType brightnessSensorPlugs[] = {
 	MessageType::PHYSICAL_ILLUMINANCE_OUT,
 };
 
-constexpr MessageType motionDetectorEndpoints[] = {
+constexpr MessageType motionDetectorPlugs[] = {
 	MessageType::BINARY_OCCUPANCY_OUT,
 };
 
 // binary inputs (have out endpoints)
-constexpr MessageType inEndpoints[] = {
+constexpr MessageType inPlugs[] = {
 	MessageType::BINARY_OUT, MessageType::BINARY_OUT, MessageType::BINARY_OUT, MessageType::BINARY_OUT
 };
 
 // binary outputs (have in enpoitns)
-constexpr MessageType outEndpoints[] = {
+constexpr MessageType outPlugs[] = {
 	MessageType::BINARY_CMD_IN, MessageType::BINARY_CMD_IN, MessageType::BINARY_CMD_IN, MessageType::BINARY_CMD_IN
 };
 
 
 LocalInterface::LocalInterface() {
-	this->devices[BME680_ID - 1].init(this, BME680_ID, bme680Endpoints);
-	this->devices[HEATING_ID - 1].init(this, HEATING_ID, heatingEndpoints);
-	this->devices[BRIGHTNESS_SENSOR_ID - 1].init(this, BRIGHTNESS_SENSOR_ID, brightnessSensorEndpoints);
-	this->devices[MOTION_DETECTOR_ID - 1].init(this, MOTION_DETECTOR_ID, motionDetectorEndpoints);
-	this->devices[IN_ID - 1].init(this, IN_ID, {INPUT_EXT_COUNT, inEndpoints});
-	this->devices[OUT_ID - 1].init(this, OUT_ID, {OUTPUT_EXT_COUNT, outEndpoints});
-
 	int i = 0;
-	for (auto &device : this->devices) {
-		if (!device.plugs.isEmpty())
-			this->deviceIds[i++] = device.id;
-	}
+	this->deviceIds[i++] = BME680_ID;
+	this->deviceIds[i++] = HEATING_ID;
+	this->deviceIds[i++] = BRIGHTNESS_SENSOR_ID;
+	this->deviceIds[i++] = MOTION_DETECTOR_ID;
+	if (INPUT_EXT_COUNT > 0)
+		this->deviceIds[i++] = IN_ID;
+	if (OUTPUT_EXT_COUNT > 0)
+		this->deviceIds[i++] = OUT_ID;
 	this->deviceCount = i;
 
 	// start coroutines
@@ -81,47 +78,53 @@ Array<uint8_t const> LocalInterface::getDeviceIds() {
 	return {this->deviceCount, this->deviceIds};
 }
 
-Interface::Device *LocalInterface::getDevice(uint8_t id) {
+String LocalInterface::getName(uint8_t id) const {
 	if (id >= 1 && id <= DEVICE_COUNT)
-		return &this->devices[id - 1];
-	return nullptr;
+		return deviceNames[id - 1];
+	return {};
 }
 
-void LocalInterface::eraseDevice(uint8_t id) {
+void LocalInterface::setName(uint8_t id, String name) {
+}
+
+Array<MessageType const> LocalInterface::getPlugs(uint8_t id) const {
+	switch (id) {
+	case BME680_ID:
+		return bme680Plugs;
+	case HEATING_ID:
+		return heatingPlugs;
+	case BRIGHTNESS_SENSOR_ID:
+		return brightnessSensorPlugs;
+	case MOTION_DETECTOR_ID:
+		return motionDetectorPlugs;
+	case IN_ID:
+		return {INPUT_EXT_COUNT, inPlugs};
+	case OUT_ID:
+		return {OUTPUT_EXT_COUNT, outPlugs};
+	default:
+		return {};
+	}
+}
+
+void LocalInterface::subscribe(uint8_t id, uint8_t plugIndex, Subscriber &subscriber) {
+	subscriber.remove();
+	auto plugs = getPlugs(id);
+	if (plugIndex < plugs.count()) {
+		subscriber.source.device = {id, plugIndex};
+		this->devices[id - 1].subscribers.add(subscriber);
+	}
+}
+
+PublishInfo LocalInterface::getPublishInfo(uint8_t id, uint8_t plugIndex) {
+	auto plugs = getPlugs(id);
+	if (plugIndex < plugs.count())
+		return {{.type = plugs[plugIndex], .device = {id, plugIndex}}, &this->publishBarrier};
+	return {};
+}
+
+void LocalInterface::erase(uint8_t id) {
 	// not possible to erase local devices
 }
-
-// LocalInterface::LocalDevice
-
-uint8_t LocalInterface::LocalDevice::getId() const {
-	return this->id;
-}
-
-String LocalInterface::LocalDevice::getName() const {
-	int i = int(this->id) - 1;
-	return deviceNames[i];
-}
-
-void LocalInterface::LocalDevice::setName(String name) {
-}
-
-Array<MessageType const> LocalInterface::LocalDevice::getPlugs() const {
-	return this->plugs;
-}
-
-void LocalInterface::LocalDevice::subscribe(uint8_t plugIndex, Subscriber &subscriber) {
-	subscriber.remove();
-	subscriber.source.device.plugIndex = plugIndex;
-	this->subscribers.add(subscriber);
-}
-
-PublishInfo LocalInterface::LocalDevice::getPublishInfo(uint8_t plugIndex) {
-	if (plugIndex >= this->plugs.count())
-		return {};
-	return {{.type = this->plugs[plugIndex], .device = {this->id, plugIndex}},
-		&this->interface->publishBarrier};
-}
-
 
 Coroutine LocalInterface::readAirSensor() {
 	BME680 airSensor;
@@ -141,7 +144,7 @@ Coroutine LocalInterface::readAirSensor() {
 
 		// publish to subscribers of air sensor
 		for (auto &subscriber : device.subscribers) {
-			if (subscriber.source.device.plugIndex >= array::count(bme680Endpoints))
+			if (subscriber.source.device.plugIndex >= array::count(bme680Plugs))
 				break;
 
 			// get source message (measured value)
@@ -170,7 +173,7 @@ Coroutine LocalInterface::readAirSensor() {
 
 				// convert to destination message type and resume coroutine if conversion was successful
 				auto &dst = *reinterpret_cast<Message *>(p.message);
-				auto srcType = bme680Endpoints[subscriber.source.device.plugIndex];
+				auto srcType = bme680Plugs[subscriber.source.device.plugIndex];
 				return convertFloat(subscriber.destination.type, dst, src, subscriber.convertOptions);
 			});
 		}

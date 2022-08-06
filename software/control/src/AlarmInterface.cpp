@@ -7,11 +7,11 @@
 #include <appConfig.hpp>
 
 
-static MessageType const endpoints[8] = {
+static MessageType const plugs[8] = {
 	MessageType::BINARY_ALARM_OUT, MessageType::BINARY_ALARM_OUT, MessageType::BINARY_ALARM_OUT, MessageType::BINARY_ALARM_OUT,
 	MessageType::BINARY_ALARM_OUT, MessageType::BINARY_ALARM_OUT, MessageType::BINARY_ALARM_OUT, MessageType::BINARY_ALARM_OUT
 };
-static_assert(array::count(endpoints) >= AlarmInterface::AlarmData::MAX_ENDPOINT_COUNT);
+static_assert(array::count(plugs) >= AlarmInterface::AlarmData::MAX_PLUG_COUNT);
 
 
 AlarmInterface::AlarmInterface() {
@@ -55,48 +55,67 @@ Array<uint8_t const> AlarmInterface::getDeviceIds() {
 	return {this->alarmCount, this->alarmIds};
 }
 
-Interface::Device *AlarmInterface::getDevice(uint8_t id) {
-	auto alarm = this->alarms;
-	while (alarm != nullptr) {
-		if (alarm->data.id == id)
-			return alarm;
-		alarm = alarm->next;
-	}
-	return nullptr;
+String AlarmInterface::getName(uint8_t id) const {
+	auto alarm = getAlarm(id);
+	if (alarm != nullptr)
+		return String(alarm->data.name);
+	return {};
 }
 
-void AlarmInterface::eraseDevice(uint8_t id) {
-	auto d = &this->alarms;
-	while (*d != nullptr) {
-		auto device = *d;
-		if (device->data.id == id) {
-			// remove device from linked list
-			*d = device->next;
+void AlarmInterface::setName(uint8_t id, String name) {
+	auto alarm = getAlarm(id);
+	if (alarm != nullptr) {
+		assign(alarm->data.name, name);
+
+		// write to flash
+		Storage::write(STORAGE_CONFIG, STORAGE_ID_ALARM | alarm->data.id, sizeof(alarm->data), &alarm->data);
+	}
+}
+
+Array<MessageType const> AlarmInterface::getPlugs(uint8_t id) const {
+	auto alarm = getAlarm(id);
+	if (alarm != nullptr)
+		return {alarm->data.plugCount, plugs};
+	return {};
+}
+
+void AlarmInterface::subscribe(uint8_t id, uint8_t plugIndex, Subscriber &subscriber) {
+	subscriber.remove();
+	auto alarm = getAlarm(id);
+	if (alarm != nullptr) {
+		subscriber.source.device = {id, plugIndex};
+		alarm->subscribers.add(subscriber);
+	}
+}
+
+PublishInfo AlarmInterface::getPublishInfo(uint8_t id, uint8_t plugIndex) {
+	return {};
+}
+
+void AlarmInterface::erase(uint8_t id) {
+	auto a = &this->alarms;
+	while (*a != nullptr) {
+		auto alarm = *a;
+		if (alarm->data.id == id) {
+			// remove alarm from linked list
+			*a = alarm->next;
 
 			// erase from flash
 			Storage::erase(STORAGE_CONFIG, STORAGE_ID_ALARM | id);
 
 			// delete device
-			delete device;
+			delete alarm;
 
 			goto list;
 		}
-		d = &device->next;
+		a = &alarm->next;
 	}
 
 list:
 
 	// erase from list of device id's
-	int j = 0;
-	for (int i = 0; i < this->alarmCount; ++i) {
-		uint8_t id2 = this->alarmIds[i];
-		if (id2 != id) {
-			this->alarmIds[j] = id;
-			++j;
-		}
-	}
-	this->alarmCount = j;
-	Storage::write(STORAGE_CONFIG, STORAGE_ID_ALARM, j, this->alarmIds);
+	this->alarmCount = eraseId(this->alarmCount, this->alarmIds, id);
+	Storage::write(STORAGE_CONFIG, STORAGE_ID_ALARM, this->alarmCount, this->alarmIds);
 }
 
 AlarmInterface::AlarmData const *AlarmInterface::get(uint8_t id) const {
@@ -104,6 +123,7 @@ AlarmInterface::AlarmData const *AlarmInterface::get(uint8_t id) const {
 	while (alarm != nullptr) {
 		if (alarm->data.id == id)
 			return &alarm->data;
+		alarm = alarm->next;
 	}
 	return nullptr;
 }
@@ -137,18 +157,21 @@ void AlarmInterface::set(uint8_t id, AlarmData &data) {
 int AlarmInterface::getSubscriberCount(uint8_t id, int endpointCount, uint8_t command) {
 	auto alarm = this->alarms;
 	while (alarm != nullptr) {
-		if (alarm->data.id == id) {
-			int count = 0;
-			for (auto &subscriber : alarm->subscribers) {
-				if (subscriber.source.device.plugIndex >= endpointCount)
-					continue;
-
-				Message dst;
-				if (convertSwitch(subscriber.destination.type, dst, command, subscriber.convertOptions))
-					++count;
-			}
-			return count;
+		if (alarm->data.id != id) {
+			alarm = alarm->next;
+			continue;
 		}
+
+		int count = 0;
+		for (auto &subscriber : alarm->subscribers) {
+			if (subscriber.source.device.plugIndex >= endpointCount)
+				continue;
+
+			Message dst;
+			if (convertSwitch(subscriber.destination.type, dst, command, subscriber.convertOptions))
+				++count;
+		}
+		return count;
 	}
 	return 0;
 }
@@ -156,58 +179,39 @@ int AlarmInterface::getSubscriberCount(uint8_t id, int endpointCount, uint8_t co
 void AlarmInterface::test(uint8_t id, int plugCount, uint8_t command) {
 	auto alarm = this->alarms;
 	while (alarm != nullptr) {
-		if (alarm->data.id == id) {
-			for (auto &subscriber: alarm->subscribers) {
-				if (subscriber.source.device.plugIndex >= plugCount)
-					continue;
-
-				// publish to subscriber
-				subscriber.barrier->resumeFirst([&subscriber, command] (PublishInfo::Parameters &p) {
-					p.info = subscriber.destination;
-
-					// convert to target unit and type and resume coroutine if conversion was successful
-					auto &dst = *reinterpret_cast<Message *>(p.message);
-					return convertSwitch(subscriber.destination.type, dst, command, subscriber.convertOptions);
-				});
-			}
+		if (alarm->data.id != id) {
+			alarm = alarm->next;
+			continue;
 		}
+
+		for (auto &subscriber: alarm->subscribers) {
+			if (subscriber.source.device.plugIndex >= plugCount)
+				continue;
+
+			// publish to subscriber
+			subscriber.barrier->resumeFirst([&subscriber, command] (PublishInfo::Parameters &p) {
+				p.info = subscriber.destination;
+
+				// convert to target unit and type and resume coroutine if conversion was successful
+				auto &dst = *reinterpret_cast<Message *>(p.message);
+				return convertSwitch(subscriber.destination.type, dst, command, subscriber.convertOptions);
+			});
+		}
+		return;
 	}
 }
 
-// AlarmInterface::Alarm
+// protected:
 
-AlarmInterface::Alarm::~Alarm() {
+AlarmInterface::Alarm *AlarmInterface::getAlarm(uint8_t id) const {
+	auto alarm = this->alarms;
+	while (alarm != nullptr) {
+		if (alarm->data.id == id)
+			return alarm;
+		alarm = alarm->next;
+	}
+	return nullptr;
 }
-
-uint8_t AlarmInterface::Alarm::getId() const {
-	return this->data.id;
-}
-
-String AlarmInterface::Alarm::getName() const {
-	return String(this->data.name);
-}
-
-void AlarmInterface::Alarm::setName(String name) {
-	assign(this->data.name, name);
-
-	// write to flash
-	Storage::write(STORAGE_CONFIG, STORAGE_ID_ALARM | this->data.id, sizeof(this->data), &this->data);
-}
-
-Array<MessageType const> AlarmInterface::Alarm::getPlugs() const {
-	return {this->data.plugCount, endpoints};
-}
-
-void AlarmInterface::Alarm::subscribe(uint8_t endpointIndex, Subscriber &subscriber) {
-	subscriber.remove();
-	subscriber.source.device.plugIndex = endpointIndex;
-	this->subscribers.add(subscriber);
-}
-
-PublishInfo AlarmInterface::Alarm::getPublishInfo(uint8_t endpointIndex) {
-	return {};
-}
-
 
 uint8_t AlarmInterface::allocateId() {
 	// find a free id

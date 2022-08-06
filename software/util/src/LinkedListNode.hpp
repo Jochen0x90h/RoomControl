@@ -63,27 +63,32 @@ struct LinkedListNode {
 	}
 
 	/**
-	 * Add a node before this node (add at end of list if this is the list head)
-	 * @param node node to add, must not be part of another list already
+	 * Add one or multiple nodes at the end of the list (assuming this node is the list head)
+	 * @param node node to add, can be part of a "ring" of nodes
 	 */
 	void add(T &node) {
-		node.next = static_cast<T *>(this);
+		auto p = node.prev;
+		node.prev->next = static_cast<T *>(this);
 		node.prev = this->prev;
 		this->prev->next = &node;
-		this->prev = &node;
+		this->prev = p;
+/*		node.next = static_cast<T *>(this);
+		node.prev = this->prev;
+		this->prev->next = &node;
+		this->prev = &node;*/
 	}
 
 	/**
 	 * Add one or more nodes at end of list if this is the list head
 	 * @param list list to insert
 	 */
-	void insert(LinkedListNode &list) {
+/*	void insert(LinkedListNode &list) {
 		auto p = list.prev;
 		list.prev->next = static_cast<T *>(this);
 		list.prev = this->prev;
 		this->prev->next = static_cast<T *>(&list);
 		this->prev = p;
-	}
+	}*/
 
 	/**
 	 * Remove this element from the list

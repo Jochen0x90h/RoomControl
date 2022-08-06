@@ -290,9 +290,9 @@ String getTypeLabel(PlugType type) {
 		case PlugType::LIGHTING_COLOR_PARAMETER:
 			switch (type & PlugType::LIGHTING_COLOR_PARAMETER_CATEGORY) {
 			case PlugType::LIGHTING_COLOR_PARAMETER_CHROMATICITY_X:
-				return "Chromaticity x";
+				return "Color X";
 			case PlugType::LIGHTING_COLOR_PARAMETER_CHROMATICITY_Y:
-				return "Chromaticity y";
+				return "Color Y";
 			case PlugType::LIGHTING_COLOR_PARAMETER_HUE:
 				return "Hue";
 			case PlugType::LIGHTING_COLOR_PARAMETER_SATURATION:

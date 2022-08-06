@@ -14,6 +14,7 @@
 #include <Timer.hpp>
 #include <crypt.hpp>
 #include <Queue.hpp>
+#include <Cie1931.hpp>
 #include "tahoma_8pt.hpp" // font
 #include <cmath>
 
@@ -37,12 +38,52 @@ static String const unlockedTiltLocked[] = {"unlocked", "tilt", "locked"};
 static String const compareOperators[] = {">", "<", "else"};
 static String const setStep[] = {"set", "step"};
 
+// https://www.nixsensor.com/blog/what-is-hsl-color/
+static String const colorNames[] = {
+	"Red",
+	"Warm Red",
+	"Orange",
+	"Warm Yellow",
+	"Yellow",
+	"Cool Yellow",
+	"Yellow Green",
+	"Warm Green",
+	"Green",
+	"Cool Green",
+	"Green Cyan",
+	"Warm Cyan",
+	"Cyan",
+	"Cool Cyan",
+	"Blue Cyan",
+	"Cool Blue",
+	"Blue",
+	"Warm Blue",
+	"Violet",
+	"Cool Magenta",
+	"Magenta",
+	"Warm Magenta",
+	"Red Magenta",
+	"Cool Red",
+	"Red"
+};
+
+
 // functions
 
 // function plugs
 static RoomControl::Plug const switchPlugs[] = {
+	{"On/Off", MessageType::BINARY_POWER_CMD_IN},
+	{"On/Off", MessageType::BINARY_POWER_OUT}};
+static RoomControl::Plug const lightPlugs[] = {
 	{"On/Off", MessageType::BINARY_POWER_LIGHT_CMD_IN},
-	{"On/Off", MessageType::BINARY_POWER_LIGHT_OUT}};
+	{"On/Off", MessageType::BINARY_POWER_LIGHT_OUT},
+	{"Brightness", MessageType::LIGHTING_BRIGHTNESS_CMD_OUT}};
+static RoomControl::Plug const colorLightPlugs[] = {
+	{"On/Off", MessageType::BINARY_POWER_LIGHT_CMD_IN},
+	{"On/Off", MessageType::BINARY_POWER_LIGHT_OUT},
+	{"Brightness", MessageType::LIGHTING_BRIGHTNESS_CMD_OUT},
+	{"Color X", MessageType::LIGHTING_COLOR_PARAMETER_CHROMATICITY_X_CMD_OUT},
+	{"Color Y", MessageType::LIGHTING_COLOR_PARAMETER_CHROMATICITY_Y_CMD_OUT}};
 static RoomControl::Plug const blindPlugs[] = {
 	{"Up/Down",     MessageType::TERNARY_BUTTON_IN},
 	{"Trigger",     MessageType::BINARY_BUTTON_IN},
@@ -63,7 +104,7 @@ static RoomControl::Plug const heatingControlPlugs[] = {
 struct FunctionInfo {
 	String name;
 	RoomControl::FunctionFlash::Type type;
-	RoomControl::FunctionFlash::TypeClass typeClass;
+	//RoomControl::FunctionFlash::TypeClass typeClass;
 	uint16_t configSize;
 	Array<RoomControl::Plug const> plugs;
 
@@ -72,33 +113,47 @@ struct FunctionInfo {
 // function infos (must be sorted by type)
 static FunctionInfo const functionInfos[] = {
 	{
-			"Light",
-			RoomControl::FunctionFlash::Type::SIMPLE_SWITCH,
-			RoomControl::FunctionFlash::TypeClass::SWITCH,
-			0,
-			switchPlugs
-		},
+		"Switch",
+		RoomControl::FunctionFlash::Type::SWITCH,
+		//RoomControl::FunctionFlash::TypeClass::SWITCH,
+		sizeof(RoomControl::Switch::Config),
+		switchPlugs
+	},
 	{
-			"Timeout Light",
-			RoomControl::FunctionFlash::Type::TIMEOUT_SWITCH,
-			RoomControl::FunctionFlash::TypeClass::SWITCH,
-			sizeof(RoomControl::TimeoutSwitch::Config),
-			switchPlugs
-		},
+		"Light",
+		RoomControl::FunctionFlash::Type::LIGHT,
+		//RoomControl::FunctionFlash::TypeClass::SWITCH,
+		sizeof(RoomControl::Light::Config),
+		lightPlugs
+	},
 	{
-			"Blind",
-			RoomControl::FunctionFlash::Type::TIMED_BLIND,
-			RoomControl::FunctionFlash::TypeClass::BLIND,
-			sizeof(RoomControl::TimedBlind::Config),
-			blindPlugs
-		},
+		"Color Light",
+		RoomControl::FunctionFlash::Type::COLOR_LIGHT,
+		//RoomControl::FunctionFlash::TypeClass::SWITCH,
+		sizeof(RoomControl::ColorLight::Config),
+		colorLightPlugs
+	},
 	{
-			"Heating Control",
-			RoomControl::FunctionFlash::Type::HEATING_CONTROL,
-			RoomControl::FunctionFlash::TypeClass::HEATING_CONTROL,
-			sizeof(RoomControl::HeatingControl::Config),
-			heatingControlPlugs
-		},
+		"Animated Light",
+		RoomControl::FunctionFlash::Type::ANIMATED_LIGHT,
+		//RoomControl::FunctionFlash::TypeClass::SWITCH,
+		sizeof(RoomControl::AnimatedLight::Config),
+		colorLightPlugs
+	},
+	{
+		"Blind",
+		RoomControl::FunctionFlash::Type::TIMED_BLIND,
+		//RoomControl::FunctionFlash::TypeClass::BLIND,
+		sizeof(RoomControl::TimedBlind::Config),
+		blindPlugs
+	},
+	{
+		"Heating Control",
+		RoomControl::FunctionFlash::Type::HEATING_CONTROL,
+		//RoomControl::FunctionFlash::TypeClass::HEATING_CONTROL,
+		sizeof(RoomControl::HeatingControl::Config),
+		heatingControlPlugs
+	},
 };
 
 static FunctionInfo const &getFunctionInfo(RoomControl::FunctionFlash::Type type) {
@@ -188,9 +243,9 @@ void RoomControl::applyConfiguration() {
 static void printDevices(Interface &interface) {
 	auto deviceIds = interface.getDeviceIds();
 	for (auto id : deviceIds) {
-		auto &device = *interface.getDevice(id);
-		Terminal::out << (hex(device.getId()) + '\n');
-		auto plugs = device.getPlugs();
+		//auto &device = *interface.getDevice(id);
+		Terminal::out << dec(id) + '\n';
+		auto plugs = interface.getPlugs(id);
 		for (auto plug : plugs) {
 			Terminal::out << '\t' << getTypeLabel(plug);
 			if ((plug & MessageType::DIRECTION_MASK) == MessageType::IN)
@@ -313,9 +368,7 @@ int RoomControl::connectFunction(RoomControl::FunctionFlash const &flash, Array<
 
 		// subscribe to device
 		auto &interface = getInterface(connection);
-		auto device = interface.getDevice(connection.deviceId);
-		if (device != nullptr)
-			device->subscribe(connection.endpointIndex, subscriber);
+		interface.subscribe(connection.deviceId, connection.endpointIndex, subscriber);
 
 		++it;
 		++inputIndex;
@@ -342,13 +395,10 @@ int RoomControl::connectFunction(RoomControl::FunctionFlash const &flash, Array<
 
 		// add publisher to device
 		auto &interface = getInterface(connection);
-		auto device = interface.getDevice(connection.deviceId);
-		if (device != nullptr) {
-			publisher.setInfo(device->getPublishInfo(connection.endpointIndex));
-			publisher.id = connection.plugIndex;
-			publisher.srcType = plug.messageType;
-			publisher.convertOptions = connection.convertOptions;
-		}
+		publisher.setInfo(interface.getPublishInfo(connection.deviceId, connection.endpointIndex));
+		publisher.id = connection.plugIndex;
+		publisher.srcType = plug.messageType;
+		publisher.convertOptions = connection.convertOptions;
 
 		++it;
 		++outputIndex;
@@ -425,44 +475,18 @@ static MessageType nextAlarmMessageType(MessageType messageType, int delta) {
 
 void RoomControl::printConnection(Menu::Stream &stream, Connection const &connection) {
 	auto &interface = getInterface(connection);
-	auto device = interface.getDevice(connection.deviceId);
-	if (device != nullptr) {
-		String deviceName = device->getName();
+	//auto device = interface.getDevice(connection.deviceId);
+	auto plugs = interface.getPlugs(connection.deviceId);
+	if (connection.endpointIndex < plugs.count()) {
+		String deviceName = interface.getName(connection.deviceId);
 		stream << deviceName << ':' << dec(connection.endpointIndex);
-		auto plugs = device->getPlugs();
-		if (connection.endpointIndex < plugs.count()) {
-			String endpointName = getTypeLabel(plugs[connection.endpointIndex]);
-			stream << " (" << endpointName << ')';
-		}
+		String plugName = getTypeLabel(plugs[connection.endpointIndex]);
+		stream << " (" << plugName << ')';
 	} else {
 		stream << "Connect...";
 	}
 }
 
-/*
-static Message getDefaultMessage(MessageType messageType) {
-	switch (messageType & MessageType::TYPE_MASK) {
-		case MessageType::OFF_ON:
-		case MessageType::OFF_ON_TOGGLE:
-		case MessageType::TRIGGER:
-		case MessageType::UP_DOWN:
-		case MessageType::OPEN_CLOSE:
-			return {.command = 1};
-		case MessageType::LEVEL:
-			return {.value = {.f = 1.0}};
-		case MessageType::SET_LEVEL:
-			return {.command = 0, .value = {.f = 1.0f}};
-		case MessageType::AIR_TEMPERATURE:
-			return {.value = {.f = 273.15f + 20.0f}};
-		case MessageType::SET_AIR_TEMPERATURE:
-			return {.command = 0, .value = {.f =273.15f + 20.0f}};
-		case MessageType::AIR_PRESSURE:
-			return {.value = {.f = 1000.0f * 100.0f}};
-		default:
-			return {};
-	}
-}
-*/
 Array<String const> RoomControl::getSwitchStates(Usage usage) {
 	switch (usage) {
 	case Usage::OFF_ON:
@@ -1046,14 +1070,15 @@ AwaitableCoroutine RoomControl::devicesMenu(Interface &interface) {
 	while (true) {
 		auto deviceIds = interface.getDeviceIds();
 		for (auto id : deviceIds) {
-			auto &device = *interface.getDevice(id);
+			//auto &device = *interface.getDevice(id);
 
 			auto stream = menu.stream();
-			stream << device.getName();
+			stream << interface.getName(id);
 			if (menu.entry()) {
-				// set commissioning to false when in deviceMenu to pevent deletion of device
+				// set commissioning to false when in deviceMenu to prevent deletion of device
+				// todo: "leave" command can still delete the device
 				interface.setCommissioning(false);
-				co_await deviceMenu(device);
+				co_await deviceMenu(interface, id);
 				interface.setCommissioning(true);
 				break;
 			}
@@ -1067,15 +1092,19 @@ AwaitableCoroutine RoomControl::devicesMenu(Interface &interface) {
 	interface.setCommissioning(false);
 }
 
-AwaitableCoroutine RoomControl::deviceMenu(Interface::Device &device) {
+AwaitableCoroutine RoomControl::deviceMenu(Interface &interface, uint8_t id) {
 	Menu menu(this->swapChain);
 	while (true) {
 		if (menu.entry("Plugs"))
-			co_await endpointsMenu(device);
+			co_await plugsMenu(interface, id);
 		if (menu.entry("Message Logger"))
-			co_await messageLogger(device);
+			co_await messageLogger(interface, id);
 		if (menu.entry("Message Generator"))
-			co_await messageGenerator(device);
+			co_await messageGenerator(interface, id);
+		if (menu.entry("Delete")) {
+			interface.erase(id);
+			break;
+		}
 		if (menu.entry("Exit"))
 			break;
 
@@ -1125,10 +1154,10 @@ AwaitableCoroutine RoomControl::alarmMenu(AlarmInterface &alarms, uint8_t id, Al
 			co_await alarmTimeMenu(data.time);
 
 		if (id != 0) {
-			auto &device = *alarms.getDevice(id);
+			//auto &device = *alarms.getDevice(id);
 
 			if (menu.entry("Message Logger"))
-				co_await messageLogger(device);
+				co_await messageLogger(alarms, id);
 
 			// test alarm
 			menu.stream() << "Test Trigger (-> " << dec(alarms.getSubscriberCount(id, 1, 1)) << ')';
@@ -1141,14 +1170,14 @@ AwaitableCoroutine RoomControl::alarmMenu(AlarmInterface &alarms, uint8_t id, Al
 
 			if (menu.entry("Delete")) {
 				// delete alarm
-				alarms.eraseDevice(id);
+				alarms.erase(id);
 				break;
 			}
 		}
 		if (menu.entry("Cancel"))
 			break;
 		if (menu.entry("Save")) {
-			// set alarm
+			// set alarm (id=0 creates new alarm)
 			alarms.set(id, data);
 			break;
 		}
@@ -1193,10 +1222,10 @@ AwaitableCoroutine RoomControl::alarmTimeMenu(AlarmTime &time) {
 	}
 }
 
-AwaitableCoroutine RoomControl::endpointsMenu(Interface::Device &device) {
+AwaitableCoroutine RoomControl::plugsMenu(Interface &interface, uint8_t id) {
 	Menu menu(this->swapChain);
 	while (true) {
-		auto plugs = device.getPlugs();
+		auto plugs = interface.getPlugs(id);
 		for (int i = 0; i < plugs.count(); ++i) {
 			auto messageType = plugs[i];
 			auto stream = menu.stream();
@@ -1217,17 +1246,17 @@ AwaitableCoroutine RoomControl::endpointsMenu(Interface::Device &device) {
 
 
 
-AwaitableCoroutine RoomControl::messageLogger(Interface::Device &device) {
+AwaitableCoroutine RoomControl::messageLogger(Interface &interface, uint8_t id) {
 	PublishInfo::Barrier barrier;
 
 	Subscriber subscribers[32];
 
-	// subscribe to all endpoints
-	for (int endpointIndex = 0; endpointIndex < array::count(subscribers); ++endpointIndex) {
-		auto &subscriber = subscribers[endpointIndex];
-		subscriber.destination.device.plugIndex = endpointIndex;
+	// subscribe to all plugs
+	for (int plugIndex = 0; plugIndex < array::count(subscribers); ++plugIndex) {
+		auto &subscriber = subscribers[plugIndex];
+		subscriber.destination.device.plugIndex = plugIndex;
 		subscriber.barrier = &barrier;
-		device.subscribe(endpointIndex, subscriber);
+		interface.subscribe(id, plugIndex, subscriber);
 	}
 
 	// event queue
@@ -1274,10 +1303,10 @@ AwaitableCoroutine RoomControl::messageLogger(Interface::Device &device) {
 			break;
 
 		// update subscribers
-		auto plugs = device.getPlugs();
-		for (int endpointIndex = 0; endpointIndex < min(plugs.count(), array::count(subscribers)); ++endpointIndex) {
-			auto &subscriber = subscribers[endpointIndex];
-			auto messageType = plugs[endpointIndex];
+		auto plugs = interface.getPlugs(id);
+		for (int plugIndex = 0; plugIndex < min(plugs.count(), array::count(subscribers)); ++plugIndex) {
+			auto &subscriber = subscribers[plugIndex];
+			auto messageType = plugs[plugIndex];
 			subscriber.destination.type = messageType ^ (MessageType::OUT ^ MessageType::IN);
 			subscriber.convertOptions = getDefaultConvertOptions(messageType);
 		}
@@ -1294,10 +1323,10 @@ AwaitableCoroutine RoomControl::messageLogger(Interface::Device &device) {
 	}
 }
 
-AwaitableCoroutine RoomControl::messageGenerator(Interface::Device &device) {
+AwaitableCoroutine RoomControl::messageGenerator(Interface &interface, uint8_t id) {
 	//! skip "in" endpoints -> or forward to subscriptions
 
-	uint8_t endpointIndex = 0;
+	uint8_t plugIndex = 0;
 	MessageType lastMessageType = MessageType::UNKNOWN;
 	Message message = {};
 	PublishInfo::Barrier *publishBarrier;
@@ -1305,11 +1334,11 @@ AwaitableCoroutine RoomControl::messageGenerator(Interface::Device &device) {
 	// menu loop
 	Menu menu(this->swapChain);
 	while (true) {
-		auto plugs = device.getPlugs();
+		auto plugs = interface.getPlugs(id);
 		if (plugs.count() > 0) {
 			// get endpoint type
-			endpointIndex = clamp(endpointIndex, 0, plugs.count() - 1);
-			auto messageType = plugs[endpointIndex];
+			plugIndex = clamp(plugIndex, 0, plugs.count() - 1);
+			auto messageType = plugs[plugIndex];
 
 			// get message component to edit (some messages such as MOVE_TO_LEVEL have two components)
 			int edit = menu.getEdit(1 + getComponentCount(messageType));
@@ -1320,8 +1349,8 @@ AwaitableCoroutine RoomControl::messageGenerator(Interface::Device &device) {
 
 			// edit endpoint index
 			if (editIndex) {
-				endpointIndex = clamp(endpointIndex + delta, 0, plugs.count() - 1);
-				messageType = plugs[endpointIndex];
+				plugIndex = clamp(plugIndex + delta, 0, plugs.count() - 1);
+				messageType = plugs[plugIndex];
 			}
 
 			// set default message if type has changed
@@ -1346,15 +1375,15 @@ AwaitableCoroutine RoomControl::messageGenerator(Interface::Device &device) {
 
 			// edit message
 			auto stream = menu.stream();
-			stream << underline(dec(endpointIndex), editIndex) << ": ";
+			stream << underline(dec(plugIndex), editIndex) << ": ";
 			editMessage(stream, messageType, message, editMessage1, editMessage2, delta);
 			menu.entry();
 
 			// send message
 			if (menu.entry("Send")) {
-				auto info = device.getPublishInfo(endpointIndex);
-				info.barrier->resumeFirst([&device, endpointIndex, messageType, &message] (PublishInfo::Parameters &p) {
-					p.info = {messageType, {.device = {device.getId(), endpointIndex}}};
+				auto info = interface.getPublishInfo(id, plugIndex);
+				info.barrier->resumeFirst([id, plugIndex, messageType, &message] (PublishInfo::Parameters &p) {
+					p.info = {messageType, {.device = {id, plugIndex}}};
 
 					// convert to destination message type and resume coroutine if conversion was successful
 					auto &dst = *reinterpret_cast<Message *>(p.message);
@@ -1407,8 +1436,8 @@ AwaitableCoroutine RoomControl::functionsMenu() {
 		co_await menu.show();
 	}
 }
-
-static void editDuration(Menu &menu, Menu::Stream &stream, uint16_t &duration) {
+/*
+static void editDuration100(Menu &menu, Menu::Stream &stream, uint16_t &duration) {
 	auto delta = menu.getDelta();
 	auto d = unpackHourDuration100(duration);
 
@@ -1430,7 +1459,33 @@ static void editDuration(Menu &menu, Menu::Stream &stream, uint16_t &duration) {
 	stream
 		<< underline(dec(d.minutes, 1), editMinutes) << ":"
 		<< underline(dec(d.seconds, 2), editSeconds) << "."
-		<< underline(dec(d.hundredths, 2), editHundredths) << "0";
+		<< underline(dec(d.hundredths, 2), editHundredths);
+	menu.entry();
+}
+*/
+static void editDuration(Menu &menu, Menu::Stream &stream, uint16_t &duration, int resolution) {
+	auto delta = menu.getDelta();
+	auto d = unpackMinuteDuration(duration, resolution);
+
+	// edit duration
+	int edit = menu.getEdit(3);
+	bool editMinutes = edit == 1;
+	bool editSeconds = edit == 2;
+	bool editFraction = edit == 3;
+	if (editMinutes)
+		d.minutes = clamp(d.minutes + delta, 0, 99);
+	if (editSeconds)
+		d.seconds = clamp(d.seconds + delta, 0, 59);
+	if (editFraction)
+		d.fraction = clamp(d.fraction + delta, 0, resolution - 1);
+
+	duration = packMinuteDuration(d, resolution);
+
+	// duration
+	stream
+		<< underline(dec(d.minutes, 2), editMinutes) << ":"
+		<< underline(dec(d.seconds, 2), editSeconds) << "."
+		<< underline(dec(d.fraction, resolution > 10 ? 2 : 1), editFraction);
 	menu.entry();
 }
 
@@ -1448,7 +1503,7 @@ static void editDuration(Menu &menu, Menu::Stream &stream, uint32_t &duration) {
 	//if (editDays)
 	//	duration.days = clamp(duration.days + delta, 0, 497);
 	if (editHours)
-		d.hours = clamp(d.hours + delta, 0, 99);
+		d.hours = clamp(d.hours + delta, 0, 255);
 	if (editMinutes)
 		d.minutes = clamp(d.minutes + delta, 0, 59);
 	if (editSeconds)
@@ -1464,9 +1519,51 @@ static void editDuration(Menu &menu, Menu::Stream &stream, uint32_t &duration) {
 		<< underline(dec(d.hours), editHours) << ":"
 		<< underline(dec(d.minutes, 2), editMinutes) << ":"
 		<< underline(dec(d.seconds, 2), editSeconds) << "."
-		<< underline(dec(d.hundredths, 2), editHundredths) << "0";
+		<< underline(dec(d.hundredths, 2), editHundredths);
 	menu.entry();
 }
+
+static void editColorSettings(Menu &menu, int settingCount, RoomControl::ColorSetting *settings, bool on) {
+	auto delta = menu.getDelta();
+
+	for (int i = 0; i < settingCount; ++i) {
+		auto &setting = settings[i];
+
+		// brightness
+		auto stream = menu.stream();
+		stream << "Brightness: ";
+		int editBrightness = menu.getEdit(1);
+		if (editBrightness)
+			setting.brightness = clamp(setting.brightness + delta, 0, 100);
+		stream << underline(dec(setting.brightness), editBrightness) << '%';
+		menu.entry();
+
+		// color
+		stream = menu.stream();
+		stream << "Hue: ";
+		int editHue = menu.getEdit(1);
+		if (editHue)
+			setting.hue = (setting.hue + 72 + delta) % 72;
+		stream << underline(dec(setting.hue * 5), editHue);
+		stream << ' ' << colorNames[((setting.hue + 1) / 3) % 24];
+		menu.entry();
+		stream = menu.stream();
+		stream << "Saturation: ";
+		int editSaturation = menu.getEdit(1);
+		if (editSaturation)
+			setting.saturation = clamp(setting.saturation + delta, 0, 100);
+		stream << underline(dec(setting.saturation), editSaturation) << '%';
+		menu.entry();
+
+		// fade time
+		stream = menu.stream();
+		if (on)
+			stream << "On ";
+		stream << "Fade: ";
+		editDuration(menu, stream, setting.fade, 10);
+	}
+}
+
 
 AwaitableCoroutine RoomControl::functionMenu(int index, FunctionFlash &flash) {
 	// menu loop
@@ -1494,45 +1591,172 @@ AwaitableCoroutine RoomControl::functionMenu(int index, FunctionFlash &flash) {
 
 		// type dependent configuration
 		switch (flash.type) {
-			case FunctionFlash::Type::TIMEOUT_SWITCH: {
-				auto &config = flash.getConfig<TimeoutSwitch::Config>();
+		case FunctionFlash::Type::SWITCH: {
+			auto &config = flash.getConfig<Switch::Config>();
 
-				auto stream = menu.stream();
-				stream << "Timeout: ";
-				editDuration(menu, stream, config.duration);
-				break;
+			auto stream = menu.stream();
+			stream << "Timeout: ";
+			editDuration(menu, stream, config.timeout);
+			break;
+		}
+		case FunctionFlash::Type::LIGHT: {
+			auto &config = flash.getConfig<Light::Config>();
+
+			// timeout
+			auto stream = menu.stream();
+			stream << "Timeout: ";
+			editDuration(menu, stream, config.timeout);
+
+			// brightness
+			// todo: one per input
+			for (int i = 0; i < 4; ++i) {
+				auto &setting = config.settings[i];
+
+				stream = menu.stream();
+				stream << "Brightness: ";
+				int editBrightness = menu.getEdit(1);
+				if (editBrightness)
+					setting.brightness = clamp(setting.brightness + delta, 0, 100);
+				stream << underline(dec(setting.brightness), editBrightness) << '%';
+				menu.entry();
+
+				// on fade time
+				stream = menu.stream();
+				stream << "On Fade: ";
+				editDuration(menu, stream, setting.fade, 10);
 			}
-			case FunctionFlash::Type::TIMED_BLIND: {
-				auto &config = flash.getConfig<TimedBlind::Config>();
 
-				// minimum rocker hold time to cause switch-off on release
-				auto stream1 = menu.stream();
-				stream1 << "Hold Time: ";
-				editDuration(menu, stream1, config.holdTime);
+			// off and timeout fade times
+			stream = menu.stream();
+			stream << "Off Fade: ";
+			editDuration(menu, stream, config.offFade, 10);
 
-				// run time from fully closed to fully open
-				auto stream2 = menu.stream();
-				stream2 << "Run Time: ";
-				editDuration(menu, stream2, config.runTime);
+			stream = menu.stream();
+			stream << "Timeout Fade: ";
+			editDuration(menu, stream, config.timeoutFade, 10);
 
-				if (menu.entry("Measure Run Time")) {
-					auto it = flash.getConnections();
-					for (int connectionIndex = 0; connectionIndex < flash.connectionCount; ++connectionIndex, ++it) {
-						auto &connection = it.getConnection();
-						auto &plug = functionInfo.plugs[connection.plugIndex];
-						if (plug.messageType == MessageType::TERNARY_OPENING_BLIND_OUT /*UP_DOWN_OUT*/ && !connection.isMqtt()) {
-							auto &interface = getInterface(connection);
-							auto device = interface.getDevice(connection.deviceId);
-							if (device != nullptr)
-								co_await measureRunTime(*device, connection, config.runTime);
-							break;
-						}
+			break;
+		}
+		case FunctionFlash::Type::COLOR_LIGHT: {
+			auto &config = flash.getConfig<ColorLight::Config>();
+
+			// timeout
+			auto stream = menu.stream();
+			stream << "Timeout: ";
+			editDuration(menu, stream, config.timeout);
+
+			// todo: one per input
+			editColorSettings(menu, 4, config.settings, true);
+
+			// off and timeout fade times
+			stream = menu.stream();
+			stream << "Off Fade: ";
+			editDuration(menu, stream, config.offFade, 10);
+
+			stream = menu.stream();
+			stream << "Timeout Fade: ";
+			editDuration(menu, stream, config.timeoutFade, 10);
+
+			break;
+		}
+		case FunctionFlash::Type::ANIMATED_LIGHT: {
+			auto &config = flash.getConfig<AnimatedLight::Config>();
+
+			// timeout
+			auto stream = menu.stream();
+			stream << "Timeout: ";
+			editDuration(menu, stream, config.timeout);
+
+			// step count
+			stream = menu.stream();
+			stream << "Step Count: ";
+			int editStepCount = menu.getEdit(1);
+			if (editStepCount)
+				config.stepCount = clamp(config.stepCount + delta, 0, 15);
+			stream << underline(dec(config.stepCount), editStepCount);
+			menu.entry();
+
+			// steps
+			editColorSettings(menu, config.stepCount, config.steps, false);
+			/*for (int i = 0; i < config.stepCount; ++i) {
+				auto &step = config.steps[i];
+
+				// brightness
+				stream = menu.stream();
+				stream << "Brightness: ";
+				int editBrightness = menu.getEdit(1);
+				if (editBrightness)
+					step.brightness = clamp(step.brightness + delta, 0, 100);
+				stream << underline(dec(step.brightness), editBrightness) << '%';
+				menu.entry();
+
+				// color
+				stream = menu.stream();
+				stream << "Hue: ";
+				int editHue = menu.getEdit(1);
+				if (editHue)
+					step.hue = (step.hue + 72 + delta) % 72;
+				stream << underline(dec(step.hue * 5), editHue);
+				stream << ' ' << colorNames[((step.hue + 1) / 3) % 24];
+				menu.entry();
+				stream = menu.stream();
+				stream << "Saturation: ";
+				int editSaturation = menu.getEdit(1);
+				if (editSaturation)
+					step.saturation = clamp(step.saturation + delta, 0, 100);
+				stream << underline(dec(step.saturation), editSaturation) << '%';
+				menu.entry();
+
+				// fade time
+				stream = menu.stream();
+				stream << "Fade: ";
+				editDuration(menu, stream, step.fade, 10);
+			}*/
+
+			// fade times
+			stream = menu.stream();
+			stream << "On Fade: ";
+			editDuration(menu, stream, config.onFade, 10);
+
+			stream = menu.stream();
+			stream << "Off Fade: ";
+			editDuration(menu, stream, config.offFade, 10);
+
+			stream = menu.stream();
+			stream << "Timeout Fade: ";
+			editDuration(menu, stream, config.timeoutFade, 10);
+
+			break;
+		}
+		case FunctionFlash::Type::TIMED_BLIND: {
+			auto &config = flash.getConfig<TimedBlind::Config>();
+
+			// minimum rocker hold time to cause switch-off on release
+			auto stream1 = menu.stream();
+			stream1 << "Hold Time: ";
+			editDuration(menu, stream1, config.holdTime, 100);
+
+			// run time from fully closed to fully open
+			auto stream2 = menu.stream();
+			stream2 << "Run Time: ";
+			editDuration(menu, stream2, config.runTime, 100);
+
+			if (menu.entry("Measure Run Time")) {
+				auto it = flash.getConnections();
+				for (int connectionIndex = 0; connectionIndex < flash.connectionCount; ++connectionIndex, ++it) {
+					auto &connection = it.getConnection();
+					auto &plug = functionInfo.plugs[connection.plugIndex];
+					if (plug.messageType == MessageType::TERNARY_OPENING_BLIND_OUT /*UP_DOWN_OUT*/ && !connection.isMqtt()) {
+						auto &interface = getInterface(connection);
+						co_await measureRunTime(interface, connection.deviceId, connection, config.runTime);
+						break;
 					}
-
 				}
+
 			}
-			default:
-				;
+		}
+		default:
+			;
 		}
 
 		// list all plugs (inputs/outputs) and their connections
@@ -1613,13 +1837,13 @@ AwaitableCoroutine RoomControl::functionMenu(int index, FunctionFlash &flash) {
 	}
 }
 
-AwaitableCoroutine RoomControl::measureRunTime(Interface::Device &device, Connection const &connection,
+AwaitableCoroutine RoomControl::measureRunTime(Interface &interface, uint8_t id, Connection const &connection,
 	uint16_t &runTime)
 {
 	uint8_t state = 0;
 
 
-	auto info = device.getPublishInfo(connection.endpointIndex);
+	auto info = interface.getPublishInfo(id, connection.endpointIndex);
 
 	bool up = false;
 
@@ -1644,14 +1868,16 @@ AwaitableCoroutine RoomControl::measureRunTime(Interface::Device &device, Connec
 				state = 0;
 			}
 
-			info.barrier->resumeFirst([&device, &connection, state] (PublishInfo::Parameters &p) {
-				auto dstType = device.getPlugs()[connection.endpointIndex];
-				p.info = {dstType, {.device = {device.getId(), connection.endpointIndex}}};
-				auto &dst = *reinterpret_cast<Message *>(p.message);
-				return convertSwitch(dstType, dst, state, connection.convertOptions);
+			info.barrier->resumeFirst([&interface, id, &connection, state] (PublishInfo::Parameters &p) {
+				auto plugs = interface.getPlugs(id);
+				if (connection.endpointIndex < plugs.count()) {
+					auto dstType = plugs[connection.endpointIndex];
+					p.info = {dstType, {.device = {id, connection.endpointIndex}}};
+					auto &dst = *reinterpret_cast<Message *>(p.message);
+					return convertSwitch(dstType, dst, state, connection.convertOptions);
+				}
+				return false;
 			});
-
-			//publisher.publish();
 		}
 		if (menu.entry("Cancel"))
 			break;
@@ -1699,10 +1925,10 @@ AwaitableCoroutine RoomControl::editFunctionConnection(ConnectionIterator &it, P
 		}
 
 		// select convert options
-		auto *device = getInterface(connection).getDevice(connection.deviceId);
-		if (device != nullptr) {
-			auto endpoints = device->getPlugs();
-			auto messageType = endpoints[connection.endpointIndex];
+		auto &interface = getInterface(connection);
+		auto plugs = interface.getPlugs(connection.deviceId);
+		if (connection.endpointIndex < plugs.count()) {
+			auto messageType = plugs[connection.endpointIndex];
 
 			menu.beginSection();
 			if (plug.isInput())
@@ -1743,18 +1969,15 @@ AwaitableCoroutine RoomControl::selectFunctionDevice(Connection &connection, Plu
 	while (true) {
 		int delta = menu.getDelta();
 
-		// list devices with at least one compatible endpoint
+		// list devices with at least one compatible plug
 		auto deviceIds = interface.getDeviceIds();
 		for (auto id : deviceIds) {
-		//for (int i = 0; i < interface.getDeviceCount(); ++i) {
-			auto &device = *interface.getDevice(id);
-
 			// check if the device has at least one compatible endpoint
-			auto plugs = device.getPlugs();
+			auto plugs = interface.getPlugs(id);
 			for (auto plugType : plugs) {
 				if (isCompatible(plug, plugType) != 0) {
-					if (menu.entry(device.getName())) {
-						co_await selectFunctionEndpoint(device, connection, plug);
+					if (menu.entry(interface.getName(id))) {
+						co_await selectFunctionPlug(interface, id, connection, plug);
 						co_return;
 					}
 					break;
@@ -1770,7 +1993,7 @@ AwaitableCoroutine RoomControl::selectFunctionDevice(Connection &connection, Plu
 	}
 }
 
-AwaitableCoroutine RoomControl::selectFunctionEndpoint(Interface::Device &device, Connection &connection,
+AwaitableCoroutine RoomControl::selectFunctionPlug(Interface &interface, uint8_t id, Connection &connection,
 	Plug const &plug)
 {
 	// menu loop
@@ -1779,7 +2002,7 @@ AwaitableCoroutine RoomControl::selectFunctionEndpoint(Interface::Device &device
 		int delta = menu.getDelta();
 
 		// list all compatible endpoints of device
-		auto plugs = device.getPlugs();
+		auto plugs = interface.getPlugs(id);
 		for (int i = 0; i < plugs.count(); ++i) {
 			auto messageType = plugs[i];
 			if (isCompatible(plug, messageType) != 0) {
@@ -1788,7 +2011,7 @@ AwaitableCoroutine RoomControl::selectFunctionEndpoint(Interface::Device &device
 				menu.stream() << dec(i) << " (" << typeName << ')';
 				if (menu.entry()) {
 					// endpoint selected
-					connection.deviceId = device.getId();
+					connection.deviceId = id;//device.getId();
 					connection.endpointIndex = i;
 					if (plug.isInput())
 						connection.convertOptions = getDefaultConvertOptions(plug.messageType, messageType);
@@ -1877,7 +2100,7 @@ static int getSize(RoomControl::FunctionFlash::Type type) {
 void RoomControl::FunctionFlash::setType(Type type) {
 	int oldSize = (getSize(this->type) + 3) / 4;
 	int newSize = (getSize(type) + 3) / 4;
-	bool keepConnections = getFunctionInfo(this->type).typeClass == getFunctionInfo(type).typeClass;
+	bool keepConnections = getFunctionInfo(this->type).type == getFunctionInfo(type).type;
 	this->type = type;
 
 	if (keepConnections) {
@@ -1903,6 +2126,31 @@ void RoomControl::FunctionFlash::setType(Type type) {
 
 	// set default config
 	switch (this->type) {
+	case RoomControl::FunctionFlash::Type::LIGHT: {
+		auto &config = getConfig<Light::Config>();
+		config.settings[0] = {100, 10};
+		config.settings[1] = {75, 10};
+		config.settings[2] = {50, 10};
+		config.settings[3] = {25, 10};
+		break;
+	}
+	case RoomControl::FunctionFlash::Type::COLOR_LIGHT: {
+		auto &config = getConfig<ColorLight::Config>();
+		config.settings[0] = {100, 0, 100, 10};
+		config.settings[1] = {100, 18, 100, 10};
+		config.settings[2] = {100, 36, 100, 10};
+		config.settings[3] = {100, 54, 100, 10};
+		break;
+	}
+	case RoomControl::FunctionFlash::Type::ANIMATED_LIGHT: {
+		auto &config = getConfig<AnimatedLight::Config>();
+		config.stepCount = 4;
+		config.steps[0] = {100, 0, 100, 10};
+		config.steps[1] = {100, 18, 100, 10};
+		config.steps[2] = {100, 36, 100, 10};
+		config.steps[3] = {100, 54, 100, 10};
+		break;
+	}
 	case RoomControl::FunctionFlash::Type::TIMED_BLIND: {
 		auto &config = getConfig<TimedBlind::Config>();
 		config.holdTime = 200;
@@ -1920,14 +2168,18 @@ void RoomControl::FunctionFlash::setName(String name) {
 RoomControl::Function *RoomControl::FunctionFlash::allocate() const {
 	auto &flash = *this;
 	switch (flash.type) {
-		case Type::SIMPLE_SWITCH:
-			return new SimpleSwitch(flash);
-		case Type::TIMEOUT_SWITCH:
-			return new TimeoutSwitch(flash);
-		case Type::TIMED_BLIND:
-			return new TimedBlind(flash);
-		case Type::HEATING_CONTROL:
-			return new HeatingControl(flash);
+	case Type::SWITCH:
+		return new Switch(flash);
+	case Type::LIGHT:
+		return new Light(flash);
+	case Type::COLOR_LIGHT:
+		return new ColorLight(flash);
+	case Type::ANIMATED_LIGHT:
+		return new AnimatedLight(flash);
+	case Type::TIMED_BLIND:
+		return new TimedBlind(flash);
+	case Type::HEATING_CONTROL:
+		return new HeatingControl(flash);
 	}
 	assert(false);
 	return nullptr;
@@ -1943,11 +2195,16 @@ RoomControl::Function::~Function() {
 struct OnOff {
 	uint8_t state = 0;
 
-	void apply(uint8_t command) {
-		if (command < 2)
+	bool apply(uint8_t command) {
+		if (command < 2) {
+			bool changed = this->state != command;
 			this->state = command;
-		else
+			return changed;
+		} else if (command == 2) {
 			this->state ^= 1;
+			return true;
+		}
+		return false;
 	}
 
 	operator bool() const {return this->state != 0;}
@@ -1968,7 +2225,7 @@ struct FloatValue {
 
 	operator float() const {return this->value;}
 };
-
+/*
 // SimpleSwitch
 
 RoomControl::SimpleSwitch::~SimpleSwitch() {
@@ -2001,14 +2258,14 @@ Coroutine RoomControl::SimpleSwitch::start(RoomControl &roomControl) {
 		}
 	}
 }
+*/
 
+// Switch
 
-// TimeoutSwitch
-
-RoomControl::TimeoutSwitch::~TimeoutSwitch() {
+RoomControl::Switch::~Switch() {
 }
 
-Coroutine RoomControl::TimeoutSwitch::start(RoomControl &roomControl) {
+Coroutine RoomControl::Switch::start(RoomControl &roomControl) {
 	Subscriber subscribers[MAX_INPUT_COUNT];
 	PublishInfo::Barrier barrier;
 
@@ -2018,63 +2275,625 @@ Coroutine RoomControl::TimeoutSwitch::start(RoomControl &roomControl) {
 	// connect inputs and outputs
 	int outputCount = roomControl.connectFunction(**this, switchPlugs, subscribers, barrier, publishers);
 
-	auto duration = (*this)->getConfig<Config>().duration;
-	//SystemTime time;
-	//uint32_t duration;
+	auto timeout = (*this)->getConfig<Config>().timeout * 10ms;
 
 	// no references to flash allowed beyond this point as flash may be reallocated
 	while (true) {
 		// wait for message
 		MessageInfo info;
 		uint8_t message;
-		if (state == 0) {
+		if (state == 0 || timeout == 0ms) {
+			// off: wait for message
 			co_await barrier.wait(info, &message);
 		} else {
-			auto timeout = Timer::now() + (duration / 100) * 1s + ((duration % 100) * 1s) / 100;
+			// on: wait for message or timeout
 			int s = co_await select(barrier.wait(info, &message), Timer::sleep(timeout));
 			if (s == 2) {
-				// switch off
+				// timeout: switch off
 				message = 0;
 			}
-
-			/*
-			while (duration > 0) {
-				int h;
-				if (duration > 200000100) {
-					h = 200000000;
-					duration -= 200000000;
-				} else {
-					h = duration;
-					duration = 0;
-				}
-				time += (h / 100) * 1s + ((h % 100) * 1s) / 100;
-				int s = co_await select(barrier.wait(inputIndex, &message), Timer::sleep(time));
-				if (s == 1)
-					break;
-				if (duration == 0) {
-					// switch off
-					state = 0;
-					inputIndex = -1;
-				}
-			}*/
 		}
 
 		// process message
-		if (info.plug.id == 0) {
-			// on/off in
-			state.apply(message);
-		}
-/*
-		// start timeout
-		if (state == 1) {
-			time = Timer::now();
-			duration = config.duration;
-		}
-*/
+		state.apply(message);
+
 		// publish
 		for (int i = 0; i < outputCount; ++i) {
 			auto &publisher = publishers[i];
 			publisher.publishSwitch(state.state);
+		}
+	}
+}
+
+
+// Light
+
+RoomControl::Light::~Light() {
+}
+
+Coroutine RoomControl::Light::start(RoomControl &roomControl) {
+	Subscriber subscribers[MAX_INPUT_COUNT];
+	PublishInfo::Barrier barrier;
+
+	Publisher publishers[MAX_OUTPUT_COUNT];
+	OnOff on;
+
+	// connect inputs and outputs
+	int outputCount = roomControl.connectFunction(**this, lightPlugs, subscribers, barrier, publishers);
+
+	auto &config = (*this)->getConfig<Config>();
+	auto timeout = config.timeout * 10ms;
+	Light::Config::Setting settings[4]; // todo
+	array::copy(settings, config.settings);
+
+	// fade off either by switching off or after timeout
+	auto switchOffFade = config.offFade;
+	auto timeoutFade = config.timeoutFade;
+	uint16_t offFade;
+
+	// color settings
+	int settingIndex = -1;
+
+	// current time
+	SystemTime now;
+
+	// transition
+	bool transition = false;
+	SystemTime endTime;
+
+	// timeout
+	SystemTime offTime;
+
+	// no references to flash allowed beyond this point as flash may be reallocated
+	while (true) {
+		// wait for message
+		MessageInfo info;
+		uint8_t message;
+		bool timeoutActive = timeout > 0ms && on;
+		if (!timeoutActive && !transition) {
+			// timeout not active and no transition in progress: wait for message
+			co_await barrier.wait(info, &message);
+			//Terminal::out << "plug " << dec(info.plug.id) << '\n';
+			now = Timer::now();
+		} else {
+			// on: wait for message or timeout
+			//Terminal::out << "select" << '\n';
+			bool off = timeoutActive && (!transition || offTime <= endTime);
+			now = off ? offTime : endTime;
+			int s = co_await select(barrier.wait(info, &message), Timer::sleep(now));
+
+			// "relaxed" time to prevent lagging behind
+			now = Timer::now();
+
+			if (s == 1) {
+				// switched on or off
+
+				// "precise" time that may lag behind if cpu is overloaded
+				//now = Timer::now();
+
+				// set off fade
+				offFade = switchOffFade;
+			} else {
+				// timeout
+				if (off) {
+					// off timeout
+					//Terminal::out << "off\n";
+					message = 0;
+
+					// set off fade
+					offFade = timeoutFade;
+				} else {
+					// end of transition
+					//Terminal::out << "transition end\n";
+					transition = false;
+
+					// nothing to do
+					continue;
+				}
+			}
+			//Terminal::out << "select " << dec(s) << " plug " << dec(info.plug.id) << '\n';
+		}
+
+		// process message
+		bool changed = on.apply(message);
+
+		// set or reset off time
+		if (on) {
+			offTime = now + timeout;
+		}
+
+		// change color setting
+		bool force = false;
+		if (on && settingIndex != info.plug.connectionIndex) {
+			settingIndex = info.plug.connectionIndex;
+		} else if (!changed) {
+			// current state is confirmed (off -> off or on -> on)
+			if (transition) {
+				// interrupt transition and set immediately
+				transition = false;
+				force = true;
+			} else {
+				// nothing to do
+				continue;
+			}
+		}
+		auto &setting = settings[settingIndex];
+
+		// get color setting
+		float brightness;
+		int brightnessFade;
+		if (on) {
+			// on: fade on or to new color
+			int fade = setting.fade;
+
+			// fade to brightness
+			brightness = float(setting.brightness) * 0.01f;
+			brightnessFade = fade;
+		} else {
+			// off
+			brightness = 0.0f;
+			brightnessFade = offFade;
+		}
+
+		// start transition or set immediately
+		if (!force) {
+			// start transition
+			transition = brightnessFade > 0;
+			endTime = now + brightnessFade * 100ms;
+		} else {
+			// set immediately (1/10s)
+			transition = false;
+			brightnessFade = 1;
+			force = false;
+		}
+
+		// publish
+		for (int i = 0; i < outputCount; ++i) {
+			auto &publisher = publishers[i];
+			switch (publisher.id) {
+			case 1:
+				// on/off
+				if (changed)
+					publisher.publishSwitch(on.state);
+				break;
+			case 2:
+				// brightness
+				publisher.publishFloatTransition(brightness, 0, brightnessFade);
+				break;
+			}
+		}
+	}
+}
+
+
+// ColorLight
+
+RoomControl::ColorLight::~ColorLight() {
+}
+
+Coroutine RoomControl::ColorLight::start(RoomControl &roomControl) {
+	Subscriber subscribers[MAX_INPUT_COUNT];
+	PublishInfo::Barrier barrier;
+
+	Publisher publishers[MAX_OUTPUT_COUNT];
+	OnOff on;
+
+	// connect inputs and outputs
+	int outputCount = roomControl.connectFunction(**this, colorLightPlugs, subscribers, barrier, publishers);
+
+	auto &config = (*this)->getConfig<Config>();
+	auto timeout = config.timeout * 10ms;
+	ColorSetting settings[4]; // todo
+	array::copy(settings, config.settings);
+
+	// fade off either by switching off or after timeout
+	auto switchOffFade = config.offFade;
+	auto timeoutFade = config.timeoutFade;
+	uint16_t offFade;
+
+	// color settings
+	int settingIndex = -1;
+
+	// current time
+	SystemTime now;
+
+	// transition
+	bool transition = false;
+	SystemTime endTime;
+
+	// timeout
+	SystemTime offTime;
+
+	// no references to flash allowed beyond this point as flash may be reallocated
+	while (true) {
+		// wait for message
+		MessageInfo info;
+		uint8_t message;
+		bool timeoutActive = timeout > 0ms && on;
+		if (!timeoutActive && !transition) {
+			// timeout not active and no transition in progress: wait for message
+			co_await barrier.wait(info, &message);
+			//Terminal::out << "plug " << dec(info.plug.id) << '\n';
+			now = Timer::now();
+		} else {
+			// on: wait for message or timeout
+			//Terminal::out << "select" << '\n';
+			bool off = timeoutActive && (!transition || offTime <= endTime);
+			now = off ? offTime : endTime;
+			int s = co_await select(barrier.wait(info, &message), Timer::sleep(now));
+
+			// "relaxed" time to prevent lagging behind
+			now = Timer::now();
+
+			if (s == 1) {
+				// switched on or off
+
+				// "precise" time that may lag behind if cpu is overloaded
+				//now = Timer::now();
+
+				// set off fade
+				offFade = switchOffFade;
+			} else {
+				// timeout
+				if (off) {
+					// off timeout
+					//Terminal::out << "off\n";
+					message = 0;
+
+					// set off fade
+					offFade = timeoutFade;
+				} else {
+					// end of transition
+					//Terminal::out << "transition end\n";
+					transition = false;
+
+					// nothing to do
+					continue;
+				}
+			}
+			//Terminal::out << "select " << dec(s) << " plug " << dec(info.plug.id) << '\n';
+		}
+
+		// process message
+		bool changed = on.apply(message);
+
+		// set or reset off time
+		if (on) {
+			offTime = now + timeout;
+		}
+
+		// change color setting
+		bool setColor = false;
+		bool force = false;
+		if (on && settingIndex != info.plug.connectionIndex) {
+			settingIndex = info.plug.connectionIndex;
+			setColor = true;
+		} else if (!changed) {
+			// current state is confirmed (off -> off or on -> on)
+			if (transition) {
+				// interrupt transition and set immediately
+				transition = false;
+				force = true;
+			} else {
+				// nothing to do
+				continue;
+			}
+		}
+		auto &setting = settings[settingIndex];
+
+		// get color setting
+		float brightness;
+		int brightnessFade;
+		Cie1931 color;
+		int colorFade;
+		if (on) {
+			// on: fade on or to new color
+			int fade = setting.fade;
+
+			// fade to brightness
+			brightness = float(setting.brightness) * 0.01f;
+			brightnessFade = fade;
+
+			// fade to color
+			color = hueToCie(float(setting.hue * 5), setting.saturation * 0.01f);
+			if (!transition && changed) {
+				// set color immediately when switched on while no transition was going on
+				colorFade = min(fade, 1); // 0 does not seem to work on a philips hue
+				setColor = true;
+			} else {
+				colorFade = fade;
+			}
+		} else {
+			// off
+			brightness = 0.0f;
+			brightnessFade = offFade;
+		}
+
+		// start transition or set immediately
+		if (!force) {
+			// start transition
+			transition = brightnessFade > 0;
+			endTime = now + brightnessFade * 100ms;
+		} else {
+			// set immediately (1/10s)
+			//transition = false;
+			brightnessFade = 1;
+			colorFade = 1;
+			setColor = on;
+			force = false;
+		}
+/*
+		Terminal::out << "brightness " << flt(brightness, 5) << '\n';
+		if (setColor)
+			Terminal::out << "color " << dec(settingIndex) << " xy " << flt(color.x, 1) << ' ' << flt(color.y, 1) << " fade " << dec(colorFade) << '\n';
+*/
+		// publish
+		for (int i = 0; i < outputCount; ++i) {
+			auto &publisher = publishers[i];
+			switch (publisher.id) {
+			case 1:
+				// on/off
+				if (changed)
+					publisher.publishSwitch(on.state);
+				break;
+			case 2:
+				// brightness
+				publisher.publishFloatTransition(brightness, 0, brightnessFade);
+				break;
+			case 3:
+				// color x
+				if (setColor)
+					publisher.publishFloatTransition(color.x, 0, colorFade);
+				break;
+			case 4:
+				// color y
+				if (setColor)
+					publisher.publishFloatTransition(color.y, 0, colorFade);
+				break;
+			}
+		}
+	}
+}
+
+
+// AnimatedLight
+
+RoomControl::AnimatedLight::~AnimatedLight() {
+}
+
+Coroutine RoomControl::AnimatedLight::start(RoomControl &roomControl) {
+	Subscriber subscribers[MAX_INPUT_COUNT];
+	PublishInfo::Barrier barrier;
+
+	Publisher publishers[MAX_OUTPUT_COUNT];
+	OnOff on;
+
+	// connect inputs and outputs
+	int outputCount = roomControl.connectFunction(**this, colorLightPlugs, subscribers, barrier, publishers);
+
+	auto &config = (*this)->getConfig<Config>();
+	auto timeout = config.timeout * 10ms;
+	auto stepCount = config.stepCount;
+	ColorSetting steps[16]; // todo
+	array::copy(steps, config.steps);
+
+	// fade on
+	auto onFade = config.onFade;
+
+	// fade off either by switching off or after timeout
+	auto switchOffFade = config.offFade;
+	auto timeoutFade = config.timeoutFade;
+	uint16_t offFade;
+
+	// current time
+	SystemTime now;
+
+	// on/off transition
+	bool transition = false;
+	SystemTime startTime = {};
+	SystemTime endTime = {};
+
+	// animation steps
+	int stepIndex = 0;
+	SystemTime stepTime;
+	SystemTime nextTime;
+
+	// timeout
+	SystemTime offTime;
+
+
+	//SystemTime brightnessTime = Timer::now();
+
+	// no references to flash allowed beyond this point as flash may be reallocated
+	while (true) {
+		// wait for message
+		MessageInfo info;
+		uint8_t message;
+		bool setColor = false;
+		if (!on && !transition) {
+			// off: wait for message
+			co_await barrier.wait(info, &message);
+			//Terminal::out << "plug " << dec(info.plug.id) << '\n';
+			now = Timer::now();
+			//setColor = true;
+		} else {
+			// on: wait for message or timeout
+			//Terminal::out << "select" << '\n';
+			now = nextTime;
+			if (transition && endTime <= now)
+				now = endTime;
+			bool off = timeout > 0ms && on && offTime <= now;
+			if (off)
+				now = offTime;
+			int s = co_await select(barrier.wait(info, &message), Timer::sleep(now));
+
+			// "relaxed" time to prevent lagging behind
+			now = Timer::now();
+
+			if (s == 1) {
+				// switched on or off
+
+				// "precise" time that may lag behind if cpu is overloaded
+				//now = Timer::now();
+
+				// set off fade
+				offFade = switchOffFade;
+			} else {
+				// timeout
+				if (off) {
+					// off timeout
+					//Terminal::out << "off" << '\n';
+					message = 0;
+
+					// set off fade
+					offFade = timeoutFade;
+				} else {
+					// next animation step or end of transition: don't change state
+					message = 3;
+				}
+			}
+
+			// check check if we need to fade to next animation step
+			if (now >= nextTime) {
+				//Terminal::out << "fade to next" << '\n';
+				++stepIndex;
+				if (stepIndex >= stepCount)
+					stepIndex = 0;
+				stepTime = now;
+				setColor = true;
+			}
+
+			// check if transition ended
+			if (now >= endTime)
+				transition = false;
+
+			//Terminal::out << "select " << dec(s) << " plug " << dec(info.plug.id) << '\n';
+		}
+
+		// process message
+		bool changed = on.apply(message);
+
+		// set or reset off time
+		if (on && message < 3) {
+			offTime = now + timeout;
+		}
+
+		bool force = false;
+		if (changed) {
+			// changed: merge with transition that is still in progress
+			auto duration = (on ? onFade : offFade) * 100ms;
+			if (transition/*now > startTime && now < endTime*/) {
+				float s = (now - startTime) / (endTime - startTime);
+				//Terminal::out << "s " << flt(s, 2) << '\n';
+				startTime = now - (1.0f - s) * duration;
+			} else {
+				startTime = now;
+			}
+			endTime = startTime + duration;
+
+			if (on) {
+				// off -> on
+				//Terminal::out << "off -> on" << '\n';
+
+				// set time of current step
+				stepTime = now;
+
+				// set first color
+				setColor = true;
+			} else {
+				// on -> off
+				//Terminal::out << "on -> off" << '\n';
+			}
+
+			// transition is now in progress
+			transition = true;
+		} else {
+			// not changed
+			if (transition && message < 3) {
+				// interrupt transition and set immediately
+				//Terminal::out << "force\n";
+				transition = false;
+				force = true;
+			} else if (!setColor || (!on && !transition)) {
+				// nothing to do
+				//Terminal::out << "nothing to do\n";
+				continue;
+			}
+		}
+
+		// get animation step
+		auto &step = steps[stepIndex];
+		auto fade = max(step.fade, 1);
+		nextTime = stepTime + fade * 100ms;
+		//Terminal::out << "index " << dec(index) << " hue " << dec(step.hue * 5) << " x " << flt(color.x, 2) << " fade " << dec(fade) << '\n';
+		float brightness = float(step.brightness) * 0.01f;
+		int brightnessFade = fade;
+		Cie1931 color = hueToCie(float(step.hue * 5), step.saturation * 0.01f);;
+		int colorFade = fade;
+		if (force) {
+			// force: set brightness immediately (1/10s)
+			brightnessFade = 1;
+			if (!on)
+				brightness = 0.0f;
+			force = false;
+		} else if (on) {
+			// on: fade on or to new color
+			if (transition) {
+				// off -> on
+				if (nextTime >= endTime) {
+					if (changed)
+						brightnessFade = onFade;
+				} else {
+					brightness *= float((nextTime - startTime) / (endTime - startTime));
+				}
+			}
+		} else {
+			// off
+			if (transition) {
+				// on -> off
+				if (nextTime >= endTime) {
+					if (changed)
+						brightnessFade = offFade;
+					else
+						brightnessFade = int((endTime - stepTime) / 100ms);
+					brightness = 0.0f;
+				} else {
+					brightness *= 1.0f - float((nextTime - startTime) / (endTime - startTime));
+				}
+			}
+		}
+/*
+		auto n = Timer::now();
+		Terminal::out << "brightness " << flt(brightness, 5) << " t " << dec((n - brightnessTime).value / 100)
+			<< " transition " << dec(transition) << '\n';
+		brightnessTime = n;
+		if (setColor)
+			Terminal::out << "color " << dec(stepIndex) << '\n';
+*/
+		// publish
+		for (int i = 0; i < outputCount; ++i) {
+			auto &publisher = publishers[i];
+			switch (publisher.id) {
+			case 1:
+				// on/off
+				if (changed)
+					publisher.publishSwitch(on.state);
+				break;
+			case 2:
+				// brightness
+				publisher.publishFloatTransition(brightness, 0, brightnessFade);
+				break;
+			case 3:
+				// color x
+				if (setColor)
+					publisher.publishFloatTransition(color.x, 0, colorFade);
+				break;
+			case 4:
+				// color y
+				if (setColor)
+					publisher.publishFloatTransition(color.y, 0, colorFade);
+				break;
+			}
 		}
 	}
 }

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Interface.hpp"
+#include "SystemTime.hpp"
 #include <Configuration.hpp>
 #include <State.hpp>
 #include <Radio.hpp>
@@ -44,8 +45,12 @@ public:
 	void setCommissioning(bool enabled) override;
 
 	Array<uint8_t const> getDeviceIds() override;
-	Device *getDevice(uint8_t id) override;
-	void eraseDevice(uint8_t id) override;
+	String getName(uint8_t id) const override;
+	void setName(uint8_t id, String name) override;
+	Array<MessageType const> getPlugs(uint8_t id) const override;
+	void subscribe(uint8_t id, uint8_t plugIndex, Subscriber &subscriber) override;
+	PublishInfo getPublishInfo(uint8_t id, uint8_t plugIndex) override;
+	void erase(uint8_t id) override;
 
 private:
 	static constexpr int MAX_CLUSTER_COUNT = 32;
@@ -84,27 +89,19 @@ private:
 		int size() {return offsetOf(GpDeviceData, plugs[this->plugCount]);}
 	};
 
-	class GpDevice : public Interface::Device {
+	class GpDevice /*: public Interface::Device*/ {
 	public:
 		// takes ownership of the data
 		GpDevice(RadioInterface *interface, GpDeviceData *data)
-			: interface(interface), next(interface->gpDevices), data(data)
+			: /*interface(interface),*/ next(interface->gpDevices), data(data)
 		{
 			interface->gpDevices = this;
 		}
 
-		~GpDevice() override;
-
-		// Interface::Device
-		uint8_t getId() const override;
-		String getName() const override;
-		void setName(String name) override;
-		Array<MessageType const> getPlugs() const override;
-		void subscribe(uint8_t plugIndex, Subscriber &subscriber) override;
-		PublishInfo getPublishInfo(uint8_t plugIndex) override;
+		~GpDevice();
 
 		// back pointer to interface
-		RadioInterface *interface;
+		//RadioInterface *interface;
 
 		// next device
 		GpDevice *next;
@@ -144,13 +141,12 @@ private:
 			: data(data), sendFlags(data.sendFlags)
 		{}
 		ZbDevice(RadioInterface *interface, ZbDeviceData const &data)
-			: interface(interface), next(interface->zbDevices), data(data), sendFlags(data.sendFlags)
+			: next(interface->zbDevices), data(data), sendFlags(data.sendFlags)
 		{
 			interface->zbDevices = this;
 		}
+		~ZbDevice();
 
-		// back pointer to interface
-		RadioInterface *interface;
 
 		// next device
 		ZbDevice *next;
@@ -238,7 +234,7 @@ private:
 				this->clientClusterIndex--;
 		}
 
-		int size();
+		int size() const;
 		void build(ZbEndpointData *data);
 
 		uint8_t id;
@@ -249,31 +245,22 @@ private:
 		ClusterInfo clusterInfos[MAX_CLUSTER_COUNT];
 	};
 
-	class ZbEndpoint : public Interface::Device {
+	class ZbEndpoint {
 	public:
 		// takes ownership of the data
 		ZbEndpoint(ZbDevice *device, ZbEndpointData *data)
-			: device(device), next(device->endpoints), data(data)
+			: next(device->endpoints), data(data)
 		{
 			device->endpoints = this;
 		}
 
-		~ZbEndpoint() override;
+		~ZbEndpoint();
 
-		// Interface::Device
-		uint8_t getId() const override;
-		String getName() const override;
-		void setName(String name) override;
-		Array<MessageType const> getPlugs() const override;
-		void subscribe(uint8_t plugIndex, Subscriber &subscriber) override;
-		PublishInfo getPublishInfo(uint8_t plugIndex) override;
-
+		Array<MessageType const> getPlugs() const;
 		//Array<ClusterInfo const *> getServerClusters() const;
 		PlugRange findServerCluster(zcl::Cluster cluster) const;
 		ClusterInfo getClientCluster(int plugIndex) const;
 
-		// back pointer to device
-		ZbDevice *device;
 
 		// next endpoint in list
 		ZbEndpoint *next;
@@ -283,11 +270,19 @@ private:
 
 		// list of subscribers
 		SubscriberList subscribers;
+
+		//
+		SystemTime time;
+		uint8_t index;
+		uint16_t color;
 	};
 
+	GpDevice *getGpDevice(uint8_t id) const;
+	ZbEndpoint *getZbEndpoint(uint8_t id) const;
 	uint8_t allocateId(int deviceCount);
 	uint8_t allocateZbDeviceId();
 	ZbDevice *getOrLoadZbDevice(uint8_t id);
+	void eraseZbDevice(uint8_t id);
 
 	int deviceCount = 0;
 	uint8_t deviceIds[MAX_DEVICE_COUNT];
@@ -453,6 +448,8 @@ private:
 		uint8_t srcEndpoint);
 	void writeApsAckZcl(PacketWriter &w, uint8_t dstEndpoint, zcl::Cluster clusterId,
 		zcl::Profile profile, uint8_t srcEndpoint);
+	static bool writeZclCommand(PacketWriter &w, uint8_t zclCounter, int plugIndex,
+		zcl::Cluster cluster, Message &message, ZbEndpoint *endpoint);
 	void writeFooter(PacketWriter &w, Radio::SendFlags sendFlags);
 
 	[[nodiscard]] AwaitableCoroutine readAttribute(uint8_t (&packet)[MESSAGE_LENGTH], ZbDevice &device,

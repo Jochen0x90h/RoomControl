@@ -1,7 +1,7 @@
 #pragma once
 
 #include "Array.hpp"
-#include <stdint.h>
+#include <cstdint>
 
 #define offsetOf(Type, member) intptr_t(&((Type*)nullptr)->member)
 
