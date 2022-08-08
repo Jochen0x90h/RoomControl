@@ -57,6 +57,7 @@ struct Context {
 	ma_device device;
 };
 std::vector<Context*> contexts;
+std::vector<Type> types;
 
 
 // timeout to check if audio devices need to be stopped
@@ -150,12 +151,36 @@ void dataCallback(ma_device* device, void* output, const void* input, ma_uint32 
 
 int inited = 0;
 
+struct TypeAndSuffix {
+	Type type;
+	char const *suffix;
+};
+TypeAndSuffix suffixes[] = {
+	{Type::NONE, ""},
+	{Type::EVENT, ".event"},
+	{Type::ACTIVATION, ".activation"},
+	{Type::DEACTIVATION, ".deactivation"},
+	{Type::INFORMATION, ".information"},
+	{Type::WARNING, ".warning"},
+	{Type::DOORBELL, ".doorbell"},
+	{Type::CALL, ".call"},
+	{Type::ALARM, ".alarm"},
+};
+
 void init() {
 	Sound::inited = 1;
 
 	for (int count = 0; true; ++count) {
-		auto name = std::to_string(count) + ".opus";
-		auto file = fopen(name.c_str(), "r");
+		// open file
+		FILE *file;
+		for (auto suffix : suffixes) {
+			auto name = std::to_string(count) + suffix.suffix + ".opus";
+			file = fopen(name.c_str(), "r");
+			if (file != nullptr) {
+				Sound::types.push_back(suffix.type);
+				break;
+			}
+		}
 		if (file == nullptr)
 			break;
 
@@ -187,9 +212,12 @@ void init() {
 	Sound::timeout.time = Loop::now() + 1s;
 	Loop::timeouts.add(Sound::timeout);
 }
-
+/*
 int count() {
 	return Sound::contexts.size();
+}*/
+Array<Type> getTypes() {
+	return {int(Sound::types.size()), Sound::types.data()};
 }
 
 void play(int index) {
@@ -197,7 +225,7 @@ void play(int index) {
 	assert(index >= 0 && index < Sound::contexts.size());
 
 	if (Sound::inited == 2) {
-		auto &context = Sound::contexts[index];
+		auto context = Sound::contexts[index];
 		{
 			std::lock_guard<std::mutex> guard(context->mutex);
 
@@ -219,10 +247,18 @@ void stop(int index) {
 	assert(index >= 0 && index < Sound::contexts.size());
 
 	if (Sound::inited == 2) {
-		auto &context = Sound::contexts[index];
+		auto context = Sound::contexts[index];
 		std::lock_guard<std::mutex> guard(context->mutex);
 		context->state = Context::END;
 	}
+}
+
+bool isPlaying(int index) {
+	assert(Sound::inited != 0);
+	assert(index >= 0 && index < Sound::contexts.size());
+
+	auto context = Sound::contexts[index];
+	return context->state == Context::PLAY;
 }
 
 } // Sound

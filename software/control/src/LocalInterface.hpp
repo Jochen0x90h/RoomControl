@@ -50,6 +50,6 @@ protected:
 
 	PublishInfo::Barrier publishBarrier;
 
-	//MessageType audioPlug;
-	int audioCount;
+	int soundCount;
+	MessageType soundPlugs[32];
 };

@@ -8,13 +8,15 @@
 
 
 Coroutine soundTest() {
-	Sound::play(0);
+	int index = 0;
 	while (true) {
-		//Audio::play(0);
-
-		co_await Timer::sleep(5s);
-		
+		Sound::play(index);
+		do {
+			co_await Timer::sleep(1s);
+		} while (Sound::isPlaying(index));
 		Debug::toggleBlueLed();
+
+		index = (index + 1) % Sound::getTypes().count();
 	}
 }
 
@@ -24,7 +26,14 @@ int main(void) {
 	Sound::init();
 	Output::init(); // for debug led's
 
-	Terminal::out << dec(Sound::count()) << '\n';
+	auto types = Sound::getTypes();
+	if (types.isEmpty()) {
+		Terminal::out << "No Sounds available!\n";
+		return 0;
+	}
+	for (auto type : types) {
+		Terminal::out << "Type: " << dec(type) << '\n';
+	}
 
 	soundTest();
 

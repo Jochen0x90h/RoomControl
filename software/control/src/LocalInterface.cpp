@@ -11,7 +11,7 @@ constexpr String deviceNames[] = {
 	"Digital Inputs",
 	"Digital Outputs",
 	"Heating",
-	"Audio",
+	"Sound",
 	"Brightness Sensor",
 	"Motion Detector",
 };
@@ -45,18 +45,6 @@ constexpr MessageType heatingPlugs[] = {
 	MessageType::BINARY_OPEN_VALVE_CMD_OUT, MessageType::BINARY_OPEN_VALVE_CMD_OUT
 };
 
-// audio plugs (max 32)
-constexpr MessageType audioPlugs[] = {
-	MessageType::BINARY_IN, MessageType::BINARY_IN, MessageType::BINARY_IN, MessageType::BINARY_IN,
-	MessageType::BINARY_IN, MessageType::BINARY_IN, MessageType::BINARY_IN, MessageType::BINARY_IN,
-	MessageType::BINARY_IN, MessageType::BINARY_IN, MessageType::BINARY_IN, MessageType::BINARY_IN,
-	MessageType::BINARY_IN, MessageType::BINARY_IN, MessageType::BINARY_IN, MessageType::BINARY_IN,
-	MessageType::BINARY_IN, MessageType::BINARY_IN, MessageType::BINARY_IN, MessageType::BINARY_IN,
-	MessageType::BINARY_IN, MessageType::BINARY_IN, MessageType::BINARY_IN, MessageType::BINARY_IN,
-	MessageType::BINARY_IN, MessageType::BINARY_IN, MessageType::BINARY_IN, MessageType::BINARY_IN,
-	MessageType::BINARY_IN, MessageType::BINARY_IN, MessageType::BINARY_IN, MessageType::BINARY_IN,
-};
-
 // brightness sensor plugs
 constexpr MessageType brightnessSensorPlugs[] = {
 	MessageType::PHYSICAL_ILLUMINANCE_OUT,
@@ -68,11 +56,40 @@ constexpr MessageType motionDetectorPlugs[] = {
 };
 
 
-
 LocalInterface::LocalInterface() {
-	int audioCount = Sound::count();
-	this->audioCount = audioCount;
-	//this->audioPlug = MessageType::ENUM_CMD_IN | MessageType(audioCount + 1);
+	auto types = Sound::getTypes();
+	this->soundCount = min(types.count(), array::count(this->soundPlugs));
+	for (int i = 0; i < this->soundCount; ++i) {
+		auto &plug = this->soundPlugs[i];
+		switch (types[i]) {
+		case Sound::Type::EVENT:
+			plug = MessageType::BINARY_SOUND_EVENT_IN;
+			break;
+		case Sound::Type::ACTIVATION:
+			plug = MessageType::BINARY_SOUND_ACTIVATION_IN;
+			break;
+		case Sound::Type::DEACTIVATION:
+			plug = MessageType::BINARY_SOUND_DEACTIVATION_IN;
+			break;
+		case Sound::Type::INFORMATION:
+			plug = MessageType::BINARY_SOUND_INFORMATION_IN;
+			break;
+		case Sound::Type::WARNING:
+			plug = MessageType::BINARY_SOUND_WARNING_IN;
+			break;
+		case Sound::Type::DOORBELL:
+			plug = MessageType::BINARY_SOUND_DOORBELL_IN;
+			break;
+		case Sound::Type::CALL:
+			plug = MessageType::BINARY_SOUND_CALL_IN;
+			break;
+		case Sound::Type::ALARM:
+			plug = MessageType::BINARY_SOUND_ALARM_IN;
+			break;
+		default:
+			plug = MessageType::BINARY_SOUND_IN;
+		}
+	}
 
 	int i = 0;
 	this->deviceIds[i++] = BME680_ID;
@@ -82,7 +99,7 @@ LocalInterface::LocalInterface() {
 		this->deviceIds[i++] = OUT_ID;
 	if (OUTPUT_HEATING_COUNT > 0)
 		this->deviceIds[i++] = HEATING_ID;
-	if (audioCount > 0)
+	if (this->soundCount > 0)
 		this->deviceIds[i++] = AUDIO_ID;
 	this->deviceIds[i++] = BRIGHTNESS_SENSOR_ID;
 	this->deviceIds[i++] = MOTION_DETECTOR_ID;
@@ -123,8 +140,7 @@ Array<MessageType const> LocalInterface::getPlugs(uint8_t id) const {
 	case HEATING_ID:
 		return {OUTPUT_HEATING_COUNT, heatingPlugs};
 	case AUDIO_ID:
-		return {this->audioCount, audioPlugs};
-		//return {1, &this->audioPlug};
+		return {this->soundCount, this->soundPlugs};
 	case BRIGHTNESS_SENSOR_ID:
 		return brightnessSensorPlugs;
 	case MOTION_DETECTOR_ID:
@@ -244,19 +260,12 @@ Coroutine LocalInterface::publish() {
 			break;
 		case AUDIO_ID:
 			// start audio
-			if (info.device.plugIndex < this->audioCount) {
+			if (info.device.plugIndex < this->soundCount) {
 				if (message.value.u8 != 0)
 					Sound::play(info.device.plugIndex);
 				else
 					Sound::stop(info.device.plugIndex);
 			}
-			/*
-			if (info.device.plugIndex == 0) {
-				if (message.value.u16 == 0)
-					Audio::stop();
-				else
-					Audio::play(message.value.u16 - 1);
-			}*/
 			break;
 		}
 

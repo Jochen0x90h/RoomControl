@@ -1,4 +1,5 @@
 #include <cstdint>
+#include "Array.hpp"
 
 
 /*
@@ -36,15 +37,15 @@ enum class Type : uint8_t {
 };
 
 /**
- * Initialize sound
+ * Initialize sound driver
  */
 void init();
 
 /**
- * Get number of sound files
- * @return
+ * Get types of available sounds
+ * @return array of types
  */
-int count();
+Array<Type> getTypes();
 
 /**
  * Starts playing a sound in the background
@@ -56,5 +57,12 @@ void play(int index);
  * Stop a playing sound
  */
 void stop(int index);
+
+/**
+ * Check if a sound is playing
+ * @param index
+ * @return true if playing
+ */
+bool isPlaying(int index);
 
 } // Sound

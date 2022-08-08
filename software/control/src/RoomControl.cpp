@@ -529,7 +529,14 @@ Array<String const> RoomControl::getSwitchStates(Usage usage) {
 	return offOnToggle;
 }
 
-// number of different switch types for default convert options
+/*
+	number of different switch types for default convert options
+	0: off/on
+	1: off/on1/on2
+	2: off/on/toggle
+	3: release/press or stop/play
+	4: release/up/down
+*/
 constexpr int SWITCH_TYPE_COUNT = 5;
 
 int RoomControl::getSwitchType(MessageType type) {
@@ -539,8 +546,11 @@ int RoomControl::getSwitchType(MessageType type) {
 		return (type & MessageType::TERNARY_CATEGORY) == MessageType ::TERNARY_BUTTON ? 4 : 1;
 	}
 	auto binaryCategory = type & MessageType::BINARY_CATEGORY;
-	if (binaryCategory == MessageType::BINARY_BUTTON || binaryCategory == MessageType::BINARY_ALARM) {
-		// release/press
+	if (binaryCategory == MessageType::BINARY_BUTTON
+		|| binaryCategory == MessageType::BINARY_ALARM
+		|| binaryCategory == MessageType::BINARY_SOUND)
+	{
+		// release/press or stop/play
 		return 3;
 	}
 
@@ -2255,7 +2265,12 @@ Coroutine RoomControl::Switch::start(RoomControl &roomControl) {
 		}
 
 		// process message
-		state.apply(message);
+		bool changed = state.apply(message);
+
+		if (!changed) {
+			// nothing to do
+			continue;
+		}
 
 		// publish
 		for (int i = 0; i < outputCount; ++i) {
