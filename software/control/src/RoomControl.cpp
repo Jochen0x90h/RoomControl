@@ -29,6 +29,7 @@ static String const lockedToggle[] = {"unlocked", "locked", "toggle"};
 static String const occupancy[] = {"unoccupied", "occupied"};
 static String const activation[] = {"deactivated", "activated"};
 static String const enabled[] = {"disabled", "enabled"};
+static String const sound[] = {"stop", "play"};
 
 static String const offOn1On2[] = {"off", "on1", "on2"};
 static String const releasedUpDown[] = {"released", "up", "down"};
@@ -489,6 +490,7 @@ void RoomControl::printConnection(Menu::Stream &stream, Connection const &connec
 
 Array<String const> RoomControl::getSwitchStates(Usage usage) {
 	switch (usage) {
+	// binary
 	case Usage::OFF_ON:
 		return {2, offOnToggle};
 	case Usage::OFF_ON_TOGGLE:
@@ -509,7 +511,10 @@ Array<String const> RoomControl::getSwitchStates(Usage usage) {
 		return activation;
 	case Usage::ENABLED:
 		return enabled;
+	case Usage::SOUND:
+		return sound;
 
+	// ternary
 	case Usage::OFF_ON1_ON2:
 		return offOn1On2;
 	case Usage::RELEASED_UP_DOWN:
@@ -524,7 +529,14 @@ Array<String const> RoomControl::getSwitchStates(Usage usage) {
 	return offOnToggle;
 }
 
-// number of different switch types for default convert options
+/*
+	number of different switch types for default convert options
+	0: off/on
+	1: off/on1/on2
+	2: off/on/toggle
+	3: release/press or stop/play
+	4: release/up/down
+*/
 constexpr int SWITCH_TYPE_COUNT = 5;
 
 int RoomControl::getSwitchType(MessageType type) {
@@ -534,8 +546,11 @@ int RoomControl::getSwitchType(MessageType type) {
 		return (type & MessageType::TERNARY_CATEGORY) == MessageType ::TERNARY_BUTTON ? 4 : 1;
 	}
 	auto binaryCategory = type & MessageType::BINARY_CATEGORY;
-	if (binaryCategory == MessageType::BINARY_BUTTON || binaryCategory == MessageType::BINARY_ALARM) {
-		// release/press
+	if (binaryCategory == MessageType::BINARY_BUTTON
+		|| binaryCategory == MessageType::BINARY_ALARM
+		|| binaryCategory == MessageType::BINARY_SOUND)
+	{
+		// release/press or stop/play
 		return 3;
 	}
 
@@ -555,7 +570,7 @@ constexpr int DOWN = 2;
 constexpr int SET = 0;
 constexpr int INCREASE = 1;
 constexpr int DECREASE = 2;
-constexpr int DISCARD = 7;
+constexpr int IGNORE = 7;
 
 constexpr uint16_t convert(int s0, int s1) noexcept {
 	return s0 | (s1 << 3) | (-1 << 6);
@@ -572,57 +587,57 @@ static uint16_t const switch2switch[SWITCH_TYPE_COUNT][SWITCH_TYPE_COUNT] = {
 		convert(OFF, ON), // off/on
 		convert(OFF, ON1), // off/on1/on2
 		convert(OFF, ON), // off/on/toggle
-		convert(DISCARD, PRESS), // release/press
-		convert(DISCARD, UP), // release/up/down
+		convert(IGNORE, PRESS), // release/press
+		convert(IGNORE, UP), // release/up/down
 	},
 	// off/on1/on2 ->
 	{
-		convert(OFF, ON, DISCARD), // off/on
+		convert(OFF, ON, IGNORE), // off/on
 		convert(OFF, ON1, ON2), // off/on1/on2
-		convert(OFF, ON, DISCARD), // off/on/toggle
-		convert(DISCARD, PRESS, DISCARD), // release/press
-		convert(DISCARD, UP, DISCARD), // release/up/down
+		convert(OFF, ON, IGNORE), // off/on/toggle
+		convert(IGNORE, PRESS, IGNORE), // release/press
+		convert(IGNORE, UP, IGNORE), // release/up/down
 	},
 	// off/on/toggle ->
 	{
-		convert(OFF, ON, DISCARD), // off/on
-		convert(OFF, ON1, DISCARD), // off/on1/on2
+		convert(OFF, ON, IGNORE), // off/on
+		convert(OFF, ON1, IGNORE), // off/on1/on2
 		convert(OFF, ON, TOGGLE), // off/on/toggle
-		convert(DISCARD, DISCARD, PRESS), // release/press
-		convert(DISCARD, DISCARD, UP), // release/up/down
+		convert(IGNORE, IGNORE, PRESS), // release/press
+		convert(IGNORE, IGNORE, UP), // release/up/down
 	},
 	// release/press ->
 	{
-		convert(DISCARD, ON), // off/on
-		convert(DISCARD, ON1), // off/on1/on2
-		convert(DISCARD, TOGGLE), // off/on/toggle
+		convert(IGNORE, ON), // off/on
+		convert(IGNORE, ON1), // off/on1/on2
+		convert(IGNORE, TOGGLE), // off/on/toggle
 		convert(RELEASE, PRESS), // release/press
 		convert(RELEASE, UP), // release/up/down
 	},
 	// release/up/down ->
 	{
-		convert(DISCARD, ON, OFF), // off/on
+		convert(IGNORE, ON, OFF), // off/on
 		convert(OFF, ON1, ON2), // off/on1/on2
-		convert(DISCARD, ON, OFF), // off/on/toggle
-		convert(RELEASE, PRESS, DISCARD), // release/press
+		convert(IGNORE, ON, OFF), // off/on/toggle
+		convert(RELEASE, PRESS, IGNORE), // release/press
 		convert(RELEASE, UP, DOWN), // release/up/down
 	},
 };
 
 // default switch to value command convert
 static uint16_t const switch2valueCommand[SWITCH_TYPE_COUNT] = {
-	convert(DISCARD, SET), // off/on -> set/increase/decrease
-	convert(DISCARD, SET, DISCARD), // off/on1/on2 -> set/increase/decrease
-	convert(DISCARD, SET, DISCARD), // off/on/toggle -> set/increase/decrease
-	convert(DISCARD, SET), // release/press -> set/increase/decrease
-	convert(DISCARD, INCREASE, DECREASE), // release/up/down -> set/increase/decrease
+	convert(IGNORE, SET), // off/on -> set/increase/decrease
+	convert(IGNORE, SET, IGNORE), // off/on1/on2 -> set/increase/decrease
+	convert(IGNORE, SET, IGNORE), // off/on/toggle -> set/increase/decrease
+	convert(IGNORE, SET), // release/press -> set/increase/decrease
+	convert(IGNORE, INCREASE, DECREASE), // release/up/down -> set/increase/decrease
 };
 
 // default value command to switch convert
 static uint16_t const value2switch[SWITCH_TYPE_COUNT] = {
-	convert(ON, OFF, DISCARD), // greater/less/else -> off/on
-	convert(ON, OFF, DISCARD), // greater/less/else -> off/on/toggle
-	convert(PRESS, RELEASE, DISCARD), // greater/less/else -> release/press
+	convert(ON, OFF, IGNORE), // greater/less/else -> off/on
+	convert(ON, OFF, IGNORE), // greater/less/else -> off/on/toggle
+	convert(PRESS, RELEASE, IGNORE), // greater/less/else -> release/press
 	convert(UP, DOWN, RELEASE), // greater/less/else -> release/up/down
 };
 
@@ -823,21 +838,29 @@ void RoomControl::editMessage(Menu::Stream &stream, MessageType messageType,
 		stream << underline(states[message.value.u8], editMessage1);
 		break;
 	}
+	case MessageType::ENUM: {
+		// enumeration
+		uint count = uint(messageType & (MessageType::TYPE_MASK & ~MessageType::CATEGORY));
+		if (editMessage1)
+			message.value.u16 = uint32_t(message.value.u16 + count * 32 + delta) % count;
+		stream << underline(dec(message.value.u16), editMessage1);
+		break;
+	}
 	case MessageType::LEVEL:
 	case MessageType::PHYSICAL:
 	case MessageType::CONCENTRATION:
 		// float
 		if (editMessage1)
-			message.value.f = stepValue(usage, false, message.value.f, delta);
-		stream << underline(getDisplayValue(usage, false, message.value.f), editMessage1) << getDisplayUnit(usage);
+			message.value.f32 = stepValue(usage, false, message.value.f32, delta);
+		stream << underline(getDisplayValue(usage, false, message.value.f32), editMessage1) << getDisplayUnit(usage);
 		break;
 	case MessageType::LIGHTING:
 		// float + transition
 		if (editMessage1)
-			message.value.f = stepValue(usage, false, message.value.f, delta);
+			message.value.f32 = stepValue(usage, false, message.value.f32, delta);
 		if (editMessage2)
 			message.transition = clamp(message.transition + delta, 0, 65535);
-		stream << underline(getDisplayValue(usage, false, message.value.f), editMessage1) << getDisplayUnit(usage) << ' ';
+		stream << underline(getDisplayValue(usage, false, message.value.f32), editMessage1) << getDisplayUnit(usage) << ' ';
 
 		// transition time in 1/10 s
 		stream << underline(dec(message.transition / 10) + '.' + dec(message.transition % 10), editMessage2) << 's';
@@ -1288,7 +1311,7 @@ AwaitableCoroutine RoomControl::messageLogger(Interface &interface, uint8_t id) 
 			case MessageType::CONCENTRATION:
 			case MessageType::LIGHTING: {
 				bool relative = (event.info.type & MessageType::CMD) != 0 && event.message.command != 0;
-				stream << getDisplayValue(usage, relative, event.message.value.f) << getDisplayUnit(usage);
+				stream << getDisplayValue(usage, relative, event.message.value.f32) << getDisplayUnit(usage);
 				break;
 			}
 			case MessageType::METERING:
@@ -1363,11 +1386,15 @@ AwaitableCoroutine RoomControl::messageGenerator(Interface &interface, uint8_t i
 				case MessageType::TERNARY:
 					message.value.u8 = 1;
 					break;
+				//case MessageType::MULTISTATE:
+				case MessageType::ENUM:
+					message.value.u16 = 0;
+					break;
 				case MessageType::LEVEL:
 				case MessageType::PHYSICAL:
 				case MessageType::CONCENTRATION:
 				case MessageType::LIGHTING:
-					message.value.f = getDefaultFloatValue(usage);
+					message.value.f32 = getDefaultFloatValue(usage);
 					break;
 				default:;
 				}
@@ -1426,6 +1453,7 @@ AwaitableCoroutine RoomControl::functionsMenu() {
 
 		if (menu.entry("Add")) {
 			FunctionFlash flash;
+			flash.setType(FunctionFlash::Type::SWITCH);
 			co_await functionMenu(count, flash);
 		}
 
@@ -1436,33 +1464,7 @@ AwaitableCoroutine RoomControl::functionsMenu() {
 		co_await menu.show();
 	}
 }
-/*
-static void editDuration100(Menu &menu, Menu::Stream &stream, uint16_t &duration) {
-	auto delta = menu.getDelta();
-	auto d = unpackHourDuration100(duration);
 
-	// edit duration
-	int edit = menu.getEdit(3);
-	bool editMinutes = edit == 1;
-	bool editSeconds = edit == 2;
-	bool editHundredths = edit == 3;
-	if (editMinutes)
-		d.minutes = clamp(d.minutes + delta, 0, 9);
-	if (editSeconds)
-		d.seconds = clamp(d.seconds + delta, 0, 59);
-	if (editHundredths)
-		d.hundredths = clamp(d.hundredths + delta, 0, 99);
-
-	duration = packHourDuration100(d);
-
-	// duration
-	stream
-		<< underline(dec(d.minutes, 1), editMinutes) << ":"
-		<< underline(dec(d.seconds, 2), editSeconds) << "."
-		<< underline(dec(d.hundredths, 2), editHundredths);
-	menu.entry();
-}
-*/
 static void editDuration(Menu &menu, Menu::Stream &stream, uint16_t &duration, int resolution) {
 	auto delta = menu.getDelta();
 	auto d = unpackMinuteDuration(duration, resolution);
@@ -1667,7 +1669,7 @@ AwaitableCoroutine RoomControl::functionMenu(int index, FunctionFlash &flash) {
 			stream << "Timeout: ";
 			editDuration(menu, stream, config.timeout);
 
-			// step count
+			// animation step count
 			stream = menu.stream();
 			stream << "Step Count: ";
 			int editStepCount = menu.getEdit(1);
@@ -1676,42 +1678,8 @@ AwaitableCoroutine RoomControl::functionMenu(int index, FunctionFlash &flash) {
 			stream << underline(dec(config.stepCount), editStepCount);
 			menu.entry();
 
-			// steps
+			// animation steps
 			editColorSettings(menu, config.stepCount, config.steps, false);
-			/*for (int i = 0; i < config.stepCount; ++i) {
-				auto &step = config.steps[i];
-
-				// brightness
-				stream = menu.stream();
-				stream << "Brightness: ";
-				int editBrightness = menu.getEdit(1);
-				if (editBrightness)
-					step.brightness = clamp(step.brightness + delta, 0, 100);
-				stream << underline(dec(step.brightness), editBrightness) << '%';
-				menu.entry();
-
-				// color
-				stream = menu.stream();
-				stream << "Hue: ";
-				int editHue = menu.getEdit(1);
-				if (editHue)
-					step.hue = (step.hue + 72 + delta) % 72;
-				stream << underline(dec(step.hue * 5), editHue);
-				stream << ' ' << colorNames[((step.hue + 1) / 3) % 24];
-				menu.entry();
-				stream = menu.stream();
-				stream << "Saturation: ";
-				int editSaturation = menu.getEdit(1);
-				if (editSaturation)
-					step.saturation = clamp(step.saturation + delta, 0, 100);
-				stream << underline(dec(step.saturation), editSaturation) << '%';
-				menu.entry();
-
-				// fade time
-				stream = menu.stream();
-				stream << "Fade: ";
-				editDuration(menu, stream, step.fade, 10);
-			}*/
 
 			// fade times
 			stream = menu.stream();
@@ -2098,9 +2066,9 @@ static int getSize(RoomControl::FunctionFlash::Type type) {
 }
 
 void RoomControl::FunctionFlash::setType(Type type) {
-	int oldSize = (getSize(this->type) + 3) / 4;
+	int oldSize = this->type == FunctionFlash::Type::INVALID ? 0 : (getSize(this->type) + 3) / 4;
 	int newSize = (getSize(type) + 3) / 4;
-	bool keepConnections = getFunctionInfo(this->type).type == getFunctionInfo(type).type;
+	bool keepConnections = this->type == type;//getFunctionInfo(this->type).typeClass == getFunctionInfo(type).typeClass;
 	this->type = type;
 
 	if (keepConnections) {
@@ -2126,6 +2094,8 @@ void RoomControl::FunctionFlash::setType(Type type) {
 
 	// set default config
 	switch (this->type) {
+	case RoomControl::FunctionFlash::Type::SWITCH:
+		break;
 	case RoomControl::FunctionFlash::Type::LIGHT: {
 		auto &config = getConfig<Light::Config>();
 		config.settings[0] = {100, 10};
@@ -2216,10 +2186,10 @@ struct FloatValue {
 	void apply(Message const &message) {
 		if (message.command == 0) {
 			// set
-			this->value = message.value.f;
+			this->value = message.value.f32;
 		} else {
 			// step
-			this->value += message.value.f;
+			this->value += message.value.f32;
 		}
 	}
 
@@ -2295,7 +2265,12 @@ Coroutine RoomControl::Switch::start(RoomControl &roomControl) {
 		}
 
 		// process message
-		state.apply(message);
+		bool changed = state.apply(message);
+
+		if (!changed) {
+			// nothing to do
+			continue;
+		}
 
 		// publish
 		for (int i = 0; i < outputCount; ++i) {
@@ -2993,14 +2968,14 @@ Coroutine RoomControl::TimedBlind::start(RoomControl &roomControl) {
 			break;
 		case 2: {
 			// position in
-			auto p = maxPosition * message.value.f;
+			auto p = maxPosition * message.value.f32;
 			if (message.command == 0) {
 				// set position
-				Terminal::out << "set position " << flt(message.value.f) << '\n';
+				Terminal::out << "set position " << flt(message.value.f32) << '\n';
 				targetPosition = p;
 			} else {
 				// step position
-				Terminal::out << "step position " << flt(message.value.f) << '\n';
+				Terminal::out << "step position " << flt(message.value.f32) << '\n';
 				targetPosition += p;
 				break;
 			}
@@ -3111,7 +3086,7 @@ Coroutine RoomControl::HeatingControl::start(RoomControl &roomControl) {
 			break;
 		case 5:
 			// measured temperature in
-			temperature = message.value.f;
+			temperature = message.value.f32;
 			Terminal::out << "temperature " << flt(temperature - 273.15f) + '\n';
 			break;
 		}

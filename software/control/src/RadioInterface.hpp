@@ -89,19 +89,17 @@ private:
 		int size() {return offsetOf(GpDeviceData, plugs[this->plugCount]);}
 	};
 
-	class GpDevice /*: public Interface::Device*/ {
+	class GpDevice {
 	public:
 		// takes ownership of the data
 		GpDevice(RadioInterface *interface, GpDeviceData *data)
-			: /*interface(interface),*/ next(interface->gpDevices), data(data)
+			: next(interface->gpDevices), data(data)
 		{
 			interface->gpDevices = this;
 		}
 
 		~GpDevice();
 
-		// back pointer to interface
-		//RadioInterface *interface;
 
 		// next device
 		GpDevice *next;

@@ -8,13 +8,14 @@
 
 namespace Loop {
 
+// current time
 inline SystemTime now() {
 	timespec time;
 	clock_gettime(CLOCK_MONOTONIC, &time);
 	return {uint32_t(time.tv_sec * 1000 + time.tv_nsec / 1000000)};
 }
 
-// events for Network
+// list of file descriptors to observe readable/writable events (used in Network.cpp)
 class FileDescriptor : public LinkedListNode<FileDescriptor> {
 public:
 	virtual ~FileDescriptor();

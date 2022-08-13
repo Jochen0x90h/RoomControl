@@ -898,14 +898,14 @@ bool RadioInterface::writeZclCommand(PacketWriter &w, uint8_t zclCounter, int pl
 			w.e8(zcl::LevelControlCommand::STEP_WITH_ON_OFF);
 			w.u8(message.command == 1 ? 0x00 : 0x01);
 		}
-		w.u8(clamp(int(message.value.f * 254.0f + 0.5f), 0, 254));
+		w.u8(clamp(int(message.value.f32 * 254.0f + 0.5f), 0, 254));
 
 		// transition time in 1/10s
 		w.u16L(min(int(message.transition), 65534));
 		break;
 	}
 	case zcl::Cluster::COLOR_CONTROL: {
-		uint16_t color = clamp(int(message.value.f * 65279.0f + 0.5f), 0, 65279);
+		uint16_t color = clamp(int(message.value.f32 * 65279.0f + 0.5f), 0, 65279);
 		auto time = Timer::now();
 		auto d = time - endpoint->time;
 		if (d > 100ms || d < 0ms || endpoint->index == plugIndex) {
@@ -954,7 +954,7 @@ static bool writeZclAttribute(RadioInterface::PacketWriter &w, uint8_t zclCounte
 			w.e8(zcl::LevelControlCommand::STEP_WITH_ON_OFF);
 			w.u8(message.command == 1 ? 0x00 : 0x01);
 		}
-		w.u8(clamp(int(message.value.f * 254.0f + 0.5f), 0, 254));
+		w.u8(clamp(int(message.value.f32 * 254.0f + 0.5f), 0, 254));
 
 		// transition time in 1/10s
 		w.u16L(min(int(message.transition), 65534));

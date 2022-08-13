@@ -30,9 +30,10 @@ constexpr int INPUT_EXT_COUNT = 1;
 constexpr int OUTPUT_DEBUG_RED = 0;
 constexpr int OUTPUT_DEBUG_GREEN = 1;
 constexpr int OUTPUT_DEBUG_BLUE = 2;
-constexpr int OUTPUT_HEATING = 3;
 constexpr int OUTPUT_EXT_INDEX = 0;
 constexpr int OUTPUT_EXT_COUNT = 3;
+constexpr int OUTPUT_HEATING_INDEX = 3;
+constexpr int OUTPUT_HEATING_COUNT = 1;
 
 
 // spi

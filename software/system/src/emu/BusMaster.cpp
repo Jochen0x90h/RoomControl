@@ -1,4 +1,6 @@
 #include "../BusMaster.hpp"
+#include "StringBuffer.hpp"
+#include "StringOperators.hpp"
 #include <bus.hpp>
 #include <crypt.hpp>
 #include <util.hpp>
@@ -271,9 +273,12 @@ void handle(Gui &gui) {
 			w.e8(device.attribute);
 
 			switch (device.attribute) {
-			case bus::Attribute::MODEL_IDENTIFIER:
-				w.string("Bus");
+			case bus::Attribute::MODEL_IDENTIFIER: {
+				StringBuffer<16> b;
+				b << "Bus" << dec(device.id) << '.' << dec(device.endpointIndex);
+				w.string(b.string());
 				break;
+			}
 			case bus::Attribute::PLUG_LIST:
 				// list of plugs
 				w.data16L(device.endpoints[device.commissioning - 1][device.endpointIndex].plugs);
