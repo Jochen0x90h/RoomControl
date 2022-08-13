@@ -212,10 +212,7 @@ void init() {
 	Sound::timeout.time = Loop::now() + 1s;
 	Loop::timeouts.add(Sound::timeout);
 }
-/*
-int count() {
-	return Sound::contexts.size();
-}*/
+
 Array<Type> getTypes() {
 	return {int(Sound::types.size()), Sound::types.data()};
 }

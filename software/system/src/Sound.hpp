@@ -49,18 +49,19 @@ Array<Type> getTypes();
 
 /**
  * Starts playing a sound in the background
- * @param index
+ * @param index index of sound
  */
 void play(int index);
 
 /**
  * Stop a playing sound
+ * @param index index of sound
  */
 void stop(int index);
 
 /**
  * Check if a sound is playing
- * @param index
+ * @param index index of sound
  * @return true if playing
  */
 bool isPlaying(int index);
