@@ -40,14 +40,19 @@ void ep0Send(void const *data, int length) {
 
 // endpoints 1 - 7
 struct Endpoint {
-	// receive
-	bool receiveBusy;
+	// receive (OUT)
+	enum State {
+		IDLE,
+		BUFFER_READY,
+		BUSY,
+	};
+	State receiveState = IDLE;
 	int maxReceiveLength;
 	int receiveLength = 0;
 	Waitlist<ReceiveParameters> receiveWaitlist;
 
-	// send
-	bool sendBusy;
+	// send (IN)
+	bool sendBusy = false;
 	int sendLength = 0;
 	Waitlist<SendParameters> sendWaitlist;
 };
@@ -82,7 +87,6 @@ void handle() {
 
 			switch (bmRequestType) {
 			case usb::Request::STANDARD_DEVICE_OUT:
-			//case usb::Request::OUT | usb::Request::TYPE_STANDARD | usb::Request::RECIPIENT_DEVICE:
 				// write request to standard device
 				if (bRequest == 0x05) {
 					// set address, handled by hardware
@@ -99,7 +103,6 @@ void handle() {
 				}
 				break;
 			case usb::Request::STANDARD_DEVICE_IN:
-			//case usb::Request::IN | usb::Request::TYPE_STANDARD | usb::Request::RECIPIENT_DEVICE:
 				// read request to standard device
 				if (bRequest == 0x06) {
 					// get descriptor from user code by using the callback
@@ -120,7 +123,6 @@ void handle() {
 				}
 				break;
 			case usb::Request::STANDARD_INTERFACE_OUT:
-			//case usb::Request::OUT | usb::Request::TYPE_STANDARD | usb::Request::RECIPIENT_INTERFACE:
 				// write request to standard interface
 				if (bRequest == 0x11) {
 					// set interface
@@ -135,7 +137,6 @@ void handle() {
 				}
 				break;
 			case usb::Request::VENDOR_INTERFACE_OUT:
-			//case usb::Request::OUT | usb::Request::TYPE_VENDOR | usb::Request::RECIPIENT_INTERFACE:
 				{
 					int wValue = (NRF_USBD->WVALUEH << 8) | NRF_USBD->WVALUEL;
 					int wIndex = (NRF_USBD->WINDEXH << 8) | NRF_USBD->WINDEXL;
@@ -181,7 +182,7 @@ void handle() {
 		// capture EPDATASTATUS here to be sure that we see the previous ENDEPOUT event
 		uint32_t EPDATASTATUS = NRF_USBD->EPDATASTATUS;
 
-		// handle end of receive (OUT) DMA transfer
+		// handle end of receive (OUT) DMA transfer from internal buffer to memory
 		for (int index = 1; index < USB_ENDPOINT_COUNT; ++index) {
 			if (NRF_USBD->EVENTS_ENDEPOUT[index]) {
 				// clear pending interrupt flag at peripheral
@@ -205,18 +206,16 @@ void handle() {
 					});
 
 					// check if there are more queued coroutines waiting for receive
-					ep.receiveBusy = ep.receiveWaitlist.resumeFirst([&ep, index](ReceiveParameters p) {
+					bool busy = ep.receiveWaitlist.resumeFirst([&ep, index](ReceiveParameters p) {
 						// set receive data
 						ep.maxReceiveLength = p.length;
 						ep.receiveLength = p.length;
 						NRF_USBD->EPOUT[index].PTR = intptr_t(p.data);
 
-						// write to start receiving into intermediate buffer
-						NRF_USBD->SIZE.EPOUT[index] = 0;
-
 						// don't resume yet
 						return false;
 					});
+					ep.receiveState = busy ? Endpoint::BUSY : Endpoint::IDLE;
 				}
 			}
 		}
@@ -225,6 +224,8 @@ void handle() {
 		if (EPDATASTATUS) {
 			// clear pending interrupt flags at peripheral
 			NRF_USBD->EVENTS_EPDATA = 0;
+
+			// clear flags of acknowledged data transfers (IN and OUT)
 			NRF_USBD->EPDATASTATUS = EPDATASTATUS;
 
 			for (int index = 1; index < USB_ENDPOINT_COUNT; ++index) {
@@ -233,7 +234,7 @@ void handle() {
 
 				if (EPDATASTATUS & inFlag) {
 					// finished send to host (IN)
-					auto& ep = UsbDevice::endpoints[index - 1];
+					auto &ep = UsbDevice::endpoints[index - 1];
 
 					// check if more to send
 					int sentCount = NRF_USBD->EPIN[index].AMOUNT;
@@ -270,12 +271,17 @@ void handle() {
 					// finished receive from host (OUT)
 					auto& ep = UsbDevice::endpoints[index - 1];
 
-					// get length of data in internal buffer
-					int length = NRF_USBD->SIZE.EPOUT[index];
+					if (ep.receiveState == Endpoint::BUSY) {
+						// get length of data in internal buffer
+						int bufferLength = NRF_USBD->SIZE.EPOUT[index];
 
-					// start DMA transfer of received data from internal buffer to memory
-					NRF_USBD->EPOUT[index].MAXCNT = min(ep.receiveLength, length);
-					NRF_USBD->TASKS_STARTEPOUT[index] = TRIGGER;
+						// start DMA transfer of received data from internal buffer to memory
+						NRF_USBD->EPOUT[index].MAXCNT = min(ep.receiveLength, bufferLength);
+						NRF_USBD->TASKS_STARTEPOUT[index] = TRIGGER;
+					} else {
+						// no receive is in progress, therefore memoize that data for next receive is ready
+						ep.receiveState = Endpoint::BUFFER_READY;
+					}
 				}
 			}
 		}
@@ -328,6 +334,18 @@ void init(
 void enableEndpoints(uint8_t inFlags, uint8_t outFlags) {
 	NRF_USBD->EPINEN = inFlags;
 	NRF_USBD->EPOUTEN = outFlags;
+
+	for (int index = 1; index < 8; ++index) {
+		if (inFlags & (1 << index)) {
+			NRF_USBD->DTOGGLE = index | N(USBD_DTOGGLE_IO, In) | N(USBD_DTOGGLE_VALUE, Data0);
+		}
+		if (outFlags & (1 << index)) {
+			NRF_USBD->DTOGGLE = index | N(USBD_DTOGGLE_IO, Out) | N(USBD_DTOGGLE_VALUE, Data0);
+
+			// write any value to start receiving OUT transfers into intermediate buffer
+			NRF_USBD->SIZE.EPOUT[index] = 0;
+		}
+	}
 }
 
 Awaitable<ReceiveParameters> receive(int index, int &length, void *data) {
@@ -335,15 +353,22 @@ Awaitable<ReceiveParameters> receive(int index, int &length, void *data) {
 	auto& ep = UsbDevice::endpoints[index - 1];
 
 	// check if usb receiver is idle
-	if (!ep.receiveBusy) {
+	if (ep.receiveState != Endpoint::BUSY) {
 		// set receive data
-		ep.receiveBusy = true;
 		ep.maxReceiveLength = length;
 		ep.receiveLength = length;
 		NRF_USBD->EPOUT[index].PTR = intptr_t(data);
 
-		// write to start receiving into intermediate buffer
-		NRF_USBD->SIZE.EPOUT[index] = 0;
+		// check if data is already in the internal buffer
+		if (ep.receiveState == Endpoint::BUFFER_READY) {
+			// get length of data in internal buffer
+			int bufferLength = NRF_USBD->SIZE.EPOUT[index];
+
+			// start DMA transfer of received data from internal buffer to memory
+			NRF_USBD->EPOUT[index].MAXCNT = min(length, bufferLength);
+			NRF_USBD->TASKS_STARTEPOUT[index] = TRIGGER;
+		}
+		ep.receiveState = Endpoint::BUSY;
 	}
 
 	return {ep.receiveWaitlist, length, data};

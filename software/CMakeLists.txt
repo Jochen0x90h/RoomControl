@@ -446,7 +446,7 @@ target_include_directories(mdnsSniffer
 target_link_libraries(mdnsSniffer ${LIBRARIES})
 
 
-endif() # POSIX
+endif() # POSIX AND NOT EMU
 
 
 # wall switch executable
@@ -555,16 +555,20 @@ add_system_test_executable(Timer)
 add_system_test_executable(UsbDevice)
 
 
-if(${BOARD} STREQUAL "emuControl")
+if(POSIX AND NOT EMU)
 
 # system/usb test host, host for UsbTest on device (command line tool)
 add_executable(UsbTestHost
 	system/test/UsbTestHost.cpp
+	${UTIL}
+	${PROTOCOL}
+	${TERMINAL}
 )
 target_include_directories(UsbTestHost
 	PRIVATE
-	protocol/src
 	util/src
+	protocol/src
+	system/src
 )
 target_link_libraries(UsbTestHost ${LIBRARIES})
 
@@ -591,7 +595,6 @@ target_include_directories(MqttSnClientTest
 	util/src
 	glad
 )
-#conan_target_link_libraries(MqttSnClientTest)
 target_link_libraries(MqttSnClientTest ${LIBRARIES})
 
 
@@ -617,9 +620,12 @@ target_include_directories(MqttSnBrokerTest
 	util/src
 	glad
 )
-#conan_target_link_libraries(MqttSnBrokerTest)
 target_link_libraries(MqttSnBrokerTest ${LIBRARIES})
 
+endif() # POSIX AND NOT EMU
+
+
+if(${BOARD} STREQUAL "emuControl")
 
 # test for BME680 air sensor
 add_executable(BME680Test

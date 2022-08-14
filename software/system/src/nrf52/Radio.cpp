@@ -173,7 +173,7 @@ struct Context {
 
 	// check if a packet for given pan id and destination address is pending (called on receive of data request)
 	bool isPending(uint16_t panId, int addressLength, uint8_t const *destinationAddress) {
-		return this->sendWaitlist.find([panId, addressLength, destinationAddress](SendParameters &p) {
+		return this->sendWaitlist.contains([panId, addressLength, destinationAddress](SendParameters &p) {
 			// check pan id
 			if (panId != (p.packet[4] | (p.packet[5] << 8)))
 				return false;
@@ -291,7 +291,9 @@ static void selectForSend() {
 		auto flags = context.flags;
 
 		// check if a send operation can be started for this context
-		if (context.sendWaitlist.find([index, flags](SendParameters &p) {
+		if (context.sendWaitlist.contains([index, flags](SendParameters &p) {
+			if (p.result != 255)
+				return false;
 			int length = p.packet[0] - 2;
 			auto sendFlags = SendFlags(p.packet[1 + length]);
 			if ((sendFlags & SendFlags::AWAIT_DATA_REQUEST) == 0) {
@@ -348,10 +350,6 @@ static void backoff() {
 	// fail when maximum backoff count is reached
 	if (Radio::backoffCount >= Radio::maxBackoffCount) {
 		setSendResult(0);
-
-		// check if more to send
-		selectForSend();
-
 		return;
 	}
 
@@ -391,9 +389,6 @@ static void startSend() {
 
 // set result of send operation
 static void setSendResult(uint8_t result) {
-	// sender is idle again
-	Radio::sendState = SendState::IDLE;
-
 	// set result unless send operation was cancelled
 	if (Radio::sendResult != nullptr) {
 		*Radio::sendResult = result;
@@ -500,6 +495,12 @@ void handle() {
 		// check if a send operation has finished
 		if (NRF_EGU0->EVENTS_TRIGGERED[2]) {
 			NRF_EGU0->EVENTS_TRIGGERED[2] = 0;
+
+			// radio is idle again
+			Radio::sendState = SendState::IDLE;
+
+			// sent more packets if any are available
+			selectForSend();
 
 			// resume coroutines for finished send operations
 			for (auto &c : Radio::contexts) {
@@ -614,7 +615,7 @@ void init() {
 		| N(RADIO_INTENSET_DISABLED, Set);
 	enableInterrupt(RADIO_IRQn);
 
-	// capture time when packet was received or sent
+	// capture time when packet was received or sent (END -> CAPTURE[2])
 	NRF_PPI->CHENSET = 1 << 27;
 
 	// init event generator
@@ -641,11 +642,6 @@ void RADIO_IRQHandler(void) {
 		// start receive
 		if (Radio::receiverEnabled && !Radio::receiveQueue.isFull())
 			startReceive(); // -> END
-
-		// check if more to send (this is executed after a send operation completes)
-		if (Radio::sendState == SendState::IDLE) {
-			selectForSend();
-		}
 	}
 
 	// check if end of energy detection
@@ -704,9 +700,6 @@ void RADIO_IRQHandler(void) {
 
 				// set state of sent packet to success, send state becomes idle
 				setSendResult(Radio::backoffCount);
-
-				// check if more to send
-				selectForSend();
 			}
 		}
 
@@ -931,9 +924,6 @@ void TIMER0_IRQHandler(void) {
 		} else {
 			// sent packet was not acknowledged: set result to failed, send state becomes idle
 			setSendResult(0);
-
-			// check if more to send
-			selectForSend();
 		}
 	}
 
@@ -1010,7 +1000,7 @@ void stop() {
 	Radio::receiveQueue.clear();
 	Radio::sendState = SendState::IDLE;
 	for (auto &context : Radio::contexts) {
-		/*context.receiveWaitingQueue.resumeAll([](ReceiveParameters &p) {
+		/*context.receiveQueue.resumeAll([](ReceiveParameters &p) {
 			// coroutines waiting for receive get a null pointer
 			p.data = nullptr;
 			return true;
@@ -1095,7 +1085,7 @@ Awaitable<SendParameters> send(int index, uint8_t *packet, uint8_t &result) {
 
 	// get send flags
 	int length = packet[0] - 2;
-	SendFlags sendFlags = SendFlags(packet[1 + length]);
+	auto sendFlags = SendFlags(packet[1 + length]);
 
 	// check if we can immediately start to send (idle and don't need to wait for data request)
 	if (Radio::sendState == SendState::IDLE && sendFlags == SendFlags::NONE)

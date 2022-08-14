@@ -185,13 +185,15 @@ Coroutine send(int index) {
 			// send over the air
 			uint8_t result;
 			int r = co_await select(Radio::send(index, packet, result), barriers[index][macCounter].wait());
+			Debug::setRedLed(false);
+			Debug::setBlueLed(true);
 			if (r == 1) {
 				// send mac counter and result back to usb host
 				packet[0] = macCounter;
 				packet[1] = result;
 				co_await UsbDevice::send(1 + index, 2, packet);
 			}
-			Debug::setRedLed(false);
+			Debug::setBlueLed(false);
 		}
 	}
 }
@@ -215,14 +217,6 @@ int main(void) {
 			// enable bulk endpoints (keep control endpoint 0 enabled in both directions)
 			int flags = ~(0xffffffff << (1 + RADIO_CONTEXT_COUNT));
 			UsbDevice::enableEndpoints(flags, flags);
-
-			// start coroutines to send and receive
-			for (int index = 0; index < RADIO_CONTEXT_COUNT; ++index) {
-				for (int i = 0; i < 64; ++i) {
-					receive(index);
-					send(index);
-				}
-			}
 		},
 		[](uint8_t bRequest, uint16_t wValue, uint16_t wIndex) {
 			switch (Radio::Request(bRequest)) {
@@ -271,6 +265,14 @@ int main(void) {
 	Radio::start(15);
 	Radio::enableReceiver(true);
 	Radio::setFlags(0, Radio::ContextFlags::PASS_ALL);
+
+	// start coroutines to send and receive
+	for (int index = 0; index < RADIO_CONTEXT_COUNT; ++index) {
+		for (int i = 0; i < 64; ++i) {
+			receive(index);
+			send(index);
+		}
+	}
 
 	Loop::run();
 }

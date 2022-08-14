@@ -1,12 +1,11 @@
 #include <usb.hpp>
-#include <stdio.h>
-#include <string.h>
-#include <unistd.h>
+#include <Terminal.hpp>
 #include <libusb.h>
+#include "StringOperators.hpp"
 
 
-// host for usbTest
-// flash usbTest onto the device, then run usbTestHost
+// host for UsbDeviceTest
+// flash UsbDeviceTest onto the device, then run this
 
 
 // https://github.com/libusb/libusb/blob/master/examples/listdevs.c
@@ -20,26 +19,25 @@ static void printDevices(libusb_device **devs) {
 		struct libusb_device_descriptor desc;
 		int r = libusb_get_device_descriptor(dev, &desc);
 		if (r < 0) {
-			fprintf(stderr, "failed to get device descriptor");
+			Terminal::err << "failed to get device descriptor\n";
 			return;
 		}
 
-		printf("%04x:%04x (bus %d, device %d)",
-			desc.idVendor, desc.idProduct,
-			libusb_get_bus_number(dev), libusb_get_device_address(dev));
+		Terminal::out << hex(desc.idVendor) << ':' << hex(desc.idProduct)
+			<< " (bus " << dec(libusb_get_bus_number(dev)) << ", device " << dec(libusb_get_device_address(dev)) << ")";
 
 		r = libusb_get_port_numbers(dev, path, sizeof(path));
 		if (r > 0) {
-			printf(" path: %d", path[0]);
+			Terminal::out << " path: " << dec(path[0]);
 			for (j = 1; j < r; j++)
-				printf(".%d", path[j]);
+				Terminal::out << "." << dec(path[j]);
 		}
-		printf("\n");
+		Terminal::out << '\n';
 	}
 }
 
 // https://github.com/libusb/libusb/blob/master/examples/testlibusb.c
-static int printDevice(libusb_device *dev) {
+/*static int printDevice(libusb_device *dev) {
 	libusb_device_descriptor desc;
 	libusb_device_handle *handle = NULL;
 	unsigned char string[256];
@@ -47,7 +45,7 @@ static int printDevice(libusb_device *dev) {
 
 	ret = libusb_get_device_descriptor(dev, &desc);
 	if (ret < 0) {
-		fprintf(stderr, "failed to get device descriptor");
+		Terminal::err << "failed to get device descriptor\n";
 		return -1;
 	}
 
@@ -131,7 +129,7 @@ static int printDevice(libusb_device *dev) {
 
 
 	return 0;
-}
+}*/
 
 // vendor specific control request
 enum class Request : uint8_t {
@@ -153,8 +151,8 @@ int controlOut(libusb_device_handle *handle, Request request, uint16_t wValue, u
 }
 
 // print test status
-void printStatus(char const* message, bool status) {
-	printf("%s: %s\n", message, status ? "ok" : "error");
+void printStatus(String message, bool status) {
+	Terminal::out << message << ": " << (status ? "ok" : "error") << '\n';
 }
 
 int main(void) {
@@ -169,13 +167,13 @@ int main(void) {
 		libusb_exit(NULL);
 		return (int) cnt;
 	}
-/*
+
 	// print list of devices
 	printDevices(devs);
 	for (int i = 0; devs[i]; ++i) {
-		printDevice(devs[i]);
+		//printDevice(devs[i]);
 	}
-*/
+
 	// iterate over devices
 	for (int i = 0; devs[i]; ++i) {
 		libusb_device *dev = devs[i];
@@ -184,7 +182,7 @@ int main(void) {
 		libusb_device_descriptor desc;
 		int ret = libusb_get_device_descriptor(dev, &desc);
 		if (ret != LIBUSB_SUCCESS) {
-			fprintf(stderr, "get device descriptor error: %d\n", ret);
+			Terminal::err << "get device descriptor error: " << dec(ret) << '\n';
 			continue;
 		}
 		
@@ -202,44 +200,49 @@ int main(void) {
 		libusb_device_handle *handle;
 		ret = libusb_open(dev, &handle);
 		if (ret != LIBUSB_SUCCESS) {
-			fprintf(stderr, "open error: %d\n", ret);
+			Terminal::err << "open error: " << dec(ret) << '\n';
 			continue;
 		}
 			
 		// set configuration (reset alt_setting, reset toggles)
 		ret = libusb_set_configuration(handle, 1);
 		if (ret != LIBUSB_SUCCESS) {
-			fprintf(stderr, "set configuration error: %d\n", ret);
+			Terminal::err << "set configuration error: " << dec(ret) << '\n';
 			continue;
 		}
 
 		// claim interface with bInterfaceNumber = 0
 		ret = libusb_claim_interface(handle, 0);
 		if (ret != LIBUSB_SUCCESS) {
-			fprintf(stderr, "claim interface error: %d\n", ret);
+			Terminal::err << "claim interface error: " << dec(ret) << '\n';
 			continue;
 		}
 
 		//ret = libusb_set_interface_alt_setting(handle, 0, 0);
-		//printf("set alternate setting %d\n", ret);
+		//Terminal::out << "set alternate setting " << dec(ret) << '\n';
 
 
 		// test control request
-		ret = controlOut(handle, Request::RED, 1, 0);
-		ret = controlOut(handle, Request::GREEN, 0, 1);
+		ret = controlOut(handle, Request::RED, 1, 0); // set on if wValue != 0
 		ret = controlOut(handle, Request::RED, 0, 0);
+		ret = controlOut(handle, Request::GREEN, 0, 1); // set on if wIndex != 0
 		ret = controlOut(handle, Request::GREEN, 0, 0);
-		ret = controlOut(handle, Request::BLUE, 5, 5);
+		ret = controlOut(handle, Request::BLUE, 5, 5); // set on if wValue == wIndex
 		ret = controlOut(handle, Request::BLUE, 0, 256);
 
 		
-		// loop
-		uint8_t data[128] = {};
-		int sendLength = 0;
+		uint8_t data[129] = {};
 		int transferred;
+
+		// flush out data from last run
+		for (int i = 0; i < 4; ++i)
+			libusb_bulk_transfer(handle, 1 | usb::IN, data, 129, &transferred, 100);
+
+		// echo loop: send data to device and check if we get back the same data
+		int sendLength = 5;
 		bool allOk = true;
-		while (true) {
-			printf("length: %d\n", sendLength);
+		for (int iter = 0; iter < 1000000; ++iter) {
+			Terminal::out << "length: " << dec(sendLength) << '\n';
 
 			// send to device
 			for (int i = 0; i < sendLength; ++i) {
@@ -247,7 +250,7 @@ int main(void) {
 			}
 			ret = libusb_bulk_transfer(handle, 1 | usb::OUT, data, sendLength, &transferred, 10000);
 			if (ret == LIBUSB_ERROR_TIMEOUT)
-				printf("send timeout!\n");
+				Terminal::out << "send timeout!\n";
 			printStatus("sent", ret == 0 && transferred == sendLength);
 			allOk &= ret == 0 && transferred == sendLength;
 			
@@ -255,12 +258,26 @@ int main(void) {
 			if (sendLength > 0 && (sendLength & 63) == 0)
 				libusb_bulk_transfer(handle, 1 | usb::OUT, data, 0, &transferred, 1000);
 
+			// debug: check if one packet of maximum 64 bytes can be written while the device is not in UsbDevice::receive()
+			//int transferred2;
+			//auto ret2 = libusb_bulk_transfer(handle, 1 | usb::OUT, data, 5, &transferred2, 0);
+
 			// receive from device (we get back the same data that we sent)
-			ret = libusb_bulk_transfer(handle, 1 | usb::IN, data, 128, &transferred, 10000);
+			// note: libusb does not wait for the zero length packet if length is a multiple of 64, therefore use 129 instead of 128
+			ret = libusb_bulk_transfer(handle, 1 | usb::IN, data, 129, &transferred, 10000);
 			if (ret == LIBUSB_ERROR_TIMEOUT)
-				printf("receive timeout!\n");
-			printStatus("received", ret == 0 && transferred == sendLength);
+				Terminal::out << "receive timeout!\n";
+			//printStatus("received", ret == 0 && transferred == sendLength);
+			Terminal::out << "received: ";
+			if (ret != 0) {
+				Terminal::out << "error " << dec(ret) << '\n';
+			} else if (transferred != sendLength) {
+				Terminal::out << dec(transferred) << " != " << dec(sendLength) << '\n';
+			} else {
+				Terminal::out << "ok\n";
+			}
 			allOk &= ret == 0 && transferred == sendLength;
+
 
 			// check received data
 			bool ok = true;
@@ -273,7 +290,13 @@ int main(void) {
 
 			printStatus("all", allOk);
 
-			usleep(1000000);
+			// debug: remove additional packet
+			//libusb_bulk_transfer(handle, 1 | usb::IN, data, 129, &transferred, 10000);
+
+			// wait
+			//usleep(1000000);
+
+			// modify the send length
 			sendLength = (sendLength + 5) % 129;
 		}
 		break;
