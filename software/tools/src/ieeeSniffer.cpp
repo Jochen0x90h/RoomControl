@@ -217,7 +217,7 @@ void handleIeee(PacketReader &r) {
 				handleGp(mac, r);
 				break;
 			default:
-				Terminal::out << ("Unknown Nwk Frame Version!\n");
+				Terminal::out << ("Unknown NWK Frame Version!\n");
 			}
 		}
 		break;
@@ -251,7 +251,7 @@ void handleGp(uint8_t const *mac, PacketReader &r) {
 
 	// device id
 	uint32_t deviceId = r.u32L();
-	Terminal::out << ("Device Id: " + hex(deviceId) + "; ");
+	Terminal::out << "Device Id: " << hex(deviceId) << "; ";
 
 	if (securityLevel == gp::NwkExtendedFrameControl::SECURITY_LEVEL_NONE
 		&& r.peekE8<gp::Command>() == gp::Command::COMMISSIONING)
@@ -532,12 +532,15 @@ void handleNwk(PacketReader &r) {
 			}
 			Terminal::out << '\n';
 			break;
+		case zb::NwkCommand::NETWORK_STATUS:
+			Terminal::out << "Network Status\n";
+			break;
 		case zb::NwkCommand::LEAVE:
 			Terminal::out << "Leave\n";
 			break;
 		case zb::NwkCommand::ROUTE_RECORD:
 			// https://www.digi.com/resources/documentation/Digidocs/90001942-13/concepts/c_source_routing.htm
-			Terminal::out << ("Route Record:");
+			Terminal::out << "Route Record:";
 			{
 				uint8_t relayCount = r.u8();
 				for (int i = 0; i < relayCount; ++i) {
@@ -548,16 +551,16 @@ void handleNwk(PacketReader &r) {
 			Terminal::out << ("\n");
 			break;
 		case zb::NwkCommand::REJOIN_REQUEST:
-			Terminal::out << ("Rejoin Request\n");
+			Terminal::out << "Rejoin Request\n";
 			break;
 		case zb::NwkCommand::REJOIN_RESPONSE:
-			Terminal::out << ("Rejoin Response\n");
+			Terminal::out << "Rejoin Response\n";
 			break;
 		case zb::NwkCommand::LINK_STATUS:
-			Terminal::out << ("Link Status\n");
+			Terminal::out << "Link Status\n";
 			break;
 		default:
-			Terminal::out << ("Unknown NWK Command\n");
+			Terminal::out << "Unknown NWK Command\n";
 		}
 	} else if (frameType == zb::NwkFrameControl::TYPE_DATA) {
 		// nwk data
@@ -733,10 +736,10 @@ void handleZdp(PacketReader &r) {
 		Terminal::out << ("Bind Response\n");
 		break;
 	case zb::ZdpCommand::PERMIT_JOIN_REQUEST:
-		Terminal::out << ("Permit Joint Request\n");
+		Terminal::out << "Permit Joint Request\n";
 		break;
 	default:
-		Terminal::out << ("Unknown ZDP Command 0x" + hex(command) + "\n");
+		Terminal::out << "Unknown ZDP Command 0x" << hex(command) << "\n";
 	}
 }
 
@@ -882,48 +885,54 @@ void handleZcl(PacketReader &r, uint8_t destinationEndpoint) {
 	} else if (frameType == zcl::FrameControl::TYPE_CLUSTER_SPECIFIC && !manufacturerSpecificFlag) {
 		switch (cluster) {
 		case zcl::Cluster::BASIC:
-			Terminal::out << ("Cluster: Basic\n");
+			Terminal::out << "Cluster: Basic\n";
 			break;
 		case zcl::Cluster::POWER_CONFIGURATION:
-			Terminal::out << ("Cluster: Power Configuration\n");
+			Terminal::out << "Cluster: Power Configuration\n";
 			break;
 		case zcl::Cluster::ON_OFF:
-			Terminal::out << ("Cluster: On/Off; ");
+			Terminal::out << "Cluster: On/Off; ";
 			{
 				uint8_t command = r.u8();
 				switch (command) {
 				case 0:
-					Terminal::out << ("Off\n");
+					Terminal::out << "Off\n";
 					break;
 				case 1:
-					Terminal::out << ("On\n");
+					Terminal::out << "On\n";
 					break;
 				case 2:
-					Terminal::out << ("Toggle\n");
+					Terminal::out << "Toggle\n";
 					break;
 				default:
-					Terminal::out << ("Unknown Command\n");
+					Terminal::out << "Unknown Command\n";
 				}
 			}
 			break;
+		case zcl::Cluster::LEVEL_CONTROL:
+			Terminal::out << "Cluster: Level Control; \n";
+			break;
 		case zcl::Cluster::GREEN_POWER:
-			Terminal::out << ("Cluster: Green Power; ");
+			Terminal::out << "Cluster: Green Power; ";
 			{
 				uint8_t command = r.u8();
 				switch (command) {
 				case 2:
-					Terminal::out << ("GP Proxy Commissioning Mode\n");
+					Terminal::out << "GP Proxy Commissioning Mode\n";
 					break;
 				default:
-					Terminal::out << ("Unknown Command\n");
+					Terminal::out << "Unknown Command\n";
 				}
 			}
 			break;
+		case zcl::Cluster::COLOR_CONTROL:
+			Terminal::out << "Cluster: Color Control; \n";
+			break;
 		default:
-			Terminal::out << ("Unknown Cluster 0x" + hex(cluster) + "\n");
+			Terminal::out << "Unknown Cluster 0x" << hex(cluster) << "\n";
 		}
 	} else {
-		Terminal::out << ("Unknown ZCL Frame Type\n");
+		Terminal::out << "Unknown ZCL Frame Type\n";
 	}
 }
 

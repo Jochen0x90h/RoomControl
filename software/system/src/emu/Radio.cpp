@@ -1,8 +1,11 @@
 #include "../Radio.hpp"
+#include "StringOperators.hpp"
 #include <usb.hpp>
 #include <emu/Loop.hpp>
+#include <Terminal.hpp>
 #include <crypt.hpp>
 #include <ieee.hpp>
+#include <pcap.hpp>
 #include <Nonce.hpp>
 #include <Queue.hpp>
 #include <boardConfig.hpp>
@@ -16,18 +19,39 @@ namespace Radio {
 int channel;
 
 
+// radio connected via USB
+// -----------------------
+
+libusb_device_handle *device = nullptr;
+
+
 // context
 // -------
 
 uint64_t longAddress;
+
 
 struct Context {
 	ContextFlags volatile flags;
 	uint16_t volatile pan;
 	uint16_t volatile shortAddress;
 
+	uint8_t endpoint;
+
+	// receive
 	Waitlist<ReceiveParameters> receiveWaitlist;
+	libusb_transfer *receiveTransfer;
+	uint8_t receiveBuffer[sizeof(Radio::Packet) - 1];
+	void startReceive();
+
+	// send
 	Waitlist<SendParameters> sendWaitlist;
+	libusb_transfer *sendTransfer;
+	int sendLength;
+	uint8_t sendBuffer[sizeof(Radio::Packet) - 1];
+	Queue<uint8_t, 16> cancelQueue;
+	bool sendBusy = false;
+	void startSend();
 
 	
 	bool filter(uint8_t const *data) const {
@@ -82,6 +106,56 @@ struct Context {
 
 Context contexts[RADIO_CONTEXT_COUNT];
 
+// receive
+// -------
+
+// callback for receive via usb
+void onReceived(libusb_transfer *transfer) {
+	auto &context = *reinterpret_cast<Context *>(transfer->user_data);
+	int length = transfer->actual_length;
+	auto *buffer = transfer->buffer;
+
+	if (length == 1) {
+		// got a result of an energy detection
+		uint8_t ed = buffer[0];
+
+	} else if (length == 2) {
+		// got a result of a send operation
+		uint8_t macCounter = buffer[0];
+		uint8_t result = buffer[1];
+		//Terminal::out << "rec mac " << dec(macCounter) << ' ' << dec(result) << '\n';
+
+		// resume coroutine that sent the packet with matching mac counter
+		context.sendWaitlist.resumeAll([macCounter, result](SendParameters &p) {
+			// check if mac counter matches
+			if (p.packet[3] == macCounter) {
+				p.result = result;
+				return true;
+			}
+			return false;
+		});
+	} else if (length >= 2 + Radio::RECEIVE_EXTRA_LENGTH) {
+		// got a receive packet
+
+		// resume first waiting coroutine
+		context.receiveWaitlist.resumeFirst([length, buffer](ReceiveParameters &p) {
+			// convert to radio format where first byte is length of payload and crc, but no extra data
+			p.packet[0] = length - Radio::RECEIVE_EXTRA_LENGTH + 2;
+			array::copy(length, p.packet + 1, buffer);
+			return true;
+		});
+	}
+
+	// wait for next packet
+	context.startReceive();
+}
+
+// start receiving
+void Context::startReceive() {
+	libusb_fill_bulk_transfer(this->receiveTransfer, Radio::device, this->endpoint | usb::IN,
+		this->receiveBuffer, sizeof(this->receiveBuffer), onReceived, this, 0);
+	libusb_submit_transfer(this->receiveTransfer);
+}
 
 // let the emulated radio receive some data
 void receiveData(uint8_t *packet) {
@@ -99,10 +173,52 @@ void receiveData(uint8_t *packet) {
 }
 
 
-// radio connected via USB
-// -----------------------
+// send
+// ----
 
-libusb_device_handle *device = nullptr;
+void onSent(libusb_transfer *transfer) {
+	auto &context = *reinterpret_cast<Context *>(transfer->user_data);
+	context.sendBusy = false;
+
+	if (!context.cancelQueue.isEmpty()) {
+		// cancel a send operation by mac counter
+		context.sendLength = 1;
+		context.sendBuffer[0] = context.cancelQueue.getFront();
+		context.cancelQueue.removeFront();
+		context.startSend();
+	} else {
+		// check for more to send
+		context.sendWaitlist.contains([&context](SendParameters &p) {
+			// check if packet has already been sent and waits for result
+			if ((p.result & 0xc0) != 0xc0)
+				return false;
+
+			// copy packet
+			int length = p.packet[0] - 2;
+			context.sendLength = length + Radio::SEND_EXTRA_LENGTH;
+			array::copy(context.sendLength, context.sendBuffer, p.packet + 1);
+			//Terminal::out << "send mac " << dec(p.packet[3]) << '\n';
+
+			// mark that packet is being sent
+			p.result &= 0x80 | 0x3f;
+
+			// start to send
+			context.startSend();
+
+			return true;
+		});
+	}
+}
+
+// start sending
+void Context::startSend() {
+	this->sendBusy = true;
+	libusb_fill_bulk_transfer(this->sendTransfer, Radio::device, this->endpoint | usb::OUT,
+		this->sendBuffer, this->sendLength, onSent, this, 0);
+	libusb_submit_transfer(this->sendTransfer);
+}
+
+
 
 
 // emulated radio devices
@@ -111,7 +227,7 @@ libusb_device_handle *device = nullptr;
 // little endian 32 bit integer
 #define I32L(value) uint8_t(value), uint8_t(value >> 8), uint8_t(value >> 16), uint8_t(value >> 24)
 
-static AesKey const defaultAesKey = {{0x5a696742, 0x6565416c, 0x6c69616e, 0x63653039, 0x166d75b9, 0x730834d5, 0x1f6155bb, 0x7c046582, 0xe62066a9, 0x9528527c, 0x8a4907c7, 0xf64d6245, 0x018a08eb, 0x94a25a97, 0x1eeb5d50, 0xe8a63f15, 0x2dff5170, 0xb95d0be7, 0xa7b656b7, 0x4f1069a2, 0xf7066bf4, 0x4e5b6013, 0xe9ed36a4, 0xa6fd5f06, 0x83c904d0, 0xcd9264c3, 0x247f5267, 0x82820d61, 0xd01eebc3, 0x1d8c8f00, 0x39f3dd67, 0xbb71d006, 0xf36e8429, 0xeee20b29, 0xd711d64e, 0x6c600648, 0x3801d679, 0xd6e3dd50, 0x01f20b1e, 0x6d920d56, 0x41d66745, 0x9735ba15, 0x96c7b10b, 0xfb55bc5d}};
+//static AesKey const defaultAesKey = {{0x5a696742, 0x6565416c, 0x6c69616e, 0x63653039, 0x166d75b9, 0x730834d5, 0x1f6155bb, 0x7c046582, 0xe62066a9, 0x9528527c, 0x8a4907c7, 0xf64d6245, 0x018a08eb, 0x94a25a97, 0x1eeb5d50, 0xe8a63f15, 0x2dff5170, 0xb95d0be7, 0xa7b656b7, 0x4f1069a2, 0xf7066bf4, 0x4e5b6013, 0xe9ed36a4, 0xa6fd5f06, 0x83c904d0, 0xcd9264c3, 0x247f5267, 0x82820d61, 0xd01eebc3, 0x1d8c8f00, 0x39f3dd67, 0xbb71d006, 0xf36e8429, 0xeee20b29, 0xd711d64e, 0x6c600648, 0x3801d679, 0xd6e3dd50, 0x01f20b1e, 0x6d920d56, 0x41d66745, 0x9735ba15, 0x96c7b10b, 0xfb55bc5d}};
 
 struct GreenPowerDevice {
 	// device id
@@ -145,26 +261,6 @@ GreenPowerDeviceData const deviceData[1] = {{
 
 // read from pcap file
 // -------------------
-
-// header of pcap file
-struct PcapHeader {
-	uint32_t magic_number;   // magic number
-	uint16_t version_major;  // major version number
-	uint16_t version_minor;  // minor version number
-	int32_t thiszone;       // GMT to local correction
-	uint32_t sigfigs;        // accuracy of timestamps
-	uint32_t snaplen;        // max length of captured packets, in octets
-	uint32_t network;        // data link type
-};
-
-// header of one packet in a pcap file
-struct PcapPacketHeader {
-	uint32_t ts_sec;         // timestamp seconds
-	uint32_t ts_usec;        // timestamp microseconds
-	uint32_t incl_len;       // number of octets of packet saved in file
-	uint32_t orig_len;       // actual length of packet
-};
-
 FILE *pcapIn = nullptr;
 FILE *pcapOut = nullptr;
 
@@ -195,15 +291,22 @@ void SendParameters::add(WaitlistHead &head) noexcept {
 void SendParameters::remove() noexcept {
 	WaitlistElement::remove();
 
-	// send mac counter to device to cancel the send operation
-	if (Radio::device != nullptr) {
-		uint8_t macCounter = this->packet[3];
-		int length = packet[0] - 2;
-		int index = packet[1 + length]; // index is stored in send extra data
-		int transferred;
+	// check if we need to cancel the send operation
+	if (Radio::device != nullptr && (this->result & 0xc0) == 0x80) {
+		auto &context = Radio::contexts[this->result & 0x3f];
 
-		int ret = libusb_bulk_transfer(Radio::device, 1 + index | usb::OUT, &macCounter, 1, &transferred, 10000);
-		if (ret == 0) {
+		// send mac counter to device to cancel the send operation
+		uint8_t macCounter = this->packet[3];
+
+		Terminal::out << "cancel " << dec(macCounter) << '\n';
+		if (!context.sendBusy) {
+			// send cancel operatio immediately
+			context.sendLength = 1;
+			context.sendBuffer[0] = macCounter;
+			context.startSend();
+		} else {
+			// need to queue the cancel operation
+			context.cancelQueue.addBack(macCounter);
 		}
 	}
 }
@@ -221,54 +324,14 @@ void handle(Gui &gui) {
 				return true;
 			return false;
 		});
-	
-		while (true) {
-			// check if usb device is present
-			if (Radio::device != nullptr) {
-				// receive buffer: length, payload, LQI
-				Radio::Packet packet;
-
-				int length;
-				int ret = libusb_bulk_transfer(Radio::device, 1 + index | usb::IN, packet + 1,
-					array::count(packet) - 1, &length, 1);
-				if (ret != LIBUSB_SUCCESS)
-					break;
-				if (length == 1) {
-					// got a result of an energy detection
-					uint8_t ed = packet[1];
-					
-				} else if (length == 2) {
-					// got a result of a send operation
-					uint8_t macCounter = packet[1];
-					uint8_t result = packet[2];
-
-					// resume coroutine that sent the packet with matching mac counter
-					context.sendWaitlist.resumeAll([macCounter, result](SendParameters &p) {
-						// check if mac counter matches
-						if (p.packet[3] == macCounter) {
-							p.result = result;
-							return true;
-						}
-						return false;
-					});
-				} else if (length >= 2 + Radio::RECEIVE_EXTRA_LENGTH) {
-					// got a receive packet
-					
-					// resume first waiting coroutine
-					uint8_t *d = packet;
-					context.receiveWaitlist.resumeFirst([length, d](ReceiveParameters &p) {
-						// convert to radio format where first byte is length of payload and crc, but no extra data
-						p.packet[0] = length - Radio::RECEIVE_EXTRA_LENGTH + 2;
-						array::copy(length, p.packet + 1, d + 1);
-						return true;
-					});
-				}
-			} else {
-				break;
-			}
-		}
 	}
-	
+
+	// handle usb events
+	if (Radio::device != nullptr) {
+		timeval timeout = {};
+		libusb_handle_events_timeout(nullptr, &timeout);
+	}
+
 	// call next handler in chain
 	Radio::nextHandler(gui);
 
@@ -302,7 +365,7 @@ void handle(Gui &gui) {
 			// payload is key
 			uint8_t *message = packet + 17;
 
-			encrypt(message, header, headerLength, message, 16, 4, nonce, defaultAesKey);
+			encrypt(message, header, headerLength, message, 16, 4, nonce, zb::za09LinkAesKey/*defaultAesKey*/);
 
 			Radio::receiveData(packet);
 			++device.securityCounter;
@@ -354,8 +417,8 @@ void handle(Gui &gui) {
 	
 	// inject packets from pcap file
 	if (Radio::pcapIn != nullptr) {
-		PcapPacketHeader header;
-		if (fread(&header, sizeof(PcapPacketHeader), 1, Radio::pcapIn) == 1) {
+		pcap::PacketHeader header;
+		if (fread(&header, sizeof(pcap::PacketHeader), 1, Radio::pcapIn) == 1) {
 			// read data
 			uint8_t packet[128];
 			packet[0] = header.orig_len;
@@ -418,8 +481,18 @@ void init() {
 					// reset the radio
 					controlTransfer(device, Request::RESET, 0, 0);
 
+					// set device
 					Radio::device = device;
-					
+
+					// allocate transfers and start to receive
+					uint8_t endpoint = 1;
+					for (auto &context : Radio::contexts) {
+						context.endpoint = endpoint++;
+						context.receiveTransfer = libusb_alloc_transfer(0);
+						context.sendTransfer = libusb_alloc_transfer(0);
+						context.startReceive();
+					}
+
 					break;
 				}
 			}
@@ -443,24 +516,24 @@ void init() {
 
 
 	// open input pcap file
-/*	radio::pcapIn = fopen("input.pcap", "rb");
-	if (radio::pcapIn != nullptr) {
+	//Radio::pcapIn = fopen("input.pcap", "rb");
+	if (Radio::pcapIn != nullptr) {
 		// read pcap header
-		PcapHeader header;
-		fread(&header, sizeof(header), 1, radio::pcapIn);
-		if (header.network != 0xC3) {
+		pcap::Header header;
+		fread(&header, sizeof(header), 1, Radio::pcapIn);
+		if (header.network != pcap::Network::IEEE802_15_4) {
 			// error: protocol not supported
-			radio::pcapIn = nullptr;
+			Radio::pcapIn = nullptr;
 		}
 		
 		// skip all packets up to a given time
 		while (true) {
-			PcapPacketHeader header;
-			if (fread(&header, sizeof(PcapPacketHeader), 1, radio::pcapIn) == 1) {
+			pcap::PacketHeader header;
+			if (fread(&header, sizeof(pcap::PacketHeader), 1, Radio::pcapIn) == 1) {
 				// read data
 				uint8_t packet[128];
 				packet[0] = header.orig_len;
-				fread(packet + 1, 1, header.incl_len, radio::pcapIn);
+				fread(packet + 1, 1, header.incl_len, Radio::pcapIn);
 				
 				if (header.ts_sec >= 25)
 					break;
@@ -471,20 +544,19 @@ void init() {
 	}
 
 	// open output pcap file
-	radio::pcapOut = fopen("output.pcap", "wb");
-	if (radio::pcapOut != nullptr) {
+	//radio::pcapOut = fopen("output.pcap", "wb");
+	if (Radio::pcapOut != nullptr) {
 		// write pcap header
-		PcapHeader header;
+		pcap::Header header;
 		header.magic_number = 0xa1b2c3d4;
 		header.version_major = 2;
 		header.version_minor = 4;
 		header.thiszone = 0;
 		header.sigfigs = 0;
 		header.snaplen = 128;
-		header.network = 0xC3;
-		fwrite(&header, sizeof(header), 1, radio::pcapOut);
+		header.network = pcap::Network::IEEE802_15_4;
+		fwrite(&header, sizeof(header), 1, Radio::pcapOut);
 	}
-*/
 }
 
 void start(int channel) {
@@ -579,39 +651,35 @@ Awaitable<SendParameters> send(int index, uint8_t *packet, uint8_t &result) {
 	assert(uint(index) < RADIO_CONTEXT_COUNT);
 	auto &context = Radio::contexts[index];
 
-	// get length without crc but with extra data
+	// get length without crc
 	int length = packet[0] - 2;
 
-	result = 1;
-
-	// send to usb device if available
 	if (Radio::device != nullptr) {
-		int l = length + Radio::SEND_EXTRA_LENGTH;
-		uint8_t *d = const_cast<uint8_t *>(packet + 1);
-		int transferred;
+		// 0xc0 | index: packet waiting to be sent via usb and can be cancelled with no further action
+		// 0x80 | index: packet sent via usb and needs to be cancelled over usb
+		result = 0xc0 | index;
+		if (!context.sendBusy) {
+			// copy packet
+			int length = packet[0] - 2;
+			context.sendLength = length + Radio::SEND_EXTRA_LENGTH;
+			array::copy(context.sendLength, context.sendBuffer, packet + 1);
+			//Terminal::out << "send mac " << dec(packet[3]) << '\n';
 
-		int ret = libusb_bulk_transfer(Radio::device, 1 + index | usb::OUT, d, l, &transferred, 10000);
-		if (ret == 0) {
-			// send zero length packet to indicate that transfer is complete if length is multiple of 64
-			if (l > 0 && (l & 63) == 0)
-				libusb_bulk_transfer(Radio::device, (1 + index) | usb::OUT, d, 0, &transferred, 1000);
+			// mark that packet is being sent
+			result = 0x80 | index;
 
-		} else {
-			// indicate failure
-			result = 0;
+			// start to send
+			context.startSend();
 		}
 	} else {
 		// indicate failure
 		result = 0;
 	}
-		
-	// store context index in extra data
-	packet[1 + length] = index;
-	
+
 	// write to pcap
 	if (Radio::pcapOut != nullptr) {
 		// write header
-		PcapPacketHeader header;
+		pcap::PacketHeader header;
 		header.ts_sec = 0;//duration / 1000000;
 		header.ts_usec = 0;//duration % 1000000;
 		header.incl_len = length;

@@ -155,6 +155,22 @@ public:
 	}
 
 	/**
+	 * Remove the element at the back
+	 */
+	void removeBack() {
+		auto c = this->c;
+		if (c > 0) {
+			this->c = c - 1;
+		}
+	}
+	void removeBack() volatile {
+		auto c = this->c;
+		if (c > 0) {
+			this->c = c - 1;
+		}
+	}
+
+	/**
 	 * Clear the queue
 	 */
 	void clear() {this->c = 0;}

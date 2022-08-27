@@ -4,8 +4,8 @@
 #include "StringOperators.hpp"
 
 
-// host for UsbDeviceTest
-// flash UsbDeviceTest onto the device, then run this
+// Host for UsbDeviceTest
+// Flash UsbDeviceTest onto the device, then run this
 
 
 // https://github.com/libusb/libusb/blob/master/examples/listdevs.c
@@ -169,7 +169,7 @@ int main(void) {
 	}
 
 	// print list of devices
-	printDevices(devs);
+	//printDevices(devs);
 	for (int i = 0; devs[i]; ++i) {
 		//printDevice(devs[i]);
 	}
@@ -239,9 +239,9 @@ int main(void) {
 			libusb_bulk_transfer(handle, 1 | usb::IN, data, 129, &transferred, 100);
 
 		// echo loop: send data to device and check if we get back the same data
-		int sendLength = 5;
+		int sendLength = 128;
 		bool allOk = true;
-		for (int iter = 0; iter < 1000000; ++iter) {
+		for (int iter = 0; iter < 10000000; ++iter) {
 			Terminal::out << "length: " << dec(sendLength) << '\n';
 
 			// send to device
@@ -258,9 +258,11 @@ int main(void) {
 			if (sendLength > 0 && (sendLength & 63) == 0)
 				libusb_bulk_transfer(handle, 1 | usb::OUT, data, 0, &transferred, 1000);
 
-			// debug: check if one packet of maximum 64 bytes can be written while the device is not in UsbDevice::receive()
-			//int transferred2;
-			//auto ret2 = libusb_bulk_transfer(handle, 1 | usb::OUT, data, 5, &transferred2, 0);
+			// debug: check if one packet of maximum 64 bytes can be written while the device is not waiting in UsbDevice::receive()
+			for (int i = 0; i < 45; ++i) data[i] = 45 + i;
+			ret = libusb_bulk_transfer(handle, 1 | usb::OUT, data, 45, &transferred, 10000);
+			if (ret == LIBUSB_ERROR_TIMEOUT)
+				Terminal::out << "debug send timeout!\n";
 
 			// receive from device (we get back the same data that we sent)
 			// note: libusb does not wait for the zero length packet if length is a multiple of 64, therefore use 129 instead of 128
@@ -291,7 +293,8 @@ int main(void) {
 			printStatus("all", allOk);
 
 			// debug: remove additional packet
-			//libusb_bulk_transfer(handle, 1 | usb::IN, data, 129, &transferred, 10000);
+			ret = libusb_bulk_transfer(handle, 1 | usb::IN, data, 45, &transferred, 10000);
+			for (int i = 0; i < 45; ++i) allOk &= data[i] == 45 + i;
 
 			// wait
 			//usleep(1000000);
@@ -299,6 +302,7 @@ int main(void) {
 			// modify the send length
 			sendLength = (sendLength + 5) % 129;
 		}
+		libusb_close(handle);
 		break;
 	}
 

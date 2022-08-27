@@ -207,6 +207,7 @@ list(APPEND PROTOCOL ${TINYCRYPT})
 # drivers
 if(POSIX)
 	set(CALENDAR system/src/ClockTime.hpp system/src/Calendar.hpp system/src/posix/Calendar.cpp)
+	set(FLASH system/src/Flash.hpp system/src/posix/Flash.cpp)
 	set(LOOP system/src/Loop.hpp system/src/posix/Loop.cpp system/src/posix/Loop2.cpp)
 	set(NETWORK system/src/Network.hpp system/src/posix/Network.cpp)
 	set(OUTPUT system/src/Output.hpp system/src/posix/Output.cpp system/src/Debug.hpp)
@@ -218,7 +219,6 @@ endif()
 if(EMU)
 	set(BUS_NODE system/src/BusNode.hpp system/src/emu/BusNode.cpp)
 	set(BUS_MASTER system/src/BusMaster.hpp system/src/emu/BusMaster.cpp)
-	set(FLASH system/src/Flash.hpp system/src/emu/Flash.cpp)
 	set(INPUT system/src/Input.hpp system/src/emu/Input.hpp system/src/emu/Input.cpp)
 	set(LOOP
 		system/src/Loop.hpp
@@ -687,7 +687,7 @@ add_executable(StorageTestOld
 	node/src/State.hpp
 	node/src/ArrayStorage.cpp
 	node/src/ArrayStorage.hpp
-	system/src/emu/Flash.cpp
+	system/src/posix/Flash.cpp
 )
 target_include_directories(StorageTestOld
 	PRIVATE

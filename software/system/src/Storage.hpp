@@ -17,7 +17,7 @@ void init();
  * Get size of an element
  * @param index context index
  * @param id id of entry
- * @return true on success, false on error
+ * @return size of the element in bytes
  */
 int size(int index, uint16_t id);
 

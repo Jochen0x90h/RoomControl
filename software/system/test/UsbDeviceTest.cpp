@@ -4,6 +4,12 @@
 #include <Debug.hpp>
 #include <Coroutine.hpp>
 #include <util.hpp>
+#include <nrf52/system/nrf52840.h>
+#include "nrf52/defs.hpp"
+
+
+// Test for USB device.
+// Flash this onto the device, then run UsbTestHost on a PC
 
 
 enum class Request : uint8_t {
@@ -11,7 +17,6 @@ enum class Request : uint8_t {
 	GREEN = 1,
 	BLUE = 2
 };
-
 
 
 // device descriptor
@@ -80,16 +85,18 @@ static const UsbConfiguration configurationDescriptor = {
 };
 
 
-
-uint8_t buffer[128] __attribute__((aligned(4)));
+constexpr int bufferSize = 128;
+uint8_t buffer[bufferSize] __attribute__((aligned(4)));
 
 // echo data from host
 Coroutine echo() {
 	while (true) {
 		// receive data from host
-		int length = array::count(buffer);
+		int length = bufferSize;
 		co_await UsbDevice::receive(1, length, buffer);
-		Debug::setGreenLed(true);
+
+		// set green led to indicate processing
+		Debug::setGreenLed();
 
 		// check received data
 		bool error = false;
@@ -98,13 +105,30 @@ Coroutine echo() {
 				error = true;
 		}
 		if (error)
-			Debug::setRedLed(true);
+			Debug::setColor(Debug::RED);
 		
 		// send data back to host
 		co_await UsbDevice::send(1, length, buffer);
-		Debug::setGreenLed(false);
 
-		// toggle blue led to indicate activity
+		/*
+		// debug: send nrf52840 chip id
+		uint32_t variant = NRF_FICR->INFO.VARIANT;
+		buffer[0] = variant >> 24;
+		buffer[1] = variant >> 16;
+		buffer[2] = variant >> 8;
+		buffer[3] = variant;
+		co_await UsbDevice::send(1, 4, buffer);
+
+		// debug: send nrf52840 interrupt priorities
+		buffer[0] = getInterruptPriority(USBD_IRQn);
+		buffer[1] = getInterruptPriority(RADIO_IRQn);
+		buffer[2] = getInterruptPriority(TIMER0_IRQn);
+		buffer[3] = getInterruptPriority(RNG_IRQn);
+		co_await UsbDevice::send(1, 4, buffer);
+		*/
+
+		// clear green led and toggle blue led to indicate activity
+		Debug::clearGreenLed();
 		Debug::toggleBlueLed();
 	}
 }

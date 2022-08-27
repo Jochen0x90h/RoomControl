@@ -42,6 +42,7 @@ int main(int argc, const char **argv) {
 		configuration.key.setData(0, 16, networkKey);
 		setKey(configuration.aesKey, configuration.key);
 		configuration.ieeeLongAddress = UINT64_C(0x00124b00214f3c55);
+		configuration.zbeePanId = 0x1a62;
 		configuration.mqttLocalPort = 1337;
 		configuration.mqttGateway = {Network::Address::fromString("::1"), 10000};
 

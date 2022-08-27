@@ -13,4 +13,7 @@ void init();
  */
 void run();
 
+// busy waiting, only for debug purposes, not very precise
+void busyWait(int us);
+
 } // namespace Loop

@@ -909,6 +909,7 @@ bool RadioInterface::writeZclCommand(PacketWriter &w, uint8_t zclCounter, int pl
 		auto time = Timer::now();
 		auto d = time - endpoint->time;
 		if (d > 100ms || d < 0ms || endpoint->index == plugIndex) {
+			//todo: doing it here does not work with retry
 			// stored color component is not valid
 			endpoint->time = time;
 			endpoint->index = plugIndex;
@@ -1333,7 +1334,7 @@ Terminal::out << ("Beacon Request\n");
 				auto command = r.e8<ieee::Command>();
 
 				// check for association request with no broadcast
-				if (this->commissioning && !destinationBroadcast && command == ieee::Command::ASSOCIATION_REQUEST) {
+				if (  this->commissioning && !destinationBroadcast && command == ieee::Command::ASSOCIATION_REQUEST) {
 					// cancel current association coroutine
 					this->commissionCoroutine.cancel();
 
@@ -2859,6 +2860,7 @@ Coroutine RadioInterface::publish() {
 				if (isInput(messageType)) {
 					// request the route if necessary
 					for (int retry = 0; retry < MAX_RETRY; ++retry) {
+	//device->routerAddress = device->data.shortAddress;
 						if (device->routerAddress != 0xffff)
 							break;
 
@@ -2911,13 +2913,14 @@ Coroutine RadioInterface::publish() {
 
 					// try to send
 					uint8_t zclCounter = this->zclCounter++;
+					//Terminal::out << "zcl counter " << dec(zclCounter) << " for cluster " << hex(clusterInfo.cluster) << '\n';
 					for (int retry = 0; retry <= MAX_RETRY; ++retry) {
 						// build packet
 						{
 							PacketWriter w(packet);
 							auto const &flash = *device;
 
-							// nwk data
+							// nwk data (always use a new mac counter when retrying)
 							writeNwkData(w, *device);
 
 							// aps data
@@ -2927,12 +2930,16 @@ Coroutine RadioInterface::publish() {
 							int clusterPlugIndex = plugIndex - clusterInfo.plugs.offset;
 							if ((messageType & MessageType::CMD) == 0) {
 								// write attribute (maybe using a command if the attribute is read only)
-								if (!writeZclAttribute(w, zclCounter, clusterPlugIndex, clusterInfo.cluster, message))
+								if (!writeZclAttribute(w, zclCounter, clusterPlugIndex, clusterInfo.cluster, message)) {
+									// rejected
 									break;
+								}
 							} else {
 								// send command
-								if (!writeZclCommand(w, zclCounter, clusterPlugIndex, clusterInfo.cluster, message, endpoint))
+								if (!writeZclCommand(w, zclCounter, clusterPlugIndex, clusterInfo.cluster, message, endpoint)) {
+									// rejected
 									break;
+								}
 							}
 
 							writeFooter(w, Radio::SendFlags::NONE);
@@ -2949,6 +2956,7 @@ Coroutine RadioInterface::publish() {
 
 							// check if response was received
 							if (r == 1) {
+								//Terminal::out << "Received default response\n";
 								MessageReader r(length, packet);
 								uint8_t responseToCommand = r.u8();
 								uint8_t status = r.u8();
@@ -2975,8 +2983,12 @@ Coroutine RadioInterface::publish() {
 						});
 					}
 				}*/
+
+				// break because message was handled
 				break;
 			}
+
+			// break if message was handled, otherwise check next device
 			if (endpoint != nullptr)
 				break;
 			device = device->next;
