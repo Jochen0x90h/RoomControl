@@ -578,7 +578,9 @@ add_executable(MqttSnClientTest
 	node/test/MqttSnClientTest.cpp
 	control/src/appConfig.hpp
 	board/${BOARD}/boardConfig.hpp
-	${NODE}
+	#${NODE}
+	node/src/MqttSnClient.cpp
+	node/src/MqttSnClient.hpp
 	${PROTOCOL}
 	${SYSTEM}
 	${UTIL}
@@ -603,7 +605,9 @@ add_executable(MqttSnBrokerTest
 	node/test/MqttSnBrokerTest.cpp
 	control/src/appConfig.hpp
 	board/${BOARD}/boardConfig.hpp
-	${NODE}
+	#${NODE}
+	node/src/MqttSnBroker.cpp
+	node/src/MqttSnBroker.hpp
 	${PROTOCOL}
 	${SYSTEM}
 	${UTIL}
