@@ -340,11 +340,12 @@ public:
 	}
 	
 	/**
-	 * Find the first element for wich the predicate is true
+	 * Check if the list contains an element for which the predicate is true
 	 * @param predicate boolean predicate function for the list elements
+	 * @return true if an element is contained
 	 */
 	template <typename P>
-	bool find(P const &predicate) {
+	bool contains(P const &predicate) {
 		Element *head = static_cast<Element*>(&this->head);
 		Element *current = static_cast<Element*>(head->next);
 

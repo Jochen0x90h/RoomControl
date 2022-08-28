@@ -207,6 +207,7 @@ list(APPEND PROTOCOL ${TINYCRYPT})
 # drivers
 if(POSIX)
 	set(CALENDAR system/src/ClockTime.hpp system/src/Calendar.hpp system/src/posix/Calendar.cpp)
+	set(FLASH system/src/Flash.hpp system/src/posix/Flash.cpp)
 	set(LOOP system/src/Loop.hpp system/src/posix/Loop.cpp system/src/posix/Loop2.cpp)
 	set(NETWORK system/src/Network.hpp system/src/posix/Network.cpp)
 	set(OUTPUT system/src/Output.hpp system/src/posix/Output.cpp system/src/Debug.hpp)
@@ -218,7 +219,6 @@ endif()
 if(EMU)
 	set(BUS_NODE system/src/BusNode.hpp system/src/emu/BusNode.cpp)
 	set(BUS_MASTER system/src/BusMaster.hpp system/src/emu/BusMaster.cpp)
-	set(FLASH system/src/Flash.hpp system/src/emu/Flash.cpp)
 	set(INPUT system/src/Input.hpp system/src/emu/Input.hpp system/src/emu/Input.cpp)
 	set(LOOP
 		system/src/Loop.hpp
@@ -446,7 +446,7 @@ target_include_directories(mdnsSniffer
 target_link_libraries(mdnsSniffer ${LIBRARIES})
 
 
-endif() # POSIX
+endif() # POSIX AND NOT EMU
 
 
 # wall switch executable
@@ -555,16 +555,20 @@ add_system_test_executable(Timer)
 add_system_test_executable(UsbDevice)
 
 
-if(${BOARD} STREQUAL "emuControl")
+if(POSIX AND NOT EMU)
 
 # system/usb test host, host for UsbTest on device (command line tool)
 add_executable(UsbTestHost
 	system/test/UsbTestHost.cpp
+	${UTIL}
+	${PROTOCOL}
+	${TERMINAL}
 )
 target_include_directories(UsbTestHost
 	PRIVATE
-	protocol/src
 	util/src
+	protocol/src
+	system/src
 )
 target_link_libraries(UsbTestHost ${LIBRARIES})
 
@@ -574,7 +578,9 @@ add_executable(MqttSnClientTest
 	node/test/MqttSnClientTest.cpp
 	control/src/appConfig.hpp
 	board/${BOARD}/boardConfig.hpp
-	${NODE}
+	#${NODE}
+	node/src/MqttSnClient.cpp
+	node/src/MqttSnClient.hpp
 	${PROTOCOL}
 	${SYSTEM}
 	${UTIL}
@@ -591,7 +597,6 @@ target_include_directories(MqttSnClientTest
 	util/src
 	glad
 )
-#conan_target_link_libraries(MqttSnClientTest)
 target_link_libraries(MqttSnClientTest ${LIBRARIES})
 
 
@@ -600,7 +605,9 @@ add_executable(MqttSnBrokerTest
 	node/test/MqttSnBrokerTest.cpp
 	control/src/appConfig.hpp
 	board/${BOARD}/boardConfig.hpp
-	${NODE}
+	#${NODE}
+	node/src/MqttSnBroker.cpp
+	node/src/MqttSnBroker.hpp
 	${PROTOCOL}
 	${SYSTEM}
 	${UTIL}
@@ -617,9 +624,12 @@ target_include_directories(MqttSnBrokerTest
 	util/src
 	glad
 )
-#conan_target_link_libraries(MqttSnBrokerTest)
 target_link_libraries(MqttSnBrokerTest ${LIBRARIES})
 
+endif() # POSIX AND NOT EMU
+
+
+if(${BOARD} STREQUAL "emuControl")
 
 # test for BME680 air sensor
 add_executable(BME680Test
@@ -681,7 +691,7 @@ add_executable(StorageTestOld
 	node/src/State.hpp
 	node/src/ArrayStorage.cpp
 	node/src/ArrayStorage.hpp
-	system/src/emu/Flash.cpp
+	system/src/posix/Flash.cpp
 )
 target_include_directories(StorageTestOld
 	PRIVATE

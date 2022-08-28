@@ -14,3 +14,8 @@ CMakeLists.txt.user
 *-bak
 *-cache.lib
 fp-info-cache
+
+# data files
+*.wav
+*.mp3
+*.opus

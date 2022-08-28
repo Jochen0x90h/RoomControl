@@ -35,17 +35,16 @@ void init(
 
 /**
  * Enable endpoints. Can be done in onSetConfiguration. Endpoint 0 should stay enabled
- * @param inFlags, an enabled flag for each in endpoint
- * @param outFlags, an enabled flag for each out endpoint
+ * @param inFlags an enabled flag for each in endpoint
+ * @param outFlags an enabled flag for each out endpoint
  */
 void enableEndpoints(uint8_t inFlags, uint8_t outFlags);
 
 /**
- * Suspend execution using co_await until data is received from an endpoint (IN transfer)
+ * Suspend execution using co_await until data is received from an endpoint (OUT transfer)
  * @param index endpoint index (1-7)
- * @param length length of data buffer
- * @param receivedLength number of bytes actually received
- * @param data data to receive, must be in ram and 32 bit aligned
+ * @param length in: length of data buffer, out: length of data actually received
+ * @param data data to receive, must be in RAM
  */
 [[nodiscard]] Awaitable<ReceiveParameters> receive(int index, int &length, void *data);
 
@@ -53,7 +52,7 @@ void enableEndpoints(uint8_t inFlags, uint8_t outFlags);
  * Suspend execution using co_await until data is sent over an endpoint (IN transfer)
  * @param index endpoint index (1-7)
  * @param length data length
- * @param data data to send, must be in ram and 32 bit aligned
+ * @param data data to send, must be in RAM
  */
 [[nodiscard]] Awaitable<SendParameters> send(int index, int length, void const *data);
 

@@ -366,10 +366,6 @@ Usage getUsage(PlugType type) {
 		switch (t & PlugType::BINARY_CATEGORY) {
 		case PlugType::BINARY_BUTTON:
 			return Usage::RELEASED_PRESSED;
-		case PlugType::BINARY_SWITCH:
-			return Usage::OFF_ON;
-		case PlugType::BINARY_POWER:
-			return Usage::OFF_ON;
 		case PlugType::BINARY_OPEN:
 			return cmd ? Usage::CLOSED_OPEN_TOGGLE : Usage::CLOSED_OPEN;
 		case PlugType::BINARY_LOCK:
@@ -383,14 +379,12 @@ Usage getUsage(PlugType type) {
 		case PlugType::BINARY_ENABLE_CLOSE:
 			return Usage::ENABLED;
 		default:
-			return Usage::OFF_ON;
+			return cmd ? Usage::OFF_ON_TOGGLE : Usage::OFF_ON;
 		}
 	case PlugType::TERNARY:
 		switch (t & PlugType::TERNARY_CATEGORY) {
 		case PlugType::TERNARY_BUTTON:
 			return Usage::RELEASED_UP_DOWN;
-		case PlugType::TERNARY_SWITCH:
-			return Usage::OFF_ON1_ON2;
 		case PlugType::TERNARY_OPENING:
 			return Usage::STOPPED_OPENING_CLOSING;
 		case PlugType::TERNARY_LOCK:
@@ -398,10 +392,6 @@ Usage getUsage(PlugType type) {
 		default:
 			return Usage::OFF_ON1_ON2;
 		}
-	case PlugType::MULTISTATE:
-		return Usage::NONE;
-	case PlugType::ENUM:
-		return Usage::NONE;
 	case PlugType::LEVEL:
 		return Usage::PERCENT;
 	case PlugType::PHYSICAL:
@@ -450,8 +440,6 @@ Usage getUsage(PlugType type) {
 				default:
 					return Usage::PASCAL;
 				}
-			case PlugType::PHYSICAL_PRESSURE_SETPOINT:
-				return Usage::PASCAL;
 			default:
 				return Usage::PASCAL;
 			}
@@ -468,8 +456,6 @@ Usage getUsage(PlugType type) {
 				default:
 					return Usage::VOLTAGE;
 				}
-			case PlugType::PHYSICAL_VOLTAGE_SETPOINT:
-				return Usage::VOLTAGE;
 			default:
 				return Usage::VOLTAGE;
 			}
@@ -486,12 +472,6 @@ Usage getUsage(PlugType type) {
 		switch (t & PlugType::CONCENTRATION_CATEGORY) {
 		case PlugType::CONCENTRATION_RELATIVE_HUMIDITY:
 			return Usage::PERCENT;
-		case PlugType::CONCENTRATION_VOC:
-			return Usage::NONE;
-		case PlugType::CONCENTRATION_CARBON_MONOXIDE:
-			return Usage::NONE;
-		case PlugType::CONCENTRATION_CARBON_DIOXIDE:
-			return Usage::NONE;
 		default:
 			return Usage::NONE;
 		}
@@ -510,10 +490,6 @@ Usage getUsage(PlugType type) {
 		switch (t & PlugType::METERING_CATEGORY) {
 		case PlugType::METERING_ELECTRIC:
 			return Usage::ELECTRIC_METER;
-		case PlugType::METERING_WATER:
-			return Usage::COUNTER;
-		case PlugType::METERING_GAS:
-			return Usage::COUNTER;
 		default:
 			return Usage::COUNTER;
 		}

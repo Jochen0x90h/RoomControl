@@ -1,6 +1,7 @@
 #include <UsbDevice.hpp>
 #include <Random.hpp>
 #include <Radio.hpp>
+#include <Timer.hpp>
 #include <Loop.hpp>
 #include <Debug.hpp>
 #include <util.hpp>
@@ -147,7 +148,9 @@ Coroutine receive(int index) {
 	while (true) {
 		// receive from radio
 		co_await Radio::receive(index, packet);
-		Debug::setGreenLed(true);
+		//Debug::setGreenLed(true);
+
+		co_await Timer::sleep(25ms);
 
 		// length without crc but with extra data
 		int length = packet[0] - 2 + Radio::RECEIVE_EXTRA_LENGTH;
@@ -155,43 +158,50 @@ Coroutine receive(int index) {
 		// check if packet has minimum length (2 bytes frame control and extra data)
 		if (length >= 2 + Radio::RECEIVE_EXTRA_LENGTH) {			
 			// send to usb host
-			co_await UsbDevice::send(1 + index, length, packet + 1);
+			co_await UsbDevice::send(1 + index, length, packet + 1); // IN
 		}
-		Debug::setGreenLed(false);
+		//Debug::setGreenLed(false);
 	}
 }
+
+Debug::Counter counter;
 
 // receive from usb host and send to radio
 Coroutine send(int index) {
 	Radio::Packet packet;
 	while (true) {
 		// receive from usb host
+		//++counter;
 		int length = RADIO_MAX_PAYLOAD_LENGTH + Radio::SEND_EXTRA_LENGTH;
-		co_await UsbDevice::receive(1 + index, length, packet + 1);
+		co_await UsbDevice::receive(1 + index, length, packet + 1); // OUT
+		//--counter;
 
 		if (length == 1) {
 			// cancel by mac counter
 			uint8_t macCounter = packet[1];
 			barriers[index][macCounter].resumeAll();
 		} else if (length >= 2 + Radio::SEND_EXTRA_LENGTH) {
-			Debug::setRedLed(true);
+			//Debug::setRedLed(true);
 
-			// set length to first byte with space for crc but without extra data
-			packet[0] = length + 2 - Radio::SEND_EXTRA_LENGTH;
+			// set length to first byte (subtract extra data but add space for crc)
+			packet[0] = length - Radio::SEND_EXTRA_LENGTH + 2;
 
 			// get mac counter to identify the packet
 			uint8_t macCounter = packet[3];
-			
+
 			// send over the air
-			uint8_t result;
+			//++counter;
+			uint8_t result = 1;
 			int r = co_await select(Radio::send(index, packet, result), barriers[index][macCounter].wait());
+			//--counter;
+
 			if (r == 1) {
 				// send mac counter and result back to usb host
 				packet[0] = macCounter;
 				packet[1] = result;
-				co_await UsbDevice::send(1 + index, 2, packet);
+				co_await UsbDevice::send(1 + index, 2, packet); // IN
 			}
-			Debug::setRedLed(false);
+			//Debug::setRedLed(false);
 		}
 	}
 }
@@ -199,6 +209,7 @@ Coroutine send(int index) {
 
 int main(void) {
 	Loop::init();
+	Timer::init();
 	Radio::init();
 	UsbDevice::init(
 		[](usb::DescriptorType descriptorType) {
@@ -215,14 +226,6 @@ int main(void) {
 			// enable bulk endpoints (keep control endpoint 0 enabled in both directions)
 			int flags = ~(0xffffffff << (1 + RADIO_CONTEXT_COUNT));
 			UsbDevice::enableEndpoints(flags, flags);
-
-			// start coroutines to send and receive
-			for (int index = 0; index < RADIO_CONTEXT_COUNT; ++index) {
-				for (int i = 0; i < 64; ++i) {
-					receive(index);
-					send(index);
-				}
-			}
 		},
 		[](uint8_t bRequest, uint16_t wValue, uint16_t wIndex) {
 			switch (Radio::Request(bRequest)) {
@@ -271,6 +274,14 @@ int main(void) {
 	Radio::start(15);
 	Radio::enableReceiver(true);
 	Radio::setFlags(0, Radio::ContextFlags::PASS_ALL);
+
+	// start coroutines to send and receive
+	for (int index = 0; index < RADIO_CONTEXT_COUNT; ++index) {
+		for (int i = 0; i < 7; ++i) {//!
+			receive(index);
+			send(index);
+		}
+	}
 
 	Loop::run();
 }

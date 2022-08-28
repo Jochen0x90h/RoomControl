@@ -86,7 +86,7 @@ constexpr int BUS_RX_PIN = gpio::P0(2);
 // radio
 // -----
 
-constexpr int RADIO_CONTEXT_COUNT = 2;
+constexpr int RADIO_CONTEXT_COUNT = 1;
 constexpr int RADIO_RECEIVE_QUEUE_LENGTH = 4;
 constexpr int RADIO_MAX_PAYLOAD_LENGTH = 125; // payload length without leading length byte and trailing crc
 

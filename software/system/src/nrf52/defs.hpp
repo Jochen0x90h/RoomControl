@@ -40,3 +40,11 @@ inline bool isInterruptPending(int n) {
 inline void clearInterrupt(int n) {
 	NVIC->ICPR[n >> 5] = 1 << (n & 31);
 }
+
+inline uint8_t getInterruptPriority(int n) {
+	return NVIC->IP[n];
+}
+
+inline void setInterruptPriority(int n, uint8_t priority) {
+	NVIC->IP[n] = priority;
+}

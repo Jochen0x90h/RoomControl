@@ -247,27 +247,33 @@ def hasUsage(types):
 	return False
 	
 	
-def getUsage(types, tabs, prefix, defaultUsage):
+def getUsage(types, tabs, prefix, parentFlags, parentUsage):
 	print(f"{tabs}switch (t & PlugType::{prefix}CATEGORY) {{")
 	for i in range(1, len(types)):
 		type = types[i]
 		name = type[0]
 		flags = type[1]
 		usage = type[3]
-		if not usage:
-			usage = defaultUsage
-		print(f"{tabs}case PlugType::{prefix}{name}:")
 		if len(type) < 6 or not hasUsage(type[5]):
-			# leaf usage
-			if flags & TOGGLE:
-				print(f"{tabs}\treturn cmd ? Usage::{usage}_TOGGLE : Usage::{usage};")
-			else:
-				print(f"{tabs}\treturn Usage::{usage};")
+			# is leaf
+			if usage:
+				print(f"{tabs}case PlugType::{prefix}{name}:")
+				if flags & TOGGLE:
+					print(f"{tabs}\treturn cmd ? Usage::{usage}_TOGGLE : Usage::{usage};")
+				else:
+					print(f"{tabs}\treturn Usage::{usage};")
 		else:
-			#print(f"{tabs}\tif (t == PlugType::{prefix}{name}) return Usage::{usage};")
-			getUsage(type[5], tabs + '\t', prefix + name + '_', usage)	
+			# has children with usage
+			print(f"{tabs}case PlugType::{prefix}{name}:")
+			if usage:
+				getUsage(type[5], tabs + '\t', prefix + name + '_', flags, usage)
+			else:
+				getUsage(type[5], tabs + '\t', prefix + name + '_', parentFlags, parentUsage)
 	print(f"{tabs}default:")
-	print(f"{tabs}\treturn Usage::{defaultUsage};")
+	if parentFlags & TOGGLE:
+		print(f"{tabs}\treturn cmd ? Usage::{parentUsage}_TOGGLE : Usage::{parentUsage};")
+	else:
+		print(f"{tabs}\treturn Usage::{parentUsage};")
 	print(f"{tabs}}}")
 
 
@@ -347,7 +353,7 @@ Usage getUsage(PlugType type) {
 	bool cmd = (type & PlugType::CMD) != 0;
 	auto t = type & PlugType::TYPE_MASK;
 """)
-getUsage(types, "\t", "", "NONE")
+getUsage(types, "\t", "", 0, "NONE")
 print("}")
 
 # isCompatible()
