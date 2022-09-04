@@ -14,6 +14,7 @@
 #include <Cie1931.hpp>
 #include <gtest/gtest.h>
 #include <random>
+#include <netinet/in.h> // htonl
 
 
 // test utility functions and classes
@@ -895,6 +896,9 @@ TEST(utilTest, color) {
 	auto xy3 = hueToCie(359.0f, 1.0f);
 }
 
+TEST(utilTest, endian) {
+	EXPECT_EQ(u32B(0x44332211), htonl(0x44332211));
+}
 
 int main(int argc, char **argv) {
 	testing::InitGoogleTest(&argc, argv);

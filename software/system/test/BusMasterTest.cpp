@@ -1,7 +1,7 @@
 #include <Timer.hpp>
 #include <BusMaster.hpp>
-#include <Debug.hpp>
 #include <Loop.hpp>
+#include <Debug.hpp>
 #include <util.hpp>
 
 

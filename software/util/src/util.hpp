@@ -236,6 +236,44 @@ template <int N>
 struct UInt : public UIntBase<(N > 256 ? (N > 65536 ? 4 : 2) : 1)> {
 };
 
+/**
+ * Convert a number to little endian so that a number like 0x2211 is stored in memory like this: 0x11 0x22
+ * independent of the endianness of the platform
+ * @return big endian number
+ */
+constexpr uint16_t u16L(uint16_t x) {
+	return x;
+}
+
+/**
+ * Convert a number to little endian so that a number like 0x44332211 is stored in memory like this: 0x11 0x22 0x33 0x44
+ * independent of the endianness of the platform
+ * @return big endian number
+ */
+constexpr uint32_t u32L(uint32_t x) {
+	return x;
+}
+
+/**
+ * Convert a number to big endian so that a number like 0x2211 is stored in memory like this: 0x22 0x11
+ * independent of the endianness of the platform
+ * @return big endian number
+ */
+constexpr uint16_t u16B(uint16_t x) {
+	return (x >> 8) | (x << 8);
+}
+
+/**
+ * Convert a number to big endian so that a number like 0x44332211 is stored in memory like this: 0x44 0x33 0x22 0x11
+ * independent of the endianness of the platform
+ * @return big endian number
+ */
+constexpr uint32_t u32B(uint32_t x) {
+	return (x >> 24)
+		| ((x >> 8) & 0x0000ff00)
+		| ((x << 8) & 0x00ff0000)
+		| (x << 24);
+}
 
 
 // concepts

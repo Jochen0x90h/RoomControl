@@ -20,8 +20,13 @@ message("*** MCU ${MCU}")
 message("*** CPU ${CPU}")
 message("*** FPU ${FPU}")
 
+# linux
+if("Linux" IN_LIST PLATFORM)
+	set(LINUX 1)
+endif()
+
 # posix compatible platforms
-if("Linux" IN_LIST PLATFORM OR "Macos" IN_LIST PLATFORM OR "FreeBSD" IN_LIST PLATFORM)
+if(LINUX OR "Macos" IN_LIST PLATFORM OR "FreeBSD" IN_LIST PLATFORM)
 	set(POSIX 1)
 endif()
 
@@ -61,6 +66,7 @@ endif()
 # platform dependent configuration
 if(POSIX)
 	#message("*** posix")
+	# dependencies
 	find_package(Boost CONFIG)
 	find_package(libusb CONFIG)
 	find_package(miniaudio CONFIG)
@@ -94,6 +100,13 @@ if(POSIX)
 
 	# define emulator flag
 	add_definitions(-DEMU)
+endif()
+if(LINUX)
+	#message("*** linux")
+	# dependencies
+	find_package(PkgConfig REQUIRED)
+	pkg_search_module(BlueZ IMPORTED_TARGET bluez) # install libbluetooth-dev
+	set(LIBRARIES ${LIBRARIES} PkgConfig::BlueZ)
 endif()
 if(EMU)
 	#message("*** emu")
@@ -175,6 +188,7 @@ source_group(util FILES ${UTIL})
 
 # protocol utilities
 set(PROTOCOL
+	protocol/src/bt.hpp
 	protocol/src/bus.cpp
 	protocol/src/bus.hpp
 	protocol/src/crypt.cpp
@@ -215,6 +229,9 @@ if(POSIX)
 	set(STORAGE system/src/Storage.hpp system/src/posix/Storage.cpp)
 	set(TERMINAL system/src/Terminal.hpp system/src/posix/Terminal.cpp)
 	set(TIMER system/src/SystemTime.hpp system/src/Timer.hpp system/src/posix/Timer.cpp)
+endif()
+if(LINUX)
+	set(BLE system/src/Ble.hpp system/src/linux/Ble.cpp)
 endif()
 if(EMU)
 	set(BUS_NODE system/src/BusNode.hpp system/src/emu/BusNode.cpp)
@@ -278,6 +295,7 @@ if("stm32f0" IN_LIST PLATFORM)
 endif()
 
 set(SYSTEM
+	${BLE}
 	${BUS_NODE}
 	${BUS_MASTER}
 	${CALENDAR}
@@ -541,6 +559,7 @@ function(add_system_test_executable NAME)
 	endif()
 endfunction()
 
+add_system_test_executable(Ble)
 add_system_test_executable(BusMaster)
 add_system_test_executable(Calendar)
 add_system_test_executable(Input)

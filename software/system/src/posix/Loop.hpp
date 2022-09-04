@@ -21,7 +21,7 @@ public:
 	virtual ~FileDescriptor();
 	virtual void activate(uint16_t events) = 0;
 
-	int fd;
+	int fd = -1;
 	short int events;
 };
 using FileDescriptorList = LinkedListNode<FileDescriptor>;

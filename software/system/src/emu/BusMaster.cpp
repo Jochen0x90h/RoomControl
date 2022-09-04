@@ -115,9 +115,9 @@ void sendToMaster(bus::MessageWriter &w, Device &device) {
 	int length = w.getLength();
 	auto data = w.begin;
 	BusMaster::receiveWaitlist.resumeFirst([length, data](ReceiveParameters &p) {
-		int len = min(*p.receiveLength, length);
-		array::copy(len, p.receiveData, data);
-		*p.receiveLength = len;
+		int len = min(*p.length, length);
+		array::copy(len, p.data, data);
+		*p.length = len;
 		return true;
 	});
 }
@@ -128,14 +128,15 @@ Loop::Handler nextHandler;
 void handle(Gui &gui) {
 	// handle pending send operations
 	BusMaster::sendWaitlist.resumeFirst([](SendParameters &p) {
-		if (p.sendLength < 2)
+		if (p.length < 2)
 			return true;
 
+		// copy data because it gets modified by decrypt()
 		uint8_t data[64];
-		array::copy(p.sendLength, data, p.sendData);
+		array::copy(p.length, data, p.data);
 
 		// read message
-		bus::MessageReader r(p.sendLength, data);
+		bus::MessageReader r(p.length, data);
 		r.setHeader();
 
 		// get address
@@ -319,9 +320,9 @@ void handle(Gui &gui) {
 			// send to bus master (resume coroutine waiting to receive from device)
 			int sendLength = w.getLength();
 			BusMaster::receiveWaitlist.resumeFirst([sendLength, sendData](ReceiveParameters &p) {
-				int length = min(*p.receiveLength, sendLength);
-				array::copy(length, p.receiveData, sendData);
-				*p.receiveLength = length;
+				int length = min(*p.length, sendLength);
+				array::copy(length, p.data, sendData);
+				*p.length = length;
 				return true;
 			});
 		}
