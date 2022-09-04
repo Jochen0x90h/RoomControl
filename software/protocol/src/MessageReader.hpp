@@ -116,6 +116,15 @@ public:
 	}
 
 	template <typename T>
+	void data8(int count, T *data) {
+		for (int i = 0; i < count; ++i) {
+			uint8_t value = this->current[i];
+			data[i] = T(value);
+		}
+		this->current += count;
+	}
+
+	template <typename T>
 	void data16L(int count, T *data) {
 		for (int i = 0; i < count; ++i) {
 			uint16_t value = this->current[i * 2] | (this->current[i * 2 + 1] << 8);

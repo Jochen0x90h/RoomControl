@@ -46,6 +46,12 @@ constexpr int RADIO_CONTEXT_COUNT = 2;
 constexpr int RADIO_MAX_PAYLOAD_LENGTH = 125; // payload length without leading length byte and trailing crc
 
 
+// bluetooth
+// ---------
+
+constexpr int BLUETOOTH_CONTEXT_COUNT = 2;
+
+
 // network
 // -------
 

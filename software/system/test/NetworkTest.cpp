@@ -8,6 +8,11 @@
 #endif
 
 
+/*
+ * NetworkTest: Either start one instance without arguments that sends to itself on port 1337
+ * or start two instances, one with arguments 1337 1338 and one with arguments 1338 1337
+ */
+
 Network::Endpoint destination;
 
 

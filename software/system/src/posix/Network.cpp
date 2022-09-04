@@ -78,8 +78,6 @@ Context contexts[NETWORK_CONTEXT_COUNT];
 
 void init() {
 	Network::inited = true;
-	for (auto &context : contexts)
-		context.fd = -1;
 }
 
 bool open(int index, uint16_t port) {
@@ -99,8 +97,7 @@ bool open(int index, uint16_t port) {
 
 	// bind to local port
 	struct sockaddr_in6 address = {.sin6_family = AF_INET6, .sin6_port= htons(port)};
-	int r = bind(fd, (struct sockaddr*)&address, sizeof(address));
-    if (r < 0) {
+	if (bind(fd, (struct sockaddr*)&address, sizeof(address)) < 0) {
 		int e = errno;
 		::close(fd);
 		return false;
@@ -113,9 +110,9 @@ bool open(int index, uint16_t port) {
 }
 
 bool join(int index, Address const &multicastGroup) {
-	assert(Network::inited);
 	assert(uint(index) < NETWORK_CONTEXT_COUNT);
 	auto &context = Network::contexts[index];
+	assert(context.fd != -1);
 
 	// join multicast group
 	struct ipv6_mreq group;
@@ -132,32 +129,51 @@ bool join(int index, Address const &multicastGroup) {
 void close(int index) {
 	assert(uint(index) < NETWORK_CONTEXT_COUNT);
 	auto &context = Network::contexts[index];
-
 	assert(context.fd != -1);
+
 	::close(context.fd);
 	context.fd = -1;
 	context.events = 0;
+
+	// resume waiting coroutines
+	context.receiveWaitlist.resumeAll([](ReceiveParameters &p) {
+		*p.length = 0;
+		return true;
+	});
+	context.sendWaitlist.resumeAll([](SendParameters &p) {
+		return true;
+	});
+
+	// don't remove() yet as the iterator in the event loop may point to this context
 }
 
 Awaitable<ReceiveParameters> receive(int index, Endpoint& source, int &length, void *data) {
-	assert(Network::inited);
 	assert(uint(index) < NETWORK_CONTEXT_COUNT);
-
 	auto &context = Network::contexts[index];
+	assert(context.fd != -1);
+
 	context.events |= POLLIN;
-	if (context.isEmpty())
+
+	// add to event loop if necessary
+	if (!context.isInList())
 		Loop::fileDescriptors.add(context);
+
+	// add to wait list
 	return {context.receiveWaitlist, &source, &length, data};
 }
 
 Awaitable<SendParameters> send(int index, Endpoint const &destination, int length, void const *data) {
-	assert(Network::inited);
 	assert(uint(index) < NETWORK_CONTEXT_COUNT);
-
 	auto &context = Network::contexts[index];
+	assert(context.fd != -1);
+
 	context.events |= POLLOUT;
-	if (context.isEmpty())
+
+	// add to event loop if necessary
+	if (!context.isInList())
 		Loop::fileDescriptors.add(context);
+
+	// add to wait list
 	return {context.sendWaitlist, &destination, length, data};
 }
 

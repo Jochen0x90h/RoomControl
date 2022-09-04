@@ -54,13 +54,13 @@
 namespace BusMaster {
 
 struct ReceiveParameters {
-	int *receiveLength;
-	uint8_t *receiveData;
+	int *length;
+	uint8_t *data;
 };
 
 struct SendParameters {
-	int sendLength;
-	uint8_t const *sendData;
+	int length;
+	uint8_t const *data;
 };
 
 /**

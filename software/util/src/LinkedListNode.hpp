@@ -42,10 +42,17 @@ struct LinkedListNode {
 	}
 
 	/**
-	 * Return true if the node is an empty list head or if an element is "not in list"
+	 * Return true if the node is an empty list head
 	 */
 	bool isEmpty() const {
 		return this->next == this;
+	}
+
+	/**
+	 * Return true if the node part of a list
+	 */
+	bool isInList() const {
+		return this->next != this;
 	}
 
 	/**
