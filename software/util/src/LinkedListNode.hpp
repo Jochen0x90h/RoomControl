@@ -2,14 +2,12 @@
 
 
 /**
- * Linked list node that list elements inherit from
- * @tparam T list element that inherits LinkedListNode, e.g class Element : public LinkedListNode<Element>
+ * Linked list node. The linked list consists of a node and list elements must inherit from the node.
+ * @tparam T list element that inherits LinkedListNode, e.g class Element : public LinkedListNode<Element> {};
  */
 template <typename T>
-struct LinkedListNode {
-	T *next;
-	T *prev;
-	
+class LinkedListNode {
+public:
 	/**
 	 * Construct an empty list or an element that is "not in list"
 	 */
@@ -21,10 +19,10 @@ struct LinkedListNode {
 	 * Construct a new list element and add to list
 	 */
 	LinkedListNode(LinkedListNode &list) {
-		this->next = &list;
+		this->next = static_cast<T *>(&list);
 		this->prev = list.prev;
-		list.prev->next = this;
-		list.prev = this;
+		list.prev->next = static_cast<T *>(this);
+		list.prev = static_cast<T *>(this);
 	}
 
 	/**
@@ -79,10 +77,7 @@ struct LinkedListNode {
 		node.prev = this->prev;
 		this->prev->next = &node;
 		this->prev = p;
-/*		node.next = static_cast<T *>(this);
-		node.prev = this->prev;
-		this->prev->next = &node;
-		this->prev = &node;*/
+
 	}
 
 	/**
@@ -120,4 +115,8 @@ struct LinkedListNode {
 	
 	Iterator begin() {return {this->next};}
 	Iterator end() {return {static_cast<T *>(this)};}
+
+
+	T *next;
+	T *prev;
 };

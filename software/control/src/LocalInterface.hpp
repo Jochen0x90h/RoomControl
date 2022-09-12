@@ -28,8 +28,8 @@ public:
 	String getName(uint8_t id) const override;
 	void setName(uint8_t id, String name) override;
 	Array<MessageType const> getPlugs(uint8_t id) const override;
-	void subscribe(uint8_t id, uint8_t plugIndex, Subscriber &subscriber) override;
-	PublishInfo getPublishInfo(uint8_t id, uint8_t plugIndex) override;
+	void subscribe(Subscriber &subscriber) override;
+	SubscriberInfo getSubscriberInfo(uint8_t id, uint8_t plugIndex) override;
 	void erase(uint8_t id) override;
 
 protected:
@@ -48,7 +48,7 @@ protected:
 	uint8_t deviceIds[DEVICE_COUNT];
 	LocalDevice devices[DEVICE_COUNT];
 
-	PublishInfo::Barrier publishBarrier;
+	SubscriberInfo::Barrier publishBarrier;
 
 	int soundCount;
 	MessageType soundPlugs[32];

@@ -85,7 +85,7 @@ struct WaitlistElement : public WaitlistHead {
 
 
 /**
- * Check if a type is derived from a given class
+ * Check if a type is derived from a given class, e.g. IsDerivedFrom<Foo, Bar>::RESULT
  * @tparam T type to check if it derives from base class B
  * @tparam B base class
  */
@@ -108,9 +108,13 @@ public:
 };
 
 
+/**
+ * Select the waitlist element
+ * @tparam T element type
+ */
 template <typename T, int>
 struct WaitlistElementSelector {
-	// element type that is not derived from WaitListElement
+	// element type that is not derived from WaitlistElement
 	struct Element : public WaitlistElement {
 		T value;
 		
@@ -125,18 +129,14 @@ struct WaitlistElementSelector {
 	static T &getValue(Element *e) {return e->value;}
 };
 
+// specialization for T being derived from WaitlistElement
 template <typename T>
 struct WaitlistElementSelector<T, 1> {
-	// element type that is derived from WaitListElement
+	// element type that is derived from WaitlistElement
 	using Element = T;
 	
 	static T &getValue(Element *e) {return *e;}
 };
-
-
-// forward declare Awaitable
-template <typename T = WaitlistElement>
-struct Awaitable;
 
 
 /**
@@ -357,13 +357,6 @@ public:
 		return false;
 	}
 
-	/**
-	 * Wait until resumeFirst() or resumeAll() get called
-	 */
-	template <typename ...Args>
-	Awaitable<T> wait(Args &&...args) {
-		return {*this, std::forward<Args>(args)...};
-	}
 
 	// list of waiting coroutines
 	WaitlistHead head;
@@ -374,7 +367,7 @@ public:
  * This type is returned from functions/methods that can be awaited on using co_await. It behaves like an unique_ptr
  * to a resource and therefore can only be moved, but not copied.
  */
-template <typename T>
+template <typename T = WaitlistElement>
 struct Awaitable {
 	typename Waitlist<T>::Element element;
 
@@ -583,15 +576,15 @@ struct AwaitableCoroutine {
 struct Coroutine {
 	struct promise_type {
 		Coroutine get_return_object() noexcept {
-			#ifdef COROUTINE_DEBUG_PRINT
-				std::cout << "Coroutine get_return_object" << std::endl;
-			#endif
+#ifdef COROUTINE_DEBUG_PRINT
+			std::cout << "Coroutine get_return_object" << std::endl;
+#endif
 			return {std::coroutine_handle<promise_type>::from_promise(*this)};
 		}
 		std::suspend_never initial_suspend() noexcept {
-			#ifdef COROUTINE_DEBUG_PRINT
-				std::cout << "Coroutine initial_suspend" << std::endl;
-			#endif
+#ifdef COROUTINE_DEBUG_PRINT
+			std::cout << "Coroutine initial_suspend" << std::endl;
+#endif
 			return {};
 		}
 		std::suspend_never final_suspend() noexcept {return {};}
@@ -603,6 +596,7 @@ struct Coroutine {
 	
 	/**
 	 * Destroy the coroutine if it is still alive and suspended (coroutine has called co_await).
+	 * Call only once and when it is sure that the coroutine is still alive, e.g. when it contains an infinite loop.
 	 */
 	void destroy() {
 		this->handle.destroy();
@@ -641,8 +635,8 @@ struct CoroutineHandle {
 // helper struct
 template <typename A1, typename A2>
 struct Awaitable2 {
-	A1 const &a1;
-	A2 const &a2;
+	A1 &a1;
+	A2 &a2;
 
 
 	bool await_ready() noexcept {
@@ -650,15 +644,15 @@ struct Awaitable2 {
 	}
 
 	void await_suspend(std::coroutine_handle<> handle) noexcept {
-		const_cast<A1 &>(this->a1).await_suspend(handle);
-		const_cast<A2 &>(this->a2).await_suspend(handle);
+		this->a1.await_suspend(handle);
+		this->a2.await_suspend(handle);
 	}
 
 	int await_resume() noexcept {
 		int result = 0;
-		if (const_cast<A2 &>(this->a2).await_resume())
+		if (this->a2.await_ready())
 			result = 2;
-		if (const_cast<A1 &>(this->a1).await_resume())
+		if (this->a1.await_ready())
 			result = 1;
 		return result;
 	}
@@ -676,8 +670,7 @@ struct Awaitable2 {
  * }
  */
 template <typename A1, typename A2>
-[[nodiscard]] inline Awaitable2<A1, A2> select(A1 const& a1, A2 const& a2) {
-	//assert((void *)a1.list != (void *)a2.list);
+[[nodiscard]] inline Awaitable2<A1, A2> select(A1 &&a1, A2 &&a2) {
 	return {a1, a2};
 }
 
@@ -685,41 +678,65 @@ template <typename A1, typename A2>
 // helper struct
 template <typename A1, typename A2, typename A3>
 struct Awaitable3 {
-	A1 const &a1;
-	A2 const &a2;
-	A3 const &a3;
-
+	A1 &a1;
+	A2 &a2;
+	A3 &a3;
 
 	bool await_ready() noexcept {
 		return this->a1.await_ready() || this->a2.await_ready() || this->a3.await_ready();
 	}
 
 	void await_suspend(std::coroutine_handle<> handle) noexcept {
-		const_cast<A1 &>(this->a1).await_suspend(handle);
-		const_cast<A2 &>(this->a2).await_suspend(handle);
-		const_cast<A3 &>(this->a3).await_suspend(handle);
+		this->a1.await_suspend(handle);
+		this->a2.await_suspend(handle);
+		this->a3.await_suspend(handle);
 	}
 
 	int await_resume() noexcept {
 		int result = 0;
-		if (const_cast<A3 &>(this->a3).await_resume())
+		if (this->a3.await_ready())
 			result = 3;
-		if (const_cast<A2 &>(this->a2).await_resume())
+		if (this->a2.await_ready())
 			result = 2;
-		if (const_cast<A1 &>(this->a1).await_resume())
+		if (this->a1.await_ready())
 			result = 1;
 		return result;
 	}
 };
 
+/**
+ * Wait on three awaitables and return 1 if the first is ready, 2 if the second is ready and 3 if the third is ready
+ */
 template <typename A1, typename A2, typename A3>
-[[nodiscard]] inline Awaitable3<A1, A2, A3> select(A1 const& a1, A2 const& a2, A3 const &a3) {
+[[nodiscard]] inline Awaitable3<A1, A2, A3> select(A1 &&a1, A2 &&a2, A3 &&a3) {
 	return {a1, a2, a3};
 }
 
 
+//template <typename T = WaitlistElement>
+//using Barrier = Waitlist<T>;
+
+/**
+ * Simple barrier on which a data consumer coroutine can wait until it gets resumed by a data producer.
+ * If a resume method gets called by a data producer while no consumer is waiting, the event/data gets lost.
+ * @tparam T
+ */
 template <typename T = WaitlistElement>
-using Barrier = Waitlist<T>;
+class Barrier : public Waitlist<T> {
+public:
+
+	/**
+	 * Wait until a data producer passes data (using e.g. resumeFirst() or resumeAll()).
+	 * Call this as a data consumer
+	 * @return use co_await on return value to wait for data
+	 */
+	template <typename ...Args>
+	[[nodiscard]] Awaitable<T> wait(Args &&...args) {
+		return {*this, std::forward<Args>(args)...};
+	}
+};
+
+
 
 /**
  * Manual reset event

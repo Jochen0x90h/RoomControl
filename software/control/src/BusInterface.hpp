@@ -15,7 +15,11 @@ public:
 	// maximum number of devices that can be commissioned (each endpoint counts as one device)
 	static constexpr int MAX_DEVICE_COUNT = 128;
 
-	// number of coroutines for publishing
+	// last valid bus device address
+	static constexpr int LAST_ADDRESS = 8 * 9 - 1;
+
+	// number of coroutines for receiving and publishing
+	static constexpr int RECEIVE_COUNT = 4;
 	static constexpr int PUBLISH_COUNT = 4;
 
 	/**
@@ -40,8 +44,8 @@ public:
 	String getName(uint8_t id) const override;
 	void setName(uint8_t id, String name) override;
 	Array<MessageType const> getPlugs(uint8_t id) const override;
-	void subscribe(uint8_t id, uint8_t plugIndex, Subscriber &subscriber) override;
-	PublishInfo getPublishInfo(uint8_t id, uint8_t plugIndex) override;
+	void subscribe(Subscriber &subscriber) override;
+	SubscriberInfo getSubscriberInfo(uint8_t id, uint8_t plugIndex) override;
 	void erase(uint8_t id) override;
 
 private:
@@ -180,7 +184,7 @@ private:
 	};
 
 	// a coroutine (e.g. handleZbCommission()) waits on this barrier until a response arrives
-	Waitlist<Response> responseBarrier;
+	Barrier<Response> responseBarrier;
 
-	PublishInfo::Barrier publishBarrier;
+	SubscriberInfo::Barrier publishBarrier;
 };

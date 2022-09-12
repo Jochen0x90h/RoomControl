@@ -32,6 +32,10 @@ struct Message {
 
 // type and source or destination "address" of a message
 struct MessageInfo {
+	uint8_t deviceId;
+	uint8_t plugIndex;
+	uint8_t connectionIndex;
+/*
 	// message type
 	MessageType type = MessageType(0);
 
@@ -53,6 +57,7 @@ struct MessageInfo {
 			uint8_t connectionIndex;
 		} plug;
 	};
+*/
 };
 
 

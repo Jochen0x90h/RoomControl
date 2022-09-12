@@ -48,8 +48,8 @@ public:
 	String getName(uint8_t id) const override;
 	void setName(uint8_t id, String name) override;
 	Array<MessageType const> getPlugs(uint8_t id) const override;
-	void subscribe(uint8_t id, uint8_t plugIndex, Subscriber &subscriber) override;
-	PublishInfo getPublishInfo(uint8_t id, uint8_t plugIndex) override;
+	void subscribe(Subscriber &subscriber) override;
+	SubscriberInfo getSubscriberInfo(uint8_t id, uint8_t plugIndex) override;
 	void erase(uint8_t id) override;
 
 private:
@@ -57,17 +57,18 @@ private:
 	static constexpr int MAX_PLUG_COUNT = 64;
 	static constexpr int MESSAGE_LENGTH = 80;
 
-	enum class DeviceType : uint8_t {
-		PTM215Z = 0x02,
-		PTM216Z = 0x07,
-		ZBEE = 0xff
-	};
 
 	struct DeviceData {
+		enum class Type : uint8_t {
+			PTM215Z = 0x02,
+			PTM216Z = 0x07,
+			ZBEE = 0xff
+		};
+
 		uint8_t id;
 
 		// device type
-		DeviceType deviceType;
+		Type type;
 
 		// device name, zero-terminated if shorter than maximum length
 		char name[MAX_NAME_LENGTH];
@@ -503,7 +504,7 @@ private:
 	};
 
 	// a coroutine (e.g. handleZbCommission()) waits on this barrier until a response arrives
-	Waitlist<Response> responseBarrier;
+	Barrier<Response> responseBarrier;
 
-	PublishInfo::Barrier publishBarrier;
+	SubscriberInfo::Barrier publishBarrier;
 };

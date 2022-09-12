@@ -19,25 +19,19 @@ public:
 	String getName(uint8_t id) const override;
 	void setName(uint8_t id, String name) override;
 	Array<MessageType const> getPlugs(uint8_t id) const override;
-	void subscribe(uint8_t id, uint8_t plugIndex, Subscriber &subscriber) override;
-	PublishInfo getPublishInfo(uint8_t id, uint8_t plugIndex) override;
+	void subscribe(Subscriber &subscriber) override;
+	SubscriberInfo getSubscriberInfo(uint8_t id, uint8_t plugIndex) override;
 	void erase(uint8_t id) override;
 
-protected:
-	class Alarm;
 
-public:
 	// alarm data that is stored in flash
-	struct AlarmData {
-		static constexpr int MAX_PLUG_COUNT = 8;
-
+	struct Data {
 		uint8_t id;
 
 		// device name, zero-terminated if shorter than maximum length
 		char name[MAX_NAME_LENGTH];
 
-		// endpoints that send messages when the alarm goes off
-		uint8_t plugCount = 1;
+		uint8_t reserved;
 
 		AlarmTime time;
 	};
@@ -47,14 +41,14 @@ public:
 	 * @param id id of alarm
 	 * @return configuration data of alarm
 	 */
-	AlarmData const *get(uint8_t id) const;
+	Data const *get(uint8_t id) const;
 
 	/**
 	 * Set an alarm
 	 * @param id id of alarm, new alarm with new id gets created if not found (use 0 for new alarms)
 	 * @param data configuration data of alarm
 	 */
-	void set(uint8_t id, AlarmData &data);
+	void set(uint8_t id, Data &data);
 
 	/**
 	 * Get number of subscribers of an alarm
@@ -63,7 +57,7 @@ public:
 	 * @param command command: 0: deactivate, 1: activate
 	 * @return number of subscribers
 	 */
-	int getSubscriberCount(uint8_t id, int plugCount, uint8_t command);
+	int getSubscriberCount(uint8_t id, uint8_t command);
 
 	/**
 	 * Test an alarm by publishing its messages using given configuration
@@ -71,13 +65,14 @@ public:
 	 * @param endpointCount override number of active endpoints
 	 * @param command command: 0: deactivate, 1: activate
 	 */
-	void test(uint8_t id, int endpointCount, uint8_t command);
+	void test(uint8_t id, uint8_t command);
 
 protected:
 
 	class Alarm {
 	public:
-		Alarm(AlarmInterface *interface, AlarmData const &data)
+		// Constructor, add alarm to linked list
+		Alarm(AlarmInterface *interface, Data const &data)
 			: next(interface->alarms), data(data)
 		{
 			interface->alarms = this;
@@ -86,8 +81,8 @@ protected:
 		// next alarm
 		Alarm *next;
 
-		// zbee device data that is stored in flash
-		AlarmData data;
+		// alarm data that is stored in flash
+		Data data;
 
 		// list of subscribers
 		SubscriberList subscribers;
@@ -96,11 +91,12 @@ protected:
 		bool active = false;
 	};
 
-	Alarm *getAlarm(uint8_t id) const;
-
 	int alarmCount = 0;
 	uint8_t alarmIds[MAX_ALARM_COUNT];
 	Alarm *alarms = nullptr;
+
+	// find alarm by id
+	Alarm *findAlarm(uint8_t id) const;
 
 	uint8_t allocateId();
 

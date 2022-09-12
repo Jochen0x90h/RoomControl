@@ -2,10 +2,12 @@
 #include <ArrayList.hpp>
 #include <convert.hpp>
 #include <Coroutine.hpp>
-#include <enum.hpp>
+#include <Coroutine2.hpp>
 #include <DataQueue.hpp>
-#include <Queue.hpp>
+#include <enum.hpp>
+#include <IsSubclass.hpp>
 #include <LinkedListNode.hpp>
+#include <Queue.hpp>
 #include <StringBuffer.hpp>
 #include <StringHash.hpp>
 #include <StringSet.hpp>
@@ -127,6 +129,20 @@ TEST(utilTest, Array) {
 	EXPECT_EQ(b1[2], 22);
 }
 
+// std::initializer_list
+struct InitStruct {
+	std::initializer_list<int> i;
+	std::initializer_list<float> f;
+};
+TEST(utilTest, initializer_list) {
+	InitStruct const arrayStruct = {
+		{1, 2, 3},
+		{1.0f, 2.0f, 3.0f}
+	};
+
+	EXPECT_EQ(*(arrayStruct.i.begin() + 1), 2);
+	EXPECT_EQ(*(arrayStruct.f.begin() + 1), 2.0f);
+}
 
 TEST(utilTest, ArrayList) {
 	std::mt19937 gen(1337); // standard mersenne_twister_engine seeded with 1337
@@ -249,28 +265,79 @@ TEST(utilTest, flagsEnum) {
 }
 
 
+// IsSubclass
+// ----------
+
+struct BaseClass {};
+struct Subclass : public BaseClass {};
+
+TEST(utilTest, IsSubclass) {
+	EXPECT_EQ((IsSubclass<Subclass, BaseClass>::RESULT), 1);
+	EXPECT_EQ((IsSubclass<Subclass &, BaseClass>::RESULT), 0);
+	EXPECT_EQ((IsSubclass<Subclass *, BaseClass>::RESULT), 0);
+	EXPECT_EQ((IsSubclass<BaseClass, Subclass>::RESULT), 0);
+}
+
+
 // LinkedListNode
 // --------------
 
-struct MyListElement : public LinkedListNode<MyListElement> {
+struct ElementBaseClass {
+	int i;
+};
+
+struct MyListElement : public ElementBaseClass, public LinkedListNode<MyListElement> {
 	int foo;
+
+	MyListElement(int foo) : foo(foo) {}
+	MyListElement(LinkedListNode<MyListElement> &list, int foo) : LinkedListNode<MyListElement>(list), foo(foo) {}
 };
 
 using MyList = LinkedListNode<MyListElement>;
 
 TEST(utilTest, LinkedListNode) {
+	// create list
 	MyList list;
-	
-	MyListElement element;
-	element.foo = 10;
-	list.add(element);
+	EXPECT_TRUE(list.isEmpty());
+	EXPECT_EQ(list.count(), 0);
 
+	// create an element
+	MyListElement element(10);
+	EXPECT_FALSE(element.isInList());
+
+	// add element to list
+	list.add(element);
+	EXPECT_FALSE(list.isEmpty());
+	EXPECT_EQ(list.count(), 1);
+	EXPECT_TRUE(element.isInList());
+
+	// create another element and add to list in constructor
+	MyListElement element2(list, 50);
+	EXPECT_FALSE(list.isEmpty());
+	EXPECT_EQ(list.count(), 2);
+	EXPECT_TRUE(element.isInList());
+
+	// iterate over elements
 	int count = 0;
 	for (auto &e : list) {
-		EXPECT_EQ(e.foo, 10);
+		EXPECT_EQ(e.foo, count == 0 ? 10 : 50);
 		++count;
 	}
-	EXPECT_EQ(count, 1);
+	EXPECT_EQ(count, 2);
+
+	// remove elements
+	element.remove();
+	EXPECT_EQ(list.count(), 1);
+	EXPECT_FALSE(element.isInList());
+	EXPECT_TRUE(element2.isInList());
+
+	element2.remove();
+	EXPECT_EQ(list.count(), 0);
+	EXPECT_FALSE(element2.isInList());
+
+	// call remove second time
+	element.remove();
+	element2.remove();
 }
 
 
@@ -535,57 +602,248 @@ TEST(utilTest, UInt) {
 // return structures
 // -----------------
 
-struct Foo {
+struct Return {
 	int i;
 
-	Foo() {
+	Return() {
 		std::cout << "Default" << std::endl;
 	}
 
-	Foo(int i) : i(i) {
+	Return(int i) : i(i) {
 		std::cout << "Constructor" << std::endl;
 	}
-	
-	Foo(const Foo &) = delete;
-	
-	Foo(Foo &&foo) : i(foo.i) {
+
+	Return(const Return &) = delete;
+
+	Return(Return &&foo) : i(foo.i) {
 		std::cout << "Move Constructor" << std::endl;
 	}
-	
-	Foo &operator =(Foo &&foo) {
+
+	Return &operator =(Return &&foo) {
 		std::cout << "Move Assignment" << std::endl;
 		this->i = foo.i;
 		return *this;
 	}
 };
 
-Foo getFoo1() {
+Return return1() {
 	return {50};
 }
 
-Foo getFoo2() {
-	return getFoo1();
+Return return2() {
+	return return1();
 }
 
-Foo getFoo3() {
-	Foo foo = getFoo2();
+Return return3() {
+	Return foo = return2();
 	return foo;
 }
 
 TEST(utilTest, Return) {
 	{
 		std::cout << "Variant 1" << std::endl;
-		Foo foo = getFoo2();
+		Return r = return2();
 	}
 	{
 		std::cout << "Variant 2" << std::endl;
-		Foo foo = getFoo3();
+		Return r = return3();
 	}
 	{
 		std::cout << "Variant 3" << std::endl;
-		Foo foos[2];
-		foos[0] = std::move(getFoo3());
+		Return r[2];
+		r[0] = std::move(return3());
 	}
+}
+
+
+
+
+// Coroutine2
+// ---------
+
+// helper object for coroutine tests
+struct Object {
+	Object(char const *name) : name(name) {
+		std::cout << "enter " << name << std::endl;
+	}
+	~Object() {
+		std::cout << "exit " << name << std::endl;
+	}
+	char const *name;
+};
+
+// wait lists
+Waitlist2<> waitlist12;
+Waitlist2<> waitlist22;
+
+// wait functions
+Awaitable12<> wait12() {
+	return {waitlist12};
+}
+Awaitable12<> wait22() {
+	return {waitlist22};
+}
+
+int selectResult = 0;
+
+Coroutine coroutine2() {
+	// an object whose destructor gets called when the coroutine ends or gets cancelled
+	Object o("coroutine()");
+
+	std::cout << "!wait1" << std::endl;
+	co_await wait12();
+	std::cout << "!wait2" << std::endl;
+	co_await wait22();
+}
+
+AwaitableCoroutine2 inner2() {
+	Object o("inner()");
+
+	std::cout << "!inner wait1" << std::endl;
+	co_await wait12();
+	std::cout << "!inner wait2" << std::endl;
+	co_await wait22();
+}
+
+Coroutine outer2() {
+	Object o("outer()");
+
+	co_await inner2();
+
+	std::cout << "!outer select" << std::endl;
+	int result = co_await select(wait12(), wait22());
+	selectResult = result;
+	switch (result) {
+	case 1:
+		std::cout << "selected 1" << std::endl;
+		break;
+	case 2:
+		std::cout << "selected 2" << std::endl;
+		break;
+	}
+}
+
+TEST(utilTest, Coroutine2) {
+	// start coroutine
+	coroutine2();
+
+	// resume coroutine
+	std::cout << "!resume wait1" << std::endl;
+	EXPECT_FALSE(waitlist12.isEmpty());
+	waitlist12.resumeAll();
+	EXPECT_TRUE(waitlist12.isEmpty());
+	std::cout << "!resume wait2" << std::endl;
+	EXPECT_FALSE(waitlist22.isEmpty());
+	waitlist22.resumeAll();
+	EXPECT_TRUE(waitlist22.isEmpty());
+}
+
+TEST(utilTest, DestroyCoroutine2) {
+	// start coroutine
+	Coroutine c = coroutine2();
+
+	// destroy coroutine
+	c.destroy();
+}
+
+TEST(utilTest, NestedCoroutine2) {
+	// start outer coroutine
+	outer2();
+
+	// resume inner coroutine
+	std::cout << "!resume inner wait1" << std::endl;
+	waitlist12.resumeAll();
+	std::cout << "!resume inner wait2" << std::endl;
+	waitlist22.resumeAll();
+
+	std::cout << "!resume outer wait2" << std::endl;
+	EXPECT_FALSE(waitlist22.isEmpty());
+	waitlist22.resumeAll();
+	EXPECT_TRUE(waitlist22.isEmpty());
+	EXPECT_EQ(selectResult, 2);
+}
+
+TEST(utilTest, DestroyNestedCoroutine2) {
+	// start outer coroutine (enters inner() and waits on wait1())
+	Coroutine c = outer2();
+
+	// destroy outer coroutine
+	std::cout << "!destroy outer" << std::endl;
+	c.destroy();
+}
+
+TEST(utilTest, AwaitAwaitableCoroutine2) {
+	AwaitableCoroutine2 c = inner2();
+
+	// check that the coroutine is running
+	EXPECT_FALSE(c.await_ready());
+	EXPECT_FALSE(c.hasFinished());
+
+	waitlist12.resumeAll();
+
+	// move assign to c2
+	AwaitableCoroutine2 c2;
+	c2 = std::move(c);
+
+	// check that the c now reports ready
+	EXPECT_TRUE(c.await_ready());
+
+	// check that the coroutine is still running
+	EXPECT_FALSE(c2.await_ready());
+
+	waitlist22.resumeAll();
+
+	// check that the coroutine has stopped
+	EXPECT_TRUE(c2.await_ready());
+}
+
+
+// Coroutine with parameters
+// -------------------------
+
+struct Parameters12 : public WaitlistElement2<Parameters12> {
+	int value;
+
+	// default constructor
+	Parameters12(int value) : value(value) {}
+
+	// cancel
+	void cancel() {
+		std::cout << "Parameters::cancel" << std::endl;
+		WaitlistElement2<Parameters12>::cancel();
+	}
+};
+
+Waitlist2<Parameters12> waitListValue22;
+
+Awaitable12<Parameters12> delay22(int value) {
+	return {waitListValue22, value};
+}
+
+Coroutine waitForDelay12() {
+	Object o("waitForDelay1()");
+	co_await delay22(5);
+	std::cout << "resumed delay(5)" << std::endl;
+}
+
+Coroutine waitForDelay22() {
+	Object o("waitForDelay2()");
+	switch (co_await select(wait12(), delay22(10))) {
+	case 1:
+		std::cout << "resumed wait1" << std::endl;
+		break;
+	case 2:
+		std::cout << "resumed delay(10)" << std::endl;
+		break;
+	}
+}
+
+TEST(utilTest, CoroutineValue2) {
+	waitForDelay12();
+	waitForDelay22();
+
+	waitListValue22.resumeAll([] (Parameters12 const &p) {return p.value == 5;});
+	waitListValue22.resumeAll([] (Parameters12 const &p) {return p.value == 10;});
 }
 
 
@@ -602,16 +860,9 @@ Awaitable<> wait2() {
 	return {waitlist2};
 }
 
-
-struct Object {
-	~Object() {
-		std::cout << "~Object" << std::endl;
-	}
-};
-
 Coroutine coroutine() {
 	// an object whose destructor gets called when the coroutine ends or gets cancelled
-	Object o;
+	Object o("coroutine()");
 	
 	std::cout << "!wait1" << std::endl;
 	co_await wait1();
@@ -621,7 +872,7 @@ Coroutine coroutine() {
 
 
 AwaitableCoroutine inner() {
-	Object o;
+	Object o("inner()");
 
 	std::cout << "!inner wait1" << std::endl;
 	co_await wait1();
@@ -631,8 +882,7 @@ AwaitableCoroutine inner() {
 
 //CoroutineHandle outerHandle;
 Coroutine outer() {
-	// obtain handle of outer coroutine
-	//co_await outerHandle;
+	Object o("outer()");
 
 	co_await inner();
 
@@ -696,7 +946,7 @@ TEST(utilTest, DestroyNestedCoroutine) {
 	c.destroy();
 }
 
-TEST(utilTest, awaitAwaitableCoroutine) {
+TEST(utilTest, AwaitAwaitableCoroutine) {
 	AwaitableCoroutine c = inner();
 
 	// check that the coroutine is running
@@ -847,7 +1097,7 @@ TEST(utilTest, AwaitableList) {
 // Barrier
 // -------
 
-Waitlist<> barrier;
+Barrier barrier;
 
 Coroutine waitForBarrier() {
 	std::cout << "wait on barrier" << std::endl;
@@ -862,8 +1112,8 @@ TEST(utilTest, Barrier) {
 }
 
 
-// test Semaphore
-// --------------
+// Semaphore
+// ---------
 
 Semaphore semaphore(3);
 

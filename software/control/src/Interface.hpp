@@ -1,7 +1,6 @@
 #pragma once
 
 #include <bus.hpp>
-#include <Publisher.hpp>
 #include <Subscriber.hpp>
 #include <Array.hpp>
 #include <Coroutine.hpp>
@@ -52,20 +51,20 @@ public:
 
 	/**
 	 * Subscribe to receive messages messages from an endpoint
-	 * @param plugIndex plug index
 	 * @param subscriber subscriber to insert, gets internally inserted into a linked list
 	 */
-	virtual void subscribe(uint8_t id, uint8_t plugIndex, Subscriber &subscriber) = 0;
+	virtual void subscribe(/*uint8_t id, uint8_t plugIndex,*/ Subscriber &subscriber) = 0;
 
 	/**
-	 * Get publish info used to publish a message to an endpoint
+	 * Get information necessary to subscribe this plug to another plug using subscribe()
+	 * @param id device id
 	 * @param plugIndex plug index
 	 * @return publish info
 	 */
-	virtual PublishInfo getPublishInfo(uint8_t id, uint8_t plugIndex) = 0;
+	virtual SubscriberInfo getSubscriberInfo(uint8_t id, uint8_t plugIndex) = 0;
 
 	/**
-	 * Erase a device by id
+	 * Erase a device by id. Make sure that all PublishInfo's obtained with getPublishInfo() are erased too
 	 * @param id device id
 	 */
 	virtual void erase(uint8_t id) = 0;

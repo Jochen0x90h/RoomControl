@@ -1,7 +1,6 @@
 #pragma once
 
 #include "Message.hpp"
-#include "Publisher.hpp"
 #include "Subscriber.hpp"
 #include <Network.hpp>
 #include <SystemTime.hpp>
@@ -91,7 +90,7 @@ public:
 	 * @param type
 	 * @return publish info
 	 */
-	PublishInfo getPublishInfo(String topicName, MessageType type);
+	SubscriberInfo getPublishInfo(String topicName, MessageType type);
 
 	
 	struct PacketReader : public MessageReader {
@@ -232,8 +231,8 @@ protected:
 	// publishers
 	//Event publishEvent;
 	//PublisherList publishers;
-	PublishInfo::Barrier publishBarrier;
-	Publisher *currentPublisher = nullptr;
+	SubscriberInfo::Barrier publishBarrier;
+	//Publisher *currentPublisher = nullptr;
 	BitField<MAX_CONNECTION_COUNT, 1> dirtyFlags;
 
 
@@ -244,7 +243,7 @@ protected:
 		int &length;
 		uint8_t *message;
 	};
-	Waitlist<AckParameters> ackWaitlist;
+	Barrier<AckParameters> ackWaitlist;
 
 	struct ForwardParameters {
 		uint16_t &sourceConnectionIndex;
@@ -252,5 +251,5 @@ protected:
 		int &length;
 		uint8_t *message;
 	};
-	Waitlist<ForwardParameters> forwardWaitlist;
+	Barrier<ForwardParameters> forwardWaitlist;
 };

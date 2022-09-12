@@ -3,7 +3,8 @@
 #include "Array.hpp"
 #include <cstdint>
 
-#define offsetOf(Type, member) intptr_t(&((Type*)nullptr)->member)
+#define sizeOf(Type) int(sizeof(Type))
+#define offsetOf(Type, member) int(intptr_t(&((Type*)nullptr)->member))
 
 using uint = unsigned int;
 

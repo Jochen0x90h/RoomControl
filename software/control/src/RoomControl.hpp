@@ -4,6 +4,7 @@
 #include "BusInterface.hpp"
 #include "RadioInterface.hpp"
 #include "AlarmInterface.hpp"
+#include "FunctionInterface.hpp"
 #include "SwapChain.hpp"
 #include "Menu.hpp"
 #include <MqttSnBroker.hpp> // include at first because of strange compiler error
@@ -39,7 +40,7 @@ public:
 // -------
 
 	// manager for flash storage
-	ArrayStorage storage;
+	//ArrayStorage storage;
 
 	PersistentStateManager stateManager;
 	
@@ -55,15 +56,45 @@ public:
 // Interfaces
 // ----------
 
+	static constexpr int LOCAL_INTERFACE = 0;
+	static constexpr int BUS_INTERFACE = 1;
+	static constexpr int RADIO_INTERFACE = 2;
+	static constexpr int ALARM_INTERFACE = 3;
+	static constexpr int FUNCTION_INTERFACE = 4;
+	static constexpr int INTERFACE_COUNT = 5;
+
+	Interface &getInterface(int index);
+
 	LocalInterface localInterface;
 	BusInterface busInterface;
 	RadioInterface radioInterface;
 	AlarmInterface alarmInterface;
+	FunctionInterface functionInterface;
+
+	Interface *interfaces[INTERFACE_COUNT];
+
+
+// Connections
+// -----------
+
+	// connections to one input plug
+	struct ConnectionGroup {
+		ConnectionGroup *next;
+
+		uint8_t interfaceIndex;
+		uint8_t deviceId;
+
+		uint8_t count;
+		ConnectionData *data;
+		Subscriber *subscribers;
+	};
+
+	ConnectionGroup* connectionGroups = nullptr;
 
 
 // Functions
 // ---------
-
+/*
 	static constexpr int MAX_FUNCTION_COUNT = 128;
 
 	// plug, describes an input/output of a function
@@ -197,13 +228,13 @@ public:
 			
 			HEATING_CONTROL = 20,
 		};
-/*
+/ *
 		enum class TypeClass : uint8_t {
 			SWITCH = 1,
 			BLIND = 2,
 			HEATING_CONTROL = 3,
 		};
-*/
+* /
 		// function type
 		Type type = Type::INVALID;
 	
@@ -229,43 +260,43 @@ public:
 		FunctionFlash() = default;
 		FunctionFlash(FunctionFlash const &flash);
 
-		/**
+		/ **
 		 * Set type and reallocate and clear configuration
 		 * @param type function type
-		 */
+		 * /
 		void setType(Type type);
 
-		/**
+		/ **
 		 * Returns the name of the function (e.g. "Ceiling Light")
 		 * @return device name
-		 */
+		 * /
 		String getName() const {return String(this->nameLength, this->buffer);}
 		void setName(String name);
 
-		/**
+		/ **
 		 * Get function specific configuration
-		 */
+		 * /
 		template <typename T>
 		T const &getConfig() const {return *reinterpret_cast<T const *>(this->buffer + this->configOffset);}
 		template <typename T>
 		T &getConfig() {return *reinterpret_cast<T *>(this->buffer + this->configOffset);}
 
-		/**
+		/ **
 		 * Get list of inputs
-		 */
+		 * /
 		ConnectionConstIterator getConnections() const {return {this->buffer + this->connectionsOffset};}
 		ConnectionIterator getConnections() {return {this->buffer + this->connectionsOffset, *this};}
 
-		/**
+		/ **
 		 * Returns the size in bytes needed to store the device configuration in flash
 		 * @return size in bytes
-		 */
+		 * /
 		int size() const {return offsetOf(FunctionFlash, buffer[this->bufferSize]);}
 
-		/**
+		/ **
 		 * Allocates a state object
 		 * @return new state object
-		 */
+		 * /
 		Function *allocate() const;
 	};
 
@@ -281,7 +312,7 @@ public:
 		Coroutine coroutine;
 	};
 
-/*
+/ *
 	// simple switch
 	class SimpleSwitch : public Function {
 	public:
@@ -290,7 +321,7 @@ public:
 
 		Coroutine start(RoomControl &roomControl) override;
 	};
-*/
+* /
 
 	// switch with optional timeout
 	class Switch : public Function {
@@ -315,17 +346,16 @@ public:
 			uint32_t timeout;
 
 			struct Setting {
+				// brightness
 				uint8_t brightness;
-				uint16_t fade; // 1/10s
+
+				// fade on or to this setting in 1/10 s
+				uint16_t fade;
 			};
 
 			Setting settings[4];
 
-			// brightness
-			//uint8_t brightness;
-
 			// fade times in 1/10 s
-			//uint16_t onFade;
 			uint16_t offFade;
 			uint16_t timeoutFade;
 		};
@@ -419,7 +449,6 @@ public:
 	};
 
 
-	Interface &getInterface(Connection const &connection);
 
 	//Coroutine testSwitch();
 
@@ -429,12 +458,12 @@ public:
 
 	// list of functions
 	ArrayStorage::Array<Function> functions;
-
+*/
 
 // Menu Helpers
 // ------------
 
-	void printConnection(Menu::Stream &stream, Connection const &connection);
+	//!void printConnection(Menu::Stream &stream, Connection const &connection);
 
 	// get array of switch states
 	Array<String const> getSwitchStates(Usage usage);
@@ -483,18 +512,28 @@ public:
 
 	Coroutine idleDisplay();
 	[[nodiscard]] AwaitableCoroutine mainMenu();
+
+	// local, bus and radio devices
 	[[nodiscard]] AwaitableCoroutine devicesMenu(Interface &interface);
 	[[nodiscard]] AwaitableCoroutine deviceMenu(Interface &interface, uint8_t id);
-	[[nodiscard]] AwaitableCoroutine alarmsMenu(AlarmInterface &alarms);
-	[[nodiscard]] AwaitableCoroutine alarmMenu(AlarmInterface &alarms, uint8_t id, AlarmInterface::AlarmData &data);
+
+	// alarms
+	[[nodiscard]] AwaitableCoroutine alarmsMenu();
+	[[nodiscard]] AwaitableCoroutine alarmMenu(AlarmInterface::Data &data);
 	[[nodiscard]] AwaitableCoroutine alarmTimeMenu(AlarmTime &time);
+
+	// functions
+	[[nodiscard]] AwaitableCoroutine functionsMenu();
+	[[nodiscard]] AwaitableCoroutine functionMenu(FunctionInterface::DataUnion &data);
+
+	// helpers
 	[[nodiscard]] AwaitableCoroutine plugsMenu(Interface &interface, uint8_t id);
 	[[nodiscard]] AwaitableCoroutine messageLogger(Interface &interface, uint8_t id);
 	[[nodiscard]] AwaitableCoroutine messageGenerator(Interface &interface, uint8_t id);
-	[[nodiscard]] AwaitableCoroutine functionsMenu();
-	[[nodiscard]] AwaitableCoroutine functionMenu(int index, FunctionFlash &flash);
+/*
 	[[nodiscard]] AwaitableCoroutine measureRunTime(Interface &interface, uint8_t id, Connection const &connection, uint16_t &measureRunTime);
 	[[nodiscard]] AwaitableCoroutine editFunctionConnection(ConnectionIterator &it, Plug const &plug, Connection connection, bool add);
 	[[nodiscard]] AwaitableCoroutine selectFunctionDevice(Connection &connection, Plug const &plug);
 	[[nodiscard]] AwaitableCoroutine selectFunctionPlug(Interface &interface, uint8_t id, Connection &connection, Plug const &plug);
+*/
 };
