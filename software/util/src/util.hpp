@@ -60,6 +60,13 @@ void insert(It begin, It end, int count = 1) {
 	}
 }
 
+/**
+ * Erase the first elements of an array
+ * @tparam It iterator type
+ * @param begin begin iterator
+ * @param end end iterator
+ * @param count number of elements to erase
+ */
 template <typename It>
 void erase(It begin, It end, int count = 1) {
 	for (It it = begin + count; it < end; ++it) {

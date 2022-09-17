@@ -424,7 +424,8 @@ Awaitable<Network::SendParameters> MqttSnClient::ackReceive(uint16_t msgId, uint
 	// message id is only set when qos was 1 or 2
 	if (msgId == 0)
 		return {};
-		
+//!
+// todo: message gets deallocated before send is complete
 	uint8_t message[8];
 
 	PacketWriter w(message);

@@ -13,6 +13,7 @@ public:
 	AlarmInterface();
 	~AlarmInterface() override;
 
+	String getName() override;
 	void setCommissioning(bool enabled) override;
 
 	Array<uint8_t const> getDeviceIds() override;

@@ -113,6 +113,10 @@ LocalInterface::LocalInterface() {
 LocalInterface::~LocalInterface() {
 }
 
+String LocalInterface::getName() {
+	return "Local";
+}
+
 void LocalInterface::setCommissioning(bool enabled) {
 }
 

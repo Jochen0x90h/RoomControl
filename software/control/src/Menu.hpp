@@ -146,7 +146,12 @@ protected:
 	int8_t delta = 0;
 	bool activated = false;
 
-	bool section = false;
+	enum class Section : uint8_t {
+		BEGIN,
+		BODY,
+		END
+	};
+	Section section = Section::BODY;
 
 	// index of selected menu entry
 	uint16_t selected = 0;

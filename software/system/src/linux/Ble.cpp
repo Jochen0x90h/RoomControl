@@ -43,6 +43,8 @@ public:
 
 	// waiting coroutines
 	Waitlist<ScanParameters> waitlist;
+
+	// emulated result index
 	int index = 0;
 };
 

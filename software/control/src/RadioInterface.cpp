@@ -109,6 +109,10 @@ void RadioInterface::setConfiguration(uint16_t panId, DataBuffer<16> const &key,
 		start();
 }
 
+String RadioInterface::getName() {
+	return "Radio";
+}
+
 void RadioInterface::setCommissioning(bool enabled) {
 	this->commissioning = enabled;
 	if (this->commissioning) {

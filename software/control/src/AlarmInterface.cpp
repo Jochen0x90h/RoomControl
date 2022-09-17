@@ -43,6 +43,10 @@ AlarmInterface::AlarmInterface() {
 AlarmInterface::~AlarmInterface() {
 }
 
+String AlarmInterface::getName() {
+	return "Alarm";
+}
+
 void AlarmInterface::setCommissioning(bool enabled) {
 }
 

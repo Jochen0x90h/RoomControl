@@ -22,7 +22,7 @@ static const usb::DeviceDescriptor deviceDescriptor = {
 	.bDeviceSubClass = 0xff,
 	.bDeviceProtocol = 0, // 0 = binary, 1 = text
 	.bMaxPacketSize0 = 64, // max packet size for endpoint 0
-	.idVendor = 0x1915, // Nordic Semoconductor
+	.idVendor = 0x1915, // Nordic Semiconductor
 	.idProduct = 0x1337,
 	.bcdDevice = 0x0100, // device version
 	.iManufacturer = 0, // index into string table
@@ -150,7 +150,7 @@ Coroutine receive(int index) {
 		co_await Radio::receive(index, packet);
 		//Debug::setGreenLed(true);
 
-		co_await Timer::sleep(25ms);
+		//co_await Timer::sleep(25ms);
 
 		// length without crc but with extra data
 		int length = packet[0] - 2 + Radio::RECEIVE_EXTRA_LENGTH;

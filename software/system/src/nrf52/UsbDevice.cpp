@@ -273,7 +273,7 @@ void handle() {
 
 					// resume first waiting coroutine
 					ep.receiveState = Endpoint::USB; // receiveState must not be DMA any more
-					ep.receiveWaitlist.resumeFirst([length](ReceiveParameters p){
+					ep.receiveWaitlist.resumeFirst([length](ReceiveParameters &p){
 						p.length = length;
 						return true;
 					});
@@ -281,14 +281,11 @@ void handle() {
 					ep.receiveState = Endpoint::IDLE;
 
 					// check if there are more queued coroutines waiting for receive
-					ep.receiveWaitlist.resumeFirst([&ep, index](ReceiveParameters p) {
+					ep.receiveWaitlist.visitFirst([&ep, index](ReceiveParameters &p) {
 						// set receive data
 						ep.maxReceiveLength = p.length;
 						ep.receiveLength = p.length;
 						ep.prepareReceive(index, intptr_t(p.data));
-
-						// don't resume yet
-						return false;
 					});
 					// -> EPDATA OUT
 				}
@@ -317,22 +314,19 @@ void handle() {
 						ep.startSend(index, NRF_USBD->EPIN[index].PTR + 64); // -> ENDEPIN[index]
 					} else {
 						// finished: resume waiting coroutine
-						ep.sendWaitlist.resumeFirst([](SendParameters p) {
+						ep.sendWaitlist.resumeFirst([](SendParameters &p) {
 							return true;
 						});
 
 						ep.sendState = Endpoint::IDLE;
 
 						// check if there are more queued coroutines waiting for send
-						ep.sendWaitlist.resumeFirst([index, &ep](SendParameters p) {
+						ep.sendWaitlist.visitFirst([index, &ep](SendParameters &p) {
 							// set send data
 							ep.sendLength = p.length;
 
 							// start first DMA transfer from memory to internal buffer
 							ep.startSend(index, intptr_t(p.data)); // -> ENDEPIN[index]
-
-							// don't resume yet
-							return false;
 						});
 					}
 				}

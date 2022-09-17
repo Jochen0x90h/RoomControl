@@ -53,7 +53,7 @@ struct Context {
 	bool sendBusy = false;
 	void startSend();
 
-	
+
 	bool filter(uint8_t const *data) const {
 		uint8_t const *mac = data + 1;
 		ContextFlags flags = this->flags;
@@ -264,7 +264,7 @@ GreenPowerDeviceData const deviceData[1] = {{
 FILE *pcapIn = nullptr;
 FILE *pcapOut = nullptr;
 
-
+/*
 ReceiveParameters::ReceiveParameters(ReceiveParameters &&p) noexcept
 	: WaitlistElement(std::move(p)), packet(p.packet)
 {
@@ -277,8 +277,16 @@ void ReceiveParameters::add(WaitlistHead &head) noexcept {
 void ReceiveParameters::remove() noexcept {
 	WaitlistElement::remove();
 }
+*/
+void ReceiveParameters::append(WaitlistNode<ReceiveParameters> &list) noexcept {
+	list.add(*this);
+}
 
+void ReceiveParameters::cancel() noexcept {
+	remove();
+}
 
+/*
 SendParameters::SendParameters(SendParameters &&p) noexcept
 	: WaitlistElement(std::move(p)), packet(p.packet), result(p.result)
 {
@@ -310,7 +318,34 @@ void SendParameters::remove() noexcept {
 		}
 	}
 }
+*/
 
+void SendParameters::append(WaitlistNode<SendParameters> &list) noexcept {
+	list.add(*this);
+}
+
+void SendParameters::cancel() noexcept {
+	remove();
+
+	// check if we need to cancel the send operation
+	if (Radio::device != nullptr && (this->result & 0xc0) == 0x80) {
+		auto &context = Radio::contexts[this->result & 0x3f];
+
+		// send mac counter to device to cancel the send operation
+		uint8_t macCounter = this->packet[3];
+
+		Terminal::out << "cancel " << dec(macCounter) << '\n';
+		if (!context.sendBusy) {
+			// send cancel operatio immediately
+			context.sendLength = 1;
+			context.sendBuffer[0] = macCounter;
+			context.startSend();
+		} else {
+			// need to queue the cancel operation
+			context.cancelQueue.addBack(macCounter);
+		}
+	}
+}
 
 // event loop handler chain
 Loop::Handler nextHandler = nullptr;

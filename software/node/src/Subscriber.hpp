@@ -1,33 +1,20 @@
 #pragma once
 
 #include "Message.hpp"
-#include <Coroutine.hpp>
 #include <LinkedListNode.hpp>
-
-
-/*
-struct Subscriber : public LinkedListNode<Subscriber>, public PublishInfo {
-	// message source, set by subscribe() method
-	// todo: type not necessary?
-	MessageInfo source;
-
-	// message convert options, depend on endpoint and message types
-	ConvertOptions convertOptions;
-};
-*/
 
 
 // connection data stored in flash
 struct ConnectionData {
-
-	struct PlugInfo {
+	struct {
 		uint8_t interfaceIndex;
 		uint8_t deviceId;
 		uint8_t plugIndex;
-	};
+	} source;
 
-	PlugInfo source;
-	PlugInfo destination;
+	struct {
+		uint8_t plugIndex;
+	} destination;
 
 	// message convert options, depend on endpoint and message types
 	ConvertOptions convertOptions;
@@ -36,23 +23,17 @@ struct ConnectionData {
 
 struct SubscriberInfo {
 	MessageType type = MessageType(0);
-
-	struct Parameters {
-		// info about the message source for the subscriber to identify the message
-		MessageInfo &info;
-
-		// message (length is defined by Subscriber::messageType)
-		void *message;
-	};
-
-	using Barrier = ::Barrier<Parameters>;
-	Barrier *barrier = nullptr;
+	MessageBarrier *barrier = nullptr;
 };
 
-
+/**
+ * Subscriber
+ */
 class Subscriber : public LinkedListNode<Subscriber> {
 public:
 	ConnectionData const *data;
+
+	uint8_t deviceId;
 	uint8_t connectionIndex;
 
 	SubscriberInfo info;
@@ -69,14 +50,14 @@ public:
 	 * @param plugIndex plug index
 	 * @param message message to publish
 	 */
-	void publishSwitch(int plugIndex, uint8_t message);
+	void publishSwitch(uint8_t plugIndex, uint8_t message);
 
 	/**
 	 * Publish float message to subscribers to given plug
 	 * @param plugIndex plug index
 	 * @param message message to publish
 	 */
-	void publishFloat(int plugIndex, float message);
+	void publishFloat(uint8_t plugIndex, float message);
 
 	/**
 	 * Publish float message to subscribers to given plug
@@ -84,7 +65,7 @@ public:
 	 * @param message message to publish
 	 * @param command command: 0 = set, 1 = step
 	 */
-	void publishFloatCommand(int plugIndex, float message, uint8_t command);
+	void publishFloatCommand(uint8_t plugIndex, float message, uint8_t command);
 
 	/**
 	 * Publish float message to subscribers to given plug
@@ -93,5 +74,25 @@ public:
 	 * @param command command: 0 = set, 1 = step
 	 * @param transition transition in 1/10s
 	 */
-	void publishFloatTransition(int plugIndex, float message, uint8_t command, uint16_t transition);
+	void publishFloatTransition(uint8_t plugIndex, float message, uint8_t command, uint16_t transition);
+};
+
+
+
+class Listener : public LinkedListNode<Listener> {
+public:
+	uint8_t sourceIndex;
+	MessageBarrier *barrier;
+};
+
+class ListenerList : public LinkedListNode<Listener> {
+public:
+	/**
+	 * Publish switch message to listeners
+	 * @param deviceId device id
+	 * @param plugIndex plug index
+	 * @param message message to publish
+	 */
+	void publishSwitch(uint8_t deviceId, uint8_t plugIndex, uint8_t message);
+
 };

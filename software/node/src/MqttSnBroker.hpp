@@ -231,7 +231,7 @@ protected:
 	// publishers
 	//Event publishEvent;
 	//PublisherList publishers;
-	SubscriberInfo::Barrier publishBarrier;
+	MessageBarrier publishBarrier;
 	//Publisher *currentPublisher = nullptr;
 	BitField<MAX_CONNECTION_COUNT, 1> dirtyFlags;
 

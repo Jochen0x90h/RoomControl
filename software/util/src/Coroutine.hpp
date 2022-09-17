@@ -1,6 +1,7 @@
 #pragma once
 
 #include "assert.hpp"
+#include "IsSubclass.hpp"
 #include <utility>
 
 #ifdef __clang__
@@ -18,6 +19,502 @@ namespace std {
 #include <iostream>
 #endif
 
+
+/**
+ * Waitlist node for linked list head and elements.
+ * These methods need to be implemented by list elements:
+ * append(): Append the node to the given list
+ * cancel(): Cancel the operation or awaitable coroutine (e.g. to stop a DMA
+ * transfer or destroy the awaitable coroutine). The cancel() method only gets called if the element is still part of a
+ * waitlist and also has to remove the element from the waitlist and maybe needs to be protected the list against
+ * concurrent modifications. A destructor also needs to be implemented to call cancel() when the node is still part of
+ * a waitlist (if (isInList()) cancel();)
+ * @tparam T
+ */
+template <typename T>
+class WaitlistNode {
+public:
+
+	WaitlistNode() noexcept {
+		this->next = this->prev = this;
+	}
+
+	// delete copy constructor
+	WaitlistNode(WaitlistNode const &) = delete;
+
+	/**
+	 * Destructor. It is an error to destroy a waitlist node that is still part of a list
+	 */
+	~WaitlistNode() {
+		assert(!isInList());
+	}
+
+	bool isInList() const {
+		return this->next != this;
+	}
+
+	void add(WaitlistNode &node) {
+		auto p = node.prev;
+		node.prev->next = this;
+		node.prev = this->prev;
+		this->prev->next = &node;
+		this->prev = p;
+	}
+
+	void remove() noexcept {
+		this->next->prev = this->prev;
+		this->prev->next = this->next;
+
+		// set to "not in list"
+		this->next = this;
+		this->prev = this;
+	}
+
+	WaitlistNode *next;
+	WaitlistNode *prev;
+};
+
+/**
+ * Waitlist element with default implementation of append() and cancel().
+ * @tparam T
+ */
+template <typename T>
+class WaitlistElement : public WaitlistNode<T> {
+public:
+	void append(WaitlistNode<T> &list) noexcept {list.add(*this);}
+
+	void cancel() noexcept {WaitlistElement<T>::remove();}
+
+	// handle of waiting coroutine
+	std::coroutine_handle<> handle = nullptr;
+};
+
+
+template <typename T>
+class WaitlistParameters : public WaitlistElement<WaitlistParameters<T>> {
+public:
+	template <typename ...Args>
+	explicit WaitlistParameters(Args &&...args) : parameters{std::forward<Args>(args)...} {}
+
+	T parameters;
+};
+
+
+/**
+ * Default waitlist element with no parameters
+ */
+class DefaultWaitlistElement : public WaitlistElement<DefaultWaitlistElement> {
+};
+
+
+template <typename T, int>
+struct WaitlistElementSelector {
+	using Element = WaitlistParameters<T>;
+	static T &get(Element *e) {return e->parameters;}
+};
+
+// specialization for T being derived from WaitlistElement
+template <typename T>
+struct WaitlistElementSelector<T, 1> {
+	using Element = T;
+	static T &get(Element *e) {return *e;}
+};
+
+
+/**
+ * List for waiting coroutines
+ * @tparam T list element
+ */
+template <typename T = DefaultWaitlistElement>
+class Waitlist {
+public:
+
+	// select element type
+	using Selector = WaitlistElementSelector<T, IsSubclass<T, WaitlistNode<T>>::RESULT>;
+	using Element = typename Selector::Element;
+
+	// element type
+	//using Element = T;
+
+	/**
+	 * Destructor, list should be empty when the destructor is called
+	 */
+	~Waitlist() {
+		this->head.remove();
+	}
+
+	/**
+	 * Check if the list is empty
+	 * @return true if empty
+	 */
+	bool isEmpty() {
+		return !this->head.isInList();
+	}
+
+	/**
+	 * Check if the list contains an element for which the predicate is true
+	 * @param predicate boolean predicate function for the list elements
+	 * @return true if an element is contained
+	 */
+	template <typename P>
+	bool contains(P const &predicate) {
+		auto *current = this->head.next;
+		auto *end = &this->head;
+		while (current != end) {
+			if (predicate(Selector::get(static_cast<Element*>(current))))
+				return true;
+			current = current->next;
+		}
+		return false;
+	}
+
+	/**
+	 * Visit the first element
+	 * @tparam V visitor type, e.g. a lambda function
+	 * @param visitor visitor
+	 * @param true if a first element exists
+	 */
+	template <typename V>
+	bool visitFirst(V const &visitor) {
+		auto current = this->head.next;
+		auto end = &this->head;
+		if (current != end) {
+			visitor(Selector::get(static_cast<Element*>(current)));
+			return true;
+		}
+		return false;
+	}
+
+	/**
+	 * Visit the second element. Practical for starting the next pending operation before dealing with the current
+	 * operation that has just finished.
+	 * @tparam V visitor type, e.g. a lambda function
+	 * @param visitor visitor
+	 * @param true if a second element exists
+	 */
+	template <typename V>
+	bool visitSecond(V const &visitor) {
+		auto current = this->head.next;
+		auto end = &this->head;
+		if (current != end) {
+			current = current->next;
+			if (current != end) {
+				visitor(Selector::get(static_cast<Element*>(current)));
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Remove and resume first waiting coroutine
+	 * @return true when a coroutine was resumed, false when the list was empty
+	 */
+	bool resumeFirst() {
+		auto current = static_cast<Element*>(this->head.next);
+		auto end = &this->head;
+		if (current != end) {
+			// remove element from list (special implementation of remove() may lock interrupts to avoid race condition)
+			current->remove();
+
+			// resume coroutine if it is waiting
+			if (current->handle)
+				current->handle.resume();
+			return true;
+		}
+		return false;
+	}
+
+	/**
+	 * Resume all waiting coroutines that were waiting when resumeAll() was called
+	 */
+	void resumeAll() {
+		// add end marker node
+		WaitlistNode<Element> end;
+		this->head.add(end);
+
+		// iterate over elements
+		while (this->head.next != &end) {
+			auto *current = static_cast<Element*>(this->head.next);
+
+			// remove element from list (special implementation of remove() may lock interrupts to avoid race condition)
+			current->remove();
+
+			// resume coroutine if it is waiting
+			if (current->handle)
+				current->handle.resume();
+		}
+
+		// end removes itself automatically in the destructor
+		end.remove();
+	}
+
+	/**
+	 * Remove and resume first waiting coroutine when the predicate is true
+	 * @param predicate boolean predicate function for the first list element
+	 * @return true when list was not empty
+	 */
+	template <typename P>
+	void resumeFirst(P const &predicate) {
+		auto current = static_cast<Element*>(this->head.next);
+		auto end = &this->head;
+		if (current != end) {
+			if (predicate(Selector::get(current))) {
+				// remove element from list (special implementation of remove() may lock interrupts to avoid race condition)
+				current->remove();
+
+				// resume coroutine if it is waiting
+				if (current->handle)
+					current->handle.resume();
+			}
+		}
+	}
+
+	/**
+	 * Resume one waiting coroutine for which the predicate is true (and remove it from the list)
+	 * @param predicate boolean predicate function for the list elements
+	 */
+	template <typename P>
+	void resumeOne(P const &predicate) {
+		auto current = static_cast<Element*>(this->head.next);
+		auto end = &this->head;
+		while (current != end) {
+			if (predicate(Selector::get(current))) {
+				// remove element from list (special implementation of remove() may lock interrupts to avoid race condition)
+				current->remove();
+
+				// resume coroutine if it is waiting
+				if (current->handle)
+					current->handle.resume();
+				return;
+			}
+			current = static_cast<Element*>(current->next);
+		}
+	}
+
+	/**
+	 * Resume all waiting coroutines for which the predicate is true (and remove them from the list)
+	 * @param predicate boolean predicate function for the list elements
+	 */
+	template <typename P>
+	void resumeAll(P const &predicate) {
+		// add iterator node at the beginning
+		WaitlistNode<Element> it;
+		this->head.next->add(it);
+
+		// add end marker node
+		WaitlistNode<Element> end;
+		this->head.add(end);
+
+		// iterate over elements
+		while (it.next != &end) {
+			auto current = static_cast<Element*>(it.next);
+
+			if (predicate(Selector::get(current))) {
+				// remove element from list (special implementation of remove() may lock interrupts to avoid race condition)
+				current->remove();
+
+				// resume coroutine if it is waiting
+				if (current->handle)
+					current->handle.resume();
+			} else {
+				// advance iterator node
+				it.remove();
+				current->next->add(it);
+			}
+		}
+
+		// it and end remove themselves automatically in the destructor
+		it.remove();
+		end.remove();
+	}
+
+	WaitlistNode<Element> head;
+};
+
+
+
+/**
+ * This type is returned from functions/methods that can be awaited on using co_await. It behaves like an unique_ptr
+ * to a resource and therefore can only be moved, but not copied.
+ */
+template <typename T = DefaultWaitlistElement>
+struct Awaitable {
+	typename Waitlist<T>::Element element;
+
+	Awaitable() = default;
+
+	template <typename ...Args>
+	Awaitable(Waitlist<T> &list, Args &&...args) noexcept : element(std::forward<Args>(args)...) {
+		this->element.append(list.head);
+		//list.add(this->element);
+#ifdef COROUTINE_DEBUG_PRINT
+		std::cout << "Awaitable add" << std::endl;
+#endif
+	}
+
+	Awaitable(Awaitable const &) = delete;
+
+	/**
+	 * Move constructor, only supported when the element supports it
+	 */
+	Awaitable(Awaitable &&a) noexcept : element(std::move(a.element)) {
+#ifdef COROUTINE_DEBUG_PRINT
+		std::cout << "Awaitable move" << std::endl;
+#endif
+	}
+
+	~Awaitable() {
+#ifdef COROUTINE_DEBUG_PRINT
+		std::cout << "Awaitable destructor" << std::endl;
+#endif
+		if (this->element.isInList()) {
+#ifdef COROUTINE_DEBUG_PRINT
+			std::cout << "Awaitable cancel" << std::endl;
+#endif
+			this->element.cancel();
+		}
+	}
+
+	/**
+	 * Move assignment, only supported when the element supports it
+	 */
+	Awaitable &operator =(Awaitable &&a) noexcept {
+		this->element = std::move(a.element);
+		return *this;
+	}
+
+	bool isAlive() const noexcept {
+		return this->element.isInList();
+	}
+
+	/**
+	 * Determine if the operation or coroutine has finished
+	 * @return true when finished, false when still in progress (coroutine: running or co_awaiting)
+	 */
+	bool hasFinished() const noexcept {
+		return !this->element.isInList();
+	}
+
+	/**
+	 * Cancel the operation or coroutine
+	 */
+	void cancel() {
+#ifdef COROUTINE_DEBUG_PRINT
+		std::cout << "Awaitable cancel" << std::endl;
+#endif
+		if (this->element.isInList())
+			this->element.cancel();
+	}
+
+	/**
+	 * Used by co_await to determine if the operation has finished (ready to continue)
+	 * @return true when finished
+	 */
+	bool await_ready() const noexcept {
+		// is ready when the element is "not in list"
+		return !this->element.isInList();
+	}
+
+	/**
+	 * Used by co_await to store the handle of the calling coroutine before suspending
+	 */
+	void await_suspend(std::coroutine_handle<> handle) noexcept {
+#ifdef COROUTINE_DEBUG_PRINT
+		std::cout << "Awaitable await_suspend" << std::endl;
+#endif
+		// set the coroutine handle
+		this->element.handle = handle;
+	}
+
+	/**
+	 * Used by co_await to determine the return value of co_await
+	 */
+	void await_resume() noexcept {
+#ifdef COROUTINE_DEBUG_PRINT
+		std::cout << "Awaitable await_resume" << std::endl;
+#endif
+	}
+
+
+	/**
+	 * An awaitable function or method can also be a coroutine, therefore define a promise_type
+	 */
+	struct promise_type {
+		// the waitlist is part of the coroutine promise
+		Waitlist<T> list;
+
+		~promise_type() {
+#ifdef COROUTINE_DEBUG_PRINT
+			std::cout << "AwaitableCoroutine ~promise_type" << std::endl;
+#endif
+			// the coroutine exits normally or gets destroyed
+			this->list.resumeAll();
+		}
+
+		Awaitable get_return_object() {
+			auto handle = std::coroutine_handle<promise_type>::from_promise(*this);
+			return {this->list, handle};
+		}
+
+		std::suspend_never initial_suspend() noexcept {
+			return {};
+		}
+
+		std::suspend_never final_suspend() noexcept {
+			return {};
+		}
+
+		void unhandled_exception() {
+		}
+
+		// the coroutine exits normally
+		void return_void() {
+#ifdef COROUTINE_DEBUG_PRINT
+			std::cout << "AwaitableCoroutine return_void" << std::endl;
+#endif
+		}
+	};
+};
+
+
+class AwaitableCoroutineElement : public WaitlistNode<AwaitableCoroutineElement> {
+public:
+
+	AwaitableCoroutineElement() = default;
+	explicit AwaitableCoroutineElement(std::coroutine_handle<> context) : context(context) {}
+
+
+	// move assignment
+	AwaitableCoroutineElement &operator =(AwaitableCoroutineElement &&a) noexcept {
+		remove();
+		add(a);
+		a.remove();
+		this->context = a.context;
+		return *this;
+	}
+
+	void append(WaitlistNode<AwaitableCoroutineElement> &list) {
+		list.add(*this);
+	}
+
+	void cancel() {
+		remove();
+		this->context.destroy();
+	}
+
+	// handle of waiting coroutine
+	std::coroutine_handle<> handle = nullptr;
+
+	// handle of awaitable coroutine
+	std::coroutine_handle<> context = nullptr;
+};
+
+using AwaitableCoroutine = Awaitable<AwaitableCoroutineElement>;
+
+
+
+/*
 
 struct WaitlistElement;
 
@@ -84,11 +581,11 @@ struct WaitlistElement : public WaitlistHead {
 };
 
 
-/**
+/ **
  * Check if a type is derived from a given class, e.g. IsDerivedFrom<Foo, Bar>::RESULT
  * @tparam T type to check if it derives from base class B
  * @tparam B base class
- */
+ * /
 template <typename T, class B>
 class IsDerivedFrom {
 	class No {};
@@ -108,10 +605,10 @@ public:
 };
 
 
-/**
+/ **
  * Select the waitlist element
  * @tparam T element type
- */
+ * /
 template <typename T, int>
 struct WaitlistElementSelector {
 	// element type that is not derived from WaitlistElement
@@ -139,10 +636,10 @@ struct WaitlistElementSelector<T, 1> {
 };
 
 
-/**
+/ **
  * List of coroutines that wait to be resumed
  * @tparam T list element type or structure that automatically gets extended to a list element
- */
+ * /
 template <typename T = WaitlistElement>
 class Waitlist {
 public:
@@ -152,9 +649,9 @@ public:
 	using Element = typename Selector::Element;
 
 
-	/**
+	/ **
 	 * Default constructor
-	 */
+	 * /
 	Waitlist() {
 		this->head.next = static_cast<Element *>(&this->head);
 		this->head.prev = static_cast<Element *>(&this->head);
@@ -166,16 +663,16 @@ public:
 	// delete assignment operator
 	Waitlist &operator =(Waitlist const &) = delete;
 	
-	/**
+	/ **
 	 * Check if list is empty
 	 * @return true when empty
-	 */
+	 * /
 	bool isEmpty() {return this->head.next == &this->head;}
 
-	/**
+	/ **
 	 * Resume first waiting coroutine
 	 * @return true when a coroutine was resumed, false when the list was empty
-	 */
+	 * /
 	bool resumeFirst() {
 		Element *head = static_cast<Element*>(&this->head);
 		Element *current = head->next;
@@ -199,9 +696,9 @@ public:
 		return true;
 	}
 	
-	/**
+	/ **
 	 * Resume all waiting coroutines
-	 */
+	 * /
 	void resumeAll() {
 		Element *head = static_cast<Element*>(&this->head);
 		Element *current = head;
@@ -225,7 +722,7 @@ public:
 			if (current->handle)
 				current->handle.resume();
 		}
-/*
+/ *
 		Element *head = static_cast<Element*>(&this->head);
 		Element *current = head->next;
 
@@ -245,14 +742,14 @@ public:
 
 			current = next;
 		}
-*/
+* /
 	}
 	
-	/**
+	/ **
 	 * Remove and resume first waiting coroutine when the predicate is true
 	 * @param predicate boolean predicate function for the first list element
 	 * @return true when list was not empty
-	 */
+	 * /
 	template <typename P>
 	bool resumeFirst(P const &predicate) {
 		Element *head = static_cast<Element*>(&this->head);
@@ -274,10 +771,10 @@ public:
 		return true;
 	}
 
-	/**
+	/ **
 	 * Resume one waiting coroutine for which the predicate is true (and remove it from the list)
 	 * @param predicate boolean predicate function for the list elements
-	 */
+	 * /
 	template <typename P>
 	void resumeOne(P const &predicate) {
 		Element *head = static_cast<Element*>(&this->head);
@@ -307,10 +804,10 @@ public:
 		}
 	}
 
-	/**
+	/ **
 	 * Resume all waiting coroutines for which the predicate is true (and remove them from the list)
 	 * @param predicate boolean predicate function for the list elements
-	 */
+	 * /
 	template <typename P>
 	void resumeAll(P const &predicate) {
 		Element *head = static_cast<Element*>(&this->head);
@@ -339,11 +836,11 @@ public:
 		}
 	}
 	
-	/**
+	/ **
 	 * Check if the list contains an element for which the predicate is true
 	 * @param predicate boolean predicate function for the list elements
 	 * @return true if an element is contained
-	 */
+	 * /
 	template <typename P>
 	bool contains(P const &predicate) {
 		Element *head = static_cast<Element*>(&this->head);
@@ -363,10 +860,10 @@ public:
 };
 
 
-/**
+/ **
  * This type is returned from functions/methods that can be awaited on using co_await. It behaves like an unique_ptr
  * to a resource and therefore can only be moved, but not copied.
- */
+ * /
 template <typename T = WaitlistElement>
 struct Awaitable {
 	typename Waitlist<T>::Element element;
@@ -436,7 +933,7 @@ struct Awaitable {
 };
 
 
-/**
+/ **
  * Return value for a sub-coroutine with no return value.
  *
  * Use like this:
@@ -445,7 +942,7 @@ struct Awaitable {
  * Coroutine foo() {
  *   co_await bar();
  * }
- */
+ * /
 struct AwaitableCoroutine {
 	// an awaitable function or method can also be a coroutine
 	struct promise_type {
@@ -518,9 +1015,9 @@ struct AwaitableCoroutine {
 		return *this;
 	}
 
-	/**
+	/ **
 	 * Cancel the coroutine if it is still running
-	 */
+	 * /
 	void cancel() {
 		if (this->element.next != nullptr) {
 			#ifdef COROUTINE_DEBUG_PRINT
@@ -531,10 +1028,10 @@ struct AwaitableCoroutine {
 		}
 	}
 
-	/**
+	/ **
 	 * Determine if a coroutine is still alive
 	 * @return true when alive (running or stopped), false when finished
-	 */
+	 * /
 	bool isAlive() const noexcept {
 		return this->element.next != nullptr;
 	}
@@ -558,7 +1055,7 @@ struct AwaitableCoroutine {
 		return this->element.next == nullptr;
 	}
 };
-
+*/
 
 /**
  * Simple detached coroutine for asynchronous processing. If the return value is kept, it can be destroyed later unless
@@ -721,7 +1218,7 @@ template <typename A1, typename A2, typename A3>
  * If a resume method gets called by a data producer while no consumer is waiting, the event/data gets lost.
  * @tparam T
  */
-template <typename T = WaitlistElement>
+template <typename T = DefaultWaitlistElement>
 class Barrier : public Waitlist<T> {
 public:
 

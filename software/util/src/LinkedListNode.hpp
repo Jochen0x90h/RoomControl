@@ -12,17 +12,17 @@ public:
 	 * Construct an empty list or an element that is "not in list"
 	 */
 	LinkedListNode() noexcept {
-		this->next = this->prev = static_cast<T *>(this);
+		this->next = this->prev = this;
 	}
 
 	/**
 	 * Construct a new list element and add to list
 	 */
 	LinkedListNode(LinkedListNode &list) {
-		this->next = static_cast<T *>(&list);
+		this->next = &list;
 		this->prev = list.prev;
-		list.prev->next = static_cast<T *>(this);
-		list.prev = static_cast<T *>(this);
+		list.prev->next = this;
+		list.prev = this;
 	}
 
 	/**
@@ -71,9 +71,9 @@ public:
 	 * Add one or multiple nodes at the end of the list (assuming this node is the list head)
 	 * @param node node to add, can be part of a "ring" of nodes
 	 */
-	void add(T &node) {
+	void add(LinkedListNode &node) {
 		auto p = node.prev;
-		node.prev->next = static_cast<T *>(this);
+		node.prev->next = this;
 		node.prev = this->prev;
 		this->prev->next = &node;
 		this->prev = p;
@@ -100,14 +100,15 @@ public:
 		this->prev->next = this->next;
 
 		// set to "not in list"
-		this->next = this->prev = static_cast<T *>(this);
+		this->next = this;
+		this->prev = this;
 	}
 	
 	
 	struct Iterator {
-		T *node;
-		T &operator *() {return *this->node;}
-		T *operator ->() {return this->node;}
+		LinkedListNode<T> *node;
+		T &operator *() {return *static_cast<T *>(this->node);}
+		T *operator ->() {return static_cast<T *>(this->node);}
 		Iterator &operator ++() {this->node = this->node->next; return *this;}
 		bool operator ==(Iterator it) const {return this->node == it.node;}
 		bool operator !=(Iterator it) const {return this->node != it.node;}
@@ -117,6 +118,6 @@ public:
 	Iterator end() {return {static_cast<T *>(this)};}
 
 
-	T *next;
-	T *prev;
+	LinkedListNode *next;
+	LinkedListNode *prev;
 };

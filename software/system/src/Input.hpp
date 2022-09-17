@@ -19,7 +19,9 @@ struct Parameters {
 	bool &value;
 };
 
-
+/**
+ * Initialize the digital inputs
+ */
 void init();
 
 /**

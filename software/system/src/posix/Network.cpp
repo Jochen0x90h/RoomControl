@@ -29,11 +29,6 @@ Address Address::fromString(String s) {
 
 class Context : public Loop::FileDescriptor {
 public:
-
-	Waitlist<ReceiveParameters> receiveWaitlist;
-	Waitlist<SendParameters> sendWaitlist;
-
-
 	void activate(uint16_t events) override {
 		if (events & POLLIN) {
 			this->receiveWaitlist.resumeFirst([this](ReceiveParameters &p) {
@@ -71,6 +66,10 @@ public:
 				this->events &= ~POLLOUT;
 		}
 	}
+
+	// waiting coroutines
+	Waitlist<ReceiveParameters> receiveWaitlist;
+	Waitlist<SendParameters> sendWaitlist;
 };
 
 bool inited = false;

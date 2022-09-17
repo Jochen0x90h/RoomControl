@@ -83,6 +83,10 @@ void BusInterface::setConfiguration(DataBuffer<16> const &key, AesKey const &aes
 		start();
 }
 
+String BusInterface::getName() {
+	return "Bus";
+}
+
 void BusInterface::setCommissioning(bool enabled) {
 	this->commissioning = enabled && this->deviceCount < MAX_DEVICE_COUNT;
 	if (this->commissioning) {
@@ -121,6 +125,7 @@ Array<MessageType const> BusInterface::getPlugs(uint8_t id) const {
 }
 
 void BusInterface::subscribe(Subscriber &subscriber) {
+	assert(subscriber.info.barrier != nullptr);
 	subscriber.remove();
 	auto id = subscriber.data->source.deviceId;
 	auto endpoint = getEndpoint(id);

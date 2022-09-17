@@ -190,7 +190,7 @@ static const TypeInfo typeInfos[] = {
 
 				// change color setting
 				bool force = false;
-				int newSettingIndex = info.connectionIndex % data.settingCount;
+				int newSettingIndex = info.sourceIndex % data.settingCount;
 				if (on && settingIndex != newSettingIndex) {
 					settingIndex = newSettingIndex;
 				} else if (!changed) {
@@ -344,8 +344,8 @@ static const TypeInfo typeInfos[] = {
 				// change color setting
 				bool setColor = false;
 				bool force = false;
-				if (on && settingIndex != info.connectionIndex) {
-					settingIndex = info.connectionIndex;
+				if (on && settingIndex != info.sourceIndex) {
+					settingIndex = info.sourceIndex;
 					setColor = true;
 				} else if (!changed) {
 					// current state is confirmed (off -> off or on -> on)
@@ -646,13 +646,11 @@ static const TypeInfo typeInfos[] = {
 				// publish brightness
 				function->subscribers.publishFloatTransition(2, brightness, 0, brightnessFade);
 
-				// publish color x
-				if (setColor)
+				// publish color x/y
+				if (setColor) {
 					function->subscribers.publishFloatTransition(3, color.x, 0, colorFade);
-
-				// publish color y
-				if (setColor)
 					function->subscribers.publishFloatTransition(4, color.y, 0, colorFade);
+				}
 			}
 		}
 	},
@@ -851,11 +849,11 @@ static const TypeInfo typeInfos[] = {
 					break;
 				case 3:
 					// windows in
-					Terminal::out << "window " << dec(info.connectionIndex) << (message.value.u8 ? " open\n" : " closed\n");
+					Terminal::out << "window " << dec(info.sourceIndex) << (message.value.u8 ? " open\n" : " closed\n");
 					if (message.value.u8 == 0)
-						windows &= ~(1 << info.connectionIndex);
+						windows &= ~(1 << info.sourceIndex);
 					else
-						windows |= 1 << info.connectionIndex;
+						windows |= 1 << info.sourceIndex;
 					break;
 				case 4:
 					// set temperature in
@@ -961,6 +959,10 @@ FunctionInterface::FunctionInterface() {
 FunctionInterface::~FunctionInterface() {
 }
 
+String FunctionInterface::getName() {
+	return "Function";
+}
+
 void FunctionInterface::setCommissioning(bool enabled) {
 }
 
@@ -990,7 +992,7 @@ Array<MessageType const> FunctionInterface::getPlugs(uint8_t id) const {
 	auto function = findFunction(id);
 	if (function != nullptr) {
 		auto &typeInfo = findInfo(function->data->type);
-		return {int(typeInfo.plugs.size()), typeInfo.plugs.begin()};//function->getPlugs();
+		return {int(typeInfo.plugs.size()), typeInfo.plugs.begin()};
 	}
 	return {};
 }
@@ -1098,7 +1100,7 @@ FunctionInterface::Type FunctionInterface::getNextType(Type type, int delta) {
 }
 
 void FunctionInterface::setType(DataUnion &data, Type type) {
-	array::fill(sizeOf(DataUnion), reinterpret_cast<uint8_t *>(&data), 0);
+	array::fill(sizeof(DataUnion) - sizeof(Data), reinterpret_cast<uint8_t *>(&data) + sizeof(Data), 0);
 
 	data.data.type = type;
 
@@ -1135,6 +1137,10 @@ void FunctionInterface::setType(DataUnion &data, Type type) {
 	}
 }
 
+Array<MessageType const> FunctionInterface::getPlugs(Type type) {
+	auto &typeInfo = findInfo(type);
+	return {int(typeInfo.plugs.size()), typeInfo.plugs.begin()};
+}
 
 
 // protected:

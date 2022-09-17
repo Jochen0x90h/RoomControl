@@ -22,6 +22,7 @@ public:
 
 	~LocalInterface() override;
 
+	String getName() override;
 	void setCommissioning(bool enabled) override;
 
 	Array<uint8_t const> getDeviceIds() override;
@@ -48,7 +49,7 @@ protected:
 	uint8_t deviceIds[DEVICE_COUNT];
 	LocalDevice devices[DEVICE_COUNT];
 
-	SubscriberInfo::Barrier publishBarrier;
+	MessageBarrier publishBarrier;
 
 	int soundCount;
 	MessageType soundPlugs[32];

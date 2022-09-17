@@ -13,6 +13,7 @@ public:
 	FunctionInterface();
 	~FunctionInterface() override;
 
+	String getName() override;
 	void setCommissioning(bool enabled) override;
 
 	Array<uint8_t const> getDeviceIds() override;
@@ -141,6 +142,7 @@ public:
 	static String getName(Type type);
 	static Type getNextType(Type type, int delta);
 	static void setType(DataUnion &data, Type type);
+	static Array<MessageType const> getPlugs(Type type);
 
 
 	class Function {
@@ -165,7 +167,7 @@ public:
 		Coroutine coroutine;
 
 		// coroutines wait here until something gets published to them
-		SubscriberInfo::Barrier publishBarrier;
+		MessageBarrier publishBarrier;
 
 		// list of subscribers
 		SubscriberList subscribers;

@@ -38,6 +38,7 @@ public:
 	 */
 	void setConfiguration(DataBuffer<16> const &key, AesKey const &aesKey);
 
+	String getName() override;
 	void setCommissioning(bool enabled) override;
 
 	Array<uint8_t const> getDeviceIds() override;
@@ -186,5 +187,5 @@ private:
 	// a coroutine (e.g. handleZbCommission()) waits on this barrier until a response arrives
 	Barrier<Response> responseBarrier;
 
-	SubscriberInfo::Barrier publishBarrier;
+	MessageBarrier publishBarrier;
 };

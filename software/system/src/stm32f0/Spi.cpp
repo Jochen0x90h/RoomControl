@@ -138,11 +138,8 @@ void handle() {
 			auto &context = Spi::contexts[index];
 			
 			// check if a coroutine is waiting on this context
-			if (context.waitlist.resumeFirst([index](Parameters const &p) {
+			if (context.waitlist.visitFirst([index](Parameters const &p) {
 				startTransfer(index, p);
-
-				// don't resume yet
-				return false;
 			})) {
 				break;
 			}
@@ -177,18 +174,17 @@ void init() {
 	Spi::nextHandler = Loop::addHandler(handle);
 }
 
-Awaitable<Parameters> transfer(int index, int writeLength, void const *writeData, int readLength, void *readData)
-{
+Awaitable<Parameters> transfer(int index, int writeLength, void const *writeData, int readLength, void *readData) {
 	assert(Spi::nextHandler != nullptr && uint(index) < SPI_CONTEXT_COUNT); // init() not called or index out of range
 	auto &context = Spi::contexts[index];
 
-	Awaitable<Parameters> r = {context.waitlist, writeLength, writeData, readLength, readData};
-
 	// start transfer immediately if SPI is idle
-	if ((TIM14->CR1 & TIM_CR1_CEN) == 0)
-		startTransfer(index, r.element.value);
+	if ((TIM14->CR1 & TIM_CR1_CEN) == 0) {
+		Parameters parameters{writeLength, writeData, readLength, readData};
+		startTransfer(index, parameters);
+	}
 	
-	return r;
+	return {context.waitlist, writeLength, writeData, readLength, readData};
 }
 
 } // namespace Spi

@@ -18,7 +18,12 @@ public:
 	 * Destructor
 	 */
 	virtual ~Interface();
-	
+
+	/**
+	 * Get name of interface
+	 */
+	virtual String getName() = 0;
+
 	/**
 	 * Set the interface into commissioning mode so that new devices can be added
 	 * @param enabled true to enable
