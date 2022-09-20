@@ -68,12 +68,12 @@ struct SendParameters : public WaitlistElement {
 };
 */
 // Internal helper: Stores the receive parameters and a reference to the result value in the awaitable during co_await
-class ReceiveParameters : public WaitlistNode<ReceiveParameters> {
+class ReceiveParameters : public WaitlistNode {
 public:
 	explicit ReceiveParameters(Packet &packet) : packet(packet) {}
 	//~ReceiveParameters() {if (isInList()) cancel();}
 
-	void append(WaitlistNode<ReceiveParameters> &list) noexcept;
+	void append(WaitlistNode &list) noexcept;
 	void cancel() noexcept;
 
 	// handle of waiting coroutine
@@ -83,12 +83,12 @@ public:
 };
 
 // Internal helper: Stores the send parameters in the awaitable during co_await
-class SendParameters : public WaitlistNode<SendParameters> {
+class SendParameters : public WaitlistNode {
 public:
 	SendParameters(uint8_t *packet, uint8_t &result) : packet(packet), result(result) {}
 	//~SendParameters() {if (isInList()) cancel();}
 
-	void append(WaitlistNode<SendParameters> &list) noexcept;
+	void append(WaitlistNode &list) noexcept;
 	void cancel() noexcept;
 
 	// handle of waiting coroutine

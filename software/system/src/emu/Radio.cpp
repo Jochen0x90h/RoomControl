@@ -278,7 +278,7 @@ void ReceiveParameters::remove() noexcept {
 	WaitlistElement::remove();
 }
 */
-void ReceiveParameters::append(WaitlistNode<ReceiveParameters> &list) noexcept {
+void ReceiveParameters::append(WaitlistNode &list) noexcept {
 	list.add(*this);
 }
 
@@ -320,7 +320,7 @@ void SendParameters::remove() noexcept {
 }
 */
 
-void SendParameters::append(WaitlistNode<SendParameters> &list) noexcept {
+void SendParameters::append(WaitlistNode &list) noexcept {
 	list.add(*this);
 }
 

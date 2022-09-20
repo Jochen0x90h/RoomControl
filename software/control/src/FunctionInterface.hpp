@@ -144,6 +144,9 @@ public:
 	static void setType(DataUnion &data, Type type);
 	static Array<MessageType const> getPlugs(Type type);
 
+	// configuration methods
+	void publishSwitch(uint8_t id, uint8_t plugIndex, uint8_t value);
+
 
 	class Function {
 	public:

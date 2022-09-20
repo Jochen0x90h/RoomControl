@@ -1142,6 +1142,11 @@ Array<MessageType const> FunctionInterface::getPlugs(Type type) {
 	return {int(typeInfo.plugs.size()), typeInfo.plugs.begin()};
 }
 
+void FunctionInterface::publishSwitch(uint8_t id, uint8_t plugIndex, uint8_t value) {
+	auto function = findFunction(id);
+	if (function != nullptr)
+		function->subscribers.publishSwitch(plugIndex, value);
+}
 
 // protected:
 

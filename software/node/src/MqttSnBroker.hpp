@@ -8,7 +8,7 @@
 #include <MessageWriter.hpp>
 #include <mqttsn.hpp>
 #include <BitField.hpp>
-#include <LinkedListNode.hpp>
+#include <LinkedList.hpp>
 #include <StringBuffer.hpp>
 #include <StringHash.hpp>
 #include <convert.hpp>

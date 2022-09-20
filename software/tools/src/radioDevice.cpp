@@ -277,7 +277,7 @@ int main(void) {
 
 	// start coroutines to send and receive
 	for (int index = 0; index < RADIO_CONTEXT_COUNT; ++index) {
-		for (int i = 0; i < 7; ++i) {//!
+		for (int i = 0; i < 64; ++i) {
 			receive(index);
 			send(index);
 		}

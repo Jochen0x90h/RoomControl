@@ -5,7 +5,7 @@
 #include <DataQueue.hpp>
 #include <enum.hpp>
 #include <IsSubclass.hpp>
-#include <LinkedListNode.hpp>
+#include <LinkedList.hpp>
 #include <Queue.hpp>
 #include <StringBuffer.hpp>
 #include <StringHash.hpp>
@@ -285,14 +285,14 @@ struct ElementBaseClass {
 	int i;
 };
 
-struct MyListElement : public ElementBaseClass, public LinkedListNode<MyListElement> {
+struct MyListElement : public ElementBaseClass, public LinkedListNode {
 	int foo;
 
 	MyListElement(int foo) : foo(foo) {}
-	MyListElement(LinkedListNode<MyListElement> &list, int foo) : LinkedListNode<MyListElement>(list), foo(foo) {}
+	MyListElement(LinkedList<MyListElement> &list, int foo) : LinkedListNode(list), foo(foo) {}
 };
 
-using MyList = LinkedListNode<MyListElement>;
+using MyList = LinkedList<MyListElement>;
 
 TEST(utilTest, LinkedListNode) {
 	// create list
@@ -775,11 +775,10 @@ TEST(utilTest, DestroyNestedCoroutine) {
 TEST(utilTest, AwaitAwaitableCoroutine) {
 	AwaitableCoroutine c = inner();
 
-	// check that the coroutine is running
-	EXPECT_FALSE(c.await_ready());
+	// check that the coroutine is alive
+	EXPECT_TRUE(c.isAlive());
 	EXPECT_FALSE(c.hasFinished());
-
-	waitlist1.resumeAll();
+	EXPECT_FALSE(c.await_ready());
 
 	// move assign to c2
 	AwaitableCoroutine c2;
@@ -791,7 +790,25 @@ TEST(utilTest, AwaitAwaitableCoroutine) {
 	// check that the coroutine is still running
 	EXPECT_FALSE(c2.await_ready());
 
+	// resume the coroutine
+	waitlist1.resumeAll();
 	waitlist2.resumeAll();
+
+	// check that the coroutine has stopped
+	EXPECT_TRUE(c2.await_ready());
+
+	// should have no effect
+	c.cancel();
+
+
+	// start again and assign to finished c2
+	c2 = inner();
+
+	// start again and assign to c2 when it is still alive
+	c2 = inner();
+
+	// cancel the coroutine
+	c2.cancel();
 
 	// check that the coroutine has stopped
 	EXPECT_TRUE(c2.await_ready());
@@ -801,12 +818,12 @@ TEST(utilTest, AwaitAwaitableCoroutine) {
 // Coroutine with parameters
 // -------------------------
 
-class Parameters1 : public WaitlistNode<Parameters1> {
+class Parameters1 : public WaitlistNode {
 public:
 	// default constructor
 	explicit Parameters1(int value) : value(value) {}
 
-	void append(WaitlistNode<Parameters1> &list) {
+	void append(WaitlistNode &list) {
 		std::cout << "Parameters::append" << std::endl;
 		list.add(*this);
 	}

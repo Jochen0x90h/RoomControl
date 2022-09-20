@@ -2,10 +2,8 @@
 
 
 /**
- * Linked list node. The linked list consists of a node and list elements must inherit from the node.
- * @tparam T list element that inherits LinkedListNode, e.g class Element : public LinkedListNode<Element> {};
+ * Linked list node for list head and elements
  */
-template <typename T>
 class LinkedListNode {
 public:
 	/**
@@ -16,7 +14,7 @@ public:
 	}
 
 	/**
-	 * Construct a new list element and add to list
+	 * Construct a new list element and add to given list
 	 */
 	LinkedListNode(LinkedListNode &list) {
 		this->next = &list;
@@ -103,21 +101,32 @@ public:
 		this->next = this;
 		this->prev = this;
 	}
-	
-	
+
+
+	LinkedListNode *next;
+	LinkedListNode *prev;
+};
+
+/**
+ * Linked list. The list elements must inherit from LinkedListNode
+ * @tparam T list element type that inherits LinkedListNode, e.g class Element : public LinkedListNode {};
+ */
+template <typename T>
+class LinkedList : public LinkedListNode {
+public:
+
+	/**
+	 * Iterator. Do not remove() an element that an iterator points to
+	 */
 	struct Iterator {
-		LinkedListNode<T> *node;
+		LinkedListNode *node;
 		T &operator *() {return *static_cast<T *>(this->node);}
 		T *operator ->() {return static_cast<T *>(this->node);}
 		Iterator &operator ++() {this->node = this->node->next; return *this;}
 		bool operator ==(Iterator it) const {return this->node == it.node;}
 		bool operator !=(Iterator it) const {return this->node != it.node;}
 	};
-	
+
 	Iterator begin() {return {this->next};}
-	Iterator end() {return {static_cast<T *>(this)};}
-
-
-	LinkedListNode *next;
-	LinkedListNode *prev;
+	Iterator end() {return {this};}
 };

@@ -2,7 +2,7 @@
 
 #include "../Loop.hpp"
 #include "SystemTime.hpp"
-#include <LinkedListNode.hpp>
+#include <LinkedList.hpp>
 #include <ctime>
 
 
@@ -16,7 +16,7 @@ inline SystemTime now() {
 }
 
 // list of file descriptors to observe readable/writable events (used in Network.cpp)
-class FileDescriptor : public LinkedListNode<FileDescriptor> {
+class FileDescriptor : public LinkedListNode {
 public:
 	virtual ~FileDescriptor();
 	virtual void activate(uint16_t events) = 0;
@@ -24,18 +24,18 @@ public:
 	int fd = -1;
 	short int events;
 };
-using FileDescriptorList = LinkedListNode<FileDescriptor>;
+using FileDescriptorList = LinkedList<FileDescriptor>;
 extern FileDescriptorList fileDescriptors;
 
 // timeouts for Timer and Calendar
-class Timeout : public LinkedListNode<Timeout> {
+class Timeout : public LinkedListNode {
 public:
 	virtual ~Timeout();
 	virtual void activate() = 0;
 
 	SystemTime time;
 };
-using TimeoutList = LinkedListNode<Timeout>;
+using TimeoutList = LinkedList<Timeout>;
 extern TimeoutList timeouts;
 
 /**

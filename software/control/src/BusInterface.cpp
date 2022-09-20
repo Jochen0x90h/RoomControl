@@ -632,7 +632,8 @@ AwaitableCoroutine BusInterface::handleCommission(uint32_t deviceId, uint8_t end
 		auto oldEndpoint = oldDevice->endpoints;
 		auto endpoint = device->endpoints;
 		while (oldEndpoint != nullptr && endpoint != nullptr) {
-			endpoint->subscribers.add(static_cast<Subscriber &>(static_cast<LinkedListNode<Subscriber> &>(oldEndpoint->subscribers)));
+			//endpoint->subscribers.add(static_cast<Subscriber &>(static_cast<LinkedListNode<Subscriber> &>(oldEndpoint->subscribers)));
+			endpoint->subscribers.add(oldEndpoint->subscribers); // only works because old list removes itself from linked list
 			oldEndpoint = oldEndpoint->next;
 			endpoint = endpoint->next;
 		}

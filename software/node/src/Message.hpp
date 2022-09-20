@@ -47,10 +47,8 @@ struct MessageInfo {
 	//MessageType type;
 };
 
-class MessageParameters : public WaitlistElement<MessageParameters> {
+struct MessageParameters {
 public:
-	MessageParameters(MessageInfo &info, void *message) : info(info), message(message) {}
-
 	// info about the message source for the subscriber to identify the message
 	MessageInfo &info;
 

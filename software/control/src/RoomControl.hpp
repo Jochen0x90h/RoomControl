@@ -174,6 +174,7 @@ public:
 	// functions
 	[[nodiscard]] AwaitableCoroutine functionsMenu();
 	[[nodiscard]] AwaitableCoroutine functionMenu(FunctionInterface::DataUnion &data);
+	[[nodiscard]] AwaitableCoroutine measureRunTime(uint8_t id, uint8_t plugIndex, uint16_t &runTime);
 
 	// connections
 	[[nodiscard]] AwaitableCoroutine connectionsMenu(Array<MessageType const> plugs, TempConnections &tc);
@@ -185,7 +186,5 @@ public:
 	[[nodiscard]] AwaitableCoroutine plugsMenu(Interface &interface, uint8_t id);
 	[[nodiscard]] AwaitableCoroutine messageLogger(Interface &interface, uint8_t id);
 	[[nodiscard]] AwaitableCoroutine messageGenerator(Interface &interface, uint8_t id);
-/*
-	[[nodiscard]] AwaitableCoroutine measureRunTime(Interface &interface, uint8_t id, Connection const &connection, uint16_t &measureRunTime);
-*/
+
 };

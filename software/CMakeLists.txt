@@ -164,7 +164,6 @@ set(UTIL
 	util/src/convert.cpp
 	util/src/convert.hpp
 	util/src/Coroutine.hpp
-	util/src/Coroutine2.hpp
 	util/src/Data.hpp
 	util/src/DataQueue.hpp
 	util/src/defines.hpp
@@ -173,7 +172,7 @@ set(UTIL
 	util/src/Font.cpp
 	util/src/Font.hpp
 	util/src/IsSubclass.hpp
-	util/src/LinkedListNode.hpp
+	util/src/LinkedList.hpp
 	util/src/optional.hpp
 	util/src/Pointer.hpp
 	util/src/Queue.hpp

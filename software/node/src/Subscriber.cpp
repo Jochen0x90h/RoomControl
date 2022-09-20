@@ -7,66 +7,66 @@ static void setInfo(MessageParameters &p, Subscriber const &subscriber) {
 	//p.info.type = subscriber.info.type;
 }
 
-void SubscriberList::publishSwitch(uint8_t plugIndex, uint8_t message) {
+void SubscriberList::publishSwitch(uint8_t plugIndex, uint8_t value) {
 	for (auto &subscriber: *this) {
 		// check if this is the right plug
 		if (subscriber.data->source.plugIndex == plugIndex) {
 			// resume subscriber
-			subscriber.info.barrier->resumeFirst([&subscriber, message](MessageParameters &p) {
+			subscriber.info.barrier->resumeFirst([&subscriber, value](MessageParameters &p) {
 				setInfo(p, subscriber);
 
 				// convert to destination message type and resume coroutine if conversion was successful
 				auto &dst = *reinterpret_cast<Message *>(p.message);
-				return convertSwitch(subscriber.info.type, dst, message, subscriber.data->convertOptions);
+				return convertSwitch(subscriber.info.type, dst, value, subscriber.data->convertOptions);
 			});
 		}
 	}
 }
 
-void SubscriberList::publishFloat(uint8_t plugIndex, float message) {
+void SubscriberList::publishFloat(uint8_t plugIndex, float value) {
 	for (auto &subscriber: *this) {
 		// check if this is the right plug
 		if (subscriber.data->source.plugIndex == plugIndex) {
 			// resume subscriber
-			subscriber.info.barrier->resumeFirst([&subscriber, message](MessageParameters &p) {
+			subscriber.info.barrier->resumeFirst([&subscriber, value](MessageParameters &p) {
 				setInfo(p, subscriber);
 
 				// convert to destination message type and resume coroutine if conversion was successful
 				auto &dst = *reinterpret_cast<Message *>(p.message);
-				return convertFloat(subscriber.info.type, dst, message, subscriber.data->convertOptions);
+				return convertFloat(subscriber.info.type, dst, value, subscriber.data->convertOptions);
 			});
 		}
 	}
 }
 
-void SubscriberList::publishFloatCommand(uint8_t plugIndex, float message, uint8_t command) {
+void SubscriberList::publishFloatCommand(uint8_t plugIndex, float value, uint8_t command) {
 	for (auto &subscriber: *this) {
 		// check if this is the right plug
 		if (subscriber.data->source.plugIndex == plugIndex) {
 			// resume subscriber
-			subscriber.info.barrier->resumeFirst([&subscriber, message, command](MessageParameters &p) {
+			subscriber.info.barrier->resumeFirst([&subscriber, value, command](MessageParameters &p) {
 				setInfo(p, subscriber);
 
 				// convert to destination message type and resume coroutine if conversion was successful
 				auto &dst = *reinterpret_cast<Message *>(p.message);
-				return convertFloatCommand(subscriber.info.type, dst, message, command, subscriber.data->convertOptions);
+				return convertFloatCommand(subscriber.info.type, dst, value, command, subscriber.data->convertOptions);
 			});
 		}
 	}
 }
 
-void SubscriberList::publishFloatTransition(uint8_t plugIndex, float message, uint8_t command, uint16_t transition) {
+void SubscriberList::publishFloatTransition(uint8_t plugIndex, float value, uint8_t command, uint16_t transition) {
 	for (auto &subscriber: *this) {
 		// check if this is the right plug
 		if (subscriber.data->source.plugIndex == plugIndex) {
 			// resume subscriber
-			subscriber.info.barrier->resumeFirst([&subscriber, message, command, transition](MessageParameters &p) {
+			subscriber.info.barrier->resumeFirst([&subscriber, value, command, transition](MessageParameters &p) {
 				setInfo(p, subscriber);
 
 				// convert to destination message type and resume coroutine if conversion was successful
 				auto &dst = *reinterpret_cast<Message *>(p.message);
 				return convertFloatTransition(subscriber.info.type, dst,
-					message, command, transition, subscriber.data->convertOptions);
+					value, command, transition, subscriber.data->convertOptions);
 			});
 		}
 	}
