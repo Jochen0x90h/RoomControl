@@ -38,44 +38,10 @@ public:
 	}
 
 	/**
-	 * Return true if the node is an empty list head
-	 */
-	bool isEmpty() const {
-		return this->next == this;
-	}
-
-	/**
 	 * Return true if the node part of a list
 	 */
 	bool isInList() const {
 		return this->next != this;
-	}
-
-	/**
-	 * Return the number of entries in the list
-	 * @return number of entries
-	 */
-	int count() const {
-		int count = 0;
-		auto node = this->next;
-		while (node != this) {
-			node = node->next;
-			++count;
-		}
-		return count;
-	}
-
-	/**
-	 * Add one or multiple nodes at the end of the list (assuming this node is the list head)
-	 * @param node node to add, can be part of a "ring" of nodes
-	 */
-	void add(LinkedListNode &node) {
-		auto p = node.prev;
-		node.prev->next = this;
-		node.prev = this->prev;
-		this->prev->next = &node;
-		this->prev = p;
-
 	}
 
 	/**
@@ -114,6 +80,50 @@ public:
 template <typename T>
 class LinkedList : public LinkedListNode {
 public:
+	/**
+	 * Return true if the node is an empty list head
+	 */
+	bool isEmpty() const {
+		return this->next == this;
+	}
+
+	/**
+	 * Return the number of entries in the list
+	 * @return number of entries
+	 */
+	int count() const {
+		int count = 0;
+		auto node = this->next;
+		while (node != this) {
+			node = node->next;
+			++count;
+		}
+		return count;
+	}
+
+	/**
+	 * Add one or multiple elements at the end of the list
+	 * @param node element to add, can be part of a "ring" of nodes
+	 */
+	void add(T &node) {
+		auto p = node.prev;
+		node.prev->next = this;
+		node.prev = this->prev;
+		this->prev->next = &node;
+		this->prev = p;
+	}
+
+	/**
+	 * Add one list to another, take care to remove the other list from the "ring" of nodes afterwards
+	 * @param node list to add
+	 */
+	void add(LinkedList &node) {
+		auto p = node.prev;
+		node.prev->next = this;
+		node.prev = this->prev;
+		this->prev->next = &node;
+		this->prev = p;
+	}
 
 	/**
 	 * Iterator. Do not remove() an element that an iterator points to

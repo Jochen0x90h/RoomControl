@@ -20,8 +20,9 @@ public:
 	String getName(uint8_t id) const override;
 	void setName(uint8_t id, String name) override;
 	Array<MessageType const> getPlugs(uint8_t id) const override;
-	void subscribe(Subscriber &subscriber) override;
 	SubscriberInfo getSubscriberInfo(uint8_t id, uint8_t plugIndex) override;
+	void subscribe(Subscriber &subscriber) override;
+	void listen(Listener &listener) override;
 	void erase(uint8_t id) override;
 
 
@@ -70,11 +71,11 @@ public:
 
 protected:
 
-	class Alarm {
+	class Alarm : public Device {
 	public:
 		// Constructor, add alarm to linked list
 		Alarm(AlarmInterface *interface, Data const &data)
-			: next(interface->alarms), data(data)
+			: Device(data.id, interface->listeners), next(interface->alarms), data(data)
 		{
 			interface->alarms = this;
 		}
@@ -84,9 +85,6 @@ protected:
 
 		// alarm data that is stored in flash
 		Data data;
-
-		// list of subscribers
-		SubscriberList subscribers;
 
 		// true when alarm is active
 		bool active = false;
@@ -102,4 +100,7 @@ protected:
 	uint8_t allocateId();
 
 	Coroutine tick();
+
+	// listeners that listen on all messages of the interface (as opposed to subscribers that subscribe to one plug)
+	ListenerList listeners;
 };

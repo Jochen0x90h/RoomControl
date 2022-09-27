@@ -48,21 +48,21 @@ public:
 	/**
 	 * Publish switch message to subscribers to given plug
 	 * @param plugIndex plug index
-	 * @param message message to publish
+	 * @param value value of message to publish
 	 */
 	void publishSwitch(uint8_t plugIndex, uint8_t value);
 
 	/**
 	 * Publish float message to subscribers to given plug
 	 * @param plugIndex plug index
-	 * @param message message to publish
+	 * @param value value of message to publish
 	 */
 	void publishFloat(uint8_t plugIndex, float value);
 
 	/**
 	 * Publish float message to subscribers to given plug
 	 * @param plugIndex plug index
-	 * @param message message to publish
+	 * @param value value of message to publish
 	 * @param command command: 0 = set, 1 = step
 	 */
 	void publishFloatCommand(uint8_t plugIndex, float value, uint8_t command);
@@ -70,7 +70,7 @@ public:
 	/**
 	 * Publish float message to subscribers to given plug
 	 * @param plugIndex plug index
-	 * @param message message to publish
+	 * @param value value of message to publish
 	 * @param command command: 0 = set, 1 = step
 	 * @param transition transition in 1/10s
 	 */
@@ -91,8 +91,34 @@ public:
 	 * Publish switch message to listeners
 	 * @param deviceId device id
 	 * @param plugIndex plug index
-	 * @param message message to publish
+	 * @param value value of message to publish
 	 */
-	void publishSwitch(uint8_t deviceId, uint8_t plugIndex, uint8_t message);
+	void publishSwitch(uint8_t deviceId, uint8_t plugIndex, uint8_t value);
 
+	/**
+	 * Publish float message to listeners
+	 * @param deviceId device id
+	 * @param plugIndex plug index
+	 * @param value value of message to publish
+	 */
+	void publishFloat(uint8_t deviceId, uint8_t plugIndex, float value);
+
+	/**
+	 * Publish float message to subscribers to given plug
+	 * @param deviceId device id
+	 * @param plugIndex plug index
+	 * @param value value of message to publish
+	 * @param command command: 0 = set, 1 = step
+	 */
+	void publishFloatCommand(uint8_t deviceId, uint8_t plugIndex, float value, uint8_t command);
+
+	/**
+	 * Publish float message to subscribers to given plug
+	 * @param deviceId device id
+	 * @param plugIndex plug index
+	 * @param value value of message to publish
+	 * @param command command: 0 = set, 1 = step
+	 * @param transition transition in 1/10s
+	 */
+	void publishFloatTransition(uint8_t deviceId, uint8_t plugIndex, float value, uint8_t command, uint16_t transition);
 };

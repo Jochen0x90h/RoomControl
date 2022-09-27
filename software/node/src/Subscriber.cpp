@@ -72,21 +72,67 @@ void SubscriberList::publishFloatTransition(uint8_t plugIndex, float value, uint
 	}
 }
 
+
 static void setInfo(MessageParameters &p, Listener const &listener, uint8_t deviceId, uint8_t plugIndex) {
 	p.info.sourceIndex = listener.sourceIndex;
 	p.info.deviceId = deviceId;
 	p.info.plugIndex = plugIndex;
 }
 
-void ListenerList::publishSwitch(uint8_t deviceId, uint8_t plugIndex, uint8_t message) {
+void ListenerList::publishSwitch(uint8_t deviceId, uint8_t plugIndex, uint8_t value) {
 	for (auto &listener: *this) {
 		// resume subscriber
-		listener.barrier->resumeFirst([&listener, deviceId, plugIndex, message](MessageParameters &p) {
+		listener.barrier->resumeFirst([&listener, deviceId, plugIndex, value](MessageParameters &p) {
 			setInfo(p, listener, deviceId, plugIndex);
 
 			// convert to destination message type and resume coroutine if conversion was successful
 			auto &dst = *reinterpret_cast<Message *>(p.message);
-			dst.value.u8 = message;
+			dst.value.u8 = value;
+			return true;
+		});
+	}
+}
+
+void ListenerList::publishFloat(uint8_t deviceId, uint8_t plugIndex, float value) {
+	for (auto &listener: *this) {
+		// resume subscriber
+		listener.barrier->resumeFirst([&listener, deviceId, plugIndex, value](MessageParameters &p) {
+			setInfo(p, listener, deviceId, plugIndex);
+
+			// convert to destination message type and resume coroutine if conversion was successful
+			auto &dst = *reinterpret_cast<Message *>(p.message);
+			dst.value.f32 = value;
+			return true;
+		});
+	}
+}
+
+void ListenerList::publishFloatCommand(uint8_t deviceId, uint8_t plugIndex, float value, uint8_t command) {
+	for (auto &listener: *this) {
+		// resume subscriber
+		listener.barrier->resumeFirst([&listener, deviceId, plugIndex, value, command](MessageParameters &p) {
+			setInfo(p, listener, deviceId, plugIndex);
+
+			// convert to destination message type and resume coroutine if conversion was successful
+			auto &dst = *reinterpret_cast<Message *>(p.message);
+			dst.value.f32 = value;
+			dst.command = command;
+			return true;
+		});
+	}
+}
+
+void ListenerList::publishFloatTransition(uint8_t deviceId, uint8_t plugIndex, float value, uint8_t command, uint16_t transition) {
+	for (auto &listener: *this) {
+		// resume subscriber
+		listener.barrier->resumeFirst([&listener, deviceId, plugIndex, value, command, transition](MessageParameters &p) {
+			setInfo(p, listener, deviceId, plugIndex);
+
+			// convert to destination message type and resume coroutine if conversion was successful
+			auto &dst = *reinterpret_cast<Message *>(p.message);
+			dst.value.f32 = value;
+			dst.command = command;
+			dst.transition = transition;
 			return true;
 		});
 	}

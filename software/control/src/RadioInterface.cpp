@@ -83,7 +83,9 @@ RadioInterface::RadioInterface(PersistentStateManager &stateManager)
 				free(data);
 				continue;
 			}
-			new ZbEndpoint(device, endpointData);
+
+			// create endpoint, add to list of endpoints of device, device takes ownership of endpoint
+			new ZbEndpoint(this, device, endpointData);
 		}
 
 		// device was correctly loaded
@@ -193,6 +195,21 @@ Array<MessageType const> RadioInterface::getPlugs(uint8_t id) const {
 	return {};
 }
 
+SubscriberInfo RadioInterface::getSubscriberInfo(uint8_t id, uint8_t plugIndex) {
+	auto gpDevice = getGpDevice(id);
+	if (gpDevice != nullptr) {
+		if (plugIndex < gpDevice->data->plugCount)
+			return {gpDevice->data->plugs[plugIndex], &this->publishBarrier};
+	} else {
+		auto zbEndpoint = getZbEndpoint(id);
+		if (zbEndpoint != nullptr && plugIndex < zbEndpoint->data->plugCount) {
+			auto plugs = reinterpret_cast<MessageType *>(zbEndpoint->data->buffer);
+			return {plugs[plugIndex], &this->publishBarrier};
+		}
+	}
+	return {};
+}
+
 void RadioInterface::subscribe(Subscriber &subscriber) {
 	subscriber.remove();
 	auto id = subscriber.data->source.deviceId;
@@ -207,19 +224,10 @@ void RadioInterface::subscribe(Subscriber &subscriber) {
 	}
 }
 
-SubscriberInfo RadioInterface::getSubscriberInfo(uint8_t id, uint8_t plugIndex) {
-	auto gpDevice = getGpDevice(id);
-	if (gpDevice != nullptr) {
-		if (plugIndex < gpDevice->data->plugCount)
-			return {gpDevice->data->plugs[plugIndex], &this->publishBarrier};
-	} else {
-		auto zbEndpoint = getZbEndpoint(id);
-		if (zbEndpoint != nullptr && plugIndex < zbEndpoint->data->plugCount) {
-			auto plugs = reinterpret_cast<MessageType *>(zbEndpoint->data->buffer);
-			return {plugs[plugIndex], &this->publishBarrier};
-		}
-	}
-	return {};
+void RadioInterface::listen(Listener &listener) {
+	assert(listener.barrier	!= nullptr);
+	listener.remove();
+	this->listeners.add(listener);
 }
 
 void RadioInterface::erase(uint8_t id) {
@@ -2031,7 +2039,7 @@ Terminal::out << ("Beacon Request\n");
 				// publish to subscribers
 				switch (cluster) {
 				case zcl::Cluster::ON_OFF:
-					endpoint->subscribers.publishSwitch(plugs.offset, r.u8());
+					endpoint->publishSwitch(plugs.offset, r.u8());
 					break;
 				case zcl::Cluster::LEVEL_CONTROL: {
 					uint8_t cmd = 0;
@@ -2049,7 +2057,7 @@ Terminal::out << ("Beacon Request\n");
 							value = -value;
 						}
 						uint16_t transition = r.u16L(); // transition time in 1/10 s
-						endpoint->subscribers.publishFloatTransition(plugs.offset, value, command, transition);
+						endpoint->publishFloatTransition(plugs.offset, value, command, transition);
 						break;
 					}
 					default:
@@ -2064,16 +2072,16 @@ Terminal::out << ("Beacon Request\n");
 						auto x = float(r.i16L()) / 65279.0f;
 						auto y = float(r.i16L()) / 65279.0f;
 						uint16_t transition = r.u16L(); // transition time in 1/10 s
-						endpoint->subscribers.publishFloatTransition(plugs.offset + 0, x, 1, transition);
-						endpoint->subscribers.publishFloatTransition(plugs.offset + 1, y, 1, transition);
+						endpoint->publishFloatTransition(plugs.offset + 0, x, 1, transition);
+						endpoint->publishFloatTransition(plugs.offset + 1, y, 1, transition);
 						break;
 					}
 					case zcl::ColorControlCommand::MOVE_TO_COLOR: {
 						auto x = float(r.u16L()) / 65279.0f;
 						auto y = float(r.u16L()) / 65279.0f;
 						uint16_t transition = r.u16L(); // transition time in 1/10 s
-						endpoint->subscribers.publishFloatTransition(plugs.offset + 0, x, 0, transition);
-						endpoint->subscribers.publishFloatTransition(plugs.offset + 1, y, 0, transition);
+						endpoint->publishFloatTransition(plugs.offset + 0, x, 0, transition);
+						endpoint->publishFloatTransition(plugs.offset + 1, y, 0, transition);
 						break;
 					}
 					default:
@@ -2318,7 +2326,7 @@ void RadioInterface::handleGp(uint8_t const *mac, PacketReader &r) {
 		}
 
 		// publish to subscribers
-		device->subscribers.publishSwitch(plugIndex, message);
+		device->publishSwitch(plugIndex, message);
 		break;
 	}
 }
@@ -2787,8 +2795,8 @@ AwaitableCoroutine RadioInterface::handleZbCommission(uint64_t deviceLongAddress
 		auto modelIdentifier = getString(packet2).get("Device");
 		assign(data->name, modelIdentifier);
 
-		// create endpoint, device takes ownership
-		auto endpoint = new ZbEndpoint(device.ptr, data);
+		// create endpoint, add to list of endpoints of device, device takes ownership of endpoint
+		auto endpoint = new ZbEndpoint(this, device.ptr, data);
 
 		// bind all device client clusters to our server clusters
 		for (int i = 0; i < builder.serverClusterIndex; i++) {

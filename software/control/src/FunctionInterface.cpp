@@ -90,7 +90,7 @@ static const TypeInfo typeInfos[] = {
 
 				// publish on/off
 				if (changed)
-					function->subscribers.publishSwitch(1, on.state);
+					function->publishSwitch(1, on.state);
 			}
 		}
 	},
@@ -236,10 +236,10 @@ static const TypeInfo typeInfos[] = {
 
 				// publish on/off
 				if (changed)
-					function->subscribers.publishSwitch(1, on.state);
+					function->publishSwitch(1, on.state);
 
 				// publish brightness
-				function->subscribers.publishFloatTransition(2, brightness, 0, brightnessFade);
+				function->publishFloatTransition(2, brightness, 0, brightnessFade);
 			}
 		}
 	},
@@ -409,18 +409,18 @@ static const TypeInfo typeInfos[] = {
 
 				// publish on/off
 				if (changed)
-					function->subscribers.publishSwitch(1, on.state);
+					function->publishSwitch(1, on.state);
 
 				// publish brightness
-				function->subscribers.publishFloatTransition(2, brightness, 0, brightnessFade);
+				function->publishFloatTransition(2, brightness, 0, brightnessFade);
 
 				// publish color x
 				if (setColor)
-					function->subscribers.publishFloatTransition(3, color.x, 0, colorFade);
+					function->publishFloatTransition(3, color.x, 0, colorFade);
 
 				// publish color y
 				if (setColor)
-					function->subscribers.publishFloatTransition(4, color.y, 0, colorFade);
+					function->publishFloatTransition(4, color.y, 0, colorFade);
 			}
 		}
 	},
@@ -641,15 +641,15 @@ static const TypeInfo typeInfos[] = {
 				*/
 				// publish on/off
 				if (changed)
-					function->subscribers.publishSwitch(1, on.state);
+					function->publishSwitch(1, on.state);
 
 				// publish brightness
-				function->subscribers.publishFloatTransition(2, brightness, 0, brightnessFade);
+				function->publishFloatTransition(2, brightness, 0, brightnessFade);
 
 				// publish color x/y
 				if (setColor) {
-					function->subscribers.publishFloatTransition(3, color.x, 0, colorFade);
-					function->subscribers.publishFloatTransition(4, color.y, 0, colorFade);
+					function->publishFloatTransition(3, color.x, 0, colorFade);
+					function->publishFloatTransition(4, color.y, 0, colorFade);
 				}
 			}
 		}
@@ -792,10 +792,10 @@ static const TypeInfo typeInfos[] = {
 				}
 
 				// publish up/down
-				function->subscribers.publishSwitch(4, state);
+				function->publishSwitch(4, state);
 
 				// publish position
-				function->subscribers.publishFloat(5, position / maxPosition);
+				function->publishFloat(5, position / maxPosition);
 			}
 		}
 	},
@@ -884,7 +884,7 @@ static const TypeInfo typeInfos[] = {
 				}
 
 				// publish valve
-				function->subscribers.publishSwitch(6, valve);
+				function->publishSwitch(6, valve);
 			}
 		}
 	}
@@ -934,20 +934,9 @@ FunctionInterface::FunctionInterface() {
 
 		// create function
 		Function *function = new Function(this, data);
-		/*
-		switch (data->type) {
-		case Type::SWITCH:
-			function = new Switch(this, data);
-			break;
-		case Type::LIGHT:
-			function = new Light(this, data);
-			break;
-		default:
-			continue;
-		}*/
 
 		// start coroutine
-		function->coroutine = typeInfo.start(function);//function->start();
+		function->coroutine = typeInfo.start(function);
 
 		// device was correctly loaded
 		this->functionIds[j] = id;
@@ -997,6 +986,16 @@ Array<MessageType const> FunctionInterface::getPlugs(uint8_t id) const {
 	return {};
 }
 
+SubscriberInfo FunctionInterface::getSubscriberInfo(uint8_t id, uint8_t plugIndex) {
+	auto function = findFunction(id);
+	if (function != nullptr) {
+		auto &typeInfo = findInfo(function->data->type);
+		if (plugIndex < typeInfo.plugs.size())
+			return {typeInfo.plugs.begin()[plugIndex], &function->publishBarrier};
+	}
+	return {};
+}
+
 void FunctionInterface::subscribe(Subscriber &subscriber) {
 	assert(subscriber.info.barrier != nullptr);
 	subscriber.remove();
@@ -1006,14 +1005,10 @@ void FunctionInterface::subscribe(Subscriber &subscriber) {
 		function->subscribers.add(subscriber);
 }
 
-SubscriberInfo FunctionInterface::getSubscriberInfo(uint8_t id, uint8_t plugIndex) {
-	auto function = findFunction(id);
-	if (function != nullptr) {
-		auto &typeInfo = findInfo(function->data->type);
-		if (plugIndex < typeInfo.plugs.size())
-			return {typeInfo.plugs.begin()[plugIndex], &function->publishBarrier};
-	}
-	return {};
+void FunctionInterface::listen(Listener &listener) {
+	assert(listener.barrier	!= nullptr);
+	listener.remove();
+	this->listeners.add(listener);
 }
 
 void FunctionInterface::erase(uint8_t id) {

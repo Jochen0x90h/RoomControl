@@ -20,8 +20,9 @@ public:
 	String getName(uint8_t id) const override;
 	void setName(uint8_t id, String name) override;
 	Array<MessageType const> getPlugs(uint8_t id) const override;
-	void subscribe(Subscriber &subscriber) override;
 	SubscriberInfo getSubscriberInfo(uint8_t id, uint8_t plugIndex) override;
+	void subscribe(Subscriber &subscriber) override;
+	void listen(Listener &listener) override;
 	void erase(uint8_t id) override;
 
 
@@ -148,16 +149,16 @@ public:
 	void publishSwitch(uint8_t id, uint8_t plugIndex, uint8_t value);
 
 
-	class Function {
+	class Function : public Device {
 	public:
-		// Constructor, add function to linked list
+		// adds to linked list and takes ownership of the data
 		Function(FunctionInterface *interface, Data *data)
-			: next(interface->functions), data(data)
+			: Device(data->id, interface->listeners), next(interface->functions), data(data)
 		{
 			interface->functions = this;
 		}
 
-		virtual ~Function();
+		~Function();
 
 
 		// next function
@@ -171,9 +172,6 @@ public:
 
 		// coroutines wait here until something gets published to them
 		MessageBarrier publishBarrier;
-
-		// list of subscribers
-		SubscriberList subscribers;
 	};
 
 	int functionCount = 0;
@@ -184,4 +182,7 @@ public:
 	Function *findFunction(uint8_t id) const;
 
 	uint8_t allocateId();
+
+	// listeners that listen on all messages of the interface (as opposed to subscribers that subscribe to one plug)
+	ListenerList listeners;
 };

@@ -162,7 +162,7 @@ protected:
 		assert(this->manager != nullptr);
 		
 		// check if not yet in dirty list
-		if (this->isEmpty()) {
+		if (!this->isInList()) {
 			// add to dirty list
 			this->manager->list.add(*this);
 			

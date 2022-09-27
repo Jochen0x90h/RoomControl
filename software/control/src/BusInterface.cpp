@@ -63,7 +63,9 @@ BusInterface::BusInterface(PersistentStateManager &stateManager)
 			free(endpointData);
 			continue;
 		}
-		new Endpoint(device, endpointData);
+
+		// create endpoint, add to list of endpoints of device, device takes ownership of endpoint
+		new Endpoint(this, device, endpointData);
 
 		// device was correctly loaded
 		this->deviceIds[j] = id;
@@ -124,6 +126,13 @@ Array<MessageType const> BusInterface::getPlugs(uint8_t id) const {
 	return {};
 }
 
+SubscriberInfo BusInterface::getSubscriberInfo(uint8_t id, uint8_t plugIndex) {
+	auto endpoint = getEndpoint(id);
+	if (endpoint != nullptr && plugIndex < endpoint->data->plugCount)
+		return {endpoint->data->plugs[plugIndex], &this->publishBarrier};
+	return {};
+}
+
 void BusInterface::subscribe(Subscriber &subscriber) {
 	assert(subscriber.info.barrier != nullptr);
 	subscriber.remove();
@@ -133,11 +142,10 @@ void BusInterface::subscribe(Subscriber &subscriber) {
 		endpoint->subscribers.add(subscriber);
 }
 
-SubscriberInfo BusInterface::getSubscriberInfo(uint8_t id, uint8_t plugIndex) {
-	auto endpoint = getEndpoint(id);
-	if (endpoint != nullptr && plugIndex < endpoint->data->plugCount)
-		return {endpoint->data->plugs[plugIndex], &this->publishBarrier};
-	return {};
+void BusInterface::listen(Listener &listener) {
+	assert(listener.barrier	!= nullptr);
+	listener.remove();
+	this->listeners.add(listener);
 }
 
 void BusInterface::erase(uint8_t id) {
@@ -458,9 +466,11 @@ Coroutine BusInterface::receive() {
 						auto srcType = endpoint->data->plugs[plugIndex];
 						switch (srcType & MessageType::CATEGORY) {
 						case MessageType::BINARY:
-						case MessageType::TERNARY:
-							endpoint->subscribers.publishSwitch(plugIndex, r.u8());
+						case MessageType::TERNARY: {
+							uint8_t value = r.u8();
+							endpoint->publishSwitch(plugIndex, value);
 							break;
+						}
 						case MessageType::MULTISTATE:
 							// todo
 							break;
@@ -469,21 +479,21 @@ Coroutine BusInterface::receive() {
 						case MessageType::CONCENTRATION: {
 							float value = r.f32L();
 							if ((srcType & MessageType::CMD) == 0) {
-								endpoint->subscribers.publishFloat(plugIndex, value);
+								endpoint->publishFloat(plugIndex, value);
 							} else {
 								uint8_t command = r.u8();
-								endpoint->subscribers.publishFloatCommand(plugIndex, value, command);
+								endpoint->publishFloatCommand(plugIndex, value, command);
 							}
 							break;
 						}
 						case MessageType::LIGHTING: {
 							float value = r.f32L();
 							if ((srcType & MessageType::CMD) == 0) {
-								endpoint->subscribers.publishFloat(plugIndex, value);
+								endpoint->publishFloat(plugIndex, value);
 							} else {
 								uint8_t command = r.u8();
 								uint16_t transition = r.u16L();
-								endpoint->subscribers.publishFloatTransition(plugIndex, value, command, transition);
+								endpoint->publishFloatTransition(plugIndex, value, command, transition);
 							}
 							break;
 						}
@@ -610,8 +620,8 @@ AwaitableCoroutine BusInterface::handleCommission(uint32_t deviceId, uint8_t end
 		else
 			assign(data->name, "Device");
 
-		// create endpoint, device takes ownership
-		auto endpoint = new Endpoint(device.ptr, data);
+		// create endpoint, add to list of endpoints of device, device takes ownership of endpoint
+		new Endpoint(this, device.ptr, data);
 
 		if (oldEndpoint != nullptr)
 			oldEndpoint = oldEndpoint->next;
@@ -727,6 +737,7 @@ static bool writeMessage(MessageWriter &w, MessageType type, Message &message) {
 	switch (type & MessageType::CATEGORY) {
 	case bus::PlugType::BINARY:
 	case bus::PlugType::TERNARY:
+		//Terminal::out << "message " << dec(message.value.u8) << '\n';
 		w.u8(message.value.u8);
 		break;
 	case MessageType::MULTISTATE:
@@ -789,6 +800,7 @@ Coroutine BusInterface::publish() {
 		MessageInfo info;
 		Message message;
 		co_await this->publishBarrier.wait(info, &message);
+		//Terminal::out << "BusInterface::publish() sourceIndex " << dec(info.sourceIndex) << " deviceId " << dec(info.deviceId) << " plugIndex " << dec(info.plugIndex) << '\n';
 
 		// find destination device
 		auto device = this->devices;

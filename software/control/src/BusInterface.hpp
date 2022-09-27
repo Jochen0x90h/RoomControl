@@ -45,8 +45,9 @@ public:
 	String getName(uint8_t id) const override;
 	void setName(uint8_t id, String name) override;
 	Array<MessageType const> getPlugs(uint8_t id) const override;
-	void subscribe(Subscriber &subscriber) override;
 	SubscriberInfo getSubscriberInfo(uint8_t id, uint8_t plugIndex) override;
+	void subscribe(Subscriber &subscriber) override;
+	void listen(Listener &listener) override;
 	void erase(uint8_t id) override;
 
 private:
@@ -106,13 +107,13 @@ private:
 		int size() {return offsetOf(EndpointData, plugs[this->plugCount]);}
 	};
 
-	class Endpoint {
+	class Endpoint : public Device {
 	public:
-		// takes ownership of the data
-		Endpoint(BusDevice *device, EndpointData *data)
-			: next(nullptr), data(data)
+		// adds to linked list and takes ownership of the data
+		Endpoint(BusInterface *interface, BusDevice *device, EndpointData *data)
+			: Device(data->id, interface->listeners), next(nullptr), data(data)
 		{
-			// add new endpoint at end of linked list of device
+			// add to end of linked list to preserve endpoint index
 			auto e = &device->endpoints;
 			while (*e != nullptr)
 				e = &(*e)->next;
@@ -126,9 +127,6 @@ private:
 
 		// endpoint data that is stored in flash
 		EndpointData *data;
-
-		// list of subscribers
-		SubscriberList subscribers;
 	};
 
 	Endpoint *getEndpoint(uint8_t id) const;
@@ -187,5 +185,9 @@ private:
 	// a coroutine (e.g. handleZbCommission()) waits on this barrier until a response arrives
 	Barrier<Response> responseBarrier;
 
+	// publish() coroutine waits here until something gets published to a bus device
 	MessageBarrier publishBarrier;
+
+	// listeners that listen on all messages of the interface (as opposed to subscribers that subscribe to one plug)
+	ListenerList listeners;
 };

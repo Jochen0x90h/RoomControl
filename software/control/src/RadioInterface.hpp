@@ -49,8 +49,9 @@ public:
 	String getName(uint8_t id) const override;
 	void setName(uint8_t id, String name) override;
 	Array<MessageType const> getPlugs(uint8_t id) const override;
-	void subscribe(Subscriber &subscriber) override;
 	SubscriberInfo getSubscriberInfo(uint8_t id, uint8_t plugIndex) override;
+	void subscribe(Subscriber &subscriber) override;
+	void listen(Listener &listener) override;
 	void erase(uint8_t id) override;
 
 private:
@@ -91,11 +92,11 @@ private:
 		int size() {return offsetOf(GpDeviceData, plugs[this->plugCount]);}
 	};
 
-	class GpDevice {
+	class GpDevice : public Device {
 	public:
 		// takes ownership of the data
 		GpDevice(RadioInterface *interface, GpDeviceData *data)
-			: next(interface->gpDevices), data(data)
+			: Device(data->id, interface->listeners), next(interface->gpDevices), data(data)
 		{
 			interface->gpDevices = this;
 		}
@@ -115,9 +116,6 @@ private:
 		// last security counter value of device
 		// todo: make persistent
 		uint32_t securityCounter = 0;
-
-		// subscriptions
-		SubscriberList subscribers;
 	};
 
 	// zbee device data that is stored in flash
@@ -245,11 +243,11 @@ private:
 		ClusterInfo clusterInfos[MAX_CLUSTER_COUNT];
 	};
 
-	class ZbEndpoint {
+	class ZbEndpoint : public Device {
 	public:
-		// takes ownership of the data
-		ZbEndpoint(ZbDevice *device, ZbEndpointData *data)
-			: next(device->endpoints), data(data)
+		// adds to linked list and takes ownership of the data
+		ZbEndpoint(RadioInterface *interface, ZbDevice *device, ZbEndpointData *data)
+			: Device(data->id, interface->listeners), next(device->endpoints), data(data)
 		{
 			device->endpoints = this;
 		}
@@ -269,7 +267,7 @@ private:
 		ZbEndpointData *data;
 
 		// list of subscribers
-		SubscriberList subscribers;
+		//SubscriberList subscribers;
 
 		//
 		SystemTime time;
@@ -508,4 +506,7 @@ private:
 	Barrier<Response> responseBarrier;
 
 	MessageBarrier publishBarrier;
+
+	// listeners that listen on all messages of the interface (as opposed to subscribers that subscribe to one plug)
+	ListenerList listeners;
 };

@@ -1736,25 +1736,13 @@ AwaitableCoroutine RoomControl::plugsMenu(Interface &interface, uint8_t id) {
 	}
 }
 
-
-
 AwaitableCoroutine RoomControl::messageLogger(Interface &interface, uint8_t id) {
 	MessageBarrier barrier;
 
-	ConnectionData connectionData[32];
-	Subscriber subscribers[32];
-
-	// subscribe to all plugs
-	for (uint8_t plugIndex = 0; plugIndex < array::count(subscribers); ++plugIndex) {
-		auto &subscriber = subscribers[plugIndex];
-		auto &data = connectionData[plugIndex];
-		data.source = {0, id, plugIndex};
-		data.destination = {plugIndex};
-		subscriber.data = &data;
-		subscriber.connectionIndex = 0;
-		subscriber.info.barrier = &barrier;
-		interface.subscribe(subscriber);
-	}
+	Listener listener;
+	listener.sourceIndex = 0; // not used
+	listener.barrier = &barrier;
+	interface.listen(listener);
 
 	// event queue
 	struct Event {
@@ -1763,7 +1751,7 @@ AwaitableCoroutine RoomControl::messageLogger(Interface &interface, uint8_t id) 
 		Message message;
 	};
 	Queue<Event, 16> queue;
-	
+
 	// add an empty event at the back of the queue to receive the first message
 	queue.addBack();
 
@@ -1796,27 +1784,18 @@ AwaitableCoroutine RoomControl::messageLogger(Interface &interface, uint8_t id) 
 			}
 			menu.entry();
 		}
-		
+
 		if (menu.entry("Exit"))
 			break;
-
-		// update subscribers
-		auto plugs = interface.getPlugs(id);
-		for (int plugIndex = 0; plugIndex < min(plugs.count(), array::count(subscribers)); ++plugIndex) {
-			auto &subscriber = subscribers[plugIndex];
-			auto messageType = plugs[plugIndex];
-			subscriber.info.type = messageType ^ (MessageType::OUT ^ MessageType::IN);
-			connectionData[plugIndex].convertOptions = getDefaultConvertOptions(messageType);
-		}
 
 		// get the empty event at the back of the queue
 		Event &event = queue.getBack();
 
 		// show menu or receive event (event gets filled in)
 		int selected = co_await select(menu.show(), barrier.wait(event.info, &event.message), Timer::sleep(250ms));
-		if (selected == 2) {
+		if (selected == 2 && event.info.deviceId == id) {
 			// received an event: add new empty event at the back of the queue
-			event.type = subscribers[event.info.plugIndex].info.type;
+			event.type = interface.getPlugs(id)[event.info.plugIndex];
 			queue.addBack();
 		}
 	}

@@ -148,9 +148,7 @@ Coroutine receive(int index) {
 	while (true) {
 		// receive from radio
 		co_await Radio::receive(index, packet);
-		//Debug::setGreenLed(true);
-
-		//co_await Timer::sleep(25ms);
+		Debug::setGreenLed(true);
 
 		// length without crc but with extra data
 		int length = packet[0] - 2 + Radio::RECEIVE_EXTRA_LENGTH;
@@ -160,28 +158,25 @@ Coroutine receive(int index) {
 			// send to usb host
 			co_await UsbDevice::send(1 + index, length, packet + 1); // IN
 		}
-		//Debug::setGreenLed(false);
+		Debug::setGreenLed(false);
 	}
 }
 
-Debug::Counter counter;
 
 // receive from usb host and send to radio
 Coroutine send(int index) {
 	Radio::Packet packet;
 	while (true) {
 		// receive from usb host
-		//++counter;
 		int length = RADIO_MAX_PAYLOAD_LENGTH + Radio::SEND_EXTRA_LENGTH;
 		co_await UsbDevice::receive(1 + index, length, packet + 1); // OUT
-		//--counter;
 
 		if (length == 1) {
 			// cancel by mac counter
 			uint8_t macCounter = packet[1];
 			barriers[index][macCounter].resumeAll();
 		} else if (length >= 2 + Radio::SEND_EXTRA_LENGTH) {
-			//Debug::setRedLed(true);
+			Debug::setRedLed(true);
 
 			// set length to first byte (subtract extra data but add space for crc)
 			packet[0] = length - Radio::SEND_EXTRA_LENGTH + 2;
@@ -190,10 +185,8 @@ Coroutine send(int index) {
 			uint8_t macCounter = packet[3];
 
 			// send over the air
-			//++counter;
 			uint8_t result = 1;
 			int r = co_await select(Radio::send(index, packet, result), barriers[index][macCounter].wait());
-			//--counter;
 
 			if (r == 1) {
 				// send mac counter and result back to usb host
@@ -201,7 +194,7 @@ Coroutine send(int index) {
 				packet[1] = result;
 				co_await UsbDevice::send(1 + index, 2, packet); // IN
 			}
-			//Debug::setRedLed(false);
+			Debug::setRedLed(false);
 		}
 	}
 }

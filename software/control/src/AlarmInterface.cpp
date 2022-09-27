@@ -79,6 +79,11 @@ Array<MessageType const> AlarmInterface::getPlugs(uint8_t id) const {
 	return {};
 }
 
+SubscriberInfo AlarmInterface::getSubscriberInfo(uint8_t id, uint8_t plugIndex) {
+	// no input plugs
+	return {};
+}
+
 void AlarmInterface::subscribe(Subscriber &subscriber) {
 	subscriber.remove();
 	auto id = subscriber.data->source.deviceId;
@@ -87,8 +92,10 @@ void AlarmInterface::subscribe(Subscriber &subscriber) {
 		alarm->subscribers.add(subscriber);
 }
 
-SubscriberInfo AlarmInterface::getSubscriberInfo(uint8_t id, uint8_t plugIndex) {
-	return {};
+void AlarmInterface::listen(Listener &listener) {
+	assert(listener.barrier	!= nullptr);
+	listener.remove();
+	this->listeners.add(listener);
 }
 
 void AlarmInterface::erase(uint8_t id) {
@@ -214,7 +221,7 @@ Coroutine AlarmInterface::tick() {
 		while (alarm != nullptr) {
 			if (alarm->data.time.matches(time)) {
 				// alarm goes off: publish to subscribers of this alarm
-				alarm->subscribers.publishSwitch(0, 1);
+				alarm->publishSwitch(0, 1);
 
 				// set to active state
 				alarm->active = true;
