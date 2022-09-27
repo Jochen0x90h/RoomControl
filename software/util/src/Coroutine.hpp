@@ -23,9 +23,11 @@ namespace std {
 /**
  * Node for Waitlist and and list elements representing waiting coroutines.
  * These methods need to be implemented by list elements:
+ *
  * append(WaitlistNode &list): Append the node to the given list
  * cancel(): Cancel the operation or awaitable coroutine (e.g. to stop a DMA transfer or destroy the awaitable coroutine).
  * take(WaitlistNode &node): Optional for move assignment, take the waiting coroutine from the given node
+ *
  * The cancel() method only gets called if the element is still part of a waitlist and also has to remove the element
  * from the waitlist and maybe needs to be protected the list against concurrent modifications. A destructor also needs
  * to be implemented to call cancel() when the node is still part of a waitlist (if (isInList()) cancel();)
@@ -102,13 +104,17 @@ public:
 };
 
 /**
- * Waitlist element with default implementation of append() and cancel().
+ * Waitlist element with default implementation of append(), cancel() and take().
  */
 class WaitlistElement : public WaitlistNode {
 public:
 	void append(WaitlistNode &list) noexcept {list.add(*this);}
 
 	void cancel() noexcept {remove();}
+
+	void take(WaitlistElement &element) {
+		element.pass(*this);
+	}
 
 	// handle of waiting coroutine
 	std::coroutine_handle<> handle = nullptr;
@@ -384,10 +390,13 @@ struct Awaitable {
 	/**
 	 * Move constructor, only supported when the element supports it
 	 */
-	Awaitable(Awaitable &&a) noexcept : element(std::move(a.element)) {
+	Awaitable(Awaitable &&a) noexcept {
 #ifdef COROUTINE_DEBUG_PRINT
 		std::cout << "Awaitable move" << std::endl;
 #endif
+		// take waiting coroutine from other element
+		if (a.element.isInList())
+			this->element.take(a.element);
 	}
 
 	~Awaitable() {

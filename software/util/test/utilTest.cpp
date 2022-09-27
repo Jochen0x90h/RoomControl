@@ -871,208 +871,6 @@ TEST(utilTest, CoroutineValue2) {
 	waitListValue.resumeAll([] (Parameters1 const &p) {return p.value == 10;});
 }
 
-/*
-// Coroutine
-// ---------
-
-Waitlist<> waitlist1;
-Awaitable<> wait1() {
-	return {waitlist1};
-}
-
-Waitlist<> waitlist2;
-Awaitable<> wait2() {
-	return {waitlist2};
-}
-
-Coroutine coroutine() {
-	// an object whose destructor gets called when the coroutine ends or gets cancelled
-	Object o("coroutine()");
-	
-	std::cout << "!wait1" << std::endl;
-	co_await wait1();
-	std::cout << "!wait2" << std::endl;
-	co_await wait2();
-}
-
-
-AwaitableCoroutine inner() {
-	Object o("inner()");
-
-	std::cout << "!inner wait1" << std::endl;
-	co_await wait1();
-	std::cout << "!inner wait2" << std::endl;
-	co_await wait2();
-}
-
-//CoroutineHandle outerHandle;
-Coroutine outer() {
-	Object o("outer()");
-
-	co_await inner();
-
-	std::cout << "!outer select" << std::endl;
-	int result = co_await select(wait1(), wait2());
-	switch (result) {
-	case 1:
-		std::cout << "selected 1" << std::endl;
-		break;
-	case 2:
-		std::cout << "selected 2" << std::endl;
-		break;
-	}
-}
-
-TEST(utilTest, Coroutine) {
-	// start coroutine
-	coroutine();
-	
-	// resume coroutine
-	std::cout << "!resume wait1" << std::endl;
-	EXPECT_FALSE(waitlist1.isEmpty());
-	waitlist1.resumeAll();
-	EXPECT_TRUE(waitlist1.isEmpty());
-	std::cout << "!resume wait2" << std::endl;
-	EXPECT_FALSE(waitlist2.isEmpty());
-	waitlist2.resumeAll();
-	EXPECT_TRUE(waitlist2.isEmpty());
-}
-
-TEST(utilTest, DestroyCoroutine) {
-	// start coroutine
-	coroutine();
-	
-	// destroy coroutine
-	waitlist1.head.next->handle.destroy();
-}
-
-TEST(utilTest, NestedCoroutine) {
-	// start outer coroutine
-	outer();
-
-	// resume inner coroutine
-	std::cout << "!resume inner wait1" << std::endl;
-	waitlist1.resumeAll();
-	std::cout << "!resume inner wait2" << std::endl;
-	waitlist2.resumeAll();
-
-	std::cout << "!resume outer wait2" << std::endl;
-	EXPECT_FALSE(waitlist2.isEmpty());
-	waitlist2.resumeAll();
-	EXPECT_TRUE(waitlist2.isEmpty());
-}
-
-TEST(utilTest, DestroyNestedCoroutine) {
-	// start outer coroutine (enters inner() and waits on wait1())
-	Coroutine c = outer();
-
-	// destroy outer coroutine
-	std::cout << "!destroy outer" << std::endl;
-	c.destroy();
-}
-
-TEST(utilTest, AwaitAwaitableCoroutine) {
-	AwaitableCoroutine c = inner();
-
-	// check that the coroutine is running
-	EXPECT_FALSE(c.await_ready());
-	
-	waitlist1.resumeAll();
-
-	// move assign to c2
-	AwaitableCoroutine c2;
-	c2 = std::move(c);
-
-	// check that the c now reports ready
-	EXPECT_TRUE(c.await_ready());
-
-	// check that the coroutine is still running
-	EXPECT_FALSE(c2.await_ready());
-
-	waitlist2.resumeAll();
-
-	// check that the coroutine has stopped
-	EXPECT_TRUE(c2.await_ready());
-}
-
-
-// Coroutine with extra value
-// --------------------------
-
-void moveStart() {
-	std::cout << "Parameters::move start" << std::endl;
-}
-
-struct Parameters1 {
-	int value;
-};
-
-struct Parameters2 : public WaitlistElement {
-	int value;
-
-	// default constructor
-	Parameters2(int value) : WaitlistElement(), value(value) {}
-
-	// move constructor
-	Parameters2(Parameters2 &&p) noexcept : WaitlistElement((moveStart(), std::move(p))), value(p.value) {
-		std::cout << "Parameters::move end" << std::endl;
-	}
-
-	// add to list
-	void add(WaitlistHead &head) noexcept {
-		std::cout << "Parameters::add" << std::endl;
-		WaitlistElement::add(head);
-	}
-
-	// remove from list
-	void remove() noexcept {
-		std::cout << "Parameters::remove" << std::endl;
-		WaitlistElement::remove();
-	}
-};
-
-Waitlist<int> waitListValue0; // only tested if it compiles
-Waitlist<Parameters1> waitListValue1; // only tested if it compiles
-Waitlist<Parameters2> waitListValue2;
-
-Awaitable<int> delay0(int value) {
-	return {waitListValue0, value};
-}
-
-Awaitable<Parameters1> delay1(int value) {
-	return {waitListValue1, value};
-}
-
-Awaitable<Parameters2> delay2(int value) {
-	return {waitListValue2, value};
-}
-
-Coroutine waitForDelay1() {
-	auto a = delay2(5);
-	Awaitable<Parameters2> b(std::move(a));
-	co_await b;
-	std::cout << "resumed delay(5)" << std::endl;
-}
-
-Coroutine waitForDelay2() {
-	switch (co_await select(wait1(), delay2(10))) {
-	case 1:
-		std::cout << "resumed wait1" << std::endl;
-		break;
-	case 2:
-		std::cout << "resumed delay(10)" << std::endl;
-		break;
-	}
-}
-
-TEST(utilTest, CoroutineValue) {
-	waitForDelay1();
-	waitForDelay2();
-	
-	waitListValue2.resumeAll([] (Parameters2 const &p) {return p.value == 5;});
-	waitListValue2.resumeAll([] (Parameters2 const &p) {return p.value == 10;});
-}
-
 
 // Awaitable move constructor
 // --------------------------
@@ -1081,42 +879,23 @@ Coroutine move() {
 	Awaitable<> a = wait1();
 	Awaitable<> b(std::move(a));
 
+	EXPECT_TRUE(a.hasFinished());
 	co_await a;
-	std::cout << "a is ready" << std::endl;
 
 	std::cout << "await b" << std::endl;
 	co_await b;
 	std::cout << "resumed from b" << std::endl;
 
-	co_await a;
-	std::cout << "a is ready" << std::endl;
-	co_await b;
-	std::cout << "b is ready" << std::endl;
+	EXPECT_TRUE(a.hasFinished());
+	EXPECT_TRUE(b.hasFinished());
 }
 
 TEST(utilTest, AwaitableMove) {
 	move();
-	
+
 	waitlist1.resumeAll();
 	EXPECT_TRUE(waitlist1.isEmpty());
 }
-
-
-// List of awaitables
-// ------------------
-
-Coroutine list() {
-	std::vector<Awaitable<>> list;
-	
-	list.push_back(wait1());
-	
-	co_await list[0];
-}
-
-TEST(utilTest, AwaitableList) {
-	list();
-	
-}*/
 
 
 // Barrier
