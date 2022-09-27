@@ -106,7 +106,9 @@ if(LINUX)
 	# dependencies
 	find_package(PkgConfig REQUIRED)
 	pkg_search_module(BlueZ IMPORTED_TARGET bluez) # install libbluetooth-dev
-	set(LIBRARIES ${LIBRARIES} PkgConfig::BlueZ)
+	if(TARGET PkgConfig::BlueZ)
+		set(LIBRARIES ${LIBRARIES} PkgConfig::BlueZ)
+	endif()
 endif()
 if(EMU)
 	#message("*** emu")
@@ -169,7 +171,8 @@ set(UTIL
 	util/src/enum.hpp
 	util/src/Font.cpp
 	util/src/Font.hpp
-	util/src/LinkedListNode.hpp
+	util/src/IsSubclass.hpp
+	util/src/LinkedList.hpp
 	util/src/optional.hpp
 	util/src/Pointer.hpp
 	util/src/Queue.hpp
@@ -231,7 +234,9 @@ if(POSIX)
 	set(TIMER system/src/SystemTime.hpp system/src/Timer.hpp system/src/posix/Timer.cpp)
 endif()
 if(LINUX)
-	set(BLE system/src/Ble.hpp system/src/linux/Ble.cpp)
+	if(TARGET PkgConfig::BlueZ)
+		set(BLE system/src/Ble.hpp system/src/linux/Ble.cpp)
+	endif()
 endif()
 if(EMU)
 	set(BUS_NODE system/src/BusNode.hpp system/src/emu/BusNode.cpp)
@@ -325,11 +330,11 @@ set(NODE
 	node/src/MqttSnClient.hpp
 	node/src/MqttSnBroker.cpp
 	node/src/MqttSnBroker.hpp
-	node/src/Publisher.hpp
 	node/src/State.cpp
 	node/src/State.hpp
 	node/src/ArrayStorage.cpp
 	node/src/ArrayStorage.hpp
+	node/src/Subscriber.cpp
 	node/src/Subscriber.hpp
 )
 source_group(node FILES ${NODE})
@@ -344,6 +349,8 @@ set(CONTROL
 	control/src/BusInterface.cpp
 	control/src/BusInterface.hpp
 	control/src/Configuration.hpp
+	control/src/FunctionInterface.cpp
+	control/src/FunctionInterface.hpp
 	control/src/Interface.cpp
 	control/src/Interface.hpp
 	control/src/LocalInterface.cpp

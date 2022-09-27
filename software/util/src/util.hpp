@@ -3,7 +3,8 @@
 #include "Array.hpp"
 #include <cstdint>
 
-#define offsetOf(Type, member) intptr_t(&((Type*)nullptr)->member)
+#define sizeOf(Type) int(sizeof(Type))
+#define offsetOf(Type, member) int(intptr_t(&((Type*)nullptr)->member))
 
 using uint = unsigned int;
 
@@ -59,6 +60,13 @@ void insert(It begin, It end, int count = 1) {
 	}
 }
 
+/**
+ * Erase the first elements of an array
+ * @tparam It iterator type
+ * @param begin begin iterator
+ * @param end end iterator
+ * @param count number of elements to erase
+ */
 template <typename It>
 void erase(It begin, It end, int count = 1) {
 	for (It it = begin + count; it < end; ++it) {

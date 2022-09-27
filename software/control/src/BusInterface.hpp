@@ -15,7 +15,11 @@ public:
 	// maximum number of devices that can be commissioned (each endpoint counts as one device)
 	static constexpr int MAX_DEVICE_COUNT = 128;
 
-	// number of coroutines for publishing
+	// last valid bus device address
+	static constexpr int LAST_ADDRESS = 8 * 9 - 1;
+
+	// number of coroutines for receiving and publishing
+	static constexpr int RECEIVE_COUNT = 4;
 	static constexpr int PUBLISH_COUNT = 4;
 
 	/**
@@ -34,14 +38,16 @@ public:
 	 */
 	void setConfiguration(DataBuffer<16> const &key, AesKey const &aesKey);
 
+	String getName() override;
 	void setCommissioning(bool enabled) override;
 
 	Array<uint8_t const> getDeviceIds() override;
 	String getName(uint8_t id) const override;
 	void setName(uint8_t id, String name) override;
 	Array<MessageType const> getPlugs(uint8_t id) const override;
-	void subscribe(uint8_t id, uint8_t plugIndex, Subscriber &subscriber) override;
-	PublishInfo getPublishInfo(uint8_t id, uint8_t plugIndex) override;
+	SubscriberInfo getSubscriberInfo(uint8_t id, uint8_t plugIndex) override;
+	void subscribe(Subscriber &subscriber) override;
+	void listen(Listener &listener) override;
 	void erase(uint8_t id) override;
 
 private:
@@ -101,13 +107,13 @@ private:
 		int size() {return offsetOf(EndpointData, plugs[this->plugCount]);}
 	};
 
-	class Endpoint {
+	class Endpoint : public Device {
 	public:
-		// takes ownership of the data
-		Endpoint(BusDevice *device, EndpointData *data)
-			: next(nullptr), data(data)
+		// adds to linked list and takes ownership of the data
+		Endpoint(BusInterface *interface, BusDevice *device, EndpointData *data)
+			: Device(data->id, interface->listeners), next(nullptr), data(data)
 		{
-			// add new endpoint at end of linked list of device
+			// add to end of linked list to preserve endpoint index
 			auto e = &device->endpoints;
 			while (*e != nullptr)
 				e = &(*e)->next;
@@ -121,9 +127,6 @@ private:
 
 		// endpoint data that is stored in flash
 		EndpointData *data;
-
-		// list of subscribers
-		SubscriberList subscribers;
 	};
 
 	Endpoint *getEndpoint(uint8_t id) const;
@@ -180,7 +183,11 @@ private:
 	};
 
 	// a coroutine (e.g. handleZbCommission()) waits on this barrier until a response arrives
-	Waitlist<Response> responseBarrier;
+	Barrier<Response> responseBarrier;
 
-	PublishInfo::Barrier publishBarrier;
+	// publish() coroutine waits here until something gets published to a bus device
+	MessageBarrier publishBarrier;
+
+	// listeners that listen on all messages of the interface (as opposed to subscribers that subscribe to one plug)
+	ListenerList listeners;
 };

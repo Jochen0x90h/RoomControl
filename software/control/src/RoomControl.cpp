@@ -1,11 +1,8 @@
-#include <iostream>
 #include "RoomControl.hpp"
 #include "Menu.hpp"
 #include "Message.hpp"
 #include <Calendar.hpp>
-#include <Poti.hpp>
 #include <Input.hpp>
-#include <Spi.hpp>
 #include <Random.hpp>
 #include <Radio.hpp>
 #include <Output.hpp>
@@ -14,7 +11,6 @@
 #include <Timer.hpp>
 #include <crypt.hpp>
 #include <Queue.hpp>
-#include <Cie1931.hpp>
 #include "tahoma_8pt.hpp" // font
 #include <cmath>
 
@@ -70,7 +66,7 @@ static String const colorNames[] = {
 
 
 // functions
-
+/*
 // function plugs
 static RoomControl::Plug const switchPlugs[] = {
 	{"On/Off", MessageType::BINARY_POWER_CMD_IN},
@@ -101,92 +97,19 @@ static RoomControl::Plug const heatingControlPlugs[] = {
 	{"Temperature Sensor", MessageType::PHYSICAL_TEMPERATURE_MEASURED_ROOM_IN},
 	{"Valve",              MessageType::BINARY_OPEN_VALVE_OUT},
 };
-
-struct FunctionInfo {
-	String name;
-	RoomControl::FunctionFlash::Type type;
-	//RoomControl::FunctionFlash::TypeClass typeClass;
-	uint16_t configSize;
-	Array<RoomControl::Plug const> plugs;
-
-};
-
-// function infos (must be sorted by type)
-static FunctionInfo const functionInfos[] = {
-	{
-		"Switch",
-		RoomControl::FunctionFlash::Type::SWITCH,
-		//RoomControl::FunctionFlash::TypeClass::SWITCH,
-		sizeof(RoomControl::Switch::Config),
-		switchPlugs
-	},
-	{
-		"Light",
-		RoomControl::FunctionFlash::Type::LIGHT,
-		//RoomControl::FunctionFlash::TypeClass::SWITCH,
-		sizeof(RoomControl::Light::Config),
-		lightPlugs
-	},
-	{
-		"Color Light",
-		RoomControl::FunctionFlash::Type::COLOR_LIGHT,
-		//RoomControl::FunctionFlash::TypeClass::SWITCH,
-		sizeof(RoomControl::ColorLight::Config),
-		colorLightPlugs
-	},
-	{
-		"Animated Light",
-		RoomControl::FunctionFlash::Type::ANIMATED_LIGHT,
-		//RoomControl::FunctionFlash::TypeClass::SWITCH,
-		sizeof(RoomControl::AnimatedLight::Config),
-		colorLightPlugs
-	},
-	{
-		"Blind",
-		RoomControl::FunctionFlash::Type::TIMED_BLIND,
-		//RoomControl::FunctionFlash::TypeClass::BLIND,
-		sizeof(RoomControl::TimedBlind::Config),
-		blindPlugs
-	},
-	{
-		"Heating Control",
-		RoomControl::FunctionFlash::Type::HEATING_CONTROL,
-		//RoomControl::FunctionFlash::TypeClass::HEATING_CONTROL,
-		sizeof(RoomControl::HeatingControl::Config),
-		heatingControlPlugs
-	},
-};
-
-static FunctionInfo const &getFunctionInfo(RoomControl::FunctionFlash::Type type) {
-	int i = array::binaryLowerBound(functionInfos, [type](FunctionInfo const &info) {return info.type < type;});
-	FunctionInfo const &functionInfo = functionInfos[i];
-	assert(functionInfo.type == type);
-	return functionInfo;
-}
-
-RoomControl::FunctionFlash::Type nextFunctionType(RoomControl::FunctionFlash::Type type, int delta) {
-	int i = array::binaryLowerBound(functionInfos, [type](FunctionInfo const &info) {return info.type < type;});
-	i = (i + array::count(functionInfos) * 256 + delta) % array::count(functionInfos);
-	return functionInfos[i].type;
-}
-
-static bool isCompatible(RoomControl::Plug const &plug, MessageType messageType) {
-	if (plug.isInput())
-		return isCompatible(plug.messageType, messageType);
-	else
-		return isCompatible(messageType, plug.messageType);
-}
+*/
 
 
 // RoomControl
 // -----------
 
 RoomControl::RoomControl()
-	: storage(0, FLASH_PAGE_COUNT, functions)
-	, stateManager()
+	: //storage(0, FLASH_PAGE_COUNT, functions),
+	stateManager()
 	//, houseTopicId(), roomTopicId()
 	, busInterface(stateManager)
 	, radioInterface(stateManager)
+	, interfaces{&localInterface, &busInterface, &radioInterface, &alarmInterface, &functionInterface}
 {
 	// load configuration
 	if (Storage::read(STORAGE_CONFIG, 0, sizeof(Configuration), &this->configuration) != sizeof(Configuration)) {
@@ -219,32 +142,210 @@ RoomControl::RoomControl()
 
 	applyConfiguration();
 
+	// load connections
+	for (uint8_t interfaceIndex = 0; interfaceIndex < INTERFACE_COUNT; ++interfaceIndex) {
+		auto &interface = *this->interfaces[interfaceIndex];
+
+		// iterate over all devices in the interface
+		auto deviceIds = interface.getDeviceIds();
+		for (auto deviceId : deviceIds) {
+			int const storageId = STORAGE_ID_CONNECTION | (interfaceIndex << 8) | deviceId;
+
+			// determine size
+			int size = Storage::size(STORAGE_CONFIG, storageId);
+			uint8_t count = size / sizeof(ConnectionData);
+			if (count == 0)
+				continue;
+
+			// allocate and read connection data
+			auto connectionData = reinterpret_cast<ConnectionData *>(malloc(size));
+			Storage::read(STORAGE_CONFIG, storageId, size, connectionData);
+
+			// allocate subscribers
+			auto subscribers = new Subscriber[count];
+
+			// create new connection group for the device
+			auto connections = new Connections{this->connectionGroups, interfaceIndex, deviceId, count, connectionData, subscribers};
+			this->connectionGroups = connections;
+
+			connect(connections);
+		}
+	}
+
 	// start coroutines
 	idleDisplay();
-	for (auto &function : this->functions) {
-		function.coroutine = function.start(*this);
-	}
 }
 
 RoomControl::~RoomControl() {
-	// unregister second handler not needed because RoomControl lives forever
 }
 
 void RoomControl::applyConfiguration() {
-	auto const &configuration = this->configuration;//*this->configurations[0];
+	auto const &configuration = this->configuration;
 	this->busInterface.setConfiguration(configuration.key, configuration.aesKey);
 	Radio::setLongAddress(configuration.ieeeLongAddress);
 	this->radioInterface.setConfiguration(configuration.zbeePanId, configuration.key, configuration.aesKey);
 }
 
 
-// Functions
-// ---------
+// Interfaces
+// ----------
 
+static String getInterfaceName(int interface) {
+	switch (interface) {
+	case RoomControl::LOCAL_INTERFACE:
+		return "Local";
+	case RoomControl::BUS_INTERFACE:
+		return "Bus";
+	case RoomControl::RADIO_INTERFACE:
+		return "Radio";
+	case RoomControl::ALARM_INTERFACE:
+		return "Alarm";
+	default:
+		return "MQTT";
+	}
+}
+
+
+// Connections
+// -----------
+
+void RoomControl::connect(Connections *connections) {
+	auto &interface = *this->interfaces[connections->interfaceIndex];
+	uint8_t lastPlugIndex = 0;
+	uint8_t connectionIndex = 0;
+	for (int i = 0; i < connections->count; ++i) {
+		auto data = &connections->data[i];
+		auto &subscriber = connections->subscribers[i];
+
+		// reset connectionIndex if connection is for the next plug
+		if (data->destination.plugIndex != lastPlugIndex) {
+			lastPlugIndex = data->destination.plugIndex;
+			connectionIndex = 0;
+		}
+
+		// initialize subscriber
+		subscriber.data = data;
+		subscriber.deviceId = connections->deviceId;
+		subscriber.connectionIndex = connectionIndex;
+		subscriber.info = interface.getSubscriberInfo(connections->deviceId, data->destination.plugIndex);
+
+		// subscribe
+		if (data->source.interfaceIndex < INTERFACE_COUNT) {
+			auto &sourceInterface = *this->interfaces[data->source.interfaceIndex];
+			sourceInterface.subscribe(subscriber);
+		}
+	}
+}
+
+RoomControl::TempConnections RoomControl::getConnections(uint8_t interfaceIndex, uint8_t deviceId) {
+	TempConnections tc;
+	auto p = &this->connectionGroups;
+	while (*p != nullptr) {
+		auto connections = *p;
+		if (connections->interfaceIndex == interfaceIndex && connections->deviceId == deviceId) {
+			tc.p = p;
+			tc.count = min(connections->count, TempConnections::MAX_CONNECTIONS);
+
+			// copy connection data
+			for (int i = 0; i < tc.count; ++i) {
+				tc.data[i] = connections->data[i];
+			}
+			break;
+		}
+		p = &connections->next;
+	}
+	return tc;
+}
+
+void RoomControl::writeConnections(uint8_t interfaceIndex, uint8_t deviceId, TempConnections &tc) {
+	auto count = tc.count;
+	int size = count * sizeof(ConnectionData);
+
+	Connections *connections;
+	if (tc.p == nullptr) {
+		// new connections
+
+		// allocate and connection data
+		auto connectionData = reinterpret_cast<ConnectionData *>(malloc(size));
+
+		// allocate subscribers
+		auto subscribers = new Subscriber[count];
+
+		// create new connections
+		connections = new Connections{this->connectionGroups, interfaceIndex, deviceId, count, connectionData, subscribers};
+		this->connectionGroups = connections;
+	} else {
+		// existing connections
+		connections = *tc.p;
+
+		if (count != connections->count) {
+			connections->count = count;
+
+			// reallocate connection data
+			connections->data = reinterpret_cast<ConnectionData *>(realloc(connections->data, size));
+
+			// reallocate subscribers
+			delete [] connections->subscribers;
+			connections->subscribers = new Subscriber[count];
+		}
+	}
+
+	// copy connection data
+	for (int i = 0; i < count; ++i) {
+		connections->data[i] = tc.data[i];
+	}
+
+	// connect
+	connect(connections);
+
+	// write to flash
+	int const storageId = STORAGE_ID_CONNECTION | (interfaceIndex << 8) | deviceId;
+	Storage::write(STORAGE_CONFIG, storageId, size, connections->data);
+}
+
+void RoomControl::eraseConnections(uint8_t interfaceIndex, uint8_t deviceId, TempConnections &tc) {
+	auto connections = *tc.p;
+
+	// remove from linked list
+	*tc.p = connections->next;
+
+	// delete connection data
+	free(connections->data);
+
+	// delete subscribers (automatically unsubscribe)
+	delete [] connections->subscribers;
+
+	// erase from flash
+	int const storageId = STORAGE_ID_CONNECTION | (interfaceIndex << 8) | deviceId;
+	Storage::erase(STORAGE_CONFIG, storageId);
+}
+
+void RoomControl::printConnection(Menu::Stream &stream, ConnectionData const &connection) {
+	if (connection.source.interfaceIndex < array::count(this->interfaces)) {
+		auto ifc = this->interfaces[connection.source.interfaceIndex];
+		if (ifc != nullptr) {
+			auto &interface = *ifc;
+			auto plugs = interface.getPlugs(connection.source.deviceId);
+			if (connection.source.plugIndex < plugs.count()) {
+				String deviceName = interface.getName(connection.source.deviceId);
+				stream << deviceName << '/' << dec(connection.source.plugIndex);
+				String plugName = getTypeLabel(plugs[connection.source.plugIndex]);
+				stream << " (" << plugName << ')';
+				return;
+			}
+		}
+	}
+	stream << "Connect...";
+}
+
+
+// Menu Helpers
+// ------------
+
+// print all devices in an interface
 static void printDevices(Interface &interface) {
 	auto deviceIds = interface.getDeviceIds();
 	for (auto id : deviceIds) {
-		//auto &device = *interface.getDevice(id);
 		Terminal::out << dec(id) + '\n';
 		auto plugs = interface.getPlugs(id);
 		for (auto plug : plugs) {
@@ -255,236 +356,6 @@ static void printDevices(Interface &interface) {
 				Terminal::out << " Out";
 			Terminal::out << '\n';
 		}
-	}
-}
-
-Interface &RoomControl::getInterface(Connection const &connection) {
-	switch (connection.interface) {
-		case Connection::Interface::LOCAL:
-			return this->localInterface;
-		case Connection::Interface::BUS:
-			return this->busInterface;
-		case Connection::Interface::RADIO:
-			return this->radioInterface;
-		case Connection::Interface::ALARM:
-			return this->alarmInterface;
-		default:
-			return this->localInterface;
-	}
-}
-
-/*
-Coroutine RoomControl::testSwitch() {
-	Subscriber::Barrier barrier;
-
-	printDevices(this->radioInterface);
-
-	Subscriber subscriber;
-	subscriber.source = {0, 0};
-	subscriber.messageType = MessageType::OFF_ON;
-	subscriber.barrier = &barrier;
-
-	Publisher publisher;
-	uint8_t message;
-	publisher.messageType = MessageType::OFF_ON;
-	publisher.message = &message;
-	
-	//Interface &interface = this->busInterface;
-	Interface &interface = this->radioInterface;
-	bool haveIn = false;
-	bool haveOut = false;
-	for (int i = 0; i < interface.getDeviceCount(); ++i) {
-		auto &device = interface.getDeviceByIndex(i);
-		Array<MessageType const> endpoints = device.getEndpoints();
-		for (int plugIndex = 0; plugIndex < endpoints.count(); ++plugIndex) {
-			auto endpointType = endpoints[plugIndex];
-			if (!haveIn && (endpointType == MessageType::OFF_ON_IN || endpointType == MessageType::UP_DOWN_IN)) {
-				haveIn = true;
-				device.addSubscriber(plugIndex, subscriber);
-			}
-			if (!haveOut && endpointType == MessageType::OFF_ON_OUT) {
-				haveOut = true;
-				device.addPublisher(plugIndex, publisher);
-			}
-		}
-	}
-
-	while (true) {
-		// wait for event
-		Subscriber::Source source;
-		co_await barrier.wait(source, &message);
-
-		// publish
-		publisher.publish();
-
-		if (message <= 1)
-			Output::set(0, message);
-		else if (message == 2)
-			Output::toggle(0);
-	}
-}
-*/
-int RoomControl::connectFunction(RoomControl::FunctionFlash const &flash, Array<Plug const> plugs,
-	Array<Subscriber, MAX_INPUT_COUNT> subscribers, PublishInfo::Barrier &barrier,
-	Array<Publisher, MAX_OUTPUT_COUNT> publishers)
-{
-/*	// count number of inputs and outputs
-	int inputCount = 0;
-	for (auto &plug : plugs) {
-		if (plug.isInput())
-			++inputCount;
-	}
-	int outputCount = plugs.count() - inputCount;
-*/
-	auto it = flash.getConnections();
-
-	// connect inputs
-	int inputIndex = 0;
-	int lastPlugIndex = -1;
-	int connectionIndex;
-	while (inputIndex < flash.connectionCount) {
-		auto &connection = it.getConnection();
-
-		// safety check
-		if (connection.plugIndex >= plugs.count())
-			break;
-
-		// get plug info, break if not an input
-		auto &plug = plugs[connection.plugIndex];
-		if (!plug.isInput())
-			break;
-
-		if (connection.plugIndex != lastPlugIndex) {
-			lastPlugIndex = connection.plugIndex;
-			connectionIndex = 0;
-		}
-
-		// initialize subscriber
-		auto &subscriber = subscribers[inputIndex];
-		subscriber.destination.type = plug.messageType;
-		subscriber.destination.plug.id = connection.plugIndex;
-		subscriber.destination.plug.connectionIndex = connectionIndex;
-		subscriber.convertOptions = connection.convertOptions;
-		subscriber.barrier = &barrier;
-
-		// subscribe to device
-		auto &interface = getInterface(connection);
-		interface.subscribe(connection.deviceId, connection.endpointIndex, subscriber);
-
-		++it;
-		++inputIndex;
-		++connectionIndex;
-	}
-
-	// connect outputs
-	int outputIndex = 0;
-	while (inputIndex + outputIndex < flash.connectionCount) {
-		auto &connection = it.getConnection();
-
-		// safety check
-		if (connection.plugIndex >= plugs.count())
-			break;
-
-		// get plug info, break if not an output
-		auto &plug = plugs[connection.plugIndex];
-		if (!plug.isOutput())
-			break;
-
-		// initialize publisher
-		auto &publisher = publishers[outputIndex];
-		publisher.id = 255;
-
-		// add publisher to device
-		auto &interface = getInterface(connection);
-		publisher.setInfo(interface.getPublishInfo(connection.deviceId, connection.endpointIndex));
-		publisher.id = connection.plugIndex;
-		publisher.srcType = plug.messageType;
-		publisher.convertOptions = connection.convertOptions;
-
-		++it;
-		++outputIndex;
-	}
-
-	// return number of outputs
-	return outputIndex;
-}
-
-// Menu
-// ----
-
-Coroutine RoomControl::idleDisplay() {
-	while (true) {
-		// get current clock time
-		auto now = Calendar::now();
-		
-		// obtain a bitmap
-		auto bitmap = this->swapChain.get();
-		
-		// display weekday and clock time
-		StringBuffer<16> b = weekdaysLong[now.getWeekday()] + "  "
-			+ dec(now.getHours()) + ':'
-			+ dec(now.getMinutes(), 2) + ':'
-			+ dec(now.getSeconds(), 2);
-		bitmap->drawText(20, 10, tahoma_8pt, b, 1);
-
-		// show bitmap on display
-		this->swapChain.show(bitmap);
-
-		// wait for event
-		int index;
-		bool value;
-		switch (co_await select(Input::trigger(1 << INPUT_POTI_BUTTON, 0, index, value), Calendar::secondTick())) {
-		case 1:
-			// poti button pressed
-			co_await mainMenu();
-			break;
-		case 2:
-			// second elapsed
-			break;
-		}
-	}
-}
-
-// menu helpers
-
-static int getComponentCount(MessageType messageType) {
-	//return (messageType & MessageType::TYPE_MASK) == MessageType::MOVE_TO_LEVEL ? 2 : 1;
-	return (messageType & MessageType::CATEGORY) == MessageType::LIGHTING ? 2 : 1;
-}
-
-// next message type for alarms
-/*
-static MessageType nextAlarmMessageType(MessageType messageType, int delta) {
-	static MessageType const types[] {
-		MessageType::OFF_ON_IN,
-		MessageType::OFF_ON_TOGGLE_IN,
-		MessageType::TRIGGER_IN,
-		MessageType::UP_DOWN_IN,
-		MessageType::OPEN_CLOSE_IN,
-		MessageType::SET_LEVEL_IN,
-		MessageType::MOVE_TO_LEVEL_IN,
-		//MessageType::SET_COLOR_IN,
-		//MessageType::SET_COLOR_TEMPERATURE_IN,
-		MessageType::SET_AIR_TEMPERATURE_IN,
-		MessageType::SET_AIR_HUMIDITY_IN,
-	};
-
-	int index = array::binaryLowerBound(types, [messageType](MessageType a) {return a < messageType;});
-	index = (index + array::count(types) * 256 + delta) % array::count(types);
-	return types[index];
-}*/
-
-void RoomControl::printConnection(Menu::Stream &stream, Connection const &connection) {
-	auto &interface = getInterface(connection);
-	//auto device = interface.getDevice(connection.deviceId);
-	auto plugs = interface.getPlugs(connection.deviceId);
-	if (connection.endpointIndex < plugs.count()) {
-		String deviceName = interface.getName(connection.deviceId);
-		stream << deviceName << ':' << dec(connection.endpointIndex);
-		String plugName = getTypeLabel(plugs[connection.endpointIndex]);
-		stream << " (" << plugName << ')';
-	} else {
-		stream << "Connect...";
 	}
 }
 
@@ -869,7 +740,6 @@ void RoomControl::editMessage(Menu::Stream &stream, MessageType messageType,
 	}
 }
 
-
 static int editDestinationCommand(Menu::Stream &stream, ConvertOptions &convertOptions, int index,
 	Array<String const> const &dstCommands, bool editCommand, int delta)
 {
@@ -1048,35 +918,53 @@ void RoomControl::editConvertOptions(Menu &menu, ConvertOptions &convertOptions,
 }
 
 
-String getName(RoomControl::Connection::Interface interface) {
-	switch (interface) {
-		case RoomControl::Connection::Interface::LOCAL:
-			return "Local";
-		case RoomControl::Connection::Interface::BUS:
-			return "Bus";
-		case RoomControl::Connection::Interface::RADIO:
-			return "Radio";
-		case RoomControl::Connection::Interface::ALARM:
-			return "Alarm";
-		default:
-			return "MQTT";
+// Menu
+// ----
+
+Coroutine RoomControl::idleDisplay() {
+	while (true) {
+		// get current clock time
+		auto now = Calendar::now();
+
+		// obtain a bitmap
+		auto bitmap = this->swapChain.get();
+
+		// display weekday and clock time
+		StringBuffer<16> b = weekdaysLong[now.getWeekday()] + "  "
+			+ dec(now.getHours()) + ':'
+			+ dec(now.getMinutes(), 2) + ':'
+			+ dec(now.getSeconds(), 2);
+		bitmap->drawText(20, 10, tahoma_8pt, b, 1);
+
+		// show bitmap on display
+		this->swapChain.show(bitmap);
+
+		// wait for event
+		int index;
+		bool value;
+		switch (co_await select(Input::trigger(1 << INPUT_POTI_BUTTON, 0, index, value), Calendar::secondTick())) {
+		case 1:
+			// poti button pressed
+			co_await mainMenu();
+			break;
+		case 2:
+			// second elapsed
+			break;
+		}
 	}
 }
-
-
-// menu
 
 AwaitableCoroutine RoomControl::mainMenu() {
 	Menu menu(this->swapChain);
 	while (true) {
 		if (menu.entry("Local Devices"))
-			co_await devicesMenu(this->localInterface);
+			co_await devicesMenu(LOCAL_INTERFACE);
 		if (menu.entry("Bus Devices"))
-			co_await devicesMenu(this->busInterface);
+			co_await devicesMenu(BUS_INTERFACE);
 		if (menu.entry("Radio Devices"))
-			co_await devicesMenu(this->radioInterface);
+			co_await devicesMenu(RADIO_INTERFACE);
 		if (menu.entry("Alarms"))
-			co_await alarmsMenu(this->alarmInterface);
+			co_await alarmsMenu();
 		if (menu.entry("Functions"))
 			co_await functionsMenu();
 		if (menu.entry("Exit"))
@@ -1087,21 +975,21 @@ AwaitableCoroutine RoomControl::mainMenu() {
 	}
 }
 
-AwaitableCoroutine RoomControl::devicesMenu(Interface &interface) {
+AwaitableCoroutine RoomControl::devicesMenu(int interfaceIndex) {
+	auto &interface = *this->interfaces[interfaceIndex];
 	interface.setCommissioning(true);
 	Menu menu(this->swapChain);
 	while (true) {
+		// list devices
 		auto deviceIds = interface.getDeviceIds();
 		for (auto id : deviceIds) {
-			//auto &device = *interface.getDevice(id);
-
 			auto stream = menu.stream();
 			stream << interface.getName(id);
 			if (menu.entry()) {
 				// set commissioning to false when in deviceMenu to prevent deletion of device
 				// todo: "leave" command can still delete the device
 				interface.setCommissioning(false);
-				co_await deviceMenu(interface, id);
+				co_await deviceMenu(interfaceIndex, id);
 				interface.setCommissioning(true);
 				break;
 			}
@@ -1115,9 +1003,17 @@ AwaitableCoroutine RoomControl::devicesMenu(Interface &interface) {
 	interface.setCommissioning(false);
 }
 
-AwaitableCoroutine RoomControl::deviceMenu(Interface &interface, uint8_t id) {
+AwaitableCoroutine RoomControl::deviceMenu(int interfaceIndex, uint8_t id) {
+	auto &interface = *this->interfaces[interfaceIndex];
+
+	// connections
+	TempConnections tc = getConnections(interfaceIndex, id);
+
+	// menu loop
 	Menu menu(this->swapChain);
 	while (true) {
+		if (menu.entry("Connections"))
+			co_await connectionsMenu(interface.getPlugs(id), tc);
 		if (menu.entry("Plugs"))
 			co_await plugsMenu(interface, id);
 		if (menu.entry("Message Logger"))
@@ -1128,17 +1024,26 @@ AwaitableCoroutine RoomControl::deviceMenu(Interface &interface, uint8_t id) {
 			interface.erase(id);
 			break;
 		}
-		if (menu.entry("Exit"))
+		if (menu.entry("Cancel"))
 			break;
+		if (menu.entry("Save")) {
+			// save connections
+			writeConnections(interfaceIndex, id, tc);
+			break;
+		}
+		//if (menu.entry("Exit"))
+		//	break;
 
 		// show menu
 		co_await menu.show();
 	}
 }
 
-AwaitableCoroutine RoomControl::alarmsMenu(AlarmInterface &alarms) {
+AwaitableCoroutine RoomControl::alarmsMenu() {
 	Menu menu(this->swapChain);
+	auto &alarms = this->alarmInterface;
 	while (true) {
+		// list alarms
 		auto ids = alarms.getDeviceIds();
 		for (auto id : ids) {
 			auto const &data = *alarms.get(id);
@@ -1153,14 +1058,16 @@ AwaitableCoroutine RoomControl::alarmsMenu(AlarmInterface &alarms) {
 
 			//stream << interface.getDeviceName(i);
 			if (menu.entry()) {
-				AlarmInterface::AlarmData data2(data);
-				co_await alarmMenu(alarms, id, data2);
+				AlarmInterface::Data data2(data);
+				co_await alarmMenu(data2);
 				break;
 			}
 		}
 		if (menu.entry("Add")) {
-			AlarmInterface::AlarmData data;
-			co_await alarmMenu(alarms, 0, data);
+			AlarmInterface::Data data;
+			data.id = 0;
+			assign(data.name, "Alarm");
+			co_await alarmMenu(data);
 		}
 		if (menu.entry("Exit"))
 			break;
@@ -1170,26 +1077,26 @@ AwaitableCoroutine RoomControl::alarmsMenu(AlarmInterface &alarms) {
 	}
 }
 
-AwaitableCoroutine RoomControl::alarmMenu(AlarmInterface &alarms, uint8_t id, AlarmInterface::AlarmData &data) {
+AwaitableCoroutine RoomControl::alarmMenu(AlarmInterface::Data &data) {
 	Menu menu(this->swapChain);
+	auto &alarms = this->alarmInterface;
+	auto id = data.id;
 	while (true) {
 		if (menu.entry("Time"))
 			co_await alarmTimeMenu(data.time);
 
+		// check if alarm already exists
 		if (id != 0) {
-			//auto &device = *alarms.getDevice(id);
-
 			if (menu.entry("Message Logger"))
 				co_await messageLogger(alarms, id);
 
 			// test alarm
-			menu.stream() << "Test Trigger (-> " << dec(alarms.getSubscriberCount(id, 1, 1)) << ')';
+			menu.stream() << "Test Trigger (-> " << dec(alarms.getSubscriberCount(id,  1)) << ')';
 			if (menu.entry())
-				alarms.test(id, 1, 1);
-			menu.stream() << "Test Release (-> " << dec(alarms.getSubscriberCount(id, 1, 0)) << ')';
+				alarms.test(id, 1);
+			menu.stream() << "Test Release (-> " << dec(alarms.getSubscriberCount(id,  0)) << ')';
 			if (menu.entry())
-				alarms.test(id, 1, 0);
-
+				alarms.test(id, 0);
 
 			if (menu.entry("Delete")) {
 				// delete alarm
@@ -1245,218 +1152,31 @@ AwaitableCoroutine RoomControl::alarmTimeMenu(AlarmTime &time) {
 	}
 }
 
-AwaitableCoroutine RoomControl::plugsMenu(Interface &interface, uint8_t id) {
-	Menu menu(this->swapChain);
-	while (true) {
-		auto plugs = interface.getPlugs(id);
-		for (int i = 0; i < plugs.count(); ++i) {
-			auto messageType = plugs[i];
-			auto stream = menu.stream();
-			stream << dec(i) << ": " << getTypeLabel(messageType);
-			if ((messageType & MessageType::DIRECTION_MASK) == MessageType::IN)
-				stream << " In";
-			if ((messageType & MessageType::DIRECTION_MASK) == MessageType::OUT)
-				stream << " Out";
-			menu.entry();
-		}
-		if (menu.entry("Exit"))
-			break;
-
-		// show menu and wait for new event until timeout so that we can show endpoints of recommissioned device
-		co_await select(menu.show(), Timer::sleep(250ms));
-	}
-}
-
-
-
-AwaitableCoroutine RoomControl::messageLogger(Interface &interface, uint8_t id) {
-	PublishInfo::Barrier barrier;
-
-	Subscriber subscribers[32];
-
-	// subscribe to all plugs
-	for (int plugIndex = 0; plugIndex < array::count(subscribers); ++plugIndex) {
-		auto &subscriber = subscribers[plugIndex];
-		subscriber.destination.device.plugIndex = plugIndex;
-		subscriber.barrier = &barrier;
-		interface.subscribe(id, plugIndex, subscriber);
-	}
-
-	// event queue
-	struct Event {
-		MessageInfo info;
-		Message message;
-	};
-	Queue<Event, 16> queue;
-	
-	// add an empty event at the back of the queue to receive the first message
-	queue.addBack();
-
-	// menu loop
-	Menu menu(this->swapChain);
-	while (true) {
-		// display events
-		for (int i = queue.count() - 2; i >= 0; --i) {
-			Event &event = queue[i];
-			auto stream = menu.stream();
-			stream << dec(event.info.device.plugIndex) << ": ";
-			auto usage = getUsage(event.info.type);
-			switch (event.info.type & MessageType::CATEGORY) {
-			case MessageType::BINARY:
-			case MessageType::TERNARY:
-				stream << getSwitchStates(usage)[event.message.value.u8];
-				break;
-			case MessageType::LEVEL:
-			case MessageType::PHYSICAL:
-			case MessageType::CONCENTRATION:
-			case MessageType::LIGHTING: {
-				bool relative = (event.info.type & MessageType::CMD) != 0 && event.message.command != 0;
-				stream << getDisplayValue(usage, relative, event.message.value.f32) << getDisplayUnit(usage);
-				break;
-			}
-			case MessageType::METERING:
-				//stream << getDisplayValue(usage, event.message.value.u32) << getDisplayUnit(usage);
-				break;
-			default:;
-			}
-			menu.entry();
-		}
-		
-		if (menu.entry("Exit"))
-			break;
-
-		// update subscribers
-		auto plugs = interface.getPlugs(id);
-		for (int plugIndex = 0; plugIndex < min(plugs.count(), array::count(subscribers)); ++plugIndex) {
-			auto &subscriber = subscribers[plugIndex];
-			auto messageType = plugs[plugIndex];
-			subscriber.destination.type = messageType ^ (MessageType::OUT ^ MessageType::IN);
-			subscriber.convertOptions = getDefaultConvertOptions(messageType);
-		}
-
-		// get the empty event at the back of the queue
-		Event &event = queue.getBack();
-
-		// show menu or receive event (event gets filled in)
-		int selected = co_await select(menu.show(), barrier.wait(event.info, &event.message), Timer::sleep(250ms));
-		if (selected == 2) {
-			// received an event: add new empty event at the back of the queue
-			queue.addBack();
-		}
-	}
-}
-
-AwaitableCoroutine RoomControl::messageGenerator(Interface &interface, uint8_t id) {
-	//! skip "in" endpoints -> or forward to subscriptions
-
-	uint8_t plugIndex = 0;
-	MessageType lastMessageType = MessageType::UNKNOWN;
-	Message message = {};
-	PublishInfo::Barrier *publishBarrier;
-
-	// menu loop
-	Menu menu(this->swapChain);
-	while (true) {
-		auto plugs = interface.getPlugs(id);
-		if (plugs.count() > 0) {
-			// get endpoint type
-			plugIndex = clamp(plugIndex, 0, plugs.count() - 1);
-			auto messageType = plugs[plugIndex];
-
-			// get message component to edit (some messages such as MOVE_TO_LEVEL have two components)
-			int edit = menu.getEdit(1 + getComponentCount(messageType));
-			bool editIndex = edit == 1;
-			bool editMessage1 = edit == 2;
-			bool editMessage2 = edit == 3;
-			int delta = menu.getDelta();
-
-			// edit endpoint index
-			if (editIndex) {
-				plugIndex = clamp(plugIndex + delta, 0, plugs.count() - 1);
-				messageType = plugs[plugIndex];
-			}
-
-			// set default message if type has changed
-			if (messageType != lastMessageType) {
-				lastMessageType = messageType;
-
-				auto usage = getUsage(messageType);
-				switch (messageType & MessageType::CATEGORY) {
-				case MessageType::BINARY:
-				case MessageType::TERNARY:
-					message.value.u8 = 1;
-					break;
-				//case MessageType::MULTISTATE:
-				case MessageType::ENUM:
-					message.value.u16 = 0;
-					break;
-				case MessageType::LEVEL:
-				case MessageType::PHYSICAL:
-				case MessageType::CONCENTRATION:
-				case MessageType::LIGHTING:
-					message.value.f32 = getDefaultFloatValue(usage);
-					break;
-				default:;
-				}
-			}
-
-			// edit message
-			auto stream = menu.stream();
-			stream << underline(dec(plugIndex), editIndex) << ": ";
-			editMessage(stream, messageType, message, editMessage1, editMessage2, delta);
-			menu.entry();
-
-			// send message
-			if (menu.entry("Send")) {
-				auto info = interface.getPublishInfo(id, plugIndex);
-				info.barrier->resumeFirst([id, plugIndex, messageType, &message] (PublishInfo::Parameters &p) {
-					p.info = {messageType, {.device = {id, plugIndex}}};
-
-					// convert to destination message type and resume coroutine if conversion was successful
-					auto &dst = *reinterpret_cast<Message *>(p.message);
-					if ((messageType & MessageType::CATEGORY) <= MessageType::TERNARY)
-						dst.value.u8 = message.value.u8;
-					else if ((messageType & MessageType::CMD) == 0)
-						dst.value = message.value;
-					else
-						dst = message;
-					return true;
-				});
-			}
-		}
-
-		if (menu.entry("Exit"))
-			break;
-			
-		// show menu
-		//co_await select(menu.show(), Timer::sleep(250ms));
-		co_await menu.show();
-	}
-}
-
 AwaitableCoroutine RoomControl::functionsMenu() {
 	// menu loop
 	Menu menu(this->swapChain);
+	auto &functions = this->functionInterface;
 	while (true) {
 		// list functions
-		int count = this->functions.count();
-		for (int i = 0; i < count; ++i) {
-			auto &function = this->functions[i];
-			String name = function->getName();
-
-			if (menu.entry(name)) {
-				FunctionFlash flash(*function);
-				co_await functionMenu(i, flash);
-				break; // function may have been deleted (this->functions.count() may be smaller than count)
+		auto deviceIds = functions.getDeviceIds();
+		for (auto id : deviceIds) {
+			auto stream = menu.stream();
+			stream << functions.getName(id);
+			if (menu.entry()) {
+				FunctionInterface::DataUnion data;
+				functions.getData(id, data);
+				co_await functionMenu(data);
+				break;
 			}
 		}
-
 		if (menu.entry("Add")) {
-			FunctionFlash flash;
-			flash.setType(FunctionFlash::Type::SWITCH);
-			co_await functionMenu(count, flash);
+			FunctionInterface::DataUnion data;
+			data.data.id = 0;
+			data.data.type = FunctionInterface::Type::SWITCH;
+			assign(data.data.name, "Function");
+			data.switchData.timeout = 0;
+			co_await functionMenu(data);
 		}
-
 		if (menu.entry("Exit"))
 			break;
 
@@ -1525,10 +1245,11 @@ static void editDuration(Menu &menu, Menu::Stream &stream, uint32_t &duration) {
 	menu.entry();
 }
 
-static void editColorSettings(Menu &menu, int settingCount, RoomControl::ColorSetting *settings, bool on) {
+static void editColorSettings(Menu &menu, int settingCount, FunctionInterface::ColorSetting *settings, bool on) {
 	auto delta = menu.getDelta();
 
 	for (int i = 0; i < settingCount; ++i) {
+		menu.beginSection();
 		auto &setting = settings[i];
 
 		// brightness
@@ -1563,11 +1284,19 @@ static void editColorSettings(Menu &menu, int settingCount, RoomControl::ColorSe
 			stream << "On ";
 		stream << "Fade: ";
 		editDuration(menu, stream, setting.fade, 10);
+
+		menu.endSection();
 	}
 }
 
+AwaitableCoroutine RoomControl::functionMenu(FunctionInterface::DataUnion &data) {
+	// function (interface and id)
+	auto &functions = this->functionInterface;
+	auto id = data.data.id;
 
-AwaitableCoroutine RoomControl::functionMenu(int index, FunctionFlash &flash) {
+	// connections
+	TempConnections tc = getConnections(FUNCTION_INTERFACE, id);
+
 	// menu loop
 	Menu menu(this->swapChain);
 	while (true) {
@@ -1575,44 +1304,38 @@ AwaitableCoroutine RoomControl::functionMenu(int index, FunctionFlash &flash) {
 
 		// todo edit name
 
-		// edit function type
-		bool editType = menu.getEdit(1) == 1;
-		if (editType && delta != 0)
-			flash.setType(nextFunctionType(flash.type, delta));
-
-		// get info for function type
-		auto &functionInfo = getFunctionInfo(flash.type);
-		int plugCount = functionInfo.plugs.count();
-
 		// function type
 		{
+			bool editType = menu.getEdit(1) == 1;
+			if (editType && delta != 0)
+				FunctionInterface::setType(data, FunctionInterface::getNextType(data.data.type, delta));
+
 			auto stream = menu.stream();
-			stream << "Type: " << underline(functionInfo.name, editType);
+			stream << "Type: " << underline(FunctionInterface::getName(data.data.type), editType);
 			menu.entry();
 		}
 
 		// type dependent configuration
-		switch (flash.type) {
-		case FunctionFlash::Type::SWITCH: {
-			auto &config = flash.getConfig<Switch::Config>();
-
+		switch (data.data.type) {
+		case FunctionInterface::Type::SWITCH: {
+			auto &d = data.switchData;
 			auto stream = menu.stream();
 			stream << "Timeout: ";
-			editDuration(menu, stream, config.timeout);
+			editDuration(menu, stream, d.timeout);
 			break;
 		}
-		case FunctionFlash::Type::LIGHT: {
-			auto &config = flash.getConfig<Light::Config>();
+		case FunctionInterface::Type::LIGHT: {
+			auto &d = data.lightData;
 
 			// timeout
 			auto stream = menu.stream();
 			stream << "Timeout: ";
-			editDuration(menu, stream, config.timeout);
+			editDuration(menu, stream, d.timeout);
 
 			// brightness
 			// todo: one per input
 			for (int i = 0; i < 4; ++i) {
-				auto &setting = config.settings[i];
+				auto &setting = d.settings[i];
 
 				stream = menu.stream();
 				stream << "Brightness: ";
@@ -1631,188 +1354,131 @@ AwaitableCoroutine RoomControl::functionMenu(int index, FunctionFlash &flash) {
 			// off and timeout fade times
 			stream = menu.stream();
 			stream << "Off Fade: ";
-			editDuration(menu, stream, config.offFade, 10);
+			editDuration(menu, stream, d.offFade, 10);
 
 			stream = menu.stream();
 			stream << "Timeout Fade: ";
-			editDuration(menu, stream, config.timeoutFade, 10);
+			editDuration(menu, stream, d.timeoutFade, 10);
 
 			break;
 		}
-		case FunctionFlash::Type::COLOR_LIGHT: {
-			auto &config = flash.getConfig<ColorLight::Config>();
+		case FunctionInterface::Type::COLOR_LIGHT: {
+			auto &d = data.colorLightData;
 
 			// timeout
 			auto stream = menu.stream();
 			stream << "Timeout: ";
-			editDuration(menu, stream, config.timeout);
+			editDuration(menu, stream, d.timeout);
 
 			// todo: one per input
-			editColorSettings(menu, 4, config.settings, true);
+			editColorSettings(menu, 4, d.settings, true);
 
 			// off and timeout fade times
 			stream = menu.stream();
 			stream << "Off Fade: ";
-			editDuration(menu, stream, config.offFade, 10);
+			editDuration(menu, stream, d.offFade, 10);
 
 			stream = menu.stream();
 			stream << "Timeout Fade: ";
-			editDuration(menu, stream, config.timeoutFade, 10);
+			editDuration(menu, stream, d.timeoutFade, 10);
 
 			break;
 		}
-		case FunctionFlash::Type::ANIMATED_LIGHT: {
-			auto &config = flash.getConfig<AnimatedLight::Config>();
+		case FunctionInterface::Type::ANIMATED_LIGHT: {
+			auto &d = data.animatedLightData;
 
 			// timeout
 			auto stream = menu.stream();
 			stream << "Timeout: ";
-			editDuration(menu, stream, config.timeout);
+			editDuration(menu, stream, d.timeout);
 
 			// animation step count
 			stream = menu.stream();
 			stream << "Step Count: ";
 			int editStepCount = menu.getEdit(1);
 			if (editStepCount)
-				config.stepCount = clamp(config.stepCount + delta, 0, 15);
-			stream << underline(dec(config.stepCount), editStepCount);
+				d.stepCount = clamp(d.stepCount + delta, 0, 15);
+			stream << underline(dec(d.stepCount), editStepCount);
 			menu.entry();
 
 			// animation steps
-			editColorSettings(menu, config.stepCount, config.steps, false);
+			editColorSettings(menu, d.stepCount, d.steps, false);
 
 			// fade times
 			stream = menu.stream();
 			stream << "On Fade: ";
-			editDuration(menu, stream, config.onFade, 10);
+			editDuration(menu, stream, d.onFade, 10);
 
 			stream = menu.stream();
 			stream << "Off Fade: ";
-			editDuration(menu, stream, config.offFade, 10);
+			editDuration(menu, stream, d.offFade, 10);
 
 			stream = menu.stream();
 			stream << "Timeout Fade: ";
-			editDuration(menu, stream, config.timeoutFade, 10);
+			editDuration(menu, stream, d.timeoutFade, 10);
 
 			break;
 		}
-		case FunctionFlash::Type::TIMED_BLIND: {
-			auto &config = flash.getConfig<TimedBlind::Config>();
+		case FunctionInterface::Type::TIMED_BLIND: {
+			auto &d = data.timedBlindData;
 
 			// minimum rocker hold time to cause switch-off on release
 			auto stream1 = menu.stream();
 			stream1 << "Hold Time: ";
-			editDuration(menu, stream1, config.holdTime, 100);
+			editDuration(menu, stream1, d.holdTime, 100);
 
 			// run time from fully closed to fully open
 			auto stream2 = menu.stream();
 			stream2 << "Run Time: ";
-			editDuration(menu, stream2, config.runTime, 100);
+			editDuration(menu, stream2, d.runTime, 100);
 
-			if (menu.entry("Measure Run Time")) {
-				auto it = flash.getConnections();
-				for (int connectionIndex = 0; connectionIndex < flash.connectionCount; ++connectionIndex, ++it) {
-					auto &connection = it.getConnection();
-					auto &plug = functionInfo.plugs[connection.plugIndex];
-					if (plug.messageType == MessageType::TERNARY_OPENING_BLIND_OUT /*UP_DOWN_OUT*/ && !connection.isMqtt()) {
-						auto &interface = getInterface(connection);
-						co_await measureRunTime(interface, connection.deviceId, connection, config.runTime);
-						break;
-					}
-				}
-
+			if (id != 0 && menu.entry("Measure Run Time")) {
+				co_await measureRunTime(id, 4, d.runTime);
 			}
 		}
 		default:
 			;
 		}
 
-		// list all plugs (inputs/outputs) and their connections
-		int i = 0;
-		auto it = flash.getConnections();
-		int inputCount = 0;
-		int outputCount = 0;
-		for (int plugIndex = 0; plugIndex < plugCount; ++plugIndex) {
-			auto &plug = functionInfo.plugs[plugIndex];
-			menu.line();
-			menu.stream() << (plug.isInput() ? "Input:" : "Output:") << ' ' << plug.name;
-			menu.label();
+		if (menu.entry("Connections"))
+			co_await connectionsMenu(FunctionInterface::getPlugs(data.data.type), tc);
 
-			// edit existing connections to the current plug
-			while (i < flash.connectionCount) {
-				auto &connection = it.getConnection();
-				if (connection.plugIndex != plugIndex)
-					break;
-
-				auto stream = menu.stream();
-				printConnection(stream, connection);
-				if (menu.entry()) {
-					co_await editFunctionConnection(it, plug, connection, false);
-				}
-
-				++i;
-				++it;
-			}
-
-			// add new connection if maximum connection count not reached
-			if (((plug.isInput() && inputCount < MAX_INPUT_COUNT) || (plug.isOutput() && outputCount < MAX_OUTPUT_COUNT))
-				&& menu.entry("Connect..."))
-			{
-				co_await editFunctionConnection(it, plug, {.plugIndex = uint8_t(plugIndex)}, true);
-			}
-
-			// count inputs and outputs
-			if (plug.isInput())
-				++inputCount;
-			else
-				++outputCount;
-		}
-		menu.line();
-
-		// check if function is to be added
-		if (index < this->functions.count()) {
-			// no: meny entry for deleting existing function
+		// check if function already exists
+		if (id != 0) {
+			if (menu.entry("Plugs"))
+				co_await plugsMenu(functions, id);
+			if (menu.entry("Message Logger"))
+				co_await messageLogger(functions, id);
+			if (menu.entry("Message Generator"))
+				co_await messageGenerator(functions, id);
 			if (menu.entry("Delete")) {
-				// delete alarm
-				this->functions.erase(index);
+				// delete connections
+				eraseConnections(FUNCTION_INTERFACE, id, tc);
+
+				// delete function
+				functions.erase(id);
 				break;
 			}
 		}
 		if (menu.entry("Cancel"))
 			break;
 		if (menu.entry("Save")) {
-			// ensure consistency
-			//assert(flash.connectionCount == i);
-			//assert(flash.bufferSize == it.buffer - flash.buffer);
-			flash.connectionCount = i;
-			flash.bufferSize = it.buffer - flash.buffer;
+			// save function
+			functions.set(data);
 
-			// allocate new state object
-			auto function = flash.allocate();
-			assert(function != nullptr);
+			// save connections
+			writeConnections(FUNCTION_INTERFACE, id, tc);
 
-			// save function to flash and delete old state object (stops coroutine)
-			this->functions.write(index, function);
-
-			// start new coroutine
-			function->coroutine = function->start(*this);
 			break;
 		}
-		menu.line();
 
 		// show menu
 		co_await menu.show();
 	}
 }
 
-AwaitableCoroutine RoomControl::measureRunTime(Interface &interface, uint8_t id, Connection const &connection,
-	uint16_t &runTime)
-{
+AwaitableCoroutine RoomControl::measureRunTime(uint8_t id, uint8_t plugIndex, uint16_t &runTime) {
 	uint8_t state = 0;
-
-
-	auto info = interface.getPublishInfo(id, connection.endpointIndex);
-
 	bool up = false;
 
 	int duration = runTime;
@@ -1829,23 +1495,16 @@ AwaitableCoroutine RoomControl::measureRunTime(Interface &interface, uint8_t id,
 			<< dec(d.hundredths, 2) << "0";
 		if (menu.entry()) {
 			if (state == 0) {
+				// start
 				state = up ? 1 : 2;
 				up = !up;
 				startTime = Timer::now();
 			} else {
+				// stop
 				state = 0;
 			}
 
-			info.barrier->resumeFirst([&interface, id, &connection, state] (PublishInfo::Parameters &p) {
-				auto plugs = interface.getPlugs(id);
-				if (connection.endpointIndex < plugs.count()) {
-					auto dstType = plugs[connection.endpointIndex];
-					p.info = {dstType, {.device = {id, connection.endpointIndex}}};
-					auto &dst = *reinterpret_cast<Message *>(p.message);
-					return convertSwitch(dstType, dst, state, connection.convertOptions);
-				}
-				return false;
-			});
+			this->functionInterface.publishSwitch(id, plugIndex, state);
 		}
 		if (menu.entry("Cancel"))
 			break;
@@ -1856,32 +1515,98 @@ AwaitableCoroutine RoomControl::measureRunTime(Interface &interface, uint8_t id,
 
 		// show menu
 		if (state == 0) {
+			// stopped:
 			co_await menu.show();
 		} else {
-			co_await select(menu.show(), Timer::sleep(10ms));
+			// running: timeout so that the duration gets updated on display
+			co_await select(menu.show(), Timer::sleep(25ms));
 
 			if (state != 0)
-				duration = (Timer::now() - startTime) * 100 / 1s;
+				duration = (Timer::now() - startTime) / 10ms;
 		}
 	}
 }
 
-AwaitableCoroutine RoomControl::editFunctionConnection(ConnectionIterator &it, Plug const &plug, Connection connection,
-	bool add)
+
+AwaitableCoroutine RoomControl::connectionsMenu(Array<MessageType const> plugs, TempConnections &tc) {
+	Menu menu(this->swapChain);
+	while (true) {
+		// list all input plugs and their connections
+		int i = 0;
+		for (int plugIndex = 0; plugIndex < plugs.count(); ++plugIndex) {
+			auto dstType = plugs[plugIndex];
+			if ((dstType & MessageType::DIRECTION_MASK) != MessageType::IN)
+				continue;
+			menu.line();
+			menu.stream() << getTypeLabel(dstType);
+			menu.label();
+
+			// edit existing connections to the current plug
+			while (i < tc.count) {
+				auto &connection = tc.data[i];
+				if (connection.destination.plugIndex != plugIndex)
+					break;
+
+				auto stream = menu.stream();
+				printConnection(stream, connection);
+				if (menu.entry()) {
+					co_await editFunctionConnection(tc, i, dstType, connection, false);
+				}
+
+				++i;
+			}
+
+			// add new connection if maximum connection count not reached
+			if (i < TempConnections::MAX_CONNECTIONS && menu.entry("Connect...")) {
+				ConnectionData connection = {
+					{0, 0, 0},
+					{uint8_t(plugIndex)},
+					{}};
+				co_await editFunctionConnection(tc, i, dstType, connection, true);
+			}
+		}
+		menu.line();
+		if (menu.entry("Exit"))
+			break;
+
+		// show menu and wait for new event until timeout so that we can show endpoints of recommissioned device
+		co_await select(menu.show(), Timer::sleep(250ms));
+	}
+}
+
+AwaitableCoroutine RoomControl::editFunctionConnection(TempConnections &tc, int index, MessageType dstType,
+	ConnectionData connection, bool add)
 {
 	// menu loop
 	Menu menu(this->swapChain);
 	while (true) {
 		int delta = menu.getDelta();
 
+		// get interface index and make sure it is valid
+		int i = connection.source.interfaceIndex;
+		while (i >= array::count(this->interfaces) || this->interfaces[i]->getDeviceIds().count() == 0) {
+			i = i >= array::count(this->interfaces) - 1 ? 0 : i + 1;
+		}
+
 		// select interface
 		bool editInterface = menu.getEdit(1) == 1;
 		if (editInterface && delta != 0) {
-			int count = int(Connection::Interface::COUNT);
-			connection.interface = Connection::Interface((int(connection.interface) + count * 256 + delta) % count);
-			connection.deviceId = 0;
+			while (delta > 0) {
+				i = i >= array::count(this->interfaces) - 1 ? 0 : i + 1;
+				if (this->interfaces[i]->getDeviceIds().count() > 0)
+					--delta;
+			}
+			while (delta < 0) {
+				i = i == 0 ? array::count(this->interfaces) - 1 : i - 1;
+				if (this->interfaces[i]->getDeviceIds().count() > 0)
+					++delta;
+			}
+			connection.source.interfaceIndex = i;
+			connection.source.deviceId = 0;
 		}
-		menu.stream() << "Interface: " << underline(getName(connection.interface), editInterface);
+		auto &interface = *this->interfaces[i];
+
+		menu.stream() << "Interface: " << underline(interface.getName(), editInterface);
 		menu.entry();
 
 		// select device
@@ -1889,26 +1614,22 @@ AwaitableCoroutine RoomControl::editFunctionConnection(ConnectionIterator &it, P
 			auto stream = menu.stream();
 			printConnection(stream, connection);
 			if (menu.entry())
-				co_await selectFunctionDevice(connection, plug);
+				co_await selectFunctionDevice(connection, dstType);
 		}
 
 		// select convert options
-		auto &interface = getInterface(connection);
-		auto plugs = interface.getPlugs(connection.deviceId);
-		if (connection.endpointIndex < plugs.count()) {
-			auto messageType = plugs[connection.endpointIndex];
+		auto plugs = interface.getPlugs(connection.source.deviceId);
+		if (connection.source.plugIndex < plugs.count()) {
+			auto messageType = plugs[connection.source.plugIndex];
 
 			menu.beginSection();
-			if (plug.isInput())
-				editConvertOptions(menu, connection.convertOptions, plug.messageType, messageType);
-			else
-				editConvertOptions(menu, connection.convertOptions, messageType, plug.messageType);
+			editConvertOptions(menu, connection.convertOptions, dstType, messageType);
 			menu.endSection();
 		}
 
 		if (!add) {
 			if (menu.entry("Delete")) {
-				it.erase();
+				tc.erase(index);
 				break;
 			}
 		}
@@ -1916,11 +1637,9 @@ AwaitableCoroutine RoomControl::editFunctionConnection(ConnectionIterator &it, P
 		if (menu.entry("Cancel"))
 			break;
 
-		if (connection.deviceId != 0 && menu.entry("Ok")) {
+		if (connection.source.deviceId != 0 && menu.entry("Ok")) {
 			if (add)
-				it.insert();
-			it.getConnection() = connection;
-			//it.setTopic();
+				tc.insert(index, connection);
 			break;
 		}
 
@@ -1929,8 +1648,8 @@ AwaitableCoroutine RoomControl::editFunctionConnection(ConnectionIterator &it, P
 	}
 }
 
-AwaitableCoroutine RoomControl::selectFunctionDevice(Connection &connection, Plug const &plug) {
-	auto &interface = getInterface(connection);
+AwaitableCoroutine RoomControl::selectFunctionDevice(ConnectionData &connection, MessageType dstType) {
+	auto &interface = *this->interfaces[connection.source.interfaceIndex];
 
 	// menu loop
 	Menu menu(this->swapChain);
@@ -1942,10 +1661,10 @@ AwaitableCoroutine RoomControl::selectFunctionDevice(Connection &connection, Plu
 		for (auto id : deviceIds) {
 			// check if the device has at least one compatible endpoint
 			auto plugs = interface.getPlugs(id);
-			for (auto plugType : plugs) {
-				if (isCompatible(plug, plugType) != 0) {
+			for (auto srcType : plugs) {
+				if (isCompatible(dstType, srcType) != 0) {
 					if (menu.entry(interface.getName(id))) {
-						co_await selectFunctionPlug(interface, id, connection, plug);
+						co_await selectFunctionPlug(interface, id, connection, dstType);
 						co_return;
 					}
 					break;
@@ -1961,8 +1680,8 @@ AwaitableCoroutine RoomControl::selectFunctionDevice(Connection &connection, Plu
 	}
 }
 
-AwaitableCoroutine RoomControl::selectFunctionPlug(Interface &interface, uint8_t id, Connection &connection,
-	Plug const &plug)
+AwaitableCoroutine RoomControl::selectFunctionPlug(Interface &interface, uint8_t id, ConnectionData &connection,
+	MessageType dstType)
 {
 	// menu loop
 	Menu menu(this->swapChain);
@@ -1971,20 +1690,17 @@ AwaitableCoroutine RoomControl::selectFunctionPlug(Interface &interface, uint8_t
 
 		// list all compatible endpoints of device
 		auto plugs = interface.getPlugs(id);
-		for (int i = 0; i < plugs.count(); ++i) {
-			auto messageType = plugs[i];
-			if (isCompatible(plug, messageType) != 0) {
-				// endpoint is compatible
-				String typeName = getTypeLabel(messageType);
-				menu.stream() << dec(i) << " (" << typeName << ')';
+		for (int plugIndex = 0; plugIndex < plugs.count(); ++plugIndex) {
+			auto srcType = plugs[plugIndex];
+			if (isCompatible(dstType, srcType) != 0) {
+				// plug is compatible
+				String typeName = getTypeLabel(srcType);
+				menu.stream() << dec(plugIndex) << " (" << typeName << ')';
 				if (menu.entry()) {
 					// endpoint selected
-					connection.deviceId = id;//device.getId();
-					connection.endpointIndex = i;
-					if (plug.isInput())
-						connection.convertOptions = getDefaultConvertOptions(plug.messageType, messageType);
-					else
-						connection.convertOptions = getDefaultConvertOptions(messageType, plug.messageType);
+					connection.source.deviceId = id;
+					connection.source.plugIndex = plugIndex;
+					connection.convertOptions = getDefaultConvertOptions(dstType, srcType);
 					co_return;
 				}
 			}
@@ -1998,1119 +1714,183 @@ AwaitableCoroutine RoomControl::selectFunctionPlug(Interface &interface, uint8_t
 	}
 }
 
-
-// ConnectionIterator
-
-void RoomControl::ConnectionIterator::setTopic(String topic) {
-	auto &flash = this->flash;
-
-	// resize input or output list
-	Connection &plug = *reinterpret_cast<Connection *>(this->buffer);
-	int oldSize = (offsetof(Connection, endpointIndex) + plug.deviceId + 3) / 4;
-	int newSize = (offsetof(Connection, endpointIndex) + topic.count() + 3) / 4;
-	int d = newSize - oldSize;
-	if (d > 0) {
-		auto buffer = this->buffer + oldSize;
-		flash.bufferSize += d;
-		array::insert(flash.bufferSize - (buffer - flash.buffer), buffer, d);
-	} else if (d < 0) {
-		auto buffer = this->buffer + newSize;
-		array::erase(flash.bufferSize - (buffer - flash.buffer), buffer, -d);
-		flash.bufferSize += d;
-	}
-
-	// set topic
-	array::copy(topic.count(), reinterpret_cast<char *>(this->buffer) + offsetof(Connection, endpointIndex), topic.data);
-	plug.deviceId = topic.count();
-}
-
-void RoomControl::ConnectionIterator::insert() {
-	auto &flash = this->flash;
-	++flash.connectionCount;
-
-	int d = (sizeof(Connection) + 3) / 4;
-	flash.bufferSize += d;
-	array::insert(flash.bufferSize - (this->buffer - flash.buffer), this->buffer, d);
-
-	// initialize new plug
-	Connection &connection = *reinterpret_cast<Connection *>(this->buffer);
-	connection.plugIndex = 0;
-	connection.interface = Connection::Interface::LOCAL;
-	connection.deviceId = 0;
-}
-
-void RoomControl::ConnectionIterator::erase() {
-	auto &flash = this->flash;
-	--flash.connectionCount;
-
-	Connection &plug = *reinterpret_cast<Connection *>(this->buffer);
-	int d = int((!plug.isMqtt() ? sizeof(Connection) : (offsetof(Connection, endpointIndex) + plug.deviceId)) + 3) / 4;
-	array::erase(flash.bufferSize - (this->buffer - flash.buffer), this->buffer, d);
-	flash.bufferSize -= d;
-}
-
-
-// FunctionFlash
-
-RoomControl::FunctionFlash::FunctionFlash(FunctionFlash const &flash)
-	: type(flash.type), nameLength(flash.nameLength), configOffset(flash.configOffset)
-	, connectionCount(flash.connectionCount), connectionsOffset(flash.connectionsOffset)
-	, bufferSize(flash.bufferSize)
-{
-	// copy contents of buffer
-	array::copy(flash.bufferSize, this->buffer, flash.buffer);
-}
-
-static int getSize(RoomControl::FunctionFlash::Type type) {
-	return getFunctionInfo(type).configSize;
-}
-
-void RoomControl::FunctionFlash::setType(Type type) {
-	int oldSize = this->type == FunctionFlash::Type::INVALID ? 0 : (getSize(this->type) + 3) / 4;
-	int newSize = (getSize(type) + 3) / 4;
-	bool keepConnections = this->type == type;//getFunctionInfo(this->type).typeClass == getFunctionInfo(type).typeClass;
-	this->type = type;
-
-	if (keepConnections) {
-		// resize config and keep connections
-		int d = newSize - oldSize;
-		if (d > 0)
-			array::insert(this->bufferSize + d - this->configOffset, this->buffer + this->configOffset, d);
-		else if (d < 0)
-			array::erase(this->bufferSize - this->configOffset, this->buffer + this->configOffset, -d);
-
-		// adjust offsets
-		this->connectionsOffset += d;
-		this->bufferSize += d;
-	} else {
-		// clear connections
-		this->connectionCount = 0;
-		this->connectionsOffset = this->configOffset + newSize;
-		this->bufferSize = this->connectionsOffset;
-	}
-
-	// clear config
-	array::fill(newSize, this->buffer + this->configOffset, 0);
-
-	// set default config
-	switch (this->type) {
-	case RoomControl::FunctionFlash::Type::SWITCH:
-		break;
-	case RoomControl::FunctionFlash::Type::LIGHT: {
-		auto &config = getConfig<Light::Config>();
-		config.settings[0] = {100, 10};
-		config.settings[1] = {75, 10};
-		config.settings[2] = {50, 10};
-		config.settings[3] = {25, 10};
-		break;
-	}
-	case RoomControl::FunctionFlash::Type::COLOR_LIGHT: {
-		auto &config = getConfig<ColorLight::Config>();
-		config.settings[0] = {100, 0, 100, 10};
-		config.settings[1] = {100, 18, 100, 10};
-		config.settings[2] = {100, 36, 100, 10};
-		config.settings[3] = {100, 54, 100, 10};
-		break;
-	}
-	case RoomControl::FunctionFlash::Type::ANIMATED_LIGHT: {
-		auto &config = getConfig<AnimatedLight::Config>();
-		config.stepCount = 4;
-		config.steps[0] = {100, 0, 100, 10};
-		config.steps[1] = {100, 18, 100, 10};
-		config.steps[2] = {100, 36, 100, 10};
-		config.steps[3] = {100, 54, 100, 10};
-		break;
-	}
-	case RoomControl::FunctionFlash::Type::TIMED_BLIND: {
-		auto &config = getConfig<TimedBlind::Config>();
-		config.holdTime = 200;
-		config.runTime = 1000;
-		break;
-	}
-	default:;
-	}
-}
-
-void RoomControl::FunctionFlash::setName(String name) {
-
-}
-
-RoomControl::Function *RoomControl::FunctionFlash::allocate() const {
-	auto &flash = *this;
-	switch (flash.type) {
-	case Type::SWITCH:
-		return new Switch(flash);
-	case Type::LIGHT:
-		return new Light(flash);
-	case Type::COLOR_LIGHT:
-		return new ColorLight(flash);
-	case Type::ANIMATED_LIGHT:
-		return new AnimatedLight(flash);
-	case Type::TIMED_BLIND:
-		return new TimedBlind(flash);
-	case Type::HEATING_CONTROL:
-		return new HeatingControl(flash);
-	}
-	assert(false);
-	return nullptr;
-}
-
-
-// Function
-
-RoomControl::Function::~Function() {
-	this->coroutine.destroy();
-}
-
-struct OnOff {
-	uint8_t state = 0;
-
-	bool apply(uint8_t command) {
-		if (command < 2) {
-			bool changed = this->state != command;
-			this->state = command;
-			return changed;
-		} else if (command == 2) {
-			this->state ^= 1;
-			return true;
-		}
-		return false;
-	}
-
-	operator bool() const {return this->state != 0;}
-};
-
-struct FloatValue {
-	float value = 0.0f;
-
-	void apply(Message const &message) {
-		if (message.command == 0) {
-			// set
-			this->value = message.value.f32;
-		} else {
-			// step
-			this->value += message.value.f32;
-		}
-	}
-
-	operator float() const {return this->value;}
-};
-/*
-// SimpleSwitch
-
-RoomControl::SimpleSwitch::~SimpleSwitch() {
-}
-
-Coroutine RoomControl::SimpleSwitch::start(RoomControl &roomControl) {
-	Subscriber subscribers[MAX_INPUT_COUNT];
-	PublishInfo::Barrier barrier;
-
-	Publisher publishers[MAX_OUTPUT_COUNT];
-	OnOff state;
-
-	// connect inputs and outputs
-	int outputCount = roomControl.connectFunction(**this, switchPlugs, subscribers, barrier, publishers);
-
-	// no references to flash allowed beyond this point as flash may be reallocated
+AwaitableCoroutine RoomControl::plugsMenu(Interface &interface, uint8_t id) {
+	Menu menu(this->swapChain);
 	while (true) {
-		// wait for message
-		MessageInfo info;
-		uint8_t message;
-		co_await barrier.wait(info, &message);
-
-		// process message
-		state.apply(message);
-
-		// publish
-		for (int i = 0; i < outputCount; ++i) {
-			auto &publisher = publishers[i];
-			publisher.publishSwitch(state.state);
+		auto plugs = interface.getPlugs(id);
+		for (int i = 0; i < plugs.count(); ++i) {
+			auto messageType = plugs[i];
+			auto stream = menu.stream();
+			stream << dec(i) << ": " << getTypeLabel(messageType);
+			if ((messageType & MessageType::DIRECTION_MASK) == MessageType::IN)
+				stream << " In";
+			if ((messageType & MessageType::DIRECTION_MASK) == MessageType::OUT)
+				stream << " Out";
+			menu.entry();
 		}
-	}
-}
-*/
+		if (menu.entry("Exit"))
+			break;
 
-// Switch
-
-RoomControl::Switch::~Switch() {
-}
-
-Coroutine RoomControl::Switch::start(RoomControl &roomControl) {
-	Subscriber subscribers[MAX_INPUT_COUNT];
-	PublishInfo::Barrier barrier;
-
-	Publisher publishers[MAX_OUTPUT_COUNT];
-	OnOff state;
-
-	// connect inputs and outputs
-	int outputCount = roomControl.connectFunction(**this, switchPlugs, subscribers, barrier, publishers);
-
-	auto timeout = (*this)->getConfig<Config>().timeout * 10ms;
-
-	// no references to flash allowed beyond this point as flash may be reallocated
-	while (true) {
-		// wait for message
-		MessageInfo info;
-		uint8_t message;
-		if (state == 0 || timeout == 0ms) {
-			// off: wait for message
-			co_await barrier.wait(info, &message);
-		} else {
-			// on: wait for message or timeout
-			int s = co_await select(barrier.wait(info, &message), Timer::sleep(timeout));
-			if (s == 2) {
-				// timeout: switch off
-				message = 0;
-			}
-		}
-
-		// process message
-		bool changed = state.apply(message);
-
-		if (!changed) {
-			// nothing to do
-			continue;
-		}
-
-		// publish
-		for (int i = 0; i < outputCount; ++i) {
-			auto &publisher = publishers[i];
-			publisher.publishSwitch(state.state);
-		}
+		// show menu and wait for new event until timeout so that we can show endpoints of recommissioned device
+		co_await select(menu.show(), Timer::sleep(250ms));
 	}
 }
 
+AwaitableCoroutine RoomControl::messageLogger(Interface &interface, uint8_t id) {
+	MessageBarrier barrier;
 
-// Light
+	Listener listener;
+	listener.sourceIndex = 0; // not used
+	listener.barrier = &barrier;
+	interface.listen(listener);
 
-RoomControl::Light::~Light() {
-}
-
-Coroutine RoomControl::Light::start(RoomControl &roomControl) {
-	Subscriber subscribers[MAX_INPUT_COUNT];
-	PublishInfo::Barrier barrier;
-
-	Publisher publishers[MAX_OUTPUT_COUNT];
-	OnOff on;
-
-	// connect inputs and outputs
-	int outputCount = roomControl.connectFunction(**this, lightPlugs, subscribers, barrier, publishers);
-
-	auto &config = (*this)->getConfig<Config>();
-	auto timeout = config.timeout * 10ms;
-	Light::Config::Setting settings[4]; // todo
-	array::copy(settings, config.settings);
-
-	// fade off either by switching off or after timeout
-	auto switchOffFade = config.offFade;
-	auto timeoutFade = config.timeoutFade;
-	uint16_t offFade;
-
-	// color settings
-	int settingIndex = -1;
-
-	// current time
-	SystemTime now;
-
-	// transition
-	bool transition = false;
-	SystemTime endTime;
-
-	// timeout
-	SystemTime offTime;
-
-	// no references to flash allowed beyond this point as flash may be reallocated
-	while (true) {
-		// wait for message
+	// event queue
+	struct Event {
 		MessageInfo info;
-		uint8_t message;
-		bool timeoutActive = timeout > 0ms && on;
-		if (!timeoutActive && !transition) {
-			// timeout not active and no transition in progress: wait for message
-			co_await barrier.wait(info, &message);
-			//Terminal::out << "plug " << dec(info.plug.id) << '\n';
-			now = Timer::now();
-		} else {
-			// on: wait for message or timeout
-			//Terminal::out << "select" << '\n';
-			bool off = timeoutActive && (!transition || offTime <= endTime);
-			now = off ? offTime : endTime;
-			int s = co_await select(barrier.wait(info, &message), Timer::sleep(now));
+		MessageType type;
+		Message message;
+	};
+	Queue<Event, 16> queue;
 
-			// "relaxed" time to prevent lagging behind
-			now = Timer::now();
+	// add an empty event at the back of the queue to receive the first message
+	queue.addBack();
 
-			if (s == 1) {
-				// switched on or off
-
-				// "precise" time that may lag behind if cpu is overloaded
-				//now = Timer::now();
-
-				// set off fade
-				offFade = switchOffFade;
-			} else {
-				// timeout
-				if (off) {
-					// off timeout
-					//Terminal::out << "off\n";
-					message = 0;
-
-					// set off fade
-					offFade = timeoutFade;
-				} else {
-					// end of transition
-					//Terminal::out << "transition end\n";
-					transition = false;
-
-					// nothing to do
-					continue;
-				}
-			}
-			//Terminal::out << "select " << dec(s) << " plug " << dec(info.plug.id) << '\n';
-		}
-
-		// process message
-		bool changed = on.apply(message);
-
-		// set or reset off time
-		if (on) {
-			offTime = now + timeout;
-		}
-
-		// change color setting
-		bool force = false;
-		if (on && settingIndex != info.plug.connectionIndex) {
-			settingIndex = info.plug.connectionIndex;
-		} else if (!changed) {
-			// current state is confirmed (off -> off or on -> on)
-			if (transition) {
-				// interrupt transition and set immediately
-				transition = false;
-				force = true;
-			} else {
-				// nothing to do
-				continue;
-			}
-		}
-		auto &setting = settings[settingIndex];
-
-		// get color setting
-		float brightness;
-		int brightnessFade;
-		if (on) {
-			// on: fade on or to new color
-			int fade = setting.fade;
-
-			// fade to brightness
-			brightness = float(setting.brightness) * 0.01f;
-			brightnessFade = fade;
-		} else {
-			// off
-			brightness = 0.0f;
-			brightnessFade = offFade;
-		}
-
-		// start transition or set immediately
-		if (!force) {
-			// start transition
-			transition = brightnessFade > 0;
-			endTime = now + brightnessFade * 100ms;
-		} else {
-			// set immediately (1/10s)
-			transition = false;
-			brightnessFade = 1;
-			force = false;
-		}
-
-		// publish
-		for (int i = 0; i < outputCount; ++i) {
-			auto &publisher = publishers[i];
-			switch (publisher.id) {
-			case 1:
-				// on/off
-				if (changed)
-					publisher.publishSwitch(on.state);
+	// menu loop
+	Menu menu(this->swapChain);
+	while (true) {
+		// display events
+		for (int i = queue.count() - 2; i >= 0; --i) {
+			Event &event = queue[i];
+			auto stream = menu.stream();
+			stream << dec(event.info.plugIndex) << ": ";
+			auto usage = getUsage(event.type);
+			switch (event.type & MessageType::CATEGORY) {
+			case MessageType::BINARY:
+			case MessageType::TERNARY:
+				stream << getSwitchStates(usage)[event.message.value.u8];
 				break;
-			case 2:
-				// brightness
-				publisher.publishFloatTransition(brightness, 0, brightnessFade);
+			case MessageType::LEVEL:
+			case MessageType::PHYSICAL:
+			case MessageType::CONCENTRATION:
+			case MessageType::LIGHTING: {
+				bool relative = (event.type & MessageType::CMD) != 0 && event.message.command != 0;
+				stream << getDisplayValue(usage, relative, event.message.value.f32) << getDisplayUnit(usage);
 				break;
 			}
+			case MessageType::METERING:
+				//stream << getDisplayValue(usage, event.message.value.u32) << getDisplayUnit(usage);
+				break;
+			default:;
+			}
+			menu.entry();
+		}
+
+		if (menu.entry("Exit"))
+			break;
+
+		// get the empty event at the back of the queue
+		Event &event = queue.getBack();
+
+		// show menu or receive event (event gets filled in)
+		int selected = co_await select(menu.show(), barrier.wait(event.info, &event.message), Timer::sleep(250ms));
+		if (selected == 2 && event.info.deviceId == id) {
+			// received an event: add new empty event at the back of the queue
+			event.type = interface.getPlugs(id)[event.info.plugIndex];
+			queue.addBack();
 		}
 	}
 }
 
-
-// ColorLight
-
-RoomControl::ColorLight::~ColorLight() {
+static int getComponentCount(MessageType messageType) {
+	return (messageType & MessageType::CATEGORY) == MessageType::LIGHTING ? 2 : 1;
 }
 
-Coroutine RoomControl::ColorLight::start(RoomControl &roomControl) {
-	Subscriber subscribers[MAX_INPUT_COUNT];
-	PublishInfo::Barrier barrier;
+AwaitableCoroutine RoomControl::messageGenerator(Interface &interface, uint8_t id) {
+	//! skip "in" endpoints -> or forward to subscriptions
 
-	Publisher publishers[MAX_OUTPUT_COUNT];
-	OnOff on;
+	uint8_t plugIndex = 0;
+	MessageType lastMessageType = MessageType::UNKNOWN;
+	Message message = {};
+	MessageBarrier *publishBarrier;
 
-	// connect inputs and outputs
-	int outputCount = roomControl.connectFunction(**this, colorLightPlugs, subscribers, barrier, publishers);
-
-	auto &config = (*this)->getConfig<Config>();
-	auto timeout = config.timeout * 10ms;
-	ColorSetting settings[4]; // todo
-	array::copy(settings, config.settings);
-
-	// fade off either by switching off or after timeout
-	auto switchOffFade = config.offFade;
-	auto timeoutFade = config.timeoutFade;
-	uint16_t offFade;
-
-	// color settings
-	int settingIndex = -1;
-
-	// current time
-	SystemTime now;
-
-	// transition
-	bool transition = false;
-	SystemTime endTime;
-
-	// timeout
-	SystemTime offTime;
-
-	// no references to flash allowed beyond this point as flash may be reallocated
+	// menu loop
+	Menu menu(this->swapChain);
 	while (true) {
-		// wait for message
-		MessageInfo info;
-		uint8_t message;
-		bool timeoutActive = timeout > 0ms && on;
-		if (!timeoutActive && !transition) {
-			// timeout not active and no transition in progress: wait for message
-			co_await barrier.wait(info, &message);
-			//Terminal::out << "plug " << dec(info.plug.id) << '\n';
-			now = Timer::now();
-		} else {
-			// on: wait for message or timeout
-			//Terminal::out << "select" << '\n';
-			bool off = timeoutActive && (!transition || offTime <= endTime);
-			now = off ? offTime : endTime;
-			int s = co_await select(barrier.wait(info, &message), Timer::sleep(now));
+		auto plugs = interface.getPlugs(id);
+		if (plugs.count() > 0) {
+			// get endpoint type
+			plugIndex = clamp(plugIndex, 0, plugs.count() - 1);
+			auto messageType = plugs[plugIndex];
 
-			// "relaxed" time to prevent lagging behind
-			now = Timer::now();
+			// get message component to edit (some messages such as MOVE_TO_LEVEL have two components such as transition)
+			int edit = menu.getEdit(1 + getComponentCount(messageType));
+			bool editIndex = edit == 1;
+			bool editMessage1 = edit == 2;
+			bool editMessage2 = edit == 3;
+			int delta = menu.getDelta();
 
-			if (s == 1) {
-				// switched on or off
-
-				// "precise" time that may lag behind if cpu is overloaded
-				//now = Timer::now();
-
-				// set off fade
-				offFade = switchOffFade;
-			} else {
-				// timeout
-				if (off) {
-					// off timeout
-					//Terminal::out << "off\n";
-					message = 0;
-
-					// set off fade
-					offFade = timeoutFade;
-				} else {
-					// end of transition
-					//Terminal::out << "transition end\n";
-					transition = false;
-
-					// nothing to do
-					continue;
-				}
+			// edit endpoint index
+			if (editIndex) {
+				plugIndex = clamp(plugIndex + delta, 0, plugs.count() - 1);
+				messageType = plugs[plugIndex];
 			}
-			//Terminal::out << "select " << dec(s) << " plug " << dec(info.plug.id) << '\n';
-		}
 
-		// process message
-		bool changed = on.apply(message);
+			// set default message if type has changed
+			if (messageType != lastMessageType) {
+				lastMessageType = messageType;
 
-		// set or reset off time
-		if (on) {
-			offTime = now + timeout;
-		}
-
-		// change color setting
-		bool setColor = false;
-		bool force = false;
-		if (on && settingIndex != info.plug.connectionIndex) {
-			settingIndex = info.plug.connectionIndex;
-			setColor = true;
-		} else if (!changed) {
-			// current state is confirmed (off -> off or on -> on)
-			if (transition) {
-				// interrupt transition and set immediately
-				transition = false;
-				force = true;
-			} else {
-				// nothing to do
-				continue;
-			}
-		}
-		auto &setting = settings[settingIndex];
-
-		// get color setting
-		float brightness;
-		int brightnessFade;
-		Cie1931 color;
-		int colorFade;
-		if (on) {
-			// on: fade on or to new color
-			int fade = setting.fade;
-
-			// fade to brightness
-			brightness = float(setting.brightness) * 0.01f;
-			brightnessFade = fade;
-
-			// fade to color
-			color = hueToCie(float(setting.hue * 5), setting.saturation * 0.01f);
-			if (!transition && changed) {
-				// set color immediately when switched on while no transition was going on
-				colorFade = min(fade, 1); // 0 does not seem to work on a philips hue
-				setColor = true;
-			} else {
-				colorFade = fade;
-			}
-		} else {
-			// off
-			brightness = 0.0f;
-			brightnessFade = offFade;
-		}
-
-		// start transition or set immediately
-		if (!force) {
-			// start transition
-			transition = brightnessFade > 0;
-			endTime = now + brightnessFade * 100ms;
-		} else {
-			// set immediately (1/10s)
-			//transition = false;
-			brightnessFade = 1;
-			colorFade = 1;
-			setColor = on;
-			force = false;
-		}
-/*
-		Terminal::out << "brightness " << flt(brightness, 5) << '\n';
-		if (setColor)
-			Terminal::out << "color " << dec(settingIndex) << " xy " << flt(color.x, 1) << ' ' << flt(color.y, 1) << " fade " << dec(colorFade) << '\n';
-*/
-		// publish
-		for (int i = 0; i < outputCount; ++i) {
-			auto &publisher = publishers[i];
-			switch (publisher.id) {
-			case 1:
-				// on/off
-				if (changed)
-					publisher.publishSwitch(on.state);
-				break;
-			case 2:
-				// brightness
-				publisher.publishFloatTransition(brightness, 0, brightnessFade);
-				break;
-			case 3:
-				// color x
-				if (setColor)
-					publisher.publishFloatTransition(color.x, 0, colorFade);
-				break;
-			case 4:
-				// color y
-				if (setColor)
-					publisher.publishFloatTransition(color.y, 0, colorFade);
-				break;
-			}
-		}
-	}
-}
-
-
-// AnimatedLight
-
-RoomControl::AnimatedLight::~AnimatedLight() {
-}
-
-Coroutine RoomControl::AnimatedLight::start(RoomControl &roomControl) {
-	Subscriber subscribers[MAX_INPUT_COUNT];
-	PublishInfo::Barrier barrier;
-
-	Publisher publishers[MAX_OUTPUT_COUNT];
-	OnOff on;
-
-	// connect inputs and outputs
-	int outputCount = roomControl.connectFunction(**this, colorLightPlugs, subscribers, barrier, publishers);
-
-	auto &config = (*this)->getConfig<Config>();
-	auto timeout = config.timeout * 10ms;
-	auto stepCount = config.stepCount;
-	ColorSetting steps[16]; // todo
-	array::copy(steps, config.steps);
-
-	// fade on
-	auto onFade = config.onFade;
-
-	// fade off either by switching off or after timeout
-	auto switchOffFade = config.offFade;
-	auto timeoutFade = config.timeoutFade;
-	uint16_t offFade;
-
-	// current time
-	SystemTime now;
-
-	// on/off transition
-	bool transition = false;
-	SystemTime startTime = {};
-	SystemTime endTime = {};
-
-	// animation steps
-	int stepIndex = 0;
-	SystemTime stepTime;
-	SystemTime nextTime;
-
-	// timeout
-	SystemTime offTime;
-
-
-	//SystemTime brightnessTime = Timer::now();
-
-	// no references to flash allowed beyond this point as flash may be reallocated
-	while (true) {
-		// wait for message
-		MessageInfo info;
-		uint8_t message;
-		bool setColor = false;
-		if (!on && !transition) {
-			// off: wait for message
-			co_await barrier.wait(info, &message);
-			//Terminal::out << "plug " << dec(info.plug.id) << '\n';
-			now = Timer::now();
-			//setColor = true;
-		} else {
-			// on: wait for message or timeout
-			//Terminal::out << "select" << '\n';
-			now = nextTime;
-			if (transition && endTime <= now)
-				now = endTime;
-			bool off = timeout > 0ms && on && offTime <= now;
-			if (off)
-				now = offTime;
-			int s = co_await select(barrier.wait(info, &message), Timer::sleep(now));
-
-			// "relaxed" time to prevent lagging behind
-			now = Timer::now();
-
-			if (s == 1) {
-				// switched on or off
-
-				// "precise" time that may lag behind if cpu is overloaded
-				//now = Timer::now();
-
-				// set off fade
-				offFade = switchOffFade;
-			} else {
-				// timeout
-				if (off) {
-					// off timeout
-					//Terminal::out << "off" << '\n';
-					message = 0;
-
-					// set off fade
-					offFade = timeoutFade;
-				} else {
-					// next animation step or end of transition: don't change state
-					message = 3;
+				auto usage = getUsage(messageType);
+				switch (messageType & MessageType::CATEGORY) {
+				case MessageType::BINARY:
+				case MessageType::TERNARY:
+					message.value.u8 = 1;
+					break;
+				//case MessageType::MULTISTATE:
+				case MessageType::ENUM:
+					message.value.u16 = 0;
+					break;
+				case MessageType::LEVEL:
+				case MessageType::PHYSICAL:
+				case MessageType::CONCENTRATION:
+				case MessageType::LIGHTING:
+					message.value.f32 = getDefaultFloatValue(usage);
+					break;
+				default:;
 				}
 			}
 
-			// check check if we need to fade to next animation step
-			if (now >= nextTime) {
-				//Terminal::out << "fade to next" << '\n';
-				++stepIndex;
-				if (stepIndex >= stepCount)
-					stepIndex = 0;
-				stepTime = now;
-				setColor = true;
-			}
+			// edit message
+			auto stream = menu.stream();
+			stream << underline(dec(plugIndex), editIndex) << ": ";
+			editMessage(stream, messageType, message, editMessage1, editMessage2, delta);
+			menu.entry();
 
-			// check if transition ended
-			if (now >= endTime)
-				transition = false;
+			// send message
+			if (menu.entry("Send")) {
+				auto info = interface.getSubscriberInfo(id, plugIndex);
+				info.barrier->resumeFirst([id, plugIndex, messageType, &message] (MessageParameters &p) {
+					p.info.deviceId = id;
+					p.info.plugIndex = plugIndex;
+					p.info.sourceIndex = 0;
 
-			//Terminal::out << "select " << dec(s) << " plug " << dec(info.plug.id) << '\n';
-		}
-
-		// process message
-		bool changed = on.apply(message);
-
-		// set or reset off time
-		if (on && message < 3) {
-			offTime = now + timeout;
-		}
-
-		bool force = false;
-		if (changed) {
-			// changed: merge with transition that is still in progress
-			auto duration = (on ? onFade : offFade) * 100ms;
-			if (transition/*now > startTime && now < endTime*/) {
-				float s = (now - startTime) / (endTime - startTime);
-				//Terminal::out << "s " << flt(s, 2) << '\n';
-				startTime = now - (1.0f - s) * duration;
-			} else {
-				startTime = now;
-			}
-			endTime = startTime + duration;
-
-			if (on) {
-				// off -> on
-				//Terminal::out << "off -> on" << '\n';
-
-				// set time of current step
-				stepTime = now;
-
-				// set first color
-				setColor = true;
-			} else {
-				// on -> off
-				//Terminal::out << "on -> off" << '\n';
-			}
-
-			// transition is now in progress
-			transition = true;
-		} else {
-			// not changed
-			if (transition && message < 3) {
-				// interrupt transition and set immediately
-				//Terminal::out << "force\n";
-				transition = false;
-				force = true;
-			} else if (!setColor || (!on && !transition)) {
-				// nothing to do
-				//Terminal::out << "nothing to do\n";
-				continue;
-			}
-		}
-
-		// get animation step
-		auto &step = steps[stepIndex];
-		auto fade = max(step.fade, 1);
-		nextTime = stepTime + fade * 100ms;
-		//Terminal::out << "index " << dec(index) << " hue " << dec(step.hue * 5) << " x " << flt(color.x, 2) << " fade " << dec(fade) << '\n';
-		float brightness = float(step.brightness) * 0.01f;
-		int brightnessFade = fade;
-		Cie1931 color = hueToCie(float(step.hue * 5), step.saturation * 0.01f);;
-		int colorFade = fade;
-		if (force) {
-			// force: set brightness immediately (1/10s)
-			brightnessFade = 1;
-			if (!on)
-				brightness = 0.0f;
-			force = false;
-		} else if (on) {
-			// on: fade on or to new color
-			if (transition) {
-				// off -> on
-				if (nextTime >= endTime) {
-					if (changed)
-						brightnessFade = onFade;
-				} else {
-					brightness *= float((nextTime - startTime) / (endTime - startTime));
-				}
-			}
-		} else {
-			// off
-			if (transition) {
-				// on -> off
-				if (nextTime >= endTime) {
-					if (changed)
-						brightnessFade = offFade;
+					// convert to destination message type and resume coroutine if conversion was successful
+					auto &dst = *reinterpret_cast<Message *>(p.message);
+					if ((messageType & MessageType::CATEGORY) <= MessageType::TERNARY)
+						dst.value.u8 = message.value.u8;
+					else if ((messageType & MessageType::CMD) == 0)
+						dst.value = message.value;
 					else
-						brightnessFade = int((endTime - stepTime) / 100ms);
-					brightness = 0.0f;
-				} else {
-					brightness *= 1.0f - float((nextTime - startTime) / (endTime - startTime));
-				}
-			}
-		}
-/*
-		auto n = Timer::now();
-		Terminal::out << "brightness " << flt(brightness, 5) << " t " << dec((n - brightnessTime).value / 100)
-			<< " transition " << dec(transition) << '\n';
-		brightnessTime = n;
-		if (setColor)
-			Terminal::out << "color " << dec(stepIndex) << '\n';
-*/
-		// publish
-		for (int i = 0; i < outputCount; ++i) {
-			auto &publisher = publishers[i];
-			switch (publisher.id) {
-			case 1:
-				// on/off
-				if (changed)
-					publisher.publishSwitch(on.state);
-				break;
-			case 2:
-				// brightness
-				publisher.publishFloatTransition(brightness, 0, brightnessFade);
-				break;
-			case 3:
-				// color x
-				if (setColor)
-					publisher.publishFloatTransition(color.x, 0, colorFade);
-				break;
-			case 4:
-				// color y
-				if (setColor)
-					publisher.publishFloatTransition(color.y, 0, colorFade);
-				break;
-			}
-		}
-	}
-}
-
-
-// TimedBlind
-
-RoomControl::TimedBlind::~TimedBlind() {
-}
-
-Coroutine RoomControl::TimedBlind::start(RoomControl &roomControl) {
-	// connect inputs and outputs
-	Subscriber subscribers[MAX_INPUT_COUNT];
-	PublishInfo::Barrier barrier;
-	Publisher publishers[MAX_OUTPUT_COUNT];
-	int outputCount = roomControl.connectFunction(**this, blindPlugs, subscribers, barrier, publishers);
-
-	// state
-	uint8_t state = 0;
-	bool up = false;
-	uint8_t enableDown = 1;
-
-	// rocker timeout
-	SystemDuration const holdTime = ((*this)->getConfig<Config>().holdTime * 1s) / 100;
-
-	// position
-	SystemDuration const maxPosition = ((*this)->getConfig<Config>().runTime * 1s) / 100;
-	SystemDuration position = maxPosition / 2;
-	SystemDuration targetPosition = 0s;
-	SystemTime startTime;
-	SystemTime lastTime;
-
-	// no references to flash allowed beyond this point as flash may be reallocated
-	while (true) {
-		// wait for message
-		MessageInfo info;
-		Message message;
-		if (state == 0) {
-			co_await barrier.wait(info, &message);
-			//Terminal::out << "plug " << dec(info.plug.id) << '\n';
-		} else {
-			auto d = targetPosition - position;
-
-			// wait for event or timeout with a maximum to regularly report the current position
-			int s = co_await select(barrier.wait(info, &message), Timer::sleep(min(up ? -d : d, 200ms)));
-
-			// set invalid plug id when timeout occurred
-			if (s != 1)
-				info.plug.id = 255;
-			//Terminal::out << "select " << dec(s) << " plug " << dec(info.plug.id) << '\n';
-
-			// get time since last time
-			auto time = Timer::now();
-			d = time - lastTime;
-			lastTime = time;
-
-			// update position
-			if (up) {
-				position -= d;
-				if (position <= targetPosition)
-					position = targetPosition;
-			} else {
-				position += d;
-				if (position >= targetPosition)
-					position = targetPosition;
+						dst = message;
+					return true;
+				});
 			}
 		}
 
-		// process message
-		switch (info.plug.id) {
-		case 0:
-		case 1:
-			// up/down or trigger in
-			if (message.value.u8 == 0) {
-				// released: stop if timeout elapsed
-				if (Timer::now() > startTime + holdTime)
-					targetPosition = position;
-			} else {
-				// up or down pressed
-				if (state == 0) {
-					// start if currently stopped
-					if (info.plug.id == 1) {
-						// trigger
-						targetPosition = ((up || (targetPosition == 0s)) && targetPosition < maxPosition) ? maxPosition : 0s;
-					} else if (message.value.u8 == 1) {
-						// up
-						targetPosition = 0s;
-					} else {
-						// down
-						targetPosition = maxPosition;
-					}
-				} else {
-					// stop if currently moving
-					targetPosition = position;
-				}
-			}
+		if (menu.entry("Exit"))
 			break;
-		case 2: {
-			// position in
-			auto p = maxPosition * message.value.f32;
-			if (message.command == 0) {
-				// set position
-				Terminal::out << "set position " << flt(message.value.f32) << '\n';
-				targetPosition = p;
-			} else {
-				// step position
-				Terminal::out << "step position " << flt(message.value.f32) << '\n';
-				targetPosition += p;
-				break;
-			}
-			if (targetPosition < 0s)
-				targetPosition = 0s;
-			if (targetPosition > maxPosition)
-				targetPosition = maxPosition;
-			break;
-		}
-		case 3:
-			// enable down
-			enableDown = message.value.u8;
-			break;
-		}
-
-		// stop if down is disabled and direction is down
-		if (!enableDown && targetPosition > position)
-			targetPosition = position;
-
-		// check if target position already reached
-		if (position == targetPosition) {
-			// stop
-			state = 0;
-		} else if (state == 0) {
-			// start
-			up = targetPosition < position;
-			state = up ? 1 : 2;
-			lastTime = startTime = Timer::now();
-		}
-
-		// publish
-		for (int i = 0; i < outputCount; ++i) {
-			auto &publisher = publishers[i];
-			//Terminal::out << "id " << dec(publisher.id) << '\n';
-			switch (publisher.id) {
-			case 4:
-				// up/down out
-				publisher.publishSwitch(state);
-				break;
-			case 5: {
-				// position out
-				float outPosition = position / maxPosition;
-				//Terminal::out << "pos " << flt(outPosition) << '\n';
-				publisher.publishFloat(outPosition);
-				break;
-			}
-			}
-		}
-	}
-}
-
-
-// HeatingRegulator
-
-RoomControl::HeatingControl::~HeatingControl() {
-}
-
-Coroutine RoomControl::HeatingControl::start(RoomControl &roomControl) {
-	Subscriber subscribers[MAX_INPUT_COUNT];
-	PublishInfo::Barrier barrier;
-
-	Publisher publishers[MAX_OUTPUT_COUNT];
-	uint8_t valve = 0;
-
-	// connect inputs and outputs
-	int outputCount = roomControl.connectFunction(**this, heatingControlPlugs, subscribers, barrier, publishers);
-
-	OnOff on;
-	OnOff night;
-	OnOff summer;
-	uint32_t windows = 0;
-	FloatValue setTemperature = {20.0f + CELSIUS_OFFSET};
-	float temperature = 20.0f + 273.15f;
-
-	// no references to flash allowed beyond this point as flash may be reallocated
-	while (true) {
-		// wait for message
-		MessageInfo info;
-		Message message;
-		co_await barrier.wait(info, &message);
-
-		// process message
-		switch (info.plug.id) {
-		case 0:
-			// on/off in
-			on.apply(message.value.u8);
-			break;
-		case 1:
-			// night in
-			night.apply(message.value.u8);
-			break;
-		case 2:
-			// summer in
-			summer.apply(message.value.u8);
-			break;
-		case 3:
-			// windows in
-			Terminal::out << "window " << dec(info.plug.connectionIndex) << (message.value.u8 ? " open\n" : " closed\n");
-			if (message.value.u8 == 0)
-				windows &= ~(1 << info.plug.connectionIndex);
-			else
-				windows |= 1 << info.plug.connectionIndex;
-			break;
-		case 4:
-			// set temperature in
-			setTemperature.apply(message);
-			Terminal::out << "set temperature " << flt(float(setTemperature) - 273.15f) + '\n';
-			break;
-		case 5:
-			// measured temperature in
-			temperature = message.value.f32;
-			Terminal::out << "temperature " << flt(temperature - 273.15f) + '\n';
-			break;
-		}
-
-		// check if on and all windows closed
-		if (on == 1 && windows == 0) {
-			// determine state of valve (simple two-position controller)
-			if (valve == 0) {
-				// switch on when current temperature below set temperature
-				if (temperature < float(setTemperature) - 0.2f)
-					valve = 1;
-			} else {
-				if (temperature > float(setTemperature) + 0.2f)
-					valve = 0;
-			}
-		} else {
-			// switch off because a window is open
-			valve = 0;
-		}
-
-		// publish
-		for (int i = 0; i < outputCount; ++i) {
-			auto &publisher = publishers[i];
-			publisher.publishSwitch(valve);
-		}
+			
+		// show menu
+		//co_await select(menu.show(), Timer::sleep(250ms));
+		co_await menu.show();
 	}
 }

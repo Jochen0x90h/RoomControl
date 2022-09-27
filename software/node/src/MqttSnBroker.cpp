@@ -303,8 +303,8 @@ void MqttSnBroker::subscribe(String topicName, MessageType type, Subscriber &sub
 
 	// remove the subscriber in case this was called a 2nd time e.g. after reconnect to gateway
 	subscriber.remove();
-	subscriber.source.type = type;
-	subscriber.source.topic.id = topicIndex + 1;
+	//subscriber.source.type = type;
+	//subscriber.source.topic.id = topicIndex + 1;
 	this->subscribers.add(subscriber);
 
 	TopicInfo &topic = this->topics[topicIndex];
@@ -315,7 +315,7 @@ void MqttSnBroker::subscribe(String topicName, MessageType type, Subscriber &sub
 		this->keepAliveEvent.set();
 }
 
-PublishInfo MqttSnBroker::getPublishInfo(String topicName, MessageType type) {
+SubscriberInfo MqttSnBroker::getPublishInfo(String topicName, MessageType type) {
 	int topicIndex = obtainTopicIndex(topicName);
 	if (topicIndex == -1) {
 		// error: topic list is full
@@ -326,7 +326,7 @@ PublishInfo MqttSnBroker::getPublishInfo(String topicName, MessageType type) {
 	//if (topic.gatewayTopicId == 0)
 	//	this->keepAliveEvent.set();
 
-	return {.destination = {.type = type, .topic = {uint16_t(topicIndex + 1)}}, .barrier = &this->publishBarrier};
+	return {};//.destination = {.type = type, .topic = {uint16_t(topicIndex + 1)}}, .barrier = &this->publishBarrier};
 }
 
 
@@ -506,7 +506,7 @@ Coroutine MqttSnBroker::publish() {
 		MessageInfo info;
 		Message message;
 		co_await this->publishBarrier.wait(info, &message);
-		uint16_t topicId = info.topic.id;
+		uint16_t topicId = 0;//!info.topic.id;
 		uint16_t topicIndex = topicId - 1;
 
 		auto flags = this->connectedFlags;
@@ -547,8 +547,8 @@ Coroutine MqttSnBroker::publish() {
 						auto c = w.current;
 
 						// message data
-						if (!writeMessage(w, info.type, &message))
-							break;
+						//!if (!writeMessage(w, info.type, &message))
+						//!	break;
 
 #ifdef DEBUG_PRINT
 						Terminal::out << (thisName + " publishes " + dec(w.current - c) + " bytes to ");
@@ -1025,6 +1025,7 @@ Coroutine MqttSnBroker::receive() {
 			}
 
 			// publish to subscribers
+			/*!
 			for (auto &subscriber : this->subscribers) {
 				// check if this is the right topic
 				if (subscriber.source.topic.id - 1 == topicIndex) {
@@ -1035,7 +1036,7 @@ Coroutine MqttSnBroker::receive() {
 						return readMessage(subscriber.destination.type, p.message, r);
 					});
 				}
-			}
+			}*/
 
 			// forward to other connections (done in separate coroutine)
 			this->forwardWaitlist.resumeFirst([connectionIndex, topicIndex, pubLength, pubData](ForwardParameters &p) {

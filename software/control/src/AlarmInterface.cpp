@@ -1,17 +1,12 @@
 #include "AlarmInterface.hpp"
 #include <Timer.hpp>
 #include <Calendar.hpp>
-#include <Output.hpp>
 #include <Storage.hpp>
 #include <util.hpp>
 #include <appConfig.hpp>
 
 
-static MessageType const plugs[8] = {
-	MessageType::BINARY_ALARM_OUT, MessageType::BINARY_ALARM_OUT, MessageType::BINARY_ALARM_OUT, MessageType::BINARY_ALARM_OUT,
-	MessageType::BINARY_ALARM_OUT, MessageType::BINARY_ALARM_OUT, MessageType::BINARY_ALARM_OUT, MessageType::BINARY_ALARM_OUT
-};
-static_assert(array::count(plugs) >= AlarmInterface::AlarmData::MAX_PLUG_COUNT);
+static MessageType const plugs[1] = {MessageType::BINARY_ALARM_OUT};
 
 
 AlarmInterface::AlarmInterface() {
@@ -23,8 +18,8 @@ AlarmInterface::AlarmInterface() {
 	for (int i = 0; i < deviceCount; ++i) {
 		uint8_t id = this->alarmIds[i];
 
-		// load data
-		AlarmData data;
+		// read data
+		Data data;
 		if (Storage::read(STORAGE_CONFIG, STORAGE_ID_ALARM | id, sizeof(data), &data) != sizeof(data))
 			continue;
 
@@ -48,6 +43,10 @@ AlarmInterface::AlarmInterface() {
 AlarmInterface::~AlarmInterface() {
 }
 
+String AlarmInterface::getName() {
+	return "Alarm";
+}
+
 void AlarmInterface::setCommissioning(bool enabled) {
 }
 
@@ -56,14 +55,14 @@ Array<uint8_t const> AlarmInterface::getDeviceIds() {
 }
 
 String AlarmInterface::getName(uint8_t id) const {
-	auto alarm = getAlarm(id);
+	auto alarm = findAlarm(id);
 	if (alarm != nullptr)
 		return String(alarm->data.name);
 	return {};
 }
 
 void AlarmInterface::setName(uint8_t id, String name) {
-	auto alarm = getAlarm(id);
+	auto alarm = findAlarm(id);
 	if (alarm != nullptr) {
 		assign(alarm->data.name, name);
 
@@ -73,42 +72,49 @@ void AlarmInterface::setName(uint8_t id, String name) {
 }
 
 Array<MessageType const> AlarmInterface::getPlugs(uint8_t id) const {
-	auto alarm = getAlarm(id);
+	auto alarm = findAlarm(id);
 	if (alarm != nullptr)
-		return {alarm->data.plugCount, plugs};
+		//return {alarm->data.plugCount, plugs};
+		return plugs;
 	return {};
 }
 
-void AlarmInterface::subscribe(uint8_t id, uint8_t plugIndex, Subscriber &subscriber) {
+SubscriberInfo AlarmInterface::getSubscriberInfo(uint8_t id, uint8_t plugIndex) {
+	// no input plugs
+	return {};
+}
+
+void AlarmInterface::subscribe(Subscriber &subscriber) {
 	subscriber.remove();
-	auto alarm = getAlarm(id);
-	if (alarm != nullptr) {
-		subscriber.source.device = {id, plugIndex};
+	auto id = subscriber.data->source.deviceId;
+	auto alarm = findAlarm(id);
+	if (alarm != nullptr)
 		alarm->subscribers.add(subscriber);
-	}
 }
 
-PublishInfo AlarmInterface::getPublishInfo(uint8_t id, uint8_t plugIndex) {
-	return {};
+void AlarmInterface::listen(Listener &listener) {
+	assert(listener.barrier	!= nullptr);
+	listener.remove();
+	this->listeners.add(listener);
 }
 
 void AlarmInterface::erase(uint8_t id) {
-	auto a = &this->alarms;
-	while (*a != nullptr) {
-		auto alarm = *a;
+	auto p = &this->alarms;
+	while (*p != nullptr) {
+		auto alarm = *p;
 		if (alarm->data.id == id) {
 			// remove alarm from linked list
-			*a = alarm->next;
+			*p = alarm->next;
 
 			// erase from flash
 			Storage::erase(STORAGE_CONFIG, STORAGE_ID_ALARM | id);
 
-			// delete device
+			// delete alarm
 			delete alarm;
 
 			goto list;
 		}
-		a = &alarm->next;
+		p = &alarm->next;
 	}
 
 list:
@@ -118,57 +124,49 @@ list:
 	Storage::write(STORAGE_CONFIG, STORAGE_ID_ALARM, this->alarmCount, this->alarmIds);
 }
 
-AlarmInterface::AlarmData const *AlarmInterface::get(uint8_t id) const {
-	auto alarm = this->alarms;
-	while (alarm != nullptr) {
-		if (alarm->data.id == id)
-			return &alarm->data;
-		alarm = alarm->next;
+AlarmInterface::Data const *AlarmInterface::get(uint8_t id) const {
+	auto alarm = findAlarm(id);
+	if (alarm != nullptr) {
+		return &alarm->data;
 	}
 	return nullptr;
 }
 
-void AlarmInterface::set(uint8_t id, AlarmData &data) {
-	auto alarm = this->alarms;
-	while (alarm != nullptr) {
-		if (alarm->data.id == id) {
-			// set data
-			alarm->data = data;
+void AlarmInterface::set(uint8_t id, Data &data) {
+	auto alarm = findAlarm(id);
+	if (alarm != nullptr) {
+		// set data
+		alarm->data = data;
 
-			// store alarm to flash
-			Storage::write(STORAGE_CONFIG, STORAGE_ID_ALARM | id, sizeof(alarm->data), &alarm->data);
-			return;
-		}
+		// store alarm to flash
+		Storage::write(STORAGE_CONFIG, STORAGE_ID_ALARM | id, sizeof(alarm->data), &alarm->data);
+		return;
 	}
 
 	data.id = allocateId();
 
-	// add alarm to list of alarms
+	// add to list of alarms
 	this->alarmIds[this->alarmCount++] = data.id;
 	Storage::write(STORAGE_CONFIG, STORAGE_ID_ALARM, this->alarmCount, this->alarmIds);
 
 	// create alarm
 	alarm = new Alarm(this, data);
 
-	// store alarm to flash
+	// store data to flash
 	Storage::write(STORAGE_CONFIG, STORAGE_ID_ALARM | data.id, sizeof(alarm->data), &alarm->data);
 }
 
-int AlarmInterface::getSubscriberCount(uint8_t id, int endpointCount, uint8_t command) {
-	auto alarm = this->alarms;
-	while (alarm != nullptr) {
-		if (alarm->data.id != id) {
-			alarm = alarm->next;
-			continue;
-		}
-
+int AlarmInterface::getSubscriberCount(uint8_t id, uint8_t command) {
+	auto alarm = findAlarm(id);
+	if (alarm != nullptr) {
 		int count = 0;
 		for (auto &subscriber : alarm->subscribers) {
-			if (subscriber.source.device.plugIndex >= endpointCount)
+			if (subscriber.data->source.plugIndex != 0)
 				continue;
 
+			// check if conversion for subscriber succeeds (command is not discarded by convertOptions)
 			Message dst;
-			if (convertSwitch(subscriber.destination.type, dst, command, subscriber.convertOptions))
+			if (convertSwitch(subscriber.info.type, dst, command, subscriber.data->convertOptions))
 				++count;
 		}
 		return count;
@@ -176,34 +174,15 @@ int AlarmInterface::getSubscriberCount(uint8_t id, int endpointCount, uint8_t co
 	return 0;
 }
 
-void AlarmInterface::test(uint8_t id, int plugCount, uint8_t command) {
-	auto alarm = this->alarms;
-	while (alarm != nullptr) {
-		if (alarm->data.id != id) {
-			alarm = alarm->next;
-			continue;
-		}
-
-		for (auto &subscriber: alarm->subscribers) {
-			if (subscriber.source.device.plugIndex >= plugCount)
-				continue;
-
-			// publish to subscriber
-			subscriber.barrier->resumeFirst([&subscriber, command] (PublishInfo::Parameters &p) {
-				p.info = subscriber.destination;
-
-				// convert to target unit and type and resume coroutine if conversion was successful
-				auto &dst = *reinterpret_cast<Message *>(p.message);
-				return convertSwitch(subscriber.destination.type, dst, command, subscriber.convertOptions);
-			});
-		}
-		return;
-	}
+void AlarmInterface::test(uint8_t id, uint8_t command) {
+	auto alarm = findAlarm(id);
+	if (alarm != nullptr)
+		alarm->subscribers.publishSwitch(0, command);
 }
 
 // protected:
 
-AlarmInterface::Alarm *AlarmInterface::getAlarm(uint8_t id) const {
+AlarmInterface::Alarm *AlarmInterface::findAlarm(uint8_t id) const {
 	auto alarm = this->alarms;
 	while (alarm != nullptr) {
 		if (alarm->data.id == id)
@@ -241,21 +220,10 @@ Coroutine AlarmInterface::tick() {
 		auto alarm = this->alarms;
 		while (alarm != nullptr) {
 			if (alarm->data.time.matches(time)) {
-				// alarm goes off: publish to subscribers of alarm
-				for (auto &subscriber: alarm->subscribers) {
-					if (subscriber.source.device.plugIndex >= alarm->data.plugCount)
-						break;
+				// alarm goes off: publish to subscribers of this alarm
+				alarm->publishSwitch(0, 1);
 
-					// publish to subscriber
-					subscriber.barrier->resumeFirst([&subscriber] (PublishInfo::Parameters &p) {
-						p.info = subscriber.destination;
-
-						// convert to target unit and type and resume coroutine if conversion was successful
-						auto &dst = *reinterpret_cast<Message *>(p.message);
-						uint8_t src = 1;
-						return convertSwitch(subscriber.destination.type, dst, src, subscriber.convertOptions);
-					});
-				}
+				// set to active state
 				alarm->active = true;
 			} else if (alarm->active) {
 				// todo: check if alarm is deactivated again

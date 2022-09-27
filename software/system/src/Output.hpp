@@ -9,7 +9,9 @@
  */
 namespace Output {
 
-
+/**
+ * Initialize the digital outputs
+ */
 void init();
 
 /**

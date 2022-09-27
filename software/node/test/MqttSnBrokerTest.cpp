@@ -43,7 +43,7 @@ struct Test {
 
 	// simple "function" that subscribes to a topic, processes the data and publishes it on another topic
 	Coroutine function() {
-		PublishInfo::Barrier barrier;
+/*		PublishInfo::Barrier barrier;
 		Subscriber subscriber;
 		subscriber.convertOptions.commands = 0 | (1 << 3) | -1 << 6;
 		subscriber.destination.type = MessageType::BINARY_IN;
@@ -72,7 +72,8 @@ struct Test {
 				dst.command = message.command;
 				return true;
 			});
-		}
+		}*/
+		co_return;
 	}
 };
 

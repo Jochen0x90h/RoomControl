@@ -33,12 +33,12 @@ BusInterface::BusInterface(PersistentStateManager &stateManager)
 	for (int i = 0; i < deviceCount; ++i) {
 		uint8_t id = this->deviceIds[i];
 
-		// determine size
+		// get size of stored data
 		int size = Storage::size(STORAGE_CONFIG, STORAGE_ID_BUS1 | id);
 		if (size < sizeof(DeviceData))
 			continue;
 
-		// allocate and read
+		// allocate memory and read data
 		auto endpointData = reinterpret_cast<EndpointData *>(malloc(size));
 		Storage::read(STORAGE_CONFIG, STORAGE_ID_BUS1 | id, size, endpointData);
 
@@ -63,7 +63,9 @@ BusInterface::BusInterface(PersistentStateManager &stateManager)
 			free(endpointData);
 			continue;
 		}
-		new Endpoint(device, endpointData);
+
+		// create endpoint, add to list of endpoints of device, device takes ownership of endpoint
+		new Endpoint(this, device, endpointData);
 
 		// device was correctly loaded
 		this->deviceIds[j] = id;
@@ -81,6 +83,10 @@ void BusInterface::setConfiguration(DataBuffer<16> const &key, AesKey const &aes
 	this->aesKey = &aesKey;
 	if (first)
 		start();
+}
+
+String BusInterface::getName() {
+	return "Bus";
 }
 
 void BusInterface::setCommissioning(bool enabled) {
@@ -120,22 +126,26 @@ Array<MessageType const> BusInterface::getPlugs(uint8_t id) const {
 	return {};
 }
 
-void BusInterface::subscribe(uint8_t id, uint8_t plugIndex, Subscriber &subscriber) {
-	subscriber.remove();
+SubscriberInfo BusInterface::getSubscriberInfo(uint8_t id, uint8_t plugIndex) {
 	auto endpoint = getEndpoint(id);
-	if (endpoint != nullptr) {
-		subscriber.source.device = {id, plugIndex};
-		endpoint->subscribers.add(subscriber);
-	}
+	if (endpoint != nullptr && plugIndex < endpoint->data->plugCount)
+		return {endpoint->data->plugs[plugIndex], &this->publishBarrier};
+	return {};
 }
 
-PublishInfo BusInterface::getPublishInfo(uint8_t id, uint8_t plugIndex) {
+void BusInterface::subscribe(Subscriber &subscriber) {
+	assert(subscriber.info.barrier != nullptr);
+	subscriber.remove();
+	auto id = subscriber.data->source.deviceId;
 	auto endpoint = getEndpoint(id);
-	if (endpoint != nullptr) {
-		if (plugIndex < endpoint->data->plugCount)
-			return {{.type = endpoint->data->plugs[plugIndex], .device = {id, plugIndex}}, &this->publishBarrier};
-	}
-	return {};
+	if (endpoint != nullptr)
+		endpoint->subscribers.add(subscriber);
+}
+
+void BusInterface::listen(Listener &listener) {
+	assert(listener.barrier	!= nullptr);
+	listener.remove();
+	this->listeners.add(listener);
 }
 
 void BusInterface::erase(uint8_t id) {
@@ -197,7 +207,7 @@ BusInterface::BusDevice::~BusDevice() {
 
 // Endpoint
 BusInterface::Endpoint::~Endpoint() {
-	free(data);
+	free(this->data);
 }
 
 BusInterface::Endpoint *BusInterface::getEndpoint(uint8_t id) const {
@@ -271,11 +281,12 @@ Coroutine BusInterface::start() {
 	co_await this->securityCounter.restore();
 
 	// start coroutines
-	receive();
+	for (int i = 0; i < RECEIVE_COUNT; ++i)
+		receive();
 	for (int i = 0; i < PUBLISH_COUNT; ++i)
 		publish();
 }
-
+/*
 static bool readMessage(MessageType dstType, void *dstMessage, MessageType srcType, MessageReader r,
 	ConvertOptions const &convertOptions)
 {
@@ -288,7 +299,7 @@ static bool readMessage(MessageType dstType, void *dstMessage, MessageType srcTy
 	case MessageType::MULTISTATE:
 		// todo
 		break;
-	/*case MessageType::LEVEL: {
+	/ *case MessageType::LEVEL: {
 		// level: convert from 0 - 65535 to 0.0 - 1.0
 		float level = float(r.u16L()) / 65535.0f;
 		if ((srcType & MessageType::CMD) == 0)
@@ -300,7 +311,7 @@ static bool readMessage(MessageType dstType, void *dstMessage, MessageType srcTy
 			level = -level;
 		}
 		return convertFloatCommand(dstType, dst, command, level, convertOptions);
-	}*/
+	}* /
 	case MessageType::LEVEL:
 	case MessageType::PHYSICAL:
 	case MessageType::CONCENTRATION: {
@@ -317,7 +328,7 @@ static bool readMessage(MessageType dstType, void *dstMessage, MessageType srcTy
 		uint8_t command = r.u8();
 		uint16_t transition = r.u16L();
 		return convertFloatTransition(dstType, dst, value, command, transition, convertOptions);
-/*
+/ *
 		// lighting: all values are normalized except color temperature
 		float value = r.u16L();
 		if ((srcType & MessageType::LIGHTING_CATEGORY) != MessageType::LIGHTING_COLOR_TEMPERATURE)
@@ -327,7 +338,7 @@ static bool readMessage(MessageType dstType, void *dstMessage, MessageType srcTy
 		uint8_t command = r.u8();
 		uint16_t transition = r.u16L();
 		return convertFloatTransition(dstType, dst, value, command, transition, convertOptions);
-*/
+* /
 	}
 	case MessageType::METERING:
 		// todo
@@ -338,7 +349,7 @@ static bool readMessage(MessageType dstType, void *dstMessage, MessageType srcTy
 
 	// conversion successful
 	return true;
-}
+}*/
 
 Coroutine BusInterface::receive() {
 	uint8_t receiveMessage[MESSAGE_LENGTH];
@@ -359,8 +370,10 @@ Coroutine BusInterface::receive() {
 
 		// get address
 		if (r.peekU8() == 0) {
-			// 0: enumerate message
+			// 0: enumerate message (device wants to be commissioned)
 			r.u8();
+
+			// check if commissioning of new devices is allowed
 			if (!this->commissioning)
 				continue;
 
@@ -377,12 +390,17 @@ Coroutine BusInterface::receive() {
 			auto version = r.u8();
 
 			// endpoint count
-			auto endpointCount = r.u8();
+			int endpointCount = r.u8();
 
 			// cancel current association coroutine
 			this->commissionCoroutine.cancel();
 
-			this->commissionCoroutine = handleCommission(deviceId, endpointCount);
+			// restrict maximum number of devices (each endpoint counts as one device)
+			endpointCount = min(endpointCount, MAX_DEVICE_COUNT - this->deviceCount);
+
+			// handle commissioning
+			if (endpointCount > 0)
+				this->commissionCoroutine = handleCommission(deviceId, endpointCount);
 		} else {
 			// data message
 
@@ -445,18 +463,44 @@ Coroutine BusInterface::receive() {
 						uint8_t plugIndex = r.u8();
 
 						// publish to subscribers
-						for (auto &subscriber: endpoint->subscribers) {
-							// check if this is the right endpoint
-							if (subscriber.source.device.plugIndex == plugIndex) {
-								auto srcType = endpoint->data->plugs[plugIndex];
-								subscriber.barrier->resumeFirst([&subscriber, &r, srcType](PublishInfo::Parameters &p) {
-									p.info = subscriber.destination;
-
-									// read message (note r is passed by value for multiple subscribers)
-									return readMessage(subscriber.destination.type, p.message, srcType, r,
-										subscriber.convertOptions);
-								});
+						auto srcType = endpoint->data->plugs[plugIndex];
+						switch (srcType & MessageType::CATEGORY) {
+						case MessageType::BINARY:
+						case MessageType::TERNARY: {
+							uint8_t value = r.u8();
+							endpoint->publishSwitch(plugIndex, value);
+							break;
+						}
+						case MessageType::MULTISTATE:
+							// todo
+							break;
+						case MessageType::LEVEL:
+						case MessageType::PHYSICAL:
+						case MessageType::CONCENTRATION: {
+							float value = r.f32L();
+							if ((srcType & MessageType::CMD) == 0) {
+								endpoint->publishFloat(plugIndex, value);
+							} else {
+								uint8_t command = r.u8();
+								endpoint->publishFloatCommand(plugIndex, value, command);
 							}
+							break;
+						}
+						case MessageType::LIGHTING: {
+							float value = r.f32L();
+							if ((srcType & MessageType::CMD) == 0) {
+								endpoint->publishFloat(plugIndex, value);
+							} else {
+								uint8_t command = r.u8();
+								uint16_t transition = r.u16L();
+								endpoint->publishFloatTransition(plugIndex, value, command, transition);
+							}
+							break;
+						}
+						case MessageType::METERING:
+							// todo
+							break;
+						default:;
 						}
 						break;
 					}
@@ -468,9 +512,6 @@ Coroutine BusInterface::receive() {
 }
 
 AwaitableCoroutine BusInterface::handleCommission(uint32_t deviceId, uint8_t endpointCount) {
-	int length;
-	uint8_t message[MESSAGE_LENGTH];
-
 	// find existing device if any
 	auto od = &this->devices;
 	while (*od != nullptr) {
@@ -481,12 +522,24 @@ AwaitableCoroutine BusInterface::handleCommission(uint32_t deviceId, uint8_t end
 	}
 	auto oldDevice = *od;
 
-	// create new device
+	// check if we are out of space for new devices
+	bool outOfDevices = oldDevice == nullptr && this->deviceCount >= MAX_DEVICE_COUNT;
+
+	// variables
+	int length;
+	uint8_t message[MESSAGE_LENGTH];
+
+	// create new bus device
 	DeviceData deviceData;
 	deviceData.id = oldDevice != nullptr ? oldDevice->data.id : allocateDeviceId();
 	deviceData.deviceId = deviceId;
 
-	// use pointer in case the coroutine gets cancelled
+	// create address for the bus device from storage id which starts at 0
+	uint8_t address = deviceData.id;
+	if (address > LAST_ADDRESS || outOfDevices)
+		co_return; // todo: maybe send a commissioning message with failed status (e.g. no address and key)
+
+	// use Pointer in case the coroutine gets cancelled
 	Pointer<BusDevice> device = new BusDevice(deviceData);
 
 	// set pointer so that we can forward responses
@@ -509,7 +562,7 @@ AwaitableCoroutine BusInterface::handleCommission(uint32_t deviceId, uint8_t end
 		w.u32L(deviceId);
 
 		// address that gets assigned to the device (use storage id)
-		w.u8(deviceData.id);
+		w.u8(address);
 
 		// key
 		w.data8(*this->key);
@@ -528,6 +581,10 @@ AwaitableCoroutine BusInterface::handleCommission(uint32_t deviceId, uint8_t end
 	Endpoint *oldEndpoint = oldDevice != nullptr ? oldDevice->endpoints : nullptr;
 	int deviceCount = this->deviceCount;
 	for (uint8_t endpointIndex = 0; endpointIndex < endpointCount; ++endpointIndex) {
+		// check if we have space for a new device (an endpoint is treated as a device)
+		if (oldEndpoint == nullptr && deviceCount >= MAX_DEVICE_COUNT)
+			continue;
+
 		// get plug list
 		co_await readAttribute(length, message, *device, endpointIndex, bus::Attribute::PLUG_LIST);
 		if (length == -1)
@@ -563,8 +620,8 @@ AwaitableCoroutine BusInterface::handleCommission(uint32_t deviceId, uint8_t end
 		else
 			assign(data->name, "Device");
 
-		// create endpoint, device takes ownership
-		auto endpoint = new Endpoint(device.ptr, data);
+		// create endpoint, add to list of endpoints of device, device takes ownership of endpoint
+		new Endpoint(this, device.ptr, data);
 
 		if (oldEndpoint != nullptr)
 			oldEndpoint = oldEndpoint->next;
@@ -585,17 +642,23 @@ AwaitableCoroutine BusInterface::handleCommission(uint32_t deviceId, uint8_t end
 		auto oldEndpoint = oldDevice->endpoints;
 		auto endpoint = device->endpoints;
 		while (oldEndpoint != nullptr && endpoint != nullptr) {
-			endpoint->subscribers.add(static_cast<Subscriber &>(oldEndpoint->subscribers));
+			//endpoint->subscribers.add(static_cast<Subscriber &>(static_cast<LinkedListNode<Subscriber> &>(oldEndpoint->subscribers)));
+			endpoint->subscribers.add(oldEndpoint->subscribers); // only works because old list removes itself from linked list
 			oldEndpoint = oldEndpoint->next;
 			endpoint = endpoint->next;
 		}
 
+		// delete old device and its endpoints
 		delete oldDevice;
 	}
 
-	// store device list
+	// store list of device id's (each endpoint is treated as a device)
 	this->deviceCount = deviceCount;
 	Storage::write(STORAGE_CONFIG, STORAGE_ID_BUS1, deviceCount, this->deviceIds);
+
+	// check if device has any endpoints
+	if (device->endpoints == nullptr)
+		co_return;
 
 	// store endpoints
 	auto endpoint = device->endpoints;
@@ -674,6 +737,7 @@ static bool writeMessage(MessageWriter &w, MessageType type, Message &message) {
 	switch (type & MessageType::CATEGORY) {
 	case bus::PlugType::BINARY:
 	case bus::PlugType::TERNARY:
+		//Terminal::out << "message " << dec(message.value.u8) << '\n';
 		w.u8(message.value.u8);
 		break;
 	case MessageType::MULTISTATE:
@@ -736,6 +800,7 @@ Coroutine BusInterface::publish() {
 		MessageInfo info;
 		Message message;
 		co_await this->publishBarrier.wait(info, &message);
+		//Terminal::out << "BusInterface::publish() sourceIndex " << dec(info.sourceIndex) << " deviceId " << dec(info.deviceId) << " plugIndex " << dec(info.plugIndex) << '\n';
 
 		// find destination device
 		auto device = this->devices;
@@ -743,14 +808,14 @@ Coroutine BusInterface::publish() {
 			auto endpoint = device->endpoints;
 			int endpointIndex = 0;
 			while (endpoint != nullptr) {
-				if (endpoint->data->id != info.device.id) {
+				if (endpoint->data->id != info.deviceId) {
 					endpoint = endpoint->next;
 					++endpointIndex;
 					continue;
 				}
 
-				// get endpoint info
-				uint8_t plugIndex = info.device.plugIndex;
+				// get plug info
+				uint8_t plugIndex = info.plugIndex;
 				if (plugIndex >= endpoint->data->plugCount)
 					break;
 				auto messageType = endpoint->data->plugs[plugIndex];

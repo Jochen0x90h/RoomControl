@@ -6,7 +6,7 @@
 #include <Spi.hpp>
 #include <defines.hpp>
 #include <util.hpp>
-#include <LinkedListNode.hpp>
+#include <LinkedList.hpp>
 
 //#define STATE_DEBUG_PRINT
 #ifdef STATE_DEBUG_PRINT
@@ -16,7 +16,7 @@
 
 struct PersistentStateManager;
 
-struct PersistentStateBase : public LinkedListNode<PersistentStateBase> {
+struct PersistentStateBase : public LinkedListNode {
 	PersistentStateManager *manager;
 
 	uint8_t size __attribute__ ((aligned (4)));
@@ -68,7 +68,7 @@ protected:
 	uint32_t allocationTable[FRAM_SIZE / 8 / 32];
 	
 	// list of tasks that wait for processing
-	LinkedListNode<PersistentStateBase> list;
+	LinkedList<PersistentStateBase> list;
 	
 	// barrier for workers that wait for a new task
 	Barrier<> barrier;
@@ -162,7 +162,7 @@ protected:
 		assert(this->manager != nullptr);
 		
 		// check if not yet in dirty list
-		if (this->isEmpty()) {
+		if (!this->isInList()) {
 			// add to dirty list
 			this->manager->list.add(*this);
 			

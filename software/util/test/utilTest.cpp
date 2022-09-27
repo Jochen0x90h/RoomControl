@@ -2,10 +2,11 @@
 #include <ArrayList.hpp>
 #include <convert.hpp>
 #include <Coroutine.hpp>
-#include <enum.hpp>
 #include <DataQueue.hpp>
+#include <enum.hpp>
+#include <IsSubclass.hpp>
+#include <LinkedList.hpp>
 #include <Queue.hpp>
-#include <LinkedListNode.hpp>
 #include <StringBuffer.hpp>
 #include <StringHash.hpp>
 #include <StringSet.hpp>
@@ -127,6 +128,20 @@ TEST(utilTest, Array) {
 	EXPECT_EQ(b1[2], 22);
 }
 
+// std::initializer_list
+struct InitStruct {
+	std::initializer_list<int> i;
+	std::initializer_list<float> f;
+};
+TEST(utilTest, initializer_list) {
+	InitStruct const arrayStruct = {
+		{1, 2, 3},
+		{1.0f, 2.0f, 3.0f}
+	};
+
+	EXPECT_EQ(*(arrayStruct.i.begin() + 1), 2);
+	EXPECT_EQ(*(arrayStruct.f.begin() + 1), 2.0f);
+}
 
 TEST(utilTest, ArrayList) {
 	std::mt19937 gen(1337); // standard mersenne_twister_engine seeded with 1337
@@ -249,28 +264,79 @@ TEST(utilTest, flagsEnum) {
 }
 
 
+// IsSubclass
+// ----------
+
+struct BaseClass {};
+struct Subclass : public BaseClass {};
+
+TEST(utilTest, IsSubclass) {
+	EXPECT_EQ((IsSubclass<Subclass, BaseClass>::RESULT), 1);
+	EXPECT_EQ((IsSubclass<Subclass &, BaseClass>::RESULT), 0);
+	EXPECT_EQ((IsSubclass<Subclass *, BaseClass>::RESULT), 0);
+	EXPECT_EQ((IsSubclass<BaseClass, Subclass>::RESULT), 0);
+}
+
+
 // LinkedListNode
 // --------------
 
-struct MyListElement : public LinkedListNode<MyListElement> {
-	int foo;
+struct ElementBaseClass {
+	int i;
 };
 
-using MyList = LinkedListNode<MyListElement>;
+struct MyListElement : public ElementBaseClass, public LinkedListNode {
+	int foo;
+
+	MyListElement(int foo) : foo(foo) {}
+	MyListElement(LinkedList<MyListElement> &list, int foo) : LinkedListNode(list), foo(foo) {}
+};
+
+using MyList = LinkedList<MyListElement>;
 
 TEST(utilTest, LinkedListNode) {
+	// create list
 	MyList list;
-	
-	MyListElement element;
-	element.foo = 10;
-	list.add(element);
+	EXPECT_TRUE(list.isEmpty());
+	EXPECT_EQ(list.count(), 0);
 
+	// create an element
+	MyListElement element(10);
+	EXPECT_FALSE(element.isInList());
+
+	// add element to list
+	list.add(element);
+	EXPECT_FALSE(list.isEmpty());
+	EXPECT_EQ(list.count(), 1);
+	EXPECT_TRUE(element.isInList());
+
+	// create another element and add to list in constructor
+	MyListElement element2(list, 50);
+	EXPECT_FALSE(list.isEmpty());
+	EXPECT_EQ(list.count(), 2);
+	EXPECT_TRUE(element.isInList());
+
+	// iterate over elements
 	int count = 0;
 	for (auto &e : list) {
-		EXPECT_EQ(e.foo, 10);
+		EXPECT_EQ(e.foo, count == 0 ? 10 : 50);
 		++count;
 	}
-	EXPECT_EQ(count, 1);
+	EXPECT_EQ(count, 2);
+
+	// remove elements
+	element.remove();
+	EXPECT_EQ(list.count(), 1);
+	EXPECT_FALSE(element.isInList());
+	EXPECT_TRUE(element2.isInList());
+
+	element2.remove();
+	EXPECT_EQ(list.count(), 0);
+	EXPECT_FALSE(element2.isInList());
+
+	// call remove second time
+	element.remove();
+	element2.remove();
 }
 
 
@@ -535,93 +601,102 @@ TEST(utilTest, UInt) {
 // return structures
 // -----------------
 
-struct Foo {
+struct Return {
 	int i;
 
-	Foo() {
+	Return() {
 		std::cout << "Default" << std::endl;
 	}
 
-	Foo(int i) : i(i) {
+	Return(int i) : i(i) {
 		std::cout << "Constructor" << std::endl;
 	}
-	
-	Foo(const Foo &) = delete;
-	
-	Foo(Foo &&foo) : i(foo.i) {
+
+	Return(const Return &) = delete;
+
+	Return(Return &&foo) : i(foo.i) {
 		std::cout << "Move Constructor" << std::endl;
 	}
-	
-	Foo &operator =(Foo &&foo) {
+
+	Return &operator =(Return &&foo) {
 		std::cout << "Move Assignment" << std::endl;
 		this->i = foo.i;
 		return *this;
 	}
 };
 
-Foo getFoo1() {
+Return return1() {
 	return {50};
 }
 
-Foo getFoo2() {
-	return getFoo1();
+Return return2() {
+	return return1();
 }
 
-Foo getFoo3() {
-	Foo foo = getFoo2();
+Return return3() {
+	Return foo = return2();
 	return foo;
 }
 
 TEST(utilTest, Return) {
 	{
 		std::cout << "Variant 1" << std::endl;
-		Foo foo = getFoo2();
+		Return r = return2();
 	}
 	{
 		std::cout << "Variant 2" << std::endl;
-		Foo foo = getFoo3();
+		Return r = return3();
 	}
 	{
 		std::cout << "Variant 3" << std::endl;
-		Foo foos[2];
-		foos[0] = std::move(getFoo3());
+		Return r[2];
+		r[0] = std::move(return3());
 	}
 }
+
+
 
 
 // Coroutine
 // ---------
 
+// helper object for coroutine tests
+struct Object {
+	Object(char const *name) : name(name) {
+		std::cout << "enter " << name << std::endl;
+	}
+	~Object() {
+		std::cout << "exit " << name << std::endl;
+	}
+	char const *name;
+};
+
+// wait lists
 Waitlist<> waitlist1;
+Waitlist<> waitlist2;
+
+// wait functions
 Awaitable<> wait1() {
 	return {waitlist1};
 }
-
-Waitlist<> waitlist2;
 Awaitable<> wait2() {
 	return {waitlist2};
 }
 
-
-struct Object {
-	~Object() {
-		std::cout << "~Object" << std::endl;
-	}
-};
+int selectResult = 0;
 
 Coroutine coroutine() {
 	// an object whose destructor gets called when the coroutine ends or gets cancelled
-	Object o;
-	
+	Object o("coroutine()");
+
 	std::cout << "!wait1" << std::endl;
 	co_await wait1();
 	std::cout << "!wait2" << std::endl;
 	co_await wait2();
 }
 
-
 AwaitableCoroutine inner() {
-	Object o;
+	Object o("inner()");
 
 	std::cout << "!inner wait1" << std::endl;
 	co_await wait1();
@@ -629,15 +704,14 @@ AwaitableCoroutine inner() {
 	co_await wait2();
 }
 
-//CoroutineHandle outerHandle;
 Coroutine outer() {
-	// obtain handle of outer coroutine
-	//co_await outerHandle;
+	Object o("outer()");
 
 	co_await inner();
 
 	std::cout << "!outer select" << std::endl;
 	int result = co_await select(wait1(), wait2());
+	selectResult = result;
 	switch (result) {
 	case 1:
 		std::cout << "selected 1" << std::endl;
@@ -651,7 +725,7 @@ Coroutine outer() {
 TEST(utilTest, Coroutine) {
 	// start coroutine
 	coroutine();
-	
+
 	// resume coroutine
 	std::cout << "!resume wait1" << std::endl;
 	EXPECT_FALSE(waitlist1.isEmpty());
@@ -665,10 +739,10 @@ TEST(utilTest, Coroutine) {
 
 TEST(utilTest, DestroyCoroutine) {
 	// start coroutine
-	coroutine();
-	
+	Coroutine c = coroutine();
+
 	// destroy coroutine
-	waitlist1.head.next->handle.destroy();
+	c.destroy();
 }
 
 TEST(utilTest, NestedCoroutine) {
@@ -685,24 +759,26 @@ TEST(utilTest, NestedCoroutine) {
 	EXPECT_FALSE(waitlist2.isEmpty());
 	waitlist2.resumeAll();
 	EXPECT_TRUE(waitlist2.isEmpty());
+	EXPECT_EQ(selectResult, 2);
 }
 
 TEST(utilTest, DestroyNestedCoroutine) {
 	// start outer coroutine (enters inner() and waits on wait1())
 	Coroutine c = outer();
+	//Coroutine c = coroutine2();
 
 	// destroy outer coroutine
 	std::cout << "!destroy outer" << std::endl;
 	c.destroy();
 }
 
-TEST(utilTest, awaitAwaitableCoroutine) {
+TEST(utilTest, AwaitAwaitableCoroutine) {
 	AwaitableCoroutine c = inner();
 
-	// check that the coroutine is running
+	// check that the coroutine is alive
+	EXPECT_TRUE(c.isAlive());
+	EXPECT_FALSE(c.hasFinished());
 	EXPECT_FALSE(c.await_ready());
-	
-	waitlist1.resumeAll();
 
 	// move assign to c2
 	AwaitableCoroutine c2;
@@ -714,72 +790,69 @@ TEST(utilTest, awaitAwaitableCoroutine) {
 	// check that the coroutine is still running
 	EXPECT_FALSE(c2.await_ready());
 
+	// resume the coroutine
+	waitlist1.resumeAll();
 	waitlist2.resumeAll();
+
+	// check that the coroutine has stopped
+	EXPECT_TRUE(c2.await_ready());
+
+	// should have no effect
+	c.cancel();
+
+
+	// start again and assign to finished c2
+	c2 = inner();
+
+	// start again and assign to c2 when it is still alive
+	c2 = inner();
+
+	// cancel the coroutine
+	c2.cancel();
 
 	// check that the coroutine has stopped
 	EXPECT_TRUE(c2.await_ready());
 }
 
 
-// Coroutine with extra value
-// --------------------------
+// Coroutine with parameters
+// -------------------------
 
-void moveStart() {
-	std::cout << "Parameters::move start" << std::endl;
-}
-
-struct Parameters1 {
-	int value;
-};
-
-struct Parameters2 : public WaitlistElement {
-	int value;
-
+class Parameters1 : public WaitlistNode {
+public:
 	// default constructor
-	Parameters2(int value) : WaitlistElement(), value(value) {}
+	explicit Parameters1(int value) : value(value) {}
 
-	// move constructor
-	Parameters2(Parameters2 &&p) noexcept : WaitlistElement((moveStart(), std::move(p))), value(p.value) {
-		std::cout << "Parameters::move end" << std::endl;
+	void append(WaitlistNode &list) {
+		std::cout << "Parameters::append" << std::endl;
+		list.add(*this);
 	}
 
-	// add to list
-	void add(WaitlistHead &head) noexcept {
-		std::cout << "Parameters::add" << std::endl;
-		WaitlistElement::add(head);
+	void cancel() {
+		std::cout << "Parameters::cancel" << std::endl;
+		remove();
 	}
 
-	// remove from list
-	void remove() noexcept {
-		std::cout << "Parameters::remove" << std::endl;
-		WaitlistElement::remove();
-	}
+	// handle of waiting coroutine
+	std::coroutine_handle<> handle = nullptr;
+
+	int value;
 };
 
-Waitlist<int> waitListValue0; // only tested if it compiles
-Waitlist<Parameters1> waitListValue1; // only tested if it compiles
-Waitlist<Parameters2> waitListValue2;
+Waitlist<Parameters1> waitListValue;
 
-Awaitable<int> delay0(int value) {
-	return {waitListValue0, value};
-}
-
-Awaitable<Parameters1> delay1(int value) {
-	return {waitListValue1, value};
-}
-
-Awaitable<Parameters2> delay2(int value) {
-	return {waitListValue2, value};
+Awaitable<Parameters1> delay2(int value) {
+	return {waitListValue, value};
 }
 
 Coroutine waitForDelay1() {
-	auto a = delay2(5);
-	Awaitable<Parameters2> b(std::move(a));
-	co_await b;
+	Object o("waitForDelay1()");
+	co_await delay2(5);
 	std::cout << "resumed delay(5)" << std::endl;
 }
 
 Coroutine waitForDelay2() {
+	Object o("waitForDelay2()");
 	switch (co_await select(wait1(), delay2(10))) {
 	case 1:
 		std::cout << "resumed wait1" << std::endl;
@@ -790,12 +863,12 @@ Coroutine waitForDelay2() {
 	}
 }
 
-TEST(utilTest, CoroutineValue) {
+TEST(utilTest, CoroutineValue2) {
 	waitForDelay1();
 	waitForDelay2();
-	
-	waitListValue2.resumeAll([] (Parameters2 const &p) {return p.value == 5;});
-	waitListValue2.resumeAll([] (Parameters2 const &p) {return p.value == 10;});
+
+	waitListValue.resumeAll([] (Parameters1 const &p) {return p.value == 5;});
+	waitListValue.resumeAll([] (Parameters1 const &p) {return p.value == 10;});
 }
 
 
@@ -806,48 +879,29 @@ Coroutine move() {
 	Awaitable<> a = wait1();
 	Awaitable<> b(std::move(a));
 
+	EXPECT_TRUE(a.hasFinished());
 	co_await a;
-	std::cout << "a is ready" << std::endl;
 
 	std::cout << "await b" << std::endl;
 	co_await b;
 	std::cout << "resumed from b" << std::endl;
 
-	co_await a;
-	std::cout << "a is ready" << std::endl;
-	co_await b;
-	std::cout << "b is ready" << std::endl;
+	EXPECT_TRUE(a.hasFinished());
+	EXPECT_TRUE(b.hasFinished());
 }
 
 TEST(utilTest, AwaitableMove) {
 	move();
-	
+
 	waitlist1.resumeAll();
 	EXPECT_TRUE(waitlist1.isEmpty());
-}
-
-
-// List of awaitables
-// ------------------
-
-Coroutine list() {
-	std::vector<Awaitable<>> list;
-	
-	list.push_back(wait1());
-	
-	co_await list[0];
-}
-
-TEST(utilTest, AwaitableList) {
-	list();
-	
 }
 
 
 // Barrier
 // -------
 
-Waitlist<> barrier;
+Barrier barrier;
 
 Coroutine waitForBarrier() {
 	std::cout << "wait on barrier" << std::endl;
@@ -861,9 +915,30 @@ TEST(utilTest, Barrier) {
 	barrier.resumeAll();
 }
 
+struct BarrierParameters {
+	int i;
+	float f;
+};
+Barrier<BarrierParameters> barrierWithParameters;
 
-// test Semaphore
-// --------------
+Coroutine waitForBarrierWithParameters() {
+	std::cout << "wait on barrier" << std::endl;
+	co_await barrierWithParameters.wait(1, 2.0f);
+	std::cout << "passed barrier" << std::endl;
+}
+
+TEST(utilTest, BarrierWithParameters) {
+	waitForBarrierWithParameters();
+	std::cout << "resume barrier" << std::endl;
+	barrierWithParameters.resumeAll([](BarrierParameters &p) {
+		EXPECT_EQ(p.i, 1);
+		return true;
+	});
+}
+
+
+// Semaphore
+// ---------
 
 Semaphore semaphore(3);
 
@@ -882,15 +957,18 @@ Coroutine worker2() {
 }
 
 TEST(utilTest, Semaphore) {
-	worker1();
-	worker2();
+	auto c1 = worker1();
+	auto c2 = worker2();
 	for (int i = 0; i < 10; ++i) {
 		semaphore.post();
 	}
+
+	// destroy coroutines so that no coroutine waits on the semaphore when it gets destroyed
+	c1.destroy();
+	c2.destroy();
 }
 
 TEST(utilTest, color) {
-
 	auto xy1 = hueToCie(0.0f, 0.0f);
 	auto xy2 = hueToCie(0.0f, 1.0f);
 	auto xy3 = hueToCie(359.0f, 1.0f);

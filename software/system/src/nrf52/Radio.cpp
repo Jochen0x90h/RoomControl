@@ -433,7 +433,7 @@ static inline void unlock() {
 	enableInterrupt(TIMER0_IRQn);
 }
 
-
+/*
 ReceiveParameters::ReceiveParameters(ReceiveParameters &&p) noexcept
 	: WaitlistElement((lock(), std::move(p))), packet(p.packet)
 {
@@ -492,6 +492,54 @@ void SendParameters::remove() noexcept {
 
 	unlock();
 }
+*/
+
+void ReceiveParameters::append(WaitlistNode &list) noexcept {
+	lock();
+	list.add(*this);
+	unlock();
+}
+
+void ReceiveParameters::cancel() noexcept {
+	lock();
+	remove();
+	unlock();
+}
+
+void SendParameters::append(WaitlistNode &list) noexcept {
+	lock();
+	list.add(*this);
+	unlock();
+}
+
+void SendParameters::cancel() noexcept {
+	lock();
+	remove();
+
+	// cancel if this is the current send operation
+	if (Radio::sendResult == &this->result) {
+		// disable timer interrupt 3 to stop backoff
+		NRF_TIMER0->INTENCLR = N(TIMER_INTENCLR_COMPARE3, Clear);
+
+		// stop clear channel assessment
+		NRF_RADIO->TASKS_CCASTOP = TRIGGER; // -> CCASTOPPED
+
+		// clear result pointer
+		Radio::sendResult = nullptr;
+
+		// check if no transmit operation is ongoing
+		if (isReceiveState()) {
+			// return to idle state
+			Radio::sendState = SendState::IDLE;
+
+			// check if more to send
+			selectForSend();
+		}
+	}
+
+	unlock();
+}
+
 
 
 // event loop handler chain
@@ -1086,10 +1134,10 @@ Awaitable<SendParameters> send(int index, uint8_t *packet, uint8_t &result) {
 	auto sendFlags = SendFlags(packet[1 + length]);
 
 	// check if we can immediately start to send (idle and don't need to wait for data request)
-	lock();
+	//lock();
 	if (Radio::sendState == SendState::IDLE && sendFlags == SendFlags::NONE)
 		prepareForSend(index, context.flags, packet, result);
-	unlock();
+	//unlock();
 
 	return {context.sendWaitlist, packet, result};
 }

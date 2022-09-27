@@ -16,20 +16,21 @@ void Menu::line() {
 }
 
 void Menu::beginSection() {
-	this->section = true;
+	if (this->section != Section::END)
+		this->section = Section::BEGIN;
 }
 
 void Menu::endSection() {
-	if (!this->section)
+	if (this->section == Section::BODY)
 		line();
-	this->section = false;
+	this->section = Section::END;
 }
 
 Menu::Stream Menu::stream() {
-	if (this->section) {
+	if (this->section == Section::BEGIN)
 		line();
-		this->section = false;
-	}
+	this->section = Section::BODY;
+
 	return {10, this->entryY + 2 - this->offsetY, this->bitmap};
 }
 

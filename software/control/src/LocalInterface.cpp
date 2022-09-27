@@ -16,11 +16,11 @@ constexpr String deviceNames[] = {
 	"Motion Detector",
 };
 
-// air sensor endpoints
-constexpr int BME680_TEMPERATURE_ENDPOINT = 0;
-constexpr int BME680_HUMIDITY_ENDPOINT = 1;
-constexpr int BME680_PRESSURE_ENDPOINT = 2;
-constexpr int BME680_VOC_ENDPOINT = 3;
+// air sensor plugs
+constexpr int BME680_TEMPERATURE_PLUG = 0;
+constexpr int BME680_HUMIDITY_PLUG = 1;
+constexpr int BME680_PRESSURE_PLUG = 2;
+constexpr int BME680_VOC_PLUG = 3;
 
 // air sensor plugs
 constexpr MessageType bme680Plugs[] = {
@@ -56,7 +56,18 @@ constexpr MessageType motionDetectorPlugs[] = {
 };
 
 
-LocalInterface::LocalInterface() {
+LocalInterface::LocalInterface()
+	: devices{
+		{BME680_ID, this->listeners},
+		{IN_ID, this->listeners},
+		{OUT_ID, this->listeners},
+		{HEATING_ID, this->listeners},
+		{SOUND_ID, this->listeners},
+		{BRIGHTNESS_SENSOR_ID, this->listeners},
+		{MOTION_DETECTOR_ID, this->listeners},
+	}
+{
+	// convert available sounds to plugs of sound device
 	auto types = Sound::getTypes();
 	this->soundCount = min(types.count(), array::count(this->soundPlugs));
 	for (int i = 0; i < this->soundCount; ++i) {
@@ -91,6 +102,7 @@ LocalInterface::LocalInterface() {
 		}
 	}
 
+	// set available devices to deviceIds array
 	int i = 0;
 	this->deviceIds[i++] = BME680_ID;
 	if (INPUT_EXT_COUNT > 0)
@@ -100,10 +112,15 @@ LocalInterface::LocalInterface() {
 	if (OUTPUT_HEATING_COUNT > 0)
 		this->deviceIds[i++] = HEATING_ID;
 	if (this->soundCount > 0)
-		this->deviceIds[i++] = AUDIO_ID;
+		this->deviceIds[i++] = SOUND_ID;
 	this->deviceIds[i++] = BRIGHTNESS_SENSOR_ID;
 	this->deviceIds[i++] = MOTION_DETECTOR_ID;
 	this->deviceCount = i;
+
+	// set device id's
+	//for (i = 0; i < DEVICE_COUNT; ++i) {
+	//	this->devices[i].id = i + 1;
+	//}
 
 	// start coroutines
 	readAirSensor();
@@ -111,6 +128,10 @@ LocalInterface::LocalInterface() {
 }
 
 LocalInterface::~LocalInterface() {
+}
+
+String LocalInterface::getName() {
+	return "Local";
 }
 
 void LocalInterface::setCommissioning(bool enabled) {
@@ -139,7 +160,7 @@ Array<MessageType const> LocalInterface::getPlugs(uint8_t id) const {
 		return {OUTPUT_EXT_COUNT, outPlugs};
 	case HEATING_ID:
 		return {OUTPUT_HEATING_COUNT, heatingPlugs};
-	case AUDIO_ID:
+	case SOUND_ID:
 		return {this->soundCount, this->soundPlugs};
 	case BRIGHTNESS_SENSOR_ID:
 		return brightnessSensorPlugs;
@@ -150,20 +171,24 @@ Array<MessageType const> LocalInterface::getPlugs(uint8_t id) const {
 	}
 }
 
-void LocalInterface::subscribe(uint8_t id, uint8_t plugIndex, Subscriber &subscriber) {
-	subscriber.remove();
-	auto plugs = getPlugs(id);
-	if (plugIndex < plugs.count()) {
-		subscriber.source.device = {id, plugIndex};
-		this->devices[id - 1].subscribers.add(subscriber);
-	}
-}
-
-PublishInfo LocalInterface::getPublishInfo(uint8_t id, uint8_t plugIndex) {
+SubscriberInfo LocalInterface::getSubscriberInfo(uint8_t id, uint8_t plugIndex) {
 	auto plugs = getPlugs(id);
 	if (plugIndex < plugs.count())
-		return {{.type = plugs[plugIndex], .device = {id, plugIndex}}, &this->publishBarrier};
+		return {plugs[plugIndex], &this->publishBarrier};
 	return {};
+}
+
+void LocalInterface::subscribe(Subscriber &subscriber) {
+	subscriber.remove();
+	auto index = subscriber.data->source.deviceId - 1;
+	if (index >= 0 && index < array::count(this->devices))
+		this->devices[index].subscribers.add(subscriber);
+}
+
+void LocalInterface::listen(Listener &listener) {
+	assert(listener.barrier	!= nullptr);
+	listener.remove();
+	this->listeners.add(listener);
 }
 
 void LocalInterface::erase(uint8_t id) {
@@ -186,42 +211,11 @@ Coroutine LocalInterface::readAirSensor() {
 		// measure
 		co_await airSensor.measure();
 
-		// publish to subscribers of air sensor
-		for (auto &subscriber : device.subscribers) {
-			if (subscriber.source.device.plugIndex >= array::count(bme680Plugs))
-				break;
+		device.publishFloat(BME680_TEMPERATURE_PLUG, airSensor.getTemperature() + 273.15f);
+		device.publishFloat(BME680_HUMIDITY_PLUG, airSensor.getHumidity());
+		device.publishFloat(BME680_PRESSURE_PLUG, airSensor.getPressure());
+		device.publishFloat(BME680_VOC_PLUG, airSensor.getGasResistance());
 
-			// get source message (measured value)
-			float src;
-			switch (subscriber.source.device.plugIndex) {
-			case BME680_TEMPERATURE_ENDPOINT:
-				// get temperature in celsius
-				src = airSensor.getTemperature() + 273.15f;
-				break;
-			case BME680_HUMIDITY_ENDPOINT:
-				src = airSensor.getHumidity();
-				break;
-			case BME680_PRESSURE_ENDPOINT:
-				// get pressure in hectopascal
-				src = airSensor.getPressure();
-				break;
-			case BME680_VOC_ENDPOINT:
-				// get gas resistance in ohm
-				src = airSensor.getGasResistance();
-				break;
-			}
-
-			// publish to subscriber
-			subscriber.barrier->resumeFirst([&subscriber, src] (PublishInfo::Parameters &p) {
-				p.info = subscriber.destination;
-
-				// convert to destination message type and resume coroutine if conversion was successful
-				auto &dst = *reinterpret_cast<Message *>(p.message);
-				auto srcType = bme680Plugs[subscriber.source.device.plugIndex];
-				return convertFloat(subscriber.destination.type, dst, src, subscriber.convertOptions);
-			});
-		}
-		
 		// wait
 		#ifdef DEBUG
 			co_await Timer::sleep(10s);
@@ -239,32 +233,32 @@ Coroutine LocalInterface::publish() {
 		co_await this->publishBarrier.wait(info, &message);
 
 		// set to device
-		switch (info.device.id) {
+		switch (info.deviceId) {
 		case OUT_ID:
 			// set "ext" output
-			if (info.device.plugIndex < OUTPUT_EXT_COUNT) {
+			if (info.plugIndex < OUTPUT_EXT_COUNT) {
 				if (message.value.u8 <= 1)
-					Output::set(OUTPUT_EXT_INDEX + info.device.plugIndex, message.value.u8 != 0);
+					Output::set(OUTPUT_EXT_INDEX + info.plugIndex, message.value.u8 != 0);
 				else
-					Output::toggle(OUTPUT_EXT_INDEX + info.device.plugIndex);
+					Output::toggle(OUTPUT_EXT_INDEX + info.plugIndex);
 			}
 			break;
 		case HEATING_ID:
 			// set heating output
-			if (info.device.plugIndex < OUTPUT_HEATING_COUNT) {
+			if (info.plugIndex < OUTPUT_HEATING_COUNT) {
 				if (message.value.u8 <= 1)
 					Output::set(OUTPUT_HEATING_INDEX, message.value.u8 != 0);
 				else
 					Output::toggle(OUTPUT_HEATING_INDEX);
 			}
 			break;
-		case AUDIO_ID:
-			// start audio
-			if (info.device.plugIndex < this->soundCount) {
+		case SOUND_ID:
+			// start sound
+			if (info.plugIndex < this->soundCount) {
 				if (message.value.u8 != 0)
-					Sound::play(info.device.plugIndex);
+					Sound::play(info.plugIndex);
 				else
-					Sound::stop(info.device.plugIndex);
+					Sound::stop(info.plugIndex);
 			}
 			break;
 		}

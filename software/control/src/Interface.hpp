@@ -1,7 +1,6 @@
 #pragma once
 
 #include <bus.hpp>
-#include <Publisher.hpp>
 #include <Subscriber.hpp>
 #include <Array.hpp>
 #include <Coroutine.hpp>
@@ -19,7 +18,12 @@ public:
 	 * Destructor
 	 */
 	virtual ~Interface();
-	
+
+	/**
+	 * Get name of interface
+	 */
+	virtual String getName() = 0;
+
 	/**
 	 * Set the interface into commissioning mode so that new devices can be added
 	 * @param enabled true to enable
@@ -51,21 +55,27 @@ public:
 	virtual Array<MessageType const> getPlugs(uint8_t id) const = 0;
 
 	/**
-	 * Subscribe to receive messages messages from an endpoint
-	 * @param plugIndex plug index
-	 * @param subscriber subscriber to insert, gets internally inserted into a linked list
-	 */
-	virtual void subscribe(uint8_t id, uint8_t plugIndex, Subscriber &subscriber) = 0;
-
-	/**
-	 * Get publish info used to publish a message to an endpoint
+	 * Get information necessary to subscribe this plug to another plug using subscribe()
+	 * @param id device id
 	 * @param plugIndex plug index
 	 * @return publish info
 	 */
-	virtual PublishInfo getPublishInfo(uint8_t id, uint8_t plugIndex) = 0;
+	virtual SubscriberInfo getSubscriberInfo(uint8_t id, uint8_t plugIndex) = 0;
 
 	/**
-	 * Erase a device by id
+	 * Subscribe to receive messages messages from an endpoint
+	 * @param subscriber subscriber to insert, gets internally inserted into a linked list
+	 */
+	virtual void subscribe(Subscriber &subscriber) = 0;
+
+	/**
+	 * Listen on all messages of the whole interface
+	 * @param listener listener to insert, gets internally inserted into a linked list
+	 */
+	virtual void listen(Listener &listener) = 0;
+
+	/**
+	 * Erase a device by id. Make sure that all PublishInfo's obtained with getPublishInfo() are erased too
 	 * @param id device id
 	 */
 	virtual void erase(uint8_t id) = 0;
@@ -83,4 +93,37 @@ protected:
 		}
 		return j;
 	}
+
+	class Device {
+	public:
+		Device(uint8_t id, ListenerList &listeners) : id(id), listeners(listeners) {}
+
+		void publishSwitch(uint8_t plugIndex, uint8_t value) {
+			this->listeners.publishSwitch(this->id, plugIndex, value);
+			this->subscribers.publishSwitch(plugIndex, value);
+		}
+
+		void publishFloat(uint8_t plugIndex, float value) {
+			this->listeners.publishFloat(this->id, plugIndex, value);
+			this->subscribers.publishFloat(plugIndex, value);
+		}
+
+		void publishFloatCommand(uint8_t plugIndex, float value, uint8_t command) {
+			this->listeners.publishFloatCommand(this->id, plugIndex, value, command);
+			this->subscribers.publishFloatCommand(plugIndex, value, command);
+		}
+
+		void publishFloatTransition(uint8_t plugIndex, float value, uint8_t command, uint16_t transition) {
+			this->listeners.publishFloatTransition(this->id, plugIndex, value, command, transition);
+			this->subscribers.publishFloatTransition(plugIndex, value, command, transition);
+		}
+
+		uint8_t id;
+
+		// list of listeners (listen to all messages)
+		ListenerList &listeners;
+
+		// list of subscribers (subscribe for messages on a plug)
+		SubscriberList subscribers;
+	};
 };

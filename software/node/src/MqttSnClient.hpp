@@ -263,11 +263,11 @@ private:
 		int &length;
 		uint8_t *message;
 	};
-	Waitlist<AckParameters> ackWaitlist;
+	Barrier<AckParameters> ackWaitlist;
 
 	struct ReceiveParameters {
 		int &length;
 		uint8_t *message;
 	};
-	Waitlist<ReceiveParameters> receiveWaitlist;
+	Barrier<ReceiveParameters> receiveWaitlist;
 };

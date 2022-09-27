@@ -1,7 +1,8 @@
 #pragma once
 
-#include <cstdint>
 #include "bus.hpp"
+#include "Coroutine.hpp"
+#include <cstdint>
 
 
 /**
@@ -29,31 +30,33 @@ struct Message {
 	uint16_t transition;
 };
 
-
-// type and source or destination "address" of a message
+/**
+ * Info for the receiver of a message
+ */
 struct MessageInfo {
+	// subscribers: connection index, listeners: device index
+	uint8_t sourceIndex;
+
+	// subscribers: receiver device id, listeners: sender device id
+	uint8_t deviceId;
+
+	// subscribers: receiver plug index, listeners: sender plug index
+	uint8_t plugIndex;
+
 	// message type
-	MessageType type = MessageType(0);
-
-	union {
-		// source or destination interface device
-		struct {
-			uint8_t id;
-			uint8_t plugIndex;
-		} device;
-
-		// source or destination mqtt topic
-		struct {
-			uint16_t id;
-		} topic;
-
-		// source or destination function plug
-		struct {
-			uint8_t id;
-			uint8_t connectionIndex;
-		} plug;
-	};
+	//MessageType type;
 };
+
+struct MessageParameters {
+public:
+	// info about the message source for the subscriber to identify the message
+	MessageInfo &info;
+
+	// message (length is defined by the message type)
+	void *message;
+};
+
+using MessageBarrier = Barrier<MessageParameters>;
 
 
 struct ConvertOptions {

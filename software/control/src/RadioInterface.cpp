@@ -37,12 +37,12 @@ RadioInterface::RadioInterface(PersistentStateManager &stateManager)
 	for (int i = 0; i < deviceCount; ++i) {
 		uint8_t id = this->deviceIds[i];
 
-		// determine size
+		// get size of stored data
 		int size = Storage::size(STORAGE_CONFIG, STORAGE_ID_RADIO1 | id);
 		if (size < sizeof(DeviceData))
 			continue;
 
-		// allocate and read
+		// allocate memory and read data
 		auto data = reinterpret_cast<DeviceData *>(malloc(size));
 		Storage::read(STORAGE_CONFIG, STORAGE_ID_RADIO1 | id, size, data);
 
@@ -53,7 +53,7 @@ RadioInterface::RadioInterface(PersistentStateManager &stateManager)
 			continue;
 		}
 
-		if (data->deviceType != DeviceType::ZBEE) {
+		if (data->type != DeviceData::Type::ZBEE) {
 			// green power
 			auto *deviceData = static_cast<GpDeviceData *>(data);
 
@@ -83,7 +83,9 @@ RadioInterface::RadioInterface(PersistentStateManager &stateManager)
 				free(data);
 				continue;
 			}
-			new ZbEndpoint(device, endpointData);
+
+			// create endpoint, add to list of endpoints of device, device takes ownership of endpoint
+			new ZbEndpoint(this, device, endpointData);
 		}
 
 		// device was correctly loaded
@@ -109,8 +111,12 @@ void RadioInterface::setConfiguration(uint16_t panId, DataBuffer<16> const &key,
 		start();
 }
 
+String RadioInterface::getName() {
+	return "Radio";
+}
+
 void RadioInterface::setCommissioning(bool enabled) {
-	this->commissioning = enabled && this->deviceCount < MAX_DEVICE_COUNT;
+	this->commissioning = enabled;
 	if (this->commissioning) {
 		// allocate next short address
 		allocateShortAddress();
@@ -189,34 +195,39 @@ Array<MessageType const> RadioInterface::getPlugs(uint8_t id) const {
 	return {};
 }
 
-void RadioInterface::subscribe(uint8_t id, uint8_t plugIndex, Subscriber &subscriber) {
-	subscriber.remove();
+SubscriberInfo RadioInterface::getSubscriberInfo(uint8_t id, uint8_t plugIndex) {
 	auto gpDevice = getGpDevice(id);
 	if (gpDevice != nullptr) {
-		subscriber.source.device = {id, plugIndex};
-		gpDevice->subscribers.add(subscriber);
+		if (plugIndex < gpDevice->data->plugCount)
+			return {gpDevice->data->plugs[plugIndex], &this->publishBarrier};
+	} else {
+		auto zbEndpoint = getZbEndpoint(id);
+		if (zbEndpoint != nullptr && plugIndex < zbEndpoint->data->plugCount) {
+			auto plugs = reinterpret_cast<MessageType *>(zbEndpoint->data->buffer);
+			return {plugs[plugIndex], &this->publishBarrier};
+		}
 	}
-	auto zbEndpoint = getZbEndpoint(id);
-	if (zbEndpoint != nullptr) {
-		subscriber.source.device = {id, plugIndex};
-		zbEndpoint->subscribers.add(subscriber);
+	return {};
+}
+
+void RadioInterface::subscribe(Subscriber &subscriber) {
+	subscriber.remove();
+	auto id = subscriber.data->source.deviceId;
+	auto gpDevice = getGpDevice(id);
+	if (gpDevice != nullptr) {
+		gpDevice->subscribers.add(subscriber);
+		return;
+	} else {
+		auto zbEndpoint = getZbEndpoint(id);
+		if (zbEndpoint != nullptr)
+			zbEndpoint->subscribers.add(subscriber);
 	}
 }
 
-PublishInfo RadioInterface::getPublishInfo(uint8_t id, uint8_t plugIndex) {
-	auto gpDevice = getGpDevice(id);
-	if (gpDevice != nullptr) {
-		auto plugs = gpDevice->data->plugs;
-		if (plugIndex < gpDevice->data->plugCount)
-			return {{.type = plugs[plugIndex], .device = {id, plugIndex}}, &this->publishBarrier};
-	}
-	auto zbEndpoint = getZbEndpoint(id);
-	if (zbEndpoint != nullptr) {
-		auto plugs = reinterpret_cast<MessageType *>(zbEndpoint->data->buffer);
-		if (plugIndex < zbEndpoint->data->plugCount)
-			return {{.type = plugs[plugIndex], .device = {id, plugIndex}}, &this->publishBarrier};
-	}
-	return {};
+void RadioInterface::listen(Listener &listener) {
+	assert(listener.barrier	!= nullptr);
+	listener.remove();
+	this->listeners.add(listener);
 }
 
 void RadioInterface::erase(uint8_t id) {
@@ -313,7 +324,7 @@ void RadioInterface::ZbEndpointDataBuilder::build(ZbEndpointData *data) {
 	//array::copy(data->name, this->name);
 
 	data->id = this->id;
-	data->deviceType = DeviceType::ZBEE;
+	data->type = DeviceData::Type::ZBEE;
 
 	// set counts
 	data->plugCount = this->plugCount;
@@ -1144,9 +1155,6 @@ Coroutine RadioInterface::sendBeacon() {
 
 		// send beacon
 		{
-			// get global configuration
-			//auto const &configuration = *this->configuration;
-
 			PacketWriter w(packet);
 
 			// ieee 802.15.4 frame control
@@ -1206,7 +1214,7 @@ Coroutine RadioInterface::sendBeacon() {
 		co_await Timer::sleep(100ms);
 	}
 }
-
+/*
 static bool handleZclCommand(MessageType dstType, void *dstMessage, int plugIndex, zcl::Cluster cluster,
 	MessageReader r, ConvertOptions const &convertOptions)
 {
@@ -1265,7 +1273,7 @@ static bool handleZclCommand(MessageType dstType, void *dstMessage, int plugInde
 
 	// conversion failed
 	return false;
-}
+}*/
 
 Coroutine RadioInterface::receive() {
 	while (true) {
@@ -1288,7 +1296,7 @@ Coroutine RadioInterface::receive() {
 		uint16_t destinationPanId = r.u16L();
 		bool destinationBroadcast = destinationPanId == 0xffff;
 
-		// the radio filter flags ensure that a destination address is present hat is either boradcast or our address
+		// the radio filter flags ensure that a destination address is present hat is either broadcast or our address
 		if ((ieeeFrameControl & ieee::FrameControl::DESTINATION_ADDRESSING_LONG_FLAG) == 0) {
 			// short destination address
 			uint16_t destAddress = r.u16L();
@@ -1298,8 +1306,8 @@ Coroutine RadioInterface::receive() {
 			r.skip(8);
 		}
 
+		// handle ieee frames with no source address separately
 		if ((ieeeFrameControl & ieee::FrameControl::SOURCE_ADDRESSING_FLAG) == 0) {
-			// handle ieee frames with no source address separately
 			if (ieeeFrameType == ieee::FrameControl::TYPE_COMMAND) {
 				auto command = r.e8<ieee::Command>();
 				if (command == ieee::Command::BEACON_REQUEST) {
@@ -1334,7 +1342,7 @@ Terminal::out << ("Beacon Request\n");
 				auto command = r.e8<ieee::Command>();
 
 				// check for association request with no broadcast
-				if (  this->commissioning && !destinationBroadcast && command == ieee::Command::ASSOCIATION_REQUEST) {
+				if (this->commissioning && !destinationBroadcast && command == ieee::Command::ASSOCIATION_REQUEST) {
 					// cancel current association coroutine
 					this->commissionCoroutine.cancel();
 
@@ -1342,7 +1350,8 @@ Terminal::out << ("Beacon Request\n");
 					auto deviceInfo = r.e8<ieee::DeviceInfo>();
 					bool receiveOnWhenIdle = (deviceInfo & ieee::DeviceInfo::RX_ON_WHEN_IDLE) != 0;
 					auto sendFlags = receiveOnWhenIdle ? Radio::SendFlags::NONE : Radio::SendFlags::AWAIT_DATA_REQUEST;
-Terminal::out << "Association Request: Receive On When Idle: " << dec(receiveOnWhenIdle) << '\n';
+					//Terminal::out << "Association Request: Receive On When Idle: " << dec(receiveOnWhenIdle) << '\n';
+
 					this->commissionCoroutine = handleZbCommission(sourceAddress, sendFlags);
 				}
 			}
@@ -2011,17 +2020,81 @@ Terminal::out << "Association Request: Receive On When Idle: " << dec(receiveOnW
 				bool sendDefaultResponse = (frameControl & zcl::FrameControl::DISABLE_DEFAULT_RESPONSE) == 0;
 
 				// debug-print command
-				uint8_t command = r.peekU8();
-				int length = r.getRemaining() - 1;
-				//std::cout << "Device: " << std::hex << device->shortAddress << std::dec << ", ZCL command: " << int(command) << ", length: " << length << std::endl;
-		Terminal::out << "Device: " << hex(device.data.shortAddress) << ", ZCL Command: " << dec(command) << ", Length: " << dec(length) << '\n';
+				{
+					uint8_t command = r.peekU8();
+					int length = r.getRemaining() - 1;
+					//std::cout << "Device: " << std::hex << device->shortAddress << std::dec << ", ZCL command: " << int(command) << ", length: " << length << std::endl;
+					Terminal::out << "Device: " << hex(device.data.shortAddress) << ", ZCL Command: " << dec(command)
+						<< ", Length: " << dec(length) << '\n';
+				}
 
-				// lookup cluster
+				// lookup plug range for cluster
 				auto plugs = endpoint->findServerCluster(cluster);
 				if (plugs.count == 0)
 					continue;
 
+				// get command
+				uint8_t command = r.u8();
+
 				// publish to subscribers
+				switch (cluster) {
+				case zcl::Cluster::ON_OFF:
+					endpoint->publishSwitch(plugs.offset, r.u8());
+					break;
+				case zcl::Cluster::LEVEL_CONTROL: {
+					uint8_t cmd = 0;
+					switch (zcl::LevelControlCommand(command)) {
+					case zcl::LevelControlCommand::STEP:
+					case zcl::LevelControlCommand::STEP_WITH_ON_OFF:
+						cmd = r.u8() == 0 ? 1 : 2; // increase/decrease
+						// fall through
+					case zcl::LevelControlCommand::MOVE_TO_LEVEL:
+					case zcl::LevelControlCommand::MOVE_TO_LEVEL_WITH_ON_OFF: {
+						float value = float(r.u8()) / 254.0f;
+						if (cmd == 2) {
+							// negative step
+							cmd = 1;
+							value = -value;
+						}
+						uint16_t transition = r.u16L(); // transition time in 1/10 s
+						endpoint->publishFloatTransition(plugs.offset, value, command, transition);
+						break;
+					}
+					default:
+						// unknown level control command
+						break;
+					}
+					break;
+				}
+				case zcl::Cluster::COLOR_CONTROL: {
+					switch (zcl::ColorControlCommand(command)) {
+					case zcl::ColorControlCommand::STEP_COLOR: {
+						auto x = float(r.i16L()) / 65279.0f;
+						auto y = float(r.i16L()) / 65279.0f;
+						uint16_t transition = r.u16L(); // transition time in 1/10 s
+						endpoint->publishFloatTransition(plugs.offset + 0, x, 1, transition);
+						endpoint->publishFloatTransition(plugs.offset + 1, y, 1, transition);
+						break;
+					}
+					case zcl::ColorControlCommand::MOVE_TO_COLOR: {
+						auto x = float(r.u16L()) / 65279.0f;
+						auto y = float(r.u16L()) / 65279.0f;
+						uint16_t transition = r.u16L(); // transition time in 1/10 s
+						endpoint->publishFloatTransition(plugs.offset + 0, x, 0, transition);
+						endpoint->publishFloatTransition(plugs.offset + 1, y, 0, transition);
+						break;
+					}
+					default:
+						// unknown color control command
+						break;
+					}
+					break;
+				}
+				default:;
+				}
+
+/*
+				//
 				for (auto &subscriber : endpoint->subscribers) {
 					int plugIndex = subscriber.source.device.plugIndex - plugs.offset;
 
@@ -2036,7 +2109,7 @@ Terminal::out << "Association Request: Receive On When Idle: " << dec(receiveOnW
 						});
 					}
 				}
-
+*/
 				// reply with default response
 				if (sendDefaultResponse) {
 					// cluster command (e.g. 'on' or 'off' for on/off cluster)
@@ -2172,8 +2245,8 @@ void RadioInterface::handleGp(uint8_t const *mac, PacketReader &r) {
 
 		int plugIndex = -1;
 		uint8_t message = 0;
-		switch (device->data->deviceType) {
-		case DeviceType::PTM215Z:
+		switch (device->data->type) {
+		case DeviceData::Type::PTM215Z:
 			if (r.getRemaining() >= 1) {
 				uint8_t command = r.u8();
 				switch (command) {
@@ -2222,7 +2295,7 @@ void RadioInterface::handleGp(uint8_t const *mac, PacketReader &r) {
 				}
 			}
 			break;
-		case DeviceType::PTM216Z:
+		case DeviceData::Type::PTM216Z:
 			if (r.getRemaining() >= 2) {
 				uint8_t bar = r.u8();
 				uint8_t buttons = r.u8();
@@ -2253,17 +2326,7 @@ void RadioInterface::handleGp(uint8_t const *mac, PacketReader &r) {
 		}
 
 		// publish to subscribers
-		for (auto &subscriber : device->subscribers) {
-			// check if this is the right endpoint
-			if (subscriber.source.device.plugIndex == plugIndex) {
-				subscriber.barrier->resumeFirst([&subscriber, message] (PublishInfo::Parameters &p) {
-					p.info = subscriber.destination;
-
-					auto &dst = *reinterpret_cast<Message *>(p.message);
-					return convertSwitch(subscriber.destination.type, dst, message, subscriber.convertOptions);
-				});
-			}
-		}
+		device->publishSwitch(plugIndex, message);
 		break;
 	}
 }
@@ -2281,17 +2344,17 @@ void RadioInterface::handleGpCommission(uint32_t deviceId, PacketReader& r) {
 
 	// device type
 	// 0x02: on/off switch
-	data.deviceType = r.e8<DeviceType>();
+	data.type = r.e8<DeviceData::Type>();
 
-	switch (data.deviceType) {
-	case DeviceType::PTM215Z:
+	switch (data.type) {
+	case DeviceData::Type::PTM215Z:
 		// switch, PTM215Z ("friends of hue")
 		data.plugs[0] = MessageType::TERNARY_BUTTON_OUT;
 		data.plugs[1] = MessageType::TERNARY_BUTTON_OUT;
 		data.plugs[2] = MessageType::TERNARY_BUTTON_OUT;
 		data.plugCount = 3;
 		break;
-	case DeviceType::PTM216Z:
+	case DeviceData::Type::PTM216Z:
 		// generic switch, PTM216Z
 		data.plugs[0] = MessageType::TERNARY_BUTTON_OUT;
 		data.plugs[1] = MessageType::TERNARY_BUTTON_OUT;
@@ -2363,6 +2426,10 @@ void RadioInterface::handleGpCommission(uint32_t deviceId, PacketReader& r) {
 		return;
 	}
 
+	// check if we have space for new devices
+	if (this->deviceCount >= MAX_DEVICE_COUNT)
+		return;
+
 	// add device to list of devices
 	this->deviceIds[this->deviceCount++] = data.id;
 	Storage::write(STORAGE_CONFIG, STORAGE_ID_RADIO1, this->deviceCount, this->deviceIds);
@@ -2381,12 +2448,25 @@ void RadioInterface::handleGpCommission(uint32_t deviceId, PacketReader& r) {
 }
 
 AwaitableCoroutine RadioInterface::handleZbCommission(uint64_t deviceLongAddress, Radio::SendFlags sendFlags) {
-Terminal::out << "handleAssociationRequest\n";
+	//Terminal::out << "handleAssociationRequest\n";
 
 	uint16_t deviceShortAddress = this->nextShortAddress;
 	uint64_t thisLongAddress = Radio::getLongAddress();
 
+	// find existing device if any
+	auto od = &this->zbDevices;
+	while (*od != nullptr) {
+		auto device = *od;
+		if (device->data.longAddress == deviceLongAddress)
+			break;
+		od = &device->next;
+	}
+	auto oldDevice = *od;
 
+	// check if we are out of space for new devices
+	bool outOfDevices = oldDevice == nullptr && this->deviceCount >= MAX_DEVICE_COUNT;
+
+	// variables
 	uint8_t packet1[MESSAGE_LENGTH];
 	uint8_t packet2[MESSAGE_LENGTH];
 	uint8_t sendResult;
@@ -2422,27 +2502,17 @@ Terminal::out << "handleAssociationRequest\n";
 		// short address of device
 		w.u16L(deviceShortAddress);
 
-		// association status
-		w.u8(0);
+		// association status: recommissioning of an existing device, or we have space for new devices
+		w.u8(outOfDevices ? 1 : 0);
 
 		// always await a data request packet from the device before sending the association response
 		w.finish(Radio::SendFlags::AWAIT_DATA_REQUEST);
 	}
-Terminal::out << "Send Association Response\n";
+	//Terminal::out << "Send Association Response\n";
 	co_await Radio::send(RADIO_ZBEE, packet1, sendResult);
-Terminal::out << "Send Association Response Result " << dec(sendResult) << '\n';
-	if (sendResult == 0)
+	//Terminal::out << "Send Association Response Result " << dec(sendResult) << '\n';
+	if (sendResult == 0 || outOfDevices)
 		co_return;
-
-	// find existing device if any
-	auto od = &this->zbDevices;
-	while (*od != nullptr) {
-		auto device = *od;
-		if (device->data.longAddress == deviceLongAddress)
-			break;
-		od = &device->next;
-	}
-	auto oldDevice = *od;
 
 	// create new device
 	ZbDeviceData deviceData;
@@ -2451,7 +2521,7 @@ Terminal::out << "Send Association Response Result " << dec(sendResult) << '\n';
 	deviceData.shortAddress = deviceShortAddress;
 	deviceData.longAddress = deviceLongAddress;
 
-	// use pointer in case the coroutine gets cancelled
+	// use Pointer in case the coroutine gets cancelled
 	Pointer<ZbDevice> device = new ZbDevice(deviceData);
 
 	// set pointer so that we can forward responses
@@ -2489,7 +2559,7 @@ Terminal::out << "Send Association Response Result " << dec(sendResult) << '\n';
 			writeFooter(w, sendFlags);
 		}
 		co_await Radio::send(RADIO_ZBEE, packet1, sendResult);
-Terminal::out << "Send Key Result " << dec(sendResult) << '\n';
+		//Terminal::out << "Send Key Result " << dec(sendResult) << '\n';
 		if (sendResult != 0)
 			break;
 
@@ -2516,7 +2586,7 @@ Terminal::out << "Send Key Result " << dec(sendResult) << '\n';
 			writeFooter(w, sendFlags);
 		}
 		co_await Radio::send(RADIO_ZBEE, packet1, sendResult);
-Terminal::out << "Send Node Descriptor Request Result " << dec(sendResult) << '\n';
+		//Terminal::out << "Send Node Descriptor Request Result " << dec(sendResult) << '\n';
 		if (sendResult != 0) {
 			// wait for a response from the device
 			int r = co_await select(this->responseBarrier.wait(length, packet1, uint8_t(0), zdpCounter,
@@ -2536,7 +2606,7 @@ Terminal::out << "Send Node Descriptor Request Result " << dec(sendResult) << '\
 		PacketReader nodeDescriptor(length, packet1);
 		uint8_t status = nodeDescriptor.u8();
 		uint16_t addressOfInterest = nodeDescriptor.u16L();
-Terminal::out << "Node Descriptor Status " << dec(status) << '\n';
+		//Terminal::out << "Node Descriptor Status " << dec(status) << '\n';
 	}
 
 	// get list of active endpoints
@@ -2576,7 +2646,7 @@ Terminal::out << "Node Descriptor Status " << dec(status) << '\n';
 	{
 		uint8_t status = endpoints.u8();
 		uint16_t addressOfInterest = endpoints.u16L();
-Terminal::out << "active endpoints status " << dec(status) << '\n';
+		//Terminal::out << "active endpoints status " << dec(status) << '\n';
 	}
 
 	// get descriptor of each endpoint (packet1)
@@ -2588,10 +2658,15 @@ Terminal::out << "active endpoints status " << dec(status) << '\n';
 		uint8_t deviceEndpoint = endpoints.u8();
 
 		ZbEndpointDataBuilder builder;
-		if (oldEndpoint != nullptr)
+		if (oldEndpoint != nullptr) {
+			// reuse existing device id
 			builder.id = oldEndpoint->data->id;
-		else
+		} else {
+			// allocate a new device id if possible
+			if (deviceCount >= MAX_DEVICE_COUNT)
+				continue;
 			builder.id = allocateId(deviceCount);
+		}
 
 		// get power source (packet2)
 		co_await readAttribute(packet2, *device, deviceEndpoint, zcl::Cluster::BASIC, zcl::Profile::HOME_AUTOMATION,
@@ -2720,8 +2795,8 @@ Terminal::out << "active endpoints status " << dec(status) << '\n';
 		auto modelIdentifier = getString(packet2).get("Device");
 		assign(data->name, modelIdentifier);
 
-		// create endpoint, device takes ownership
-		auto endpoint = new ZbEndpoint(device.ptr, data);
+		// create endpoint, add to list of endpoints of device, device takes ownership of endpoint
+		auto endpoint = new ZbEndpoint(this, device.ptr, data);
 
 		// bind all device client clusters to our server clusters
 		for (int i = 0; i < builder.serverClusterIndex; i++) {
@@ -2784,7 +2859,7 @@ Terminal::out << "active endpoints status " << dec(status) << '\n';
 			this->deviceIds[deviceCount++] = builder.id;
 	}
 
-	// remove remaining old endpoints from device list
+	// remove id's of remaining old endpoints from list of device id's
 	while (oldEndpoint != nullptr) {
 		deviceCount = eraseId(deviceCount, this->deviceIds, oldEndpoint->data->id);
 		oldEndpoint = oldEndpoint->next;
@@ -2799,17 +2874,23 @@ Terminal::out << "active endpoints status " << dec(status) << '\n';
 		auto oldEndpoint = oldDevice->endpoints;
 		auto endpoint = device->endpoints;
 		while (oldEndpoint != nullptr && endpoint != nullptr) {
-			endpoint->subscribers.add(static_cast<Subscriber &>(oldEndpoint->subscribers));
+			//endpoint->subscribers.add(static_cast<Subscriber &>(static_cast<LinkedListNode<Subscriber> &>(oldEndpoint->subscribers)));
+			endpoint->subscribers.add(oldEndpoint->subscribers); // only works because old list removes itself from linked list
 			oldEndpoint = oldEndpoint->next;
 			endpoint = endpoint->next;
 		}
 
+		// delete old device and its endpoints
 		delete oldDevice;
 	}
 
-	// store device list
+	// store list of device id's (each endpoint is treated as a device)
 	this->deviceCount = deviceCount;
 	Storage::write(STORAGE_CONFIG, STORAGE_ID_RADIO1, deviceCount, this->deviceIds);
+
+	// check if device has any endpoints
+	if (device->endpoints == nullptr)
+		co_return;
 
 	// store endpoints
 	auto endpoint = device->endpoints;
@@ -2821,8 +2902,7 @@ Terminal::out << "active endpoints status " << dec(status) << '\n';
 	// store device
 	Storage::write(STORAGE_CONFIG, STORAGE_ID_RADIO2 | device->data.id, sizeof(device->data), &device->data);
 
-	// transfer ownership of device to devices list
-	//device->interface = this;
+	// transfer ownership of new device to devices list
 	device->next = this->zbDevices;
 	this->zbDevices = device.ptr;
 	device.ptr = nullptr;
@@ -2844,13 +2924,13 @@ Coroutine RadioInterface::publish() {
 		while (device != nullptr) {
 			auto endpoint = device->endpoints;
 			while (endpoint != nullptr) {
-				if (endpoint->data->id != info.device.id) {
+				if (endpoint->data->id != info.deviceId) {
 					endpoint = endpoint->next;
 					continue;
 				}
 
 				// get endpoint info
-				auto plugIndex = info.device.plugIndex;
+				auto plugIndex = info.plugIndex;
 				if (plugIndex >= endpoint->data->plugCount)
 					break;
 				auto messageType = endpoint->getPlugs()[plugIndex];

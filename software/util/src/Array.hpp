@@ -5,7 +5,7 @@
 
 
 /**
- * Buffer with known size that only references the data
+ * Array with known size that only references the data
  * @tparam T type of buffer elements
  * @tparam N size of buffer
  */
@@ -138,7 +138,7 @@ protected:
 
 
 /**
- * Buffer that only references the data, similar to std::span
+ * Array with variable size that only references the data, similar to std::span
  * @tparam T type of buffer element, e.g. int const for a bufferof constant integers
  */
 template <typename T>
@@ -156,6 +156,9 @@ public:
 	template <int N>
 	constexpr Array(T (&array)[N]) noexcept : length(N), buffer(array) {}
 
+	/**
+	 * Construct from lenth and data
+	 */
 	Array(int length, T *data) noexcept : length(length), buffer(data) {}
 
 	/**
