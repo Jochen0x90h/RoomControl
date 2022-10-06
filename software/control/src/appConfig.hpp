@@ -83,6 +83,8 @@ constexpr int NETWORK_MDNS = 1;
 // -------
 
 constexpr int STORAGE_CONFIG = 0;
+constexpr int STORAGE_ID_CONFIG = 0x0000;
+constexpr int STORAGE_ID_DISPLAY_LISTENER = 0x0010;
 constexpr int STORAGE_ID_BUS1 = 0x0100;
 constexpr int STORAGE_ID_BUS2 = 0x0200;
 constexpr int STORAGE_ID_RADIO1 = 0x0300;

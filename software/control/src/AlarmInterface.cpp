@@ -9,7 +9,7 @@
 static MessageType const plugs[1] = {MessageType::BINARY_ALARM_OUT};
 
 
-AlarmInterface::AlarmInterface() {
+AlarmInterface::AlarmInterface(uint8_t interfaceId) : listeners(interfaceId) {
 	// load list of device ids
 	int deviceCount = Storage::read(STORAGE_CONFIG, STORAGE_ID_ALARM, sizeof(this->alarmIds), this->alarmIds);
 
@@ -79,7 +79,7 @@ Array<MessageType const> AlarmInterface::getPlugs(uint8_t id) const {
 	return {};
 }
 
-SubscriberInfo AlarmInterface::getSubscriberInfo(uint8_t id, uint8_t plugIndex) {
+SubscriberTarget AlarmInterface::getSubscriberTarget(uint8_t id, uint8_t plugIndex) {
 	// no input plugs
 	return {};
 }
@@ -166,7 +166,7 @@ int AlarmInterface::getSubscriberCount(uint8_t id, uint8_t command) {
 
 			// check if conversion for subscriber succeeds (command is not discarded by convertOptions)
 			Message dst;
-			if (convertSwitch(subscriber.info.type, dst, command, subscriber.data->convertOptions))
+			if (convertSwitch(subscriber.target.type, dst, command, subscriber.data->convertOptions))
 				++count;
 		}
 		return count;

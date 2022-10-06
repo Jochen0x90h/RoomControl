@@ -10,7 +10,7 @@ public:
 	// maximum number of functions
 	static constexpr int MAX_FUNCTION_COUNT = 128;
 
-	FunctionInterface();
+	FunctionInterface(uint8_t interfaceId);
 	~FunctionInterface() override;
 
 	String getName() override;
@@ -20,7 +20,7 @@ public:
 	String getName(uint8_t id) const override;
 	void setName(uint8_t id, String name) override;
 	Array<MessageType const> getPlugs(uint8_t id) const override;
-	SubscriberInfo getSubscriberInfo(uint8_t id, uint8_t plugIndex) override;
+	SubscriberTarget getSubscriberTarget(uint8_t id, uint8_t plugIndex) override;
 	void subscribe(Subscriber &subscriber) override;
 	void listen(Listener &listener) override;
 	void erase(uint8_t id) override;
@@ -171,7 +171,7 @@ public:
 		Coroutine coroutine;
 
 		// coroutines wait here until something gets published to them
-		MessageBarrier publishBarrier;
+		SubscriberBarrier barrier;
 	};
 
 	int functionCount = 0;

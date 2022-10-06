@@ -71,26 +71,28 @@ public:
 // Connections
 // -----------
 
-	// connections to one input plug
+	// list of all connections to one destination device
 	struct Connections {
 		Connections *next;
 
 		uint8_t interfaceIndex;
 		uint8_t deviceId;
 
+		// dynamically allocated lists of data and subscribers
 		uint8_t count;
-		ConnectionData *data;
+		Connection *data;
 		Subscriber *subscribers;
 	};
 
+	// temporary list of connections to one destination device, used while editing
 	struct TempConnections {
 		static constexpr int MAX_CONNECTIONS = 64;
 
 		Connections **p = nullptr;
 		uint8_t count = 0;
-		ConnectionData data[MAX_CONNECTIONS];
+		Connection data[MAX_CONNECTIONS];
 
-		void insert(int index, ConnectionData const &connection) {
+		void insert(int index, Connection const &connection) {
 			array::insert(this->data + index, this->data + this->count, 1);
 			++this->count;
 			this->data[index] = connection;
@@ -105,19 +107,66 @@ public:
 	TempConnections getConnections(uint8_t interfaceIndex, uint8_t deviceId);
 	void writeConnections(uint8_t interfaceIndex, uint8_t deviceId, TempConnections &tc);
 	void eraseConnections(uint8_t interfaceIndex, uint8_t deviceId, TempConnections &tc);
-	void printConnection(Menu::Stream &stream, ConnectionData const &connection);
+	void printConnection(Menu::Stream &stream, Connection const &connection);
 
-	Connections *connectionGroups = nullptr;
+	// linked list of connections
+	Connections *connectionsList = nullptr;
 
 
-// Menu Helpers
-// ------------
+// Listeners
+// ---------
+
+	// message that gets displayed, stored in flash
+	struct DisplaySource {
+		uint8_t deviceId;
+		uint8_t plugIndex;
+	};
+
+	// list of messages that get displayed
+	struct DisplaySources {
+		int count = 0;
+		DisplaySource *sources = nullptr;
+
+		bool contains(uint8_t deviceId, uint8_t plugIndex) const;
+	};
+
+	struct TempDisplaySources {
+		static constexpr int MAX_SOURCES = 64;
+
+		int count = 0;
+		DisplaySource sources[MAX_SOURCES];
+
+
+		TempDisplaySources(DisplaySources const &displaySources);
+		void insert(uint8_t deviceId, uint8_t plugIndex);
+		void erase(uint8_t deviceId, uint8_t plugIndex);
+		bool contains(uint8_t deviceId, uint8_t plugIndex) const;
+	};
+
+	void listen(ListenerBarrier &barrier, Listener *listeners);
+
+	void writeDisplaySources(int interfaceIndex, TempDisplaySources &tempDisplaySources);
+
+	// list of display sources, one per interface
+	DisplaySources displaySourcesList[INTERFACE_COUNT];
+
+
+// Helpers
+// -------
 
 	// get array of switch states
 	Array<String const> getSwitchStates(Usage usage);
 
 	// get switch type (binary/ternary, stable/one-shot)
 	int getSwitchType(MessageType type);
+
+	// print a message value including unit to a stream
+	void printMessage(Stream &stream, MessageType type, Message &message);
+
+
+// Menu Helpers
+// ------------
+
 
 	// default convert options for message logger and generator
 	ConvertOptions getDefaultConvertOptions(MessageType type);
@@ -156,6 +205,12 @@ public:
 // Menu
 // ----
 
+	enum class Result {
+		OK,
+		CANCEL,
+		DELETE
+	};
+
 	// display
 	SwapChain swapChain;
 
@@ -178,12 +233,15 @@ public:
 
 	// connections
 	[[nodiscard]] AwaitableCoroutine connectionsMenu(Array<MessageType const> plugs, TempConnections &tc);
-	[[nodiscard]] AwaitableCoroutine editFunctionConnection(TempConnections &tc, int index, MessageType dstType, ConnectionData connection, bool add);
-	[[nodiscard]] AwaitableCoroutine selectFunctionDevice(ConnectionData &connection, MessageType dstType);
-	[[nodiscard]] AwaitableCoroutine selectFunctionPlug(Interface &interface, uint8_t id, ConnectionData &connection, MessageType dstType);
+	[[nodiscard]] AwaitableCoroutine editConnection(Connection &connection, MessageType dstType, Result &result);
+//	[[nodiscard]] AwaitableCoroutine editConnection(TempConnections &tc, int index, ConnectionData connection, MessageType dstType, bool add);
+	[[nodiscard]] AwaitableCoroutine selectDevice(Connection &connection, MessageType dstType);
+	[[nodiscard]] AwaitableCoroutine detectConnection(Connection &connection, MessageType dstType);
+//	[[nodiscard]] AwaitableCoroutine selectDevice(ConnectionData &connection, MessageType dstType);
+	[[nodiscard]] AwaitableCoroutine selectPlug(Interface &interface, uint8_t id, Connection &connection, MessageType dstType);
 
 	// helpers
-	[[nodiscard]] AwaitableCoroutine plugsMenu(Interface &interface, uint8_t id);
+	[[nodiscard]] AwaitableCoroutine plugsMenu(Interface &interface, uint8_t deviceId, TempDisplaySources &tempDisplaySources);
 	[[nodiscard]] AwaitableCoroutine messageLogger(Interface &interface, uint8_t id);
 	[[nodiscard]] AwaitableCoroutine messageGenerator(Interface &interface, uint8_t id);
 

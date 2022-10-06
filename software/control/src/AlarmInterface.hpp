@@ -10,7 +10,7 @@ public:
 	// maximum number of alarms
 	static constexpr int MAX_ALARM_COUNT = 64;
 
-	AlarmInterface();
+	AlarmInterface(uint8_t interfaceId);
 	~AlarmInterface() override;
 
 	String getName() override;
@@ -20,7 +20,7 @@ public:
 	String getName(uint8_t id) const override;
 	void setName(uint8_t id, String name) override;
 	Array<MessageType const> getPlugs(uint8_t id) const override;
-	SubscriberInfo getSubscriberInfo(uint8_t id, uint8_t plugIndex) override;
+	SubscriberTarget getSubscriberTarget(uint8_t id, uint8_t plugIndex) override;
 	void subscribe(Subscriber &subscriber) override;
 	void listen(Listener &listener) override;
 	void erase(uint8_t id) override;

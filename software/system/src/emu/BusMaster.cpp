@@ -51,7 +51,7 @@ struct Device {
 
 constexpr auto SWITCH = PlugType::BINARY_SWITCH_WALL_OUT;
 constexpr auto BUTTON = PlugType::BINARY_BUTTON_OUT;
-constexpr auto ROCKER = PlugType::TERNARY_BUTTON_OUT;
+constexpr auto ROCKER = PlugType::TERNARY_ROCKER_OUT;
 constexpr auto LIGHT = PlugType::BINARY_POWER_LIGHT_CMD_IN;
 constexpr auto BLIND = PlugType::TERNARY_OPENING_BLIND_IN;
 
@@ -276,7 +276,7 @@ void handle(Gui &gui) {
 			switch (device.attribute) {
 			case bus::Attribute::MODEL_IDENTIFIER: {
 				StringBuffer<16> b;
-				b << "Bus" << dec(device.id) << '.' << dec(device.endpointIndex);
+				b.stream() << "Bus" << dec(device.id) << '.' << dec(device.endpointIndex);
 				w.string(b.string());
 				break;
 			}

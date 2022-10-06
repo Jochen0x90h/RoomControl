@@ -93,7 +93,7 @@ public:
 
 	/**
 	 * Add a new uninitialized element to the back of the queue. If the queue is full, the front element gets removed.
-	 * If the element was already written using getNext(), it is remains untuched and is now part of the queue.
+	 * If the element was already written to using getNext(), it is remains untouched and is now part of the queue.
 	 */
 	void addBack() {
 		auto c = this->c;
@@ -113,8 +113,7 @@ public:
 	}
 
 	/**
-	 * Add a new uninitialized element to the back of the queue. If the queue is full, the front element gets removed.
-	 * If the element was already written using getNext(), it is remains untuched and is now part of the queue.
+	 * Add a new element to the back of the queue. If the queue is full, the front element gets removed.
 	 */
 	void addBack(Element const &element) {
 		this->elements[(this->front + this->c) % N] = element;

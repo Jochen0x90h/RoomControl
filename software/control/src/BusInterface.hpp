@@ -27,7 +27,7 @@ public:
 	 * @param configuration global configuration
 	 * @param stateManager persistent state manager for counters
 	 */
-	BusInterface(PersistentStateManager &stateManager);
+	BusInterface(uint8_t interfaceId, PersistentStateManager &stateManager);
 
 	~BusInterface() override;
 
@@ -45,7 +45,7 @@ public:
 	String getName(uint8_t id) const override;
 	void setName(uint8_t id, String name) override;
 	Array<MessageType const> getPlugs(uint8_t id) const override;
-	SubscriberInfo getSubscriberInfo(uint8_t id, uint8_t plugIndex) override;
+	SubscriberTarget getSubscriberTarget(uint8_t id, uint8_t plugIndex) override;
 	void subscribe(Subscriber &subscriber) override;
 	void listen(Listener &listener) override;
 	void erase(uint8_t id) override;
@@ -186,7 +186,7 @@ private:
 	Barrier<Response> responseBarrier;
 
 	// publish() coroutine waits here until something gets published to a bus device
-	MessageBarrier publishBarrier;
+	SubscriberBarrier publishBarrier;
 
 	// listeners that listen on all messages of the interface (as opposed to subscribers that subscribe to one plug)
 	ListenerList listeners;

@@ -15,16 +15,25 @@ inline void init() {}
 void write(int index, String const& str);
 
 
-struct Stream {
+class Stream : public ::Stream {
+public:
 	int index;
-	
-	Stream &operator <<(char ch) {
+
+	Stream(int index) : index(index) {}
+
+	~Stream() override {}
+
+	Stream &operator <<(char ch) override {
 		Terminal::write(this->index, String(1, &ch));
 		return *this;
 	}
 	
-	Stream &operator <<(String const &str) {
+	Stream &operator <<(String const &str) override {
 		Terminal::write(this->index, str);
+		return *this;
+	}
+
+	Stream &operator <<(Command command) override {
 		return *this;
 	}
 };

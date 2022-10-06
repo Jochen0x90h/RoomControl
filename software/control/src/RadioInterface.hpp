@@ -30,7 +30,7 @@ public:
 	 * @param configuration global configuration
 	 * @param stateManager persistent state manager for counters
 	 */
-	RadioInterface(PersistentStateManager &stateManager);
+	RadioInterface(uint8_t interfaceId, PersistentStateManager &stateManager);
 
 	~RadioInterface() override;
 
@@ -49,7 +49,7 @@ public:
 	String getName(uint8_t id) const override;
 	void setName(uint8_t id, String name) override;
 	Array<MessageType const> getPlugs(uint8_t id) const override;
-	SubscriberInfo getSubscriberInfo(uint8_t id, uint8_t plugIndex) override;
+	SubscriberTarget getSubscriberTarget(uint8_t id, uint8_t plugIndex) override;
 	void subscribe(Subscriber &subscriber) override;
 	void listen(Listener &listener) override;
 	void erase(uint8_t id) override;
@@ -505,7 +505,7 @@ private:
 	// a coroutine (e.g. handleZbCommission()) waits on this barrier until a response arrives
 	Barrier<Response> responseBarrier;
 
-	MessageBarrier publishBarrier;
+	SubscriberBarrier publishBarrier;
 
 	// listeners that listen on all messages of the interface (as opposed to subscribers that subscribe to one plug)
 	ListenerList listeners;

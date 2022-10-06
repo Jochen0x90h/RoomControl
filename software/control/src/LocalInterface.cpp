@@ -42,7 +42,7 @@ constexpr MessageType outPlugs[] = {
 
 // heating plugs (max 2)
 constexpr MessageType heatingPlugs[] = {
-	MessageType::BINARY_OPEN_VALVE_CMD_OUT, MessageType::BINARY_OPEN_VALVE_CMD_OUT
+	MessageType::BINARY_OPENING_VALVE_CMD_OUT, MessageType::BINARY_OPENING_VALVE_CMD_OUT
 };
 
 // brightness sensor plugs
@@ -56,7 +56,7 @@ constexpr MessageType motionDetectorPlugs[] = {
 };
 
 
-LocalInterface::LocalInterface()
+LocalInterface::LocalInterface(uint8_t interfaceId)
 	: devices{
 		{BME680_ID, this->listeners},
 		{IN_ID, this->listeners},
@@ -66,6 +66,7 @@ LocalInterface::LocalInterface()
 		{BRIGHTNESS_SENSOR_ID, this->listeners},
 		{MOTION_DETECTOR_ID, this->listeners},
 	}
+	, listeners(interfaceId)
 {
 	// convert available sounds to plugs of sound device
 	auto types = Sound::getTypes();
@@ -171,7 +172,7 @@ Array<MessageType const> LocalInterface::getPlugs(uint8_t id) const {
 	}
 }
 
-SubscriberInfo LocalInterface::getSubscriberInfo(uint8_t id, uint8_t plugIndex) {
+SubscriberTarget LocalInterface::getSubscriberTarget(uint8_t id, uint8_t plugIndex) {
 	auto plugs = getPlugs(id);
 	if (plugIndex < plugs.count())
 		return {plugs[plugIndex], &this->publishBarrier};
@@ -228,7 +229,7 @@ Coroutine LocalInterface::readAirSensor() {
 Coroutine LocalInterface::publish() {
 	while (true) {
 		// wait for message
-		MessageInfo info;
+		SubscriberInfo info;
 		Message message;
 		co_await this->publishBarrier.wait(info, &message);
 

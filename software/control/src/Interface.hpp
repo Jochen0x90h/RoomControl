@@ -58,9 +58,9 @@ public:
 	 * Get information necessary to subscribe this plug to another plug using subscribe()
 	 * @param id device id
 	 * @param plugIndex plug index
-	 * @return publish info
+	 * @return SubscriberTarget
 	 */
-	virtual SubscriberInfo getSubscriberInfo(uint8_t id, uint8_t plugIndex) = 0;
+	virtual SubscriberTarget getSubscriberTarget(uint8_t id, uint8_t plugIndex) = 0;
 
 	/**
 	 * Subscribe to receive messages messages from an endpoint

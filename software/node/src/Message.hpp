@@ -33,7 +33,7 @@ struct Message {
 /**
  * Info for the receiver of a message
  */
-struct MessageInfo {
+/*struct MessageInfo {
 	// subscribers: connection index, listeners: device index
 	uint8_t sourceIndex;
 
@@ -43,8 +43,11 @@ struct MessageInfo {
 	// subscribers: receiver plug index, listeners: sender plug index
 	uint8_t plugIndex;
 
+	// subscribers: connection index
+	uint8_t connectionIndex;
+
 	// message type
-	//MessageType type;
+	MessageType type;
 };
 
 struct MessageParameters {
@@ -57,7 +60,7 @@ public:
 };
 
 using MessageBarrier = Barrier<MessageParameters>;
-
+*/
 
 struct ConvertOptions {
 	static constexpr int MAX_VALUE_COUNT = 3;

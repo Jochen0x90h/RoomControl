@@ -176,6 +176,7 @@ set(UTIL
 	util/src/optional.hpp
 	util/src/Pointer.hpp
 	util/src/Queue.hpp
+	util/src/Stream.cpp
 	util/src/Stream.hpp
 	util/src/String.hpp
 	util/src/StringBuffer.hpp

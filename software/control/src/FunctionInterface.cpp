@@ -71,14 +71,14 @@ static const TypeInfo typeInfos[] = {
 			OnOff on;
 			while (true) {
 				// wait for message
-				MessageInfo info;
+				SubscriberInfo info;
 				uint8_t message;
 				if (!on || timeout == 0ms) {
 					// off or no timeout: wait for message
-					co_await function->publishBarrier.wait(info, &message);
+					co_await function->barrier.wait(info, &message);
 				} else {
 					// on: wait for message or timeout
-					int s = co_await select(function->publishBarrier.wait(info, &message), Timer::sleep(timeout));
+					int s = co_await select(function->barrier.wait(info, &message), Timer::sleep(timeout));
 					if (s == 2) {
 						// timeout: switch off
 						message = 0;
@@ -133,12 +133,12 @@ static const TypeInfo typeInfos[] = {
 				SystemTime now;
 
 				// wait for message
-				MessageInfo info;
+				SubscriberInfo info;
 				uint8_t message;
 				bool timeoutActive = timeout > 0ms && on;
 				if (!timeoutActive && !transition) {
 					// timeout not active and no transition in progress: wait for message
-					co_await function->publishBarrier.wait(info, &message);
+					co_await function->barrier.wait(info, &message);
 					//Terminal::out << "plug " << dec(info.plug.id) << '\n';
 					now = Timer::now();
 				} else {
@@ -146,7 +146,7 @@ static const TypeInfo typeInfos[] = {
 					//Terminal::out << "select" << '\n';
 					bool off = timeoutActive && (!transition || offTime <= endTime);
 					now = off ? offTime : endTime;
-					int s = co_await select(function->publishBarrier.wait(info, &message), Timer::sleep(now));
+					int s = co_await select(function->barrier.wait(info, &message), Timer::sleep(now));
 
 					// "relaxed" time to prevent lagging behind
 					now = Timer::now();
@@ -190,7 +190,7 @@ static const TypeInfo typeInfos[] = {
 
 				// change color setting
 				bool force = false;
-				int newSettingIndex = info.sourceIndex % data.settingCount;
+				int newSettingIndex = info.connectionIndex % data.settingCount;
 				if (on && settingIndex != newSettingIndex) {
 					settingIndex = newSettingIndex;
 				} else if (!changed) {
@@ -286,12 +286,12 @@ static const TypeInfo typeInfos[] = {
 			// no references to flash allowed beyond this point as flash may be reallocated
 			while (true) {
 				// wait for message
-				MessageInfo info;
+				SubscriberInfo info;
 				uint8_t message;
 				bool timeoutActive = timeout > 0ms && on;
 				if (!timeoutActive && !transition) {
 					// timeout not active and no transition in progress: wait for message
-					co_await function->publishBarrier.wait(info, &message);
+					co_await function->barrier.wait(info, &message);
 					//Terminal::out << "plug " << dec(info.plug.id) << '\n';
 					now = Timer::now();
 				} else {
@@ -299,7 +299,7 @@ static const TypeInfo typeInfos[] = {
 					//Terminal::out << "select" << '\n';
 					bool off = timeoutActive && (!transition || offTime <= endTime);
 					now = off ? offTime : endTime;
-					int s = co_await select(function->publishBarrier.wait(info, &message), Timer::sleep(now));
+					int s = co_await select(function->barrier.wait(info, &message), Timer::sleep(now));
 
 					// "relaxed" time to prevent lagging behind
 					now = Timer::now();
@@ -344,8 +344,8 @@ static const TypeInfo typeInfos[] = {
 				// change color setting
 				bool setColor = false;
 				bool force = false;
-				if (on && settingIndex != info.sourceIndex) {
-					settingIndex = info.sourceIndex;
+				if (on && settingIndex != info.connectionIndex) {
+					settingIndex = info.connectionIndex;
 					setColor = true;
 				} else if (!changed) {
 					// current state is confirmed (off -> off or on -> on)
@@ -476,12 +476,12 @@ static const TypeInfo typeInfos[] = {
 			// no references to flash allowed beyond this point as flash may be reallocated
 			while (true) {
 				// wait for message
-				MessageInfo info;
+				SubscriberInfo info;
 				uint8_t message;
 				bool setColor = false;
 				if (!on && !transition) {
 					// off: wait for message
-					co_await function->publishBarrier.wait(info, &message);
+					co_await function->barrier.wait(info, &message);
 					//Terminal::out << "plug " << dec(info.plug.id) << '\n';
 					now = Timer::now();
 					//setColor = true;
@@ -494,7 +494,7 @@ static const TypeInfo typeInfos[] = {
 					bool off = timeout > 0ms && on && offTime <= now;
 					if (off)
 						now = offTime;
-					int s = co_await select(function->publishBarrier.wait(info, &message), Timer::sleep(now));
+					int s = co_await select(function->barrier.wait(info, &message), Timer::sleep(now));
 
 					// "relaxed" time to prevent lagging behind
 					now = Timer::now();
@@ -658,12 +658,12 @@ static const TypeInfo typeInfos[] = {
 		FunctionInterface::Type::TIMED_BLIND,
 		"Blind",
 		{
-			MessageType::TERNARY_BUTTON_IN,
+			MessageType::TERNARY_ROCKER_IN,
 			MessageType::BINARY_BUTTON_IN,
-			MessageType::LEVEL_OPEN_BLIND_CMD_IN,
+			MessageType::LEVEL_OPENING_BLIND_CMD_IN,
 			MessageType::BINARY_ENABLE_CLOSE_IN,
-			MessageType::TERNARY_OPENING_BLIND_OUT, // stop/opening/closing
-			MessageType::LEVEL_OPEN_BLIND_OUT
+			MessageType::TERNARY_OPENING_BLIND_OUT, // stopped/opening/closing
+			MessageType::LEVEL_OPENING_BLIND_OUT
 		},
 		[](FunctionInterface::Data *data) {
 			return sizeOf(FunctionInterface::TimedBlindData);
@@ -689,16 +689,16 @@ static const TypeInfo typeInfos[] = {
 			// no references to flash allowed beyond this point as flash may be reallocated
 			while (true) {
 				// wait for message
-				MessageInfo info;
+				SubscriberInfo info;
 				Message message;
 				if (state == 0) {
-					co_await function->publishBarrier.wait(info, &message);
+					co_await function->barrier.wait(info, &message);
 					//Terminal::out << "plug " << dec(info.plug.id) << '\n';
 				} else {
 					auto d = targetPosition - position;
 
 					// wait for event or timeout with a maximum to regularly report the current position
-					int s = co_await select(function->publishBarrier.wait(info, &message), Timer::sleep(min(up ? -d : d, 200ms)));
+					int s = co_await select(function->barrier.wait(info, &message), Timer::sleep(min(up ? -d : d, 200ms)));
 
 					// set invalid plug index when timeout occurred
 					if (s != 1)
@@ -806,10 +806,10 @@ static const TypeInfo typeInfos[] = {
 			MessageType::BINARY_POWER_AC_CMD_IN,
 			MessageType::BINARY_IN,
 			MessageType::BINARY_IN,
-			MessageType::BINARY_OPEN_WINDOW_IN,
+			MessageType::BINARY_OPENING_WINDOW_IN,
 			MessageType::PHYSICAL_TEMPERATURE_SETPOINT_HEATER_CMD_IN,
 			MessageType::PHYSICAL_TEMPERATURE_MEASURED_ROOM_IN,
-			MessageType::BINARY_OPEN_VALVE_OUT
+			MessageType::BINARY_OPENING_VALVE_OUT
 		},
 		[](FunctionInterface::Data *data) {
 			return sizeOf(FunctionInterface::HeatingControlData);
@@ -829,9 +829,9 @@ static const TypeInfo typeInfos[] = {
 			// no references to flash allowed beyond this point as flash may be reallocated
 			while (true) {
 				// wait for message
-				MessageInfo info;
+				SubscriberInfo info;
 				Message message;
-				co_await function->publishBarrier.wait(info, &message);
+				co_await function->barrier.wait(info, &message);
 
 				// process message
 				switch (info.plugIndex) {
@@ -849,11 +849,11 @@ static const TypeInfo typeInfos[] = {
 					break;
 				case 3:
 					// windows in
-					Terminal::out << "window " << dec(info.sourceIndex) << (message.value.u8 ? " open\n" : " closed\n");
+					Terminal::out << "window " << dec(info.connectionIndex) << (message.value.u8 ? " open\n" : " closed\n");
 					if (message.value.u8 == 0)
-						windows &= ~(1 << info.sourceIndex);
+						windows &= ~(1 << info.connectionIndex);
 					else
-						windows |= 1 << info.sourceIndex;
+						windows |= 1 << info.connectionIndex;
 					break;
 				case 4:
 					// set temperature in
@@ -901,7 +901,7 @@ static TypeInfo const &findInfo(FunctionInterface::Type type) {
 }
 
 
-FunctionInterface::FunctionInterface() {
+FunctionInterface::FunctionInterface(uint8_t interfaceId) : listeners(interfaceId) {
 	// load list of device ids
 	int deviceCount = Storage::read(STORAGE_CONFIG, STORAGE_ID_FUNCTION, sizeof(this->functionIds), this->functionIds);
 
@@ -986,18 +986,18 @@ Array<MessageType const> FunctionInterface::getPlugs(uint8_t id) const {
 	return {};
 }
 
-SubscriberInfo FunctionInterface::getSubscriberInfo(uint8_t id, uint8_t plugIndex) {
+SubscriberTarget FunctionInterface::getSubscriberTarget(uint8_t id, uint8_t plugIndex) {
 	auto function = findFunction(id);
 	if (function != nullptr) {
 		auto &typeInfo = findInfo(function->data->type);
 		if (plugIndex < typeInfo.plugs.size())
-			return {typeInfo.plugs.begin()[plugIndex], &function->publishBarrier};
+			return {typeInfo.plugs.begin()[plugIndex], &function->barrier};
 	}
 	return {};
 }
 
 void FunctionInterface::subscribe(Subscriber &subscriber) {
-	assert(subscriber.info.barrier != nullptr);
+	assert(subscriber.target.barrier != nullptr);
 	subscriber.remove();
 	auto id = subscriber.data->source.deviceId;
 	auto function = findFunction(id);

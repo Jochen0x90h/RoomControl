@@ -5,8 +5,8 @@
 #include "util.hpp"
 
 // remove when gcc 11 is available for all target platforms
-#define Stream typename
-#define Streamable typename
+//#define Stream typename
+//#define Streamable typename
 
 
 // decimal number
@@ -16,14 +16,15 @@ struct Dec {
 	int digitCount;
 };
 
-template <Stream S, typename T>
-S &operator <<(S &s, Dec<T> dec) {
+template <typename T>
+Stream &operator <<(Stream &s, Dec<T> dec) {
 	char buffer[11];
 	return s << toString(buffer, int32_t(dec.value), dec.digitCount);
 }
 
-template <Stream S, typename T>
-S &operator <<(S &&s, Dec<T> dec) {
+// stream as r-value reference, e.g. stream() << dec(10)
+template <typename T>
+Stream &operator <<(Stream &&s, Dec<T> dec) {
 	char buffer[11];
 	return s << toString(buffer, int32_t(dec.value), dec.digitCount);
 }
@@ -41,14 +42,14 @@ struct Hex {
 	int digitCount;
 };
 
-template <Stream S, typename T>
-S &operator <<(S &s, Hex<T> hex) {
+template <typename T>
+Stream &operator <<(Stream &s, Hex<T> hex) {
 	char buffer[16];
 	return s << toHexString(buffer, uint64_t(hex.value), hex.digitCount);
 }
 
-template <Stream S, typename T>
-S &operator <<(S &&s, Hex<T> hex) {
+template <typename T>
+Stream &operator <<(Stream &&s, Hex<T> hex) {
 	char buffer[16];
 	return s << toHexString(buffer, uint64_t(hex.value), hex.digitCount);
 }
@@ -70,14 +71,12 @@ struct Flt {
 	int decimalCount;
 };
 
-template <Stream S>
-S &operator <<(S &s, Flt flt) {
+inline Stream &operator <<(Stream &s, Flt flt) {
 	char buffer[21];
 	return s << toString(buffer, flt.value, flt.digitCount, flt.decimalCount);
 }
 
-template <Stream S>
-S &operator <<(S &&s, Flt flt) {
+inline Stream &operator <<(Stream &&s, Flt flt) {
 	char buffer[21];
 	return s << toString(buffer, flt.value, flt.digitCount, flt.decimalCount);
 }
@@ -115,13 +114,13 @@ struct Underline {
 	bool on;
 };
 
-template <Stream S, typename A>
-S &operator <<(S &s, Underline<A> underline) {
+template <typename A>
+Stream &operator <<(Stream &s, Underline<A> underline) {
 	if (underline.on)
-		s << StreamCommand::SET_UNDERLINE;
+		s << Stream::Command::SET_UNDERLINE;
 	s << underline.a;
 	if (underline.on)
-		s << StreamCommand::CLEAR_UNDERLINE;
+		s << Stream::Command::CLEAR_UNDERLINE;
 	return s;
 }
 
@@ -138,13 +137,13 @@ struct Invert {
 	bool on;
 };
 
-template <Stream S, typename A>
-S &operator <<(S &s, Invert<A> invert) {
+template <typename A>
+Stream &operator <<(Stream &s, Invert<A> invert) {
 	if (invert.on)
-		s << StreamCommand::SET_INVERT;
+		s << Stream::Command::SET_INVERT;
 	s << invert.a;
 	if (invert.on)
-		s << StreamCommand::CLEAR_INVERT;
+		s << Stream::Command::CLEAR_INVERT;
 	return s;
 }
 
@@ -161,11 +160,15 @@ struct Plus {
 	B const &b;
 };
 
-template <Stream S, typename A, typename B>
-S &operator <<(S &s, Plus<A, B> plus) {
+template <typename A, typename B>
+Stream &operator <<(Stream &s, Plus<A, B> plus) {
 	return s << plus.a << plus.b;
 }
 
+template <typename A, typename B>
+Stream &operator <<(Stream &&s, Plus<A, B> plus) {
+	return s << plus.a << plus.b;
+}
 
 
 // plus operators
@@ -203,5 +206,5 @@ inline Plus<char, String> operator +(char const &a, String const &b) {
 }
 
 
-#undef Stream
-#undef Streamable
+//#undef Stream
+//#undef Streamable

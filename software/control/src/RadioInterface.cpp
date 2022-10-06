@@ -26,8 +26,8 @@ constexpr zb::SecurityControl securityLevel = zb::SecurityControl::LEVEL_ENC_MIC
 
 // RadioInterface
 
-RadioInterface::RadioInterface(PersistentStateManager &stateManager)
-	: securityCounter(stateManager)
+RadioInterface::RadioInterface(uint8_t interfaceId, PersistentStateManager &stateManager)
+	: securityCounter(stateManager), listeners(interfaceId)
 {
 	// load list of device ids
 	int deviceCount = Storage::read(STORAGE_CONFIG, STORAGE_ID_RADIO1, sizeof(this->deviceIds), this->deviceIds);
@@ -195,7 +195,7 @@ Array<MessageType const> RadioInterface::getPlugs(uint8_t id) const {
 	return {};
 }
 
-SubscriberInfo RadioInterface::getSubscriberInfo(uint8_t id, uint8_t plugIndex) {
+SubscriberTarget RadioInterface::getSubscriberTarget(uint8_t id, uint8_t plugIndex) {
 	auto gpDevice = getGpDevice(id);
 	if (gpDevice != nullptr) {
 		if (plugIndex < gpDevice->data->plugCount)
@@ -2349,16 +2349,16 @@ void RadioInterface::handleGpCommission(uint32_t deviceId, PacketReader& r) {
 	switch (data.type) {
 	case DeviceData::Type::PTM215Z:
 		// switch, PTM215Z ("friends of hue")
-		data.plugs[0] = MessageType::TERNARY_BUTTON_OUT;
-		data.plugs[1] = MessageType::TERNARY_BUTTON_OUT;
-		data.plugs[2] = MessageType::TERNARY_BUTTON_OUT;
+		data.plugs[0] = MessageType::TERNARY_ROCKER_OUT;
+		data.plugs[1] = MessageType::TERNARY_ROCKER_OUT;
+		data.plugs[2] = MessageType::TERNARY_ROCKER_OUT;
 		data.plugCount = 3;
 		break;
 	case DeviceData::Type::PTM216Z:
 		// generic switch, PTM216Z
-		data.plugs[0] = MessageType::TERNARY_BUTTON_OUT;
-		data.plugs[1] = MessageType::TERNARY_BUTTON_OUT;
-		data.plugs[2] = MessageType::TERNARY_BUTTON_OUT;
+		data.plugs[0] = MessageType::TERNARY_ROCKER_OUT;
+		data.plugs[1] = MessageType::TERNARY_ROCKER_OUT;
+		data.plugs[2] = MessageType::TERNARY_ROCKER_OUT;
 		data.plugCount = 3;
 		break;
 	default:
@@ -2915,7 +2915,7 @@ Coroutine RadioInterface::publish() {
 	uint8_t packet[64];
 	while (true) {
 		// wait for message
-		MessageInfo info;
+		SubscriberInfo info;
 		Message message;
 		co_await this->publishBarrier.wait(info, &message);
 

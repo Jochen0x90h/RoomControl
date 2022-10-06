@@ -86,6 +86,7 @@ int Menu::getEdit(int editCount) {
 }
 
 AwaitableCoroutine Menu::show() {
+	this->section = Section::END;
 	const int lineHeight = tahoma_8pt.height + 4;
 
 	// adjust yOffset so that selected entry is visible

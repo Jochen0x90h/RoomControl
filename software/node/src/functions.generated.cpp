@@ -19,46 +19,46 @@ String getTypeLabel(PlugType type) {
 		case PlugType::BINARY_POWER:
 			switch (type & PlugType::BINARY_POWER_CATEGORY) {
 			case PlugType::BINARY_POWER_LIGHT:
-				return "Light On";
+				return "Light Power";
 			case PlugType::BINARY_POWER_FREEZER:
-				return "Freezer On";
+				return "Freezer Power";
 			case PlugType::BINARY_POWER_FRIDGE:
-				return "Fridge On";
+				return "Fridge Power";
 			case PlugType::BINARY_POWER_AC:
-				return "AC On";
+				return "AC Power";
 			case PlugType::BINARY_POWER_OVEN:
-				return "Oven On";
+				return "Oven Power";
 			case PlugType::BINARY_POWER_COOKER:
-				return "Cooker On";
+				return "Cooker Power";
 			case PlugType::BINARY_POWER_COFFEE:
-				return "Coffee M. On";
+				return "Coffee M. Power";
 			case PlugType::BINARY_POWER_DISHWASHER:
-				return "Dishwasher On";
+				return "Dishwasher Power";
 			case PlugType::BINARY_POWER_WASHING:
-				return "Washing M. On";
+				return "Washing M. Power";
 			case PlugType::BINARY_POWER_HIFI:
-				return "Hi-Fi On";
+				return "Hi-Fi Power";
 			case PlugType::BINARY_POWER_TV:
-				return "TV On";
+				return "TV Power";
 			default:
-				return "On/Off";
+				return "Power State";
 			}
-		case PlugType::BINARY_OPEN:
-			switch (type & PlugType::BINARY_OPEN_CATEGORY) {
-			case PlugType::BINARY_OPEN_GATE:
-				return "Gate State";
-			case PlugType::BINARY_OPEN_DOOR:
-				return "Door State";
-			case PlugType::BINARY_OPEN_WINDOW:
-				return "Window State";
-			case PlugType::BINARY_OPEN_BLIND:
-				return "Blind State";
-			case PlugType::BINARY_OPEN_SLAT:
-				return "Slat State";
-			case PlugType::BINARY_OPEN_VALVE:
-				return "Valve State";
+		case PlugType::BINARY_OPENING:
+			switch (type & PlugType::BINARY_OPENING_CATEGORY) {
+			case PlugType::BINARY_OPENING_GATE:
+				return "Gate Opening";
+			case PlugType::BINARY_OPENING_DOOR:
+				return "Door Opening";
+			case PlugType::BINARY_OPENING_WINDOW:
+				return "Window Opening";
+			case PlugType::BINARY_OPENING_BLIND:
+				return "Blind Opening";
+			case PlugType::BINARY_OPENING_SLAT:
+				return "Slat Opening";
+			case PlugType::BINARY_OPENING_VALVE:
+				return "Valve Opening";
 			default:
-				return "Open State";
+				return "Opening State";
 			}
 		case PlugType::BINARY_LOCK:
 			switch (type & PlugType::BINARY_LOCK_CATEGORY) {
@@ -69,7 +69,7 @@ String getTypeLabel(PlugType type) {
 			case PlugType::BINARY_LOCK_WINDOW:
 				return "Window Lock";
 			default:
-				return "Lock State";
+				return "Lock";
 			}
 		case PlugType::BINARY_OCCUPANCY:
 			return "Occupancy";
@@ -103,12 +103,12 @@ String getTypeLabel(PlugType type) {
 		}
 	case PlugType::TERNARY:
 		switch (type & PlugType::TERNARY_CATEGORY) {
-		case PlugType::TERNARY_BUTTON:
-			switch (type & PlugType::TERNARY_BUTTON_CATEGORY) {
-			case PlugType::TERNARY_BUTTON_WALL:
-				return "Wall Up/Down Button";
+		case PlugType::TERNARY_ROCKER:
+			switch (type & PlugType::TERNARY_ROCKER_CATEGORY) {
+			case PlugType::TERNARY_ROCKER_WALL:
+				return "Wall Rocker";
 			default:
-				return "Up/Down Button";
+				return "Rocker";
 			}
 		case PlugType::TERNARY_SWITCH:
 			switch (type & PlugType::TERNARY_SWITCH_CATEGORY) {
@@ -157,22 +157,22 @@ String getTypeLabel(PlugType type) {
 		return "Enum";
 	case PlugType::LEVEL:
 		switch (type & PlugType::LEVEL_CATEGORY) {
-		case PlugType::LEVEL_OPEN:
-			switch (type & PlugType::LEVEL_OPEN_CATEGORY) {
-			case PlugType::LEVEL_OPEN_GATE:
+		case PlugType::LEVEL_OPENING:
+			switch (type & PlugType::LEVEL_OPENING_CATEGORY) {
+			case PlugType::LEVEL_OPENING_GATE:
 				return "Gate Level";
-			case PlugType::LEVEL_OPEN_DOOR:
-				return "Gate Level";
-			case PlugType::LEVEL_OPEN_WINDOW:
-				return "Gate Level";
-			case PlugType::LEVEL_OPEN_BLIND:
+			case PlugType::LEVEL_OPENING_DOOR:
+				return "Door Level";
+			case PlugType::LEVEL_OPENING_WINDOW:
+				return "Window Level";
+			case PlugType::LEVEL_OPENING_BLIND:
 				return "Blind Level";
-			case PlugType::LEVEL_OPEN_SLAT:
+			case PlugType::LEVEL_OPENING_SLAT:
 				return "Slat Level";
-			case PlugType::LEVEL_OPEN_VALVE:
+			case PlugType::LEVEL_OPENING_VALVE:
 				return "Valve Level";
 			default:
-				return "Open Level";
+				return "Opening Level";
 			}
 		case PlugType::LEVEL_BATTERY:
 			return "Battery Level";
@@ -266,7 +266,7 @@ String getTypeLabel(PlugType type) {
 			case PlugType::PHYSICAL_POWER_SETPOINT:
 				return "Power Setpoint";
 			default:
-				return "Current";
+				return "Power";
 			}
 		case PlugType::PHYSICAL_ILLUMINANCE:
 			return "Illuminance";
@@ -366,7 +366,7 @@ Usage getUsage(PlugType type) {
 		switch (t & PlugType::BINARY_CATEGORY) {
 		case PlugType::BINARY_BUTTON:
 			return Usage::RELEASED_PRESSED;
-		case PlugType::BINARY_OPEN:
+		case PlugType::BINARY_OPENING:
 			return cmd ? Usage::CLOSED_OPEN_TOGGLE : Usage::CLOSED_OPEN;
 		case PlugType::BINARY_LOCK:
 			return cmd ? Usage::LOCK_TOGGLE : Usage::LOCK;
@@ -383,7 +383,7 @@ Usage getUsage(PlugType type) {
 		}
 	case PlugType::TERNARY:
 		switch (t & PlugType::TERNARY_CATEGORY) {
-		case PlugType::TERNARY_BUTTON:
+		case PlugType::TERNARY_ROCKER:
 			return Usage::RELEASED_UP_DOWN;
 		case PlugType::TERNARY_OPENING:
 			return Usage::STOPPED_OPENING_CLOSING;
@@ -542,8 +542,8 @@ bool isCompatible(PlugType dstType, PlugType srcType) {
 	case PlugType::LEVEL:
 		if ((src & PlugType::LEVEL_CATEGORY) == dst) return true;
 		switch (dst & PlugType::LEVEL_CATEGORY) {
-		case PlugType::LEVEL_OPEN:
-			return (src & PlugType::LEVEL_CATEGORY) == PlugType::LEVEL_OPEN;
+		case PlugType::LEVEL_OPENING:
+			return (src & PlugType::LEVEL_CATEGORY) == PlugType::LEVEL_OPENING;
 		case PlugType::LEVEL_BATTERY:
 			return (src & PlugType::LEVEL_CATEGORY) == PlugType::LEVEL_BATTERY;
 		case PlugType::LEVEL_TANK:

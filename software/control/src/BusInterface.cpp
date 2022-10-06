@@ -22,8 +22,8 @@ constexpr int MAX_RETRY = 2;
 
 // BusInterface
 
-BusInterface::BusInterface(PersistentStateManager &stateManager)
-	: securityCounter(stateManager)
+BusInterface::BusInterface(uint8_t interfaceId, PersistentStateManager &stateManager)
+	: listeners(interfaceId), securityCounter(stateManager)
 {
 	// load list of device ids
 	int deviceCount = Storage::read(STORAGE_CONFIG, STORAGE_ID_BUS1, sizeof(this->deviceIds), this->deviceIds);
@@ -126,7 +126,7 @@ Array<MessageType const> BusInterface::getPlugs(uint8_t id) const {
 	return {};
 }
 
-SubscriberInfo BusInterface::getSubscriberInfo(uint8_t id, uint8_t plugIndex) {
+SubscriberTarget BusInterface::getSubscriberTarget(uint8_t id, uint8_t plugIndex) {
 	auto endpoint = getEndpoint(id);
 	if (endpoint != nullptr && plugIndex < endpoint->data->plugCount)
 		return {endpoint->data->plugs[plugIndex], &this->publishBarrier};
@@ -134,7 +134,7 @@ SubscriberInfo BusInterface::getSubscriberInfo(uint8_t id, uint8_t plugIndex) {
 }
 
 void BusInterface::subscribe(Subscriber &subscriber) {
-	assert(subscriber.info.barrier != nullptr);
+	assert(subscriber.target.barrier != nullptr);
 	subscriber.remove();
 	auto id = subscriber.data->source.deviceId;
 	auto endpoint = getEndpoint(id);
@@ -797,7 +797,7 @@ Coroutine BusInterface::publish() {
 	uint8_t sendMessage[MESSAGE_LENGTH];
 	while (true) {
 		// wait for message
-		MessageInfo info;
+		SubscriberInfo info;
 		Message message;
 		co_await this->publishBarrier.wait(info, &message);
 		//Terminal::out << "BusInterface::publish() sourceIndex " << dec(info.sourceIndex) << " deviceId " << dec(info.deviceId) << " plugIndex " << dec(info.plugIndex) << '\n';
