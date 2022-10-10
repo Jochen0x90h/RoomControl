@@ -153,6 +153,8 @@ String getTypeLabel(PlugType type) {
 		default:
 			return "Multistate";
 		}
+	case PlugType::ENCODER:
+		return "Encoder";
 	case PlugType::ENUM:
 		return "Enum";
 	case PlugType::LEVEL:
@@ -203,15 +205,15 @@ String getTypeLabel(PlugType type) {
 			case PlugType::PHYSICAL_TEMPERATURE_SETPOINT:
 				switch (type & PlugType::PHYSICAL_TEMPERATURE_SETPOINT_CATEGORY) {
 				case PlugType::PHYSICAL_TEMPERATURE_SETPOINT_FREEZER:
-					return "Measured Temp.";
+					return "Setpoint Temp.";
 				case PlugType::PHYSICAL_TEMPERATURE_SETPOINT_FRIDGE:
-					return "Measured Temp.";
+					return "Setpoint Temp.";
 				case PlugType::PHYSICAL_TEMPERATURE_SETPOINT_COOLER:
-					return "Measured Temp.";
+					return "Setpoint Temp.";
 				case PlugType::PHYSICAL_TEMPERATURE_SETPOINT_HEATER:
-					return "Measured Temp.";
+					return "Setpoint Temp.";
 				case PlugType::PHYSICAL_TEMPERATURE_SETPOINT_OVEN:
-					return "Measured Temp.";
+					return "Setpoint Temp.";
 				default:
 					return "Setpoint Temp.";
 				}
@@ -519,6 +521,9 @@ bool isCompatible(PlugType dstType, PlugType srcType) {
 	// all value messages can generate a switch message (comparison against threshold)
 	if (!srcCommand && dstSwitch)
 		return true;
+	// encoder messages can generate a command message except switch messages
+	if (srcCategory == PlugType::ENCODER && dstCommand && !dstSwitch)
+		return true;
 	// command messages can't generate value messages
 	if (srcCommand && !dstCommand)
 		return false;
@@ -537,6 +542,8 @@ bool isCompatible(PlugType dstType, PlugType srcType) {
 		default:
 			return false;
 		}
+	case PlugType::ENCODER:
+		return (src & PlugType::CATEGORY) == PlugType::ENCODER;
 	case PlugType::ENUM:
 		return (src & PlugType::CATEGORY) == PlugType::ENUM;
 	case PlugType::LEVEL:

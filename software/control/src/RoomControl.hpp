@@ -46,6 +46,8 @@ public:
 
 	void applyConfiguration();
 
+	void saveConfiguration();
+
 	Configuration configuration;
 
 
@@ -147,8 +149,13 @@ public:
 
 	void writeDisplaySources(int interfaceIndex, TempDisplaySources &tempDisplaySources);
 
+	Coroutine displayMessageFilter();
+
 	// list of display sources, one per interface
 	DisplaySources displaySourcesList[INTERFACE_COUNT];
+
+	// barrier for messages to be displayed in idle mode
+	ListenerBarrier displayMessageBarrier;
 
 
 // Helpers
@@ -169,7 +176,7 @@ public:
 
 
 	// default convert options for message logger and generator
-	ConvertOptions getDefaultConvertOptions(MessageType type);
+	//ConvertOptions getDefaultConvertOptions(MessageType type);
 
 	// default convert options for connections
 	ConvertOptions getDefaultConvertOptions(MessageType dstType, MessageType srcType);
@@ -199,6 +206,8 @@ public:
 	void editConvertSwitch2FloatCommand(Menu &menu, ConvertOptions &convertOptions, Usage dstUsage,
 		Array<String const> const &srcCommands);
 
+	void editConvertInt2FloatCommand(Menu &menu, ConvertOptions &convertOptions, Usage dstUsage);
+
 	void editConvertOptions(Menu &menu, ConvertOptions &convertOptions, MessageType dstType, MessageType srcType);
 
 
@@ -214,7 +223,7 @@ public:
 	// display
 	SwapChain swapChain;
 
-	Coroutine idleDisplay();
+	Coroutine idleMenu();
 	[[nodiscard]] AwaitableCoroutine mainMenu();
 
 	// local, bus and radio devices
@@ -229,7 +238,7 @@ public:
 	// functions
 	[[nodiscard]] AwaitableCoroutine functionsMenu();
 	[[nodiscard]] AwaitableCoroutine functionMenu(FunctionInterface::DataUnion &data);
-	[[nodiscard]] AwaitableCoroutine measureRunTime(uint8_t id, uint8_t plugIndex, uint16_t &runTime);
+	[[nodiscard]] AwaitableCoroutine measureRunTime(uint8_t deviceId, uint8_t plugIndex, uint16_t &runTime);
 
 	// connections
 	[[nodiscard]] AwaitableCoroutine connectionsMenu(Array<MessageType const> plugs, TempConnections &tc);
@@ -238,11 +247,11 @@ public:
 	[[nodiscard]] AwaitableCoroutine selectDevice(Connection &connection, MessageType dstType);
 	[[nodiscard]] AwaitableCoroutine detectConnection(Connection &connection, MessageType dstType);
 //	[[nodiscard]] AwaitableCoroutine selectDevice(ConnectionData &connection, MessageType dstType);
-	[[nodiscard]] AwaitableCoroutine selectPlug(Interface &interface, uint8_t id, Connection &connection, MessageType dstType);
+	[[nodiscard]] AwaitableCoroutine selectPlug(Interface &interface, uint8_t deviceId, Connection &connection, MessageType dstType);
 
 	// helpers
 	[[nodiscard]] AwaitableCoroutine plugsMenu(Interface &interface, uint8_t deviceId, TempDisplaySources &tempDisplaySources);
-	[[nodiscard]] AwaitableCoroutine messageLogger(Interface &interface, uint8_t id);
-	[[nodiscard]] AwaitableCoroutine messageGenerator(Interface &interface, uint8_t id);
+	[[nodiscard]] AwaitableCoroutine messageLogger(Interface &interface, uint8_t deviceId);
+	[[nodiscard]] AwaitableCoroutine messageGenerator(Interface &interface, uint8_t deviceId);
 
 };

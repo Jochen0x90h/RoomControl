@@ -12,7 +12,7 @@ enum class PlugType : uint16_t {
 	TYPE_MASK = 0x1fff,	
 	UNKNOWN = 0,
 	CATEGORY = 15 << 9,
-	// binary category (byte)
+	// binary category (uint8)
 	BINARY = 1 << 9,
 	BINARY_IN = BINARY | IN,
 	BINARY_OUT = BINARY | OUT,
@@ -243,7 +243,7 @@ enum class PlugType : uint16_t {
 		BINARY_ENABLE_CLOSE = BINARY | 9 << 5,
 		BINARY_ENABLE_CLOSE_IN = BINARY_ENABLE_CLOSE | IN,
 		BINARY_ENABLE_CLOSE_OUT = BINARY_ENABLE_CLOSE | OUT,
-	// ternary category (byte)
+	// ternary category (uint8)
 	TERNARY = 2 << 9,
 	TERNARY_IN = TERNARY | IN,
 	TERNARY_OUT = TERNARY | OUT,
@@ -310,25 +310,29 @@ enum class PlugType : uint16_t {
 			TERNARY_LOCK_WINDOW = TERNARY_LOCK | 2 << 2,
 			TERNARY_LOCK_WINDOW_IN = TERNARY_LOCK_WINDOW | IN,
 			TERNARY_LOCK_WINDOW_OUT = TERNARY_LOCK_WINDOW | OUT,
-	// multi-state category (int)
+	// multi-state category (uint8)
 	MULTISTATE = 3 << 9,
 	MULTISTATE_IN = MULTISTATE | IN,
 	MULTISTATE_OUT = MULTISTATE | OUT,
 	MULTISTATE_CMD_IN = MULTISTATE_IN | CMD,
 	MULTISTATE_CMD_OUT = MULTISTATE_OUT | CMD,
-		MULTISTATE_CATEGORY = 63 << 7,
+		MULTISTATE_CATEGORY = 255 << 5,
 		// thermostat mode (0: heat, 1: cool, 2: auto)
-		MULTISTATE_THERMOSTAT_MODE = MULTISTATE | 1 << 7,
+		MULTISTATE_THERMOSTAT_MODE = MULTISTATE | 1 << 5,
 		MULTISTATE_THERMOSTAT_MODE_IN = MULTISTATE_THERMOSTAT_MODE | IN,
 		MULTISTATE_THERMOSTAT_MODE_OUT = MULTISTATE_THERMOSTAT_MODE | OUT,
-	// enumeration (int)
-	ENUM = 4 << 9,
+	// rotary or linear encoder (int8)
+	ENCODER = 4 << 9,
+	ENCODER_IN = ENCODER | IN,
+	ENCODER_OUT = ENCODER | OUT,
+	// enumeration of 2-511 named values (uint16)
+	ENUM = 5 << 9,
 	ENUM_IN = ENUM | IN,
 	ENUM_OUT = ENUM | OUT,
 	ENUM_CMD_IN = ENUM_IN | CMD,
 	ENUM_CMD_OUT = ENUM_OUT | CMD,
-	// level category (float, range 0-1, displayed as 0-100%)
-	LEVEL = 5 << 9,
+	// level category (float32, range 0-1, displayed as 0-100%)
+	LEVEL = 6 << 9,
 	LEVEL_IN = LEVEL | IN,
 	LEVEL_OUT = LEVEL | OUT,
 	LEVEL_CMD_IN = LEVEL_IN | CMD,
@@ -385,8 +389,8 @@ enum class PlugType : uint16_t {
 		LEVEL_TANK = LEVEL | 3 << 6,
 		LEVEL_TANK_IN = LEVEL_TANK | IN,
 		LEVEL_TANK_OUT = LEVEL_TANK | OUT,
-	// physical quantities category (float)
-	PHYSICAL = 6 << 9,
+	// physical quantities category (float32)
+	PHYSICAL = 7 << 9,
 	PHYSICAL_IN = PHYSICAL | IN,
 	PHYSICAL_OUT = PHYSICAL | OUT,
 	PHYSICAL_CMD_IN = PHYSICAL_IN | CMD,
@@ -551,8 +555,8 @@ enum class PlugType : uint16_t {
 		PHYSICAL_ILLUMINANCE = PHYSICAL | 6 << 5,
 		PHYSICAL_ILLUMINANCE_IN = PHYSICAL_ILLUMINANCE | IN,
 		PHYSICAL_ILLUMINANCE_OUT = PHYSICAL_ILLUMINANCE | OUT,
-	// concentration of substance category (float)
-	CONCENTRATION = 7 << 9,
+	// concentration of substance category (float32)
+	CONCENTRATION = 8 << 9,
 	CONCENTRATION_IN = CONCENTRATION | IN,
 	CONCENTRATION_OUT = CONCENTRATION | OUT,
 	CONCENTRATION_CMD_IN = CONCENTRATION_IN | CMD,
@@ -592,8 +596,8 @@ enum class PlugType : uint16_t {
 		CONCENTRATION_CARBON_DIOXIDE = CONCENTRATION | 4 << 4,
 		CONCENTRATION_CARBON_DIOXIDE_IN = CONCENTRATION_CARBON_DIOXIDE | IN,
 		CONCENTRATION_CARBON_DIOXIDE_OUT = CONCENTRATION_CARBON_DIOXIDE | OUT,
-	// lighting category (float, commands include a transition time)
-	LIGHTING = 8 << 9,
+	// lighting category (float32, commands include a transition time)
+	LIGHTING = 9 << 9,
 	LIGHTING_IN = LIGHTING | IN,
 	LIGHTING_OUT = LIGHTING | OUT,
 	LIGHTING_CMD_IN = LIGHTING_IN | CMD,
@@ -642,8 +646,8 @@ enum class PlugType : uint16_t {
 			LIGHTING_COLOR_PARAMETER_SATURATION_OUT = LIGHTING_COLOR_PARAMETER_SATURATION | OUT,
 			LIGHTING_COLOR_PARAMETER_SATURATION_CMD_IN = LIGHTING_COLOR_PARAMETER_SATURATION_IN | CMD,
 			LIGHTING_COLOR_PARAMETER_SATURATION_CMD_OUT = LIGHTING_COLOR_PARAMETER_SATURATION_OUT | CMD,
-	// metering of elecricity, water, gas etc. category (uint)
-	METERING = 9 << 9,
+	// metering of elecricity, water, gas etc. category (uint32)
+	METERING = 10 << 9,
 	METERING_IN = METERING | IN,
 	METERING_OUT = METERING | OUT,
 		METERING_CATEGORY = 255 << 5,

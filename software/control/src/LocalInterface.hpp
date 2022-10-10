@@ -8,14 +8,15 @@ class LocalInterface : public Interface {
 public:
 	// device id's
 	enum DeviceIds {
-		BME680_ID = 1, // air sensor
-		IN_ID = 2, // generic binary input
-		OUT_ID = 3, // generic binary output
-		HEATING_ID = 4, // heating
-		SOUND_ID = 5, // audio via built-in (or bluetooth) speaker
-		BRIGHTNESS_SENSOR_ID = 6,
-		MOTION_DETECTOR_ID = 7,
-		DEVICE_COUNT = 7
+		WHEEL_ID = 1, // wheel (rotary encoder)
+		BME680_ID = 2, // air sensor
+		IN_ID = 3, // generic binary input
+		OUT_ID = 4, // generic binary output
+		HEATING_ID = 5, // heating
+		SOUND_ID = 6, // audio via built-in (or bluetooth) speaker
+		BRIGHTNESS_SENSOR_ID = 7,
+		MOTION_DETECTOR_ID = 8,
+		DEVICE_COUNT = 8
 	};
 
 	LocalInterface(uint8_t interfaceId);
@@ -34,6 +35,12 @@ public:
 	void listen(Listener &listener) override;
 	void erase(uint8_t id) override;
 
+	// set number of plugs for the wheel device
+	void setWheelPlugCount(uint8_t plugCount) {this->wheelPlugCount = plugCount;}
+
+	// publish increment of digital potentiometer
+	void publishWheel(uint8_t plugIndex, int8_t delta);
+
 protected:
 
 	// reads the air sensor every minute and publishes the values to the subscribers
@@ -46,6 +53,7 @@ protected:
 	uint8_t deviceCount;
 	uint8_t deviceIds[DEVICE_COUNT];
 	Device devices[DEVICE_COUNT];
+	uint8_t wheelPlugCount = 1;
 
 	// sounds
 	int soundCount;

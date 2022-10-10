@@ -203,7 +203,7 @@ int binaryLowerBound(T (&array)[N], V const &element) {
 template <typename T, int N, typename C>
 int binaryLowerBound(T (&array)[N], C const &compare) {
 	int l = 0;
-	int h = N;
+	int h = N - 1;
 	while (l < h) {
 		int mid = l + (h - l) / 2;
 		if (compare(array[mid])) {
@@ -218,7 +218,7 @@ int binaryLowerBound(T (&array)[N], C const &compare) {
 template <typename It, typename C>
 int binaryLowerBound(int length, It begin, C const &compare) {
 	int l = 0;
-	int h = length;
+	int h = length - 1;
 	while (l < h) {
 		int mid = l + (h - l) / 2;
 		if (compare(begin[mid])) {

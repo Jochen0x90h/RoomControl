@@ -19,7 +19,7 @@ constexpr int CALENDAR_ROOM_CONTROL = 0;
 // inputs
 // ------
 
-constexpr int INPUT_POTI_BUTTON = 0;
+constexpr int INPUT_WHEEL_BUTTON = 0;
 constexpr int INPUT_EXT_INDEX = 1;
 constexpr int INPUT_EXT_COUNT = 1;
 

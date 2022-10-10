@@ -23,6 +23,22 @@ void SubscriberList::publishSwitch(uint8_t plugIndex, uint8_t value) {
 	}
 }
 
+void SubscriberList::publishInt8(uint8_t plugIndex, int8_t value) {
+	for (auto &subscriber: *this) {
+		// check if this is the right plug
+		if (subscriber.data->source.plugIndex == plugIndex) {
+			// resume subscriber
+			subscriber.target.barrier->resumeFirst([&subscriber, value](SubscriberParameters &p) {
+				setInfo(p, subscriber);
+
+				// convert to destination message type and resume coroutine if conversion was successful
+				auto &dst = *reinterpret_cast<Message *>(p.message);
+				return convertInt8(subscriber.target.type, dst, value, subscriber.data->convertOptions);
+			});
+		}
+	}
+}
+
 void SubscriberList::publishFloat(uint8_t plugIndex, float value) {
 	for (auto &subscriber: *this) {
 		// check if this is the right plug
@@ -82,6 +98,20 @@ void ListenerList::publishSwitch(uint8_t deviceId, uint8_t plugIndex, uint8_t va
 			// convert to destination message type and resume coroutine if conversion was successful
 			auto &dst = *reinterpret_cast<Message *>(p.message);
 			dst.value.u8 = value;
+			return true;
+		});
+	}
+}
+
+void ListenerList::publishInt8(uint8_t deviceId, uint8_t plugIndex, int8_t value) {
+	for (auto &listener: *this) {
+		// resume subscriber
+		listener.barrier->resumeFirst([this, deviceId, plugIndex, value](ListenerParameters &p) {
+			p.info = {this->interfaceId, deviceId, plugIndex};
+
+			// convert to destination message type and resume coroutine if conversion was successful
+			auto &dst = *reinterpret_cast<Message *>(p.message);
+			dst.value.i8 = value;
 			return true;
 		});
 	}

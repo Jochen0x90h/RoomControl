@@ -4,10 +4,6 @@
 #include "convert.hpp"
 #include "util.hpp"
 
-// remove when gcc 11 is available for all target platforms
-//#define Stream typename
-//#define Streamable typename
-
 
 // decimal number
 template <typename T>
@@ -204,7 +200,3 @@ inline Plus<String, char> operator +(String const &a, char const &b) {
 inline Plus<char, String> operator +(char const &a, String const &b) {
 	return {a, b};
 }
-
-
-//#undef Stream
-//#undef Streamable

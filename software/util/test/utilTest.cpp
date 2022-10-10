@@ -26,9 +26,16 @@ constexpr String strings[] = {"a", "bar", "bar2", "foo", "foo2", "foobar", "foob
 TEST(utilTest, array) {
 	int a1[] = {10, 20, 30};
 
+	// before first value
+	EXPECT_EQ(array::binaryLowerBound(a1, [](int a) {return a < 0;}), 0);
+
+	// between
 	EXPECT_EQ(array::binaryLowerBound(a1, [](int a) {return a < 19;}), 1);
 	EXPECT_EQ(array::binaryLowerBound(a1, [](int a) {return a < 20;}), 1);
 	EXPECT_EQ(array::binaryLowerBound(a1, [](int a) {return a < 21;}), 2);
+
+	// after last value
+	EXPECT_EQ(array::binaryLowerBound(a1, [](int a) {return a < 40;}), 2);
 }
 
 
@@ -379,6 +386,38 @@ TEST(utilTest, Queue) {
 	queue.addBack();
 	EXPECT_EQ(queue.count(), 1);
 	EXPECT_EQ(queue.getFront(), 1000 + 1);
+}
+
+
+// Stream
+// ------
+
+struct NoStream {
+	float f;
+	operator float() const {return this->f;}
+};
+
+class TestStream : public Stream {
+public:
+	Stream &operator <<(char ch) override {
+		std::cout << "char " << ch << std::endl;
+		return *this;
+	}
+	Stream &operator <<(String const &str) override {
+		std::string s(str.data, str.count());
+		std::cout << "char " << s << std::endl;
+		return *this;
+	}
+	Stream &operator <<(Command command) override {
+		std::cout << "char " << int(command) << std::endl;
+		return *this;
+	}
+};
+
+TEST(utilTest, Stream) {
+	NoStream n{1.0f};
+	TestStream s;
+	auto a = 1.0f < n + 1.0f;
 }
 
 

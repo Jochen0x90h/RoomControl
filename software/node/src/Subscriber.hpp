@@ -2,6 +2,7 @@
 
 #include "Message.hpp"
 #include <LinkedList.hpp>
+#include <functional>
 
 
 // connection data stored in flash
@@ -79,6 +80,8 @@ public:
 	 */
 	void publishSwitch(uint8_t plugIndex, uint8_t value);
 
+	void publishInt8(uint8_t plugIndex, int8_t value);
+
 	/**
 	 * Publish float message to subscribers to given plug
 	 * @param plugIndex plug index
@@ -136,6 +139,8 @@ using ListenerBarrier = Barrier<ListenerParameters>;
 
 class Listener : public LinkedListNode {
 public:
+	//std::function<bool (uint8_t interfaceId, uint8_t deviceId, uint8_t plugIndex)> filter;
+
 	ListenerBarrier *barrier;
 };
 
@@ -150,6 +155,8 @@ public:
 	 * @param value value of message to publish
 	 */
 	void publishSwitch(uint8_t deviceId, uint8_t plugIndex, uint8_t value);
+
+	void publishInt8(uint8_t deviceId, uint8_t plugIndex, int8_t value);
 
 	/**
 	 * Publish float message to listeners

@@ -809,6 +809,7 @@ static const TypeInfo typeInfos[] = {
 			MessageType::BINARY_OPENING_WINDOW_IN,
 			MessageType::PHYSICAL_TEMPERATURE_SETPOINT_HEATER_CMD_IN,
 			MessageType::PHYSICAL_TEMPERATURE_MEASURED_ROOM_IN,
+			MessageType::PHYSICAL_TEMPERATURE_SETPOINT_HEATER_OUT,
 			MessageType::BINARY_OPENING_VALVE_OUT
 		},
 		[](FunctionInterface::Data *data) {
@@ -819,7 +820,7 @@ static const TypeInfo typeInfos[] = {
 
 			uint8_t valve = 0;
 
-			OnOff on;
+			OnOff on{1};
 			OnOff night;
 			OnOff summer;
 			uint32_t windows = 0;
@@ -858,7 +859,10 @@ static const TypeInfo typeInfos[] = {
 				case 4:
 					// set temperature in
 					setTemperature.apply(message);
-					Terminal::out << "set temperature " << flt(float(setTemperature) - 273.15f) + '\n';
+					Terminal::out << "set temperature " << flt(setTemperature - 273.15f) + '\n';
+
+					// publish setpoint temperature
+					function->publishFloat(6, setTemperature);
 					break;
 				case 5:
 					// measured temperature in
@@ -872,10 +876,10 @@ static const TypeInfo typeInfos[] = {
 					// determine state of valve (simple two-position controller)
 					if (valve == 0) {
 						// switch on when current temperature below set temperature
-						if (temperature < float(setTemperature) - 0.2f)
+						if (temperature < setTemperature - 0.2f)
 							valve = 1;
 					} else {
-						if (temperature > float(setTemperature) + 0.2f)
+						if (temperature > setTemperature + 0.2f)
 							valve = 0;
 					}
 				} else {
@@ -884,7 +888,7 @@ static const TypeInfo typeInfos[] = {
 				}
 
 				// publish valve
-				function->publishSwitch(6, valve);
+				function->publishSwitch(7, valve);
 			}
 		}
 	}
@@ -959,15 +963,15 @@ Array<uint8_t const> FunctionInterface::getDeviceIds() {
 	return {this->functionCount, this->functionIds};
 }
 
-String FunctionInterface::getName(uint8_t id) const {
-	auto function = findFunction(id);
+String FunctionInterface::getName(uint8_t deviceId) const {
+	auto function = findFunction(deviceId);
 	if (function != nullptr)
 		return String(function->data->name);
 	return {};
 }
 
-void FunctionInterface::setName(uint8_t id, String name) {
-	auto function = findFunction(id);
+void FunctionInterface::setName(uint8_t deviceId, String name) {
+	auto function = findFunction(deviceId);
 	if (function != nullptr) {
 		assign(function->data->name, name);
 
@@ -977,8 +981,8 @@ void FunctionInterface::setName(uint8_t id, String name) {
 	}
 }
 
-Array<MessageType const> FunctionInterface::getPlugs(uint8_t id) const {
-	auto function = findFunction(id);
+Array<MessageType const> FunctionInterface::getPlugs(uint8_t deviceId) const {
+	auto function = findFunction(deviceId);
 	if (function != nullptr) {
 		auto &typeInfo = findInfo(function->data->type);
 		return {int(typeInfo.plugs.size()), typeInfo.plugs.begin()};
@@ -986,8 +990,8 @@ Array<MessageType const> FunctionInterface::getPlugs(uint8_t id) const {
 	return {};
 }
 
-SubscriberTarget FunctionInterface::getSubscriberTarget(uint8_t id, uint8_t plugIndex) {
-	auto function = findFunction(id);
+SubscriberTarget FunctionInterface::getSubscriberTarget(uint8_t deviceId, uint8_t plugIndex) {
+	auto function = findFunction(deviceId);
 	if (function != nullptr) {
 		auto &typeInfo = findInfo(function->data->type);
 		if (plugIndex < typeInfo.plugs.size())
@@ -1011,16 +1015,16 @@ void FunctionInterface::listen(Listener &listener) {
 	this->listeners.add(listener);
 }
 
-void FunctionInterface::erase(uint8_t id) {
+void FunctionInterface::erase(uint8_t deviceId) {
 	auto p = &this->functions;
 	while (*p != nullptr) {
 		auto function = *p;
-		if (function->data->id == id) {
+		if (function->data->id == deviceId) {
 			// remove function from linked list
 			*p = function->next;
 
 			// erase from flash
-			Storage::erase(STORAGE_CONFIG, STORAGE_ID_FUNCTION | id);
+			Storage::erase(STORAGE_CONFIG, STORAGE_ID_FUNCTION | deviceId);
 
 			// delete function
 			delete function;
@@ -1033,7 +1037,7 @@ void FunctionInterface::erase(uint8_t id) {
 list:
 
 	// erase from list of device id's
-	this->functionCount = eraseId(this->functionCount, this->functionIds, id);
+	this->functionCount = eraseId(this->functionCount, this->functionIds, deviceId);
 	Storage::write(STORAGE_CONFIG, STORAGE_ID_FUNCTION, this->functionCount, this->functionIds);
 }
 
@@ -1137,8 +1141,8 @@ Array<MessageType const> FunctionInterface::getPlugs(Type type) {
 	return {int(typeInfo.plugs.size()), typeInfo.plugs.begin()};
 }
 
-void FunctionInterface::publishSwitch(uint8_t id, uint8_t plugIndex, uint8_t value) {
-	auto function = findFunction(id);
+void FunctionInterface::publishSwitch(uint8_t deviceId, uint8_t plugIndex, uint8_t value) {
+	auto function = findFunction(deviceId);
 	if (function != nullptr)
 		function->subscribers.publishSwitch(plugIndex, value);
 }
@@ -1150,10 +1154,10 @@ FunctionInterface::Function::~Function() {
 	free(this->data);
 }
 
-FunctionInterface::Function *FunctionInterface::findFunction(uint8_t id) const {
+FunctionInterface::Function *FunctionInterface::findFunction(uint8_t deviceId) const {
 	auto function = this->functions;
 	while (function != nullptr) {
-		if (function->data->id == id)
+		if (function->data->id == deviceId)
 			return function;
 		function = function->next;
 	}
@@ -1161,7 +1165,7 @@ FunctionInterface::Function *FunctionInterface::findFunction(uint8_t id) const {
 }
 
 uint8_t FunctionInterface::allocateId() {
-	// find a free id
+	// find a free device id
 	int id;
 	for (id = 1; id < 256; ++id) {
 		auto function = this->functions;
