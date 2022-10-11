@@ -153,17 +153,17 @@ Array<uint8_t const> LocalInterface::getDeviceIds() {
 	return {this->deviceCount, this->deviceIds};
 }
 
-String LocalInterface::getName(uint8_t id) const {
-	if (id >= 1 && id <= DEVICE_COUNT)
-		return deviceNames[id - 1];
+String LocalInterface::getName(uint8_t deviceId) const {
+	if (deviceId >= 1 && deviceId <= DEVICE_COUNT)
+		return deviceNames[deviceId - 1];
 	return {};
 }
 
-void LocalInterface::setName(uint8_t id, String name) {
+void LocalInterface::setName(uint8_t deviceId, String name) {
 }
 
-Array<MessageType const> LocalInterface::getPlugs(uint8_t id) const {
-	switch (id) {
+Array<MessageType const> LocalInterface::getPlugs(uint8_t deviceId) const {
+	switch (deviceId) {
 	case WHEEL_ID:
 		return {this->wheelPlugCount, wheelPlugs};
 	case BME680_ID:
@@ -185,8 +185,8 @@ Array<MessageType const> LocalInterface::getPlugs(uint8_t id) const {
 	}
 }
 
-SubscriberTarget LocalInterface::getSubscriberTarget(uint8_t id, uint8_t plugIndex) {
-	auto plugs = getPlugs(id);
+SubscriberTarget LocalInterface::getSubscriberTarget(uint8_t deviceId, uint8_t plugIndex) {
+	auto plugs = getPlugs(deviceId);
 	if (plugIndex < plugs.count())
 		return {plugs[plugIndex], &this->publishBarrier};
 	return {};
@@ -205,7 +205,7 @@ void LocalInterface::listen(Listener &listener) {
 	this->listeners.add(listener);
 }
 
-void LocalInterface::erase(uint8_t id) {
+void LocalInterface::erase(uint8_t deviceId) {
 	// not possible to erase local devices
 }
 

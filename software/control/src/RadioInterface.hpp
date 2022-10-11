@@ -46,13 +46,13 @@ public:
 	void setCommissioning(bool enabled) override;
 
 	Array<uint8_t const> getDeviceIds() override;
-	String getName(uint8_t id) const override;
-	void setName(uint8_t id, String name) override;
-	Array<MessageType const> getPlugs(uint8_t id) const override;
-	SubscriberTarget getSubscriberTarget(uint8_t id, uint8_t plugIndex) override;
+	String getName(uint8_t deviceId) const override;
+	void setName(uint8_t deviceId, String name) override;
+	Array<MessageType const> getPlugs(uint8_t deviceId) const override;
+	SubscriberTarget getSubscriberTarget(uint8_t deviceId, uint8_t plugIndex) override;
 	void subscribe(Subscriber &subscriber) override;
 	void listen(Listener &listener) override;
-	void erase(uint8_t id) override;
+	void erase(uint8_t deviceId) override;
 
 private:
 	static constexpr int MAX_CLUSTER_COUNT = 32;

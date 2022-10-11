@@ -42,13 +42,13 @@ public:
 	void setCommissioning(bool enabled) override;
 
 	Array<uint8_t const> getDeviceIds() override;
-	String getName(uint8_t id) const override;
-	void setName(uint8_t id, String name) override;
-	Array<MessageType const> getPlugs(uint8_t id) const override;
-	SubscriberTarget getSubscriberTarget(uint8_t id, uint8_t plugIndex) override;
+	String getName(uint8_t deviceId) const override;
+	void setName(uint8_t deviceId, String name) override;
+	Array<MessageType const> getPlugs(uint8_t deviceId) const override;
+	SubscriberTarget getSubscriberTarget(uint8_t deviceId, uint8_t plugIndex) override;
 	void subscribe(Subscriber &subscriber) override;
 	void listen(Listener &listener) override;
-	void erase(uint8_t id) override;
+	void erase(uint8_t deviceId) override;
 
 private:
 	static constexpr int MAX_PLUG_COUNT = 64;
@@ -129,10 +129,10 @@ private:
 		EndpointData *data;
 	};
 
-	Endpoint *getEndpoint(uint8_t id) const;
+	Endpoint *getEndpoint(uint8_t deviceId) const;
 	uint8_t allocateId(int deviceCount);
 	uint8_t allocateDeviceId();
-	BusDevice *getOrLoadDevice(uint8_t id);
+	BusDevice *getOrLoadDevice(uint8_t deviceId);
 
 	// start the interface
 	Coroutine start();
@@ -152,7 +152,7 @@ private:
 	// receive from bus nodes
 	Coroutine receive();
 
-	[[nodiscard]] AwaitableCoroutine handleCommission(uint32_t deviceId, uint8_t endpointCount);
+	[[nodiscard]] AwaitableCoroutine handleCommission(uint32_t busDeviceId, uint8_t endpointCount);
 
 	[[nodiscard]] AwaitableCoroutine readAttribute(int &length, uint8_t (&message)[MESSAGE_LENGTH], BusDevice &device,
 		uint8_t endpointIndex, bus::Attribute attribute);

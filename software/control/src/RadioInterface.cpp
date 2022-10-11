@@ -155,18 +155,18 @@ Interface::Device *RadioInterface::getDevice(uint8_t id) {
 	return nullptr;
 }*/
 
-String RadioInterface::getName(uint8_t id) const {
-	auto gpDevice = getGpDevice(id);
+String RadioInterface::getName(uint8_t deviceId) const {
+	auto gpDevice = getGpDevice(deviceId);
 	if (gpDevice != nullptr)
 		return String(gpDevice->data->name);
-	auto zbEndpoint = getZbEndpoint(id);
+	auto zbEndpoint = getZbEndpoint(deviceId);
 	if (zbEndpoint != nullptr)
 		return String(zbEndpoint->data->name);
 	return {};
 }
 
-void RadioInterface::setName(uint8_t id, String name) {
-	auto gpDevice = getGpDevice(id);
+void RadioInterface::setName(uint8_t deviceId, String name) {
+	auto gpDevice = getGpDevice(deviceId);
 	if (gpDevice != nullptr) {
 		assign(gpDevice->data->name, name);
 
@@ -174,7 +174,7 @@ void RadioInterface::setName(uint8_t id, String name) {
 		Storage::write(STORAGE_CONFIG, STORAGE_ID_RADIO1 | gpDevice->data->id, gpDevice->data->size(), gpDevice->data);
 		return;
 	}
-	auto zbEndpoint = getZbEndpoint(id);
+	auto zbEndpoint = getZbEndpoint(deviceId);
 	if (zbEndpoint != nullptr) {
 		assign(zbEndpoint->data->name, name);
 
@@ -183,11 +183,11 @@ void RadioInterface::setName(uint8_t id, String name) {
 	}
 }
 
-Array<MessageType const> RadioInterface::getPlugs(uint8_t id) const {
-	auto gpDevice = getGpDevice(id);
+Array<MessageType const> RadioInterface::getPlugs(uint8_t deviceId) const {
+	auto gpDevice = getGpDevice(deviceId);
 	if (gpDevice != nullptr)
 		return {gpDevice->data->plugCount, gpDevice->data->plugs};
-	auto zbEndpoint = getZbEndpoint(id);
+	auto zbEndpoint = getZbEndpoint(deviceId);
 	if (zbEndpoint != nullptr) {
 		auto plugs = reinterpret_cast<MessageType *>(zbEndpoint->data->buffer);
 		return {zbEndpoint->data->plugCount, plugs};
@@ -195,13 +195,13 @@ Array<MessageType const> RadioInterface::getPlugs(uint8_t id) const {
 	return {};
 }
 
-SubscriberTarget RadioInterface::getSubscriberTarget(uint8_t id, uint8_t plugIndex) {
-	auto gpDevice = getGpDevice(id);
+SubscriberTarget RadioInterface::getSubscriberTarget(uint8_t deviceId, uint8_t plugIndex) {
+	auto gpDevice = getGpDevice(deviceId);
 	if (gpDevice != nullptr) {
 		if (plugIndex < gpDevice->data->plugCount)
 			return {gpDevice->data->plugs[plugIndex], &this->publishBarrier};
 	} else {
-		auto zbEndpoint = getZbEndpoint(id);
+		auto zbEndpoint = getZbEndpoint(deviceId);
 		if (zbEndpoint != nullptr && plugIndex < zbEndpoint->data->plugCount) {
 			auto plugs = reinterpret_cast<MessageType *>(zbEndpoint->data->buffer);
 			return {plugs[plugIndex], &this->publishBarrier};
@@ -230,17 +230,17 @@ void RadioInterface::listen(Listener &listener) {
 	this->listeners.add(listener);
 }
 
-void RadioInterface::erase(uint8_t id) {
+void RadioInterface::erase(uint8_t deviceId) {
 	{
 		auto d = &this->gpDevices;
 		while (*d != nullptr) {
 			auto device = *d;
-			if (device->data->id == id) {
+			if (device->data->id == deviceId) {
 				// remove device from linked list
 				*d = device->next;
 
 				// erase from flash
-				Storage::erase(STORAGE_CONFIG, STORAGE_ID_RADIO1 | id);
+				Storage::erase(STORAGE_CONFIG, STORAGE_ID_RADIO1 | deviceId);
 
 				// delete device
 				delete device;
@@ -255,11 +255,11 @@ void RadioInterface::erase(uint8_t id) {
 		while (*d != nullptr) {
 			auto device = *d;
 
-			// iterate over endpoints
+			// iterate over endpoints (each endpoint is exposed as a device)
 			auto e = &device->endpoints;
 			while (*e != nullptr) {
 				auto endpoint = *e;
-				if (endpoint->data->id == id) {
+				if (endpoint->data->id == deviceId) {
 					// remove endpoint from linked list
 					*e = endpoint->next;
 
@@ -276,7 +276,7 @@ void RadioInterface::erase(uint8_t id) {
 					}
 
 					// erase endpoint from flash
-					Storage::erase(STORAGE_CONFIG, STORAGE_ID_RADIO1 | id);
+					Storage::erase(STORAGE_CONFIG, STORAGE_ID_RADIO1 | deviceId);
 
 					// delete endpoint
 					delete endpoint;
@@ -291,7 +291,7 @@ void RadioInterface::erase(uint8_t id) {
 list:
 
 	// erase from list of device id's
-	this->deviceCount = eraseId(this->deviceCount, this->deviceIds, id);
+	this->deviceCount = eraseDevice(this->deviceCount, this->deviceIds, deviceId);
 	Storage::write(STORAGE_CONFIG, STORAGE_ID_RADIO1, this->deviceCount, this->deviceIds);
 }
 
@@ -481,7 +481,7 @@ void RadioInterface::eraseZbDevice(uint8_t id) {
 			auto endpoint = device->endpoints;
 			while (endpoint != nullptr) {
 				// remove from list of devices
-				this->deviceCount = eraseId(this->deviceCount, this->deviceIds, endpoint->data->id);
+				this->deviceCount = eraseDevice(this->deviceCount, this->deviceIds, endpoint->data->id);
 
 				// erase endpoint from flash
 				Storage::erase(STORAGE_CONFIG, STORAGE_ID_RADIO1 | id);
@@ -2861,7 +2861,7 @@ AwaitableCoroutine RadioInterface::handleZbCommission(uint64_t deviceLongAddress
 
 	// remove id's of remaining old endpoints from list of device id's
 	while (oldEndpoint != nullptr) {
-		deviceCount = eraseId(deviceCount, this->deviceIds, oldEndpoint->data->id);
+		deviceCount = eraseDevice(deviceCount, this->deviceIds, oldEndpoint->data->id);
 		oldEndpoint = oldEndpoint->next;
 	}
 

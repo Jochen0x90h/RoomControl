@@ -54,15 +54,15 @@ Array<uint8_t const> AlarmInterface::getDeviceIds() {
 	return {this->alarmCount, this->alarmIds};
 }
 
-String AlarmInterface::getName(uint8_t id) const {
-	auto alarm = findAlarm(id);
+String AlarmInterface::getName(uint8_t deviceId) const {
+	auto alarm = findAlarm(deviceId);
 	if (alarm != nullptr)
 		return String(alarm->data.name);
 	return {};
 }
 
-void AlarmInterface::setName(uint8_t id, String name) {
-	auto alarm = findAlarm(id);
+void AlarmInterface::setName(uint8_t deviceId, String name) {
+	auto alarm = findAlarm(deviceId);
 	if (alarm != nullptr) {
 		assign(alarm->data.name, name);
 
@@ -71,15 +71,15 @@ void AlarmInterface::setName(uint8_t id, String name) {
 	}
 }
 
-Array<MessageType const> AlarmInterface::getPlugs(uint8_t id) const {
-	auto alarm = findAlarm(id);
+Array<MessageType const> AlarmInterface::getPlugs(uint8_t deviceId) const {
+	auto alarm = findAlarm(deviceId);
 	if (alarm != nullptr)
 		//return {alarm->data.plugCount, plugs};
 		return plugs;
 	return {};
 }
 
-SubscriberTarget AlarmInterface::getSubscriberTarget(uint8_t id, uint8_t plugIndex) {
+SubscriberTarget AlarmInterface::getSubscriberTarget(uint8_t deviceId, uint8_t plugIndex) {
 	// no input plugs
 	return {};
 }
@@ -98,16 +98,16 @@ void AlarmInterface::listen(Listener &listener) {
 	this->listeners.add(listener);
 }
 
-void AlarmInterface::erase(uint8_t id) {
+void AlarmInterface::erase(uint8_t deviceId) {
 	auto p = &this->alarms;
 	while (*p != nullptr) {
 		auto alarm = *p;
-		if (alarm->data.id == id) {
+		if (alarm->data.id == deviceId) {
 			// remove alarm from linked list
 			*p = alarm->next;
 
 			// erase from flash
-			Storage::erase(STORAGE_CONFIG, STORAGE_ID_ALARM | id);
+			Storage::erase(STORAGE_CONFIG, STORAGE_ID_ALARM | deviceId);
 
 			// delete alarm
 			delete alarm;
@@ -120,26 +120,26 @@ void AlarmInterface::erase(uint8_t id) {
 list:
 
 	// erase from list of device id's
-	this->alarmCount = eraseId(this->alarmCount, this->alarmIds, id);
+	this->alarmCount = eraseDevice(this->alarmCount, this->alarmIds, deviceId);
 	Storage::write(STORAGE_CONFIG, STORAGE_ID_ALARM, this->alarmCount, this->alarmIds);
 }
 
-AlarmInterface::Data const *AlarmInterface::get(uint8_t id) const {
-	auto alarm = findAlarm(id);
+AlarmInterface::Data const *AlarmInterface::get(uint8_t deviceId) const {
+	auto alarm = findAlarm(deviceId);
 	if (alarm != nullptr) {
 		return &alarm->data;
 	}
 	return nullptr;
 }
 
-void AlarmInterface::set(uint8_t id, Data &data) {
-	auto alarm = findAlarm(id);
+void AlarmInterface::set(uint8_t deviceId, Data &data) {
+	auto alarm = findAlarm(deviceId);
 	if (alarm != nullptr) {
 		// set data
 		alarm->data = data;
 
 		// store alarm to flash
-		Storage::write(STORAGE_CONFIG, STORAGE_ID_ALARM | id, sizeof(alarm->data), &alarm->data);
+		Storage::write(STORAGE_CONFIG, STORAGE_ID_ALARM | deviceId, sizeof(alarm->data), &alarm->data);
 		return;
 	}
 
@@ -156,8 +156,8 @@ void AlarmInterface::set(uint8_t id, Data &data) {
 	Storage::write(STORAGE_CONFIG, STORAGE_ID_ALARM | data.id, sizeof(alarm->data), &alarm->data);
 }
 
-int AlarmInterface::getSubscriberCount(uint8_t id, uint8_t command) {
-	auto alarm = findAlarm(id);
+int AlarmInterface::getSubscriberCount(uint8_t deviceId, uint8_t command) {
+	auto alarm = findAlarm(deviceId);
 	if (alarm != nullptr) {
 		int count = 0;
 		for (auto &subscriber : alarm->subscribers) {
@@ -174,18 +174,18 @@ int AlarmInterface::getSubscriberCount(uint8_t id, uint8_t command) {
 	return 0;
 }
 
-void AlarmInterface::test(uint8_t id, uint8_t command) {
-	auto alarm = findAlarm(id);
+void AlarmInterface::test(uint8_t deviceId, uint8_t command) {
+	auto alarm = findAlarm(deviceId);
 	if (alarm != nullptr)
 		alarm->subscribers.publishSwitch(0, command);
 }
 
 // protected:
 
-AlarmInterface::Alarm *AlarmInterface::findAlarm(uint8_t id) const {
+AlarmInterface::Alarm *AlarmInterface::findAlarm(uint8_t deviceId) const {
 	auto alarm = this->alarms;
 	while (alarm != nullptr) {
-		if (alarm->data.id == id)
+		if (alarm->data.id == deviceId)
 			return alarm;
 		alarm = alarm->next;
 	}

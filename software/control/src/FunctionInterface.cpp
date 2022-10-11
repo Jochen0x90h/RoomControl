@@ -1037,7 +1037,7 @@ void FunctionInterface::erase(uint8_t deviceId) {
 list:
 
 	// erase from list of device id's
-	this->functionCount = eraseId(this->functionCount, this->functionIds, deviceId);
+	this->functionCount = eraseDevice(this->functionCount, this->functionIds, deviceId);
 	Storage::write(STORAGE_CONFIG, STORAGE_ID_FUNCTION, this->functionCount, this->functionIds);
 }
 

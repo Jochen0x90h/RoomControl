@@ -102,15 +102,15 @@ Array<uint8_t const> BusInterface::getDeviceIds() {
 	return {this->deviceCount, this->deviceIds};
 }
 
-String BusInterface::getName(uint8_t id) const {
-	auto endpoint = getEndpoint(id);
+String BusInterface::getName(uint8_t deviceId) const {
+	auto endpoint = getEndpoint(deviceId);
 	if (endpoint != nullptr)
 		return String(endpoint->data->name);
 	return {};
 }
 
-void BusInterface::setName(uint8_t id, String name) {
-	auto endpoint = getEndpoint(id);
+void BusInterface::setName(uint8_t deviceId, String name) {
+	auto endpoint = getEndpoint(deviceId);
 	if (endpoint != nullptr) {
 		assign(endpoint->data->name, name);
 
@@ -119,15 +119,15 @@ void BusInterface::setName(uint8_t id, String name) {
 	}
 }
 
-Array<MessageType const> BusInterface::getPlugs(uint8_t id) const {
-	auto endpoint = getEndpoint(id);
+Array<MessageType const> BusInterface::getPlugs(uint8_t deviceId) const {
+	auto endpoint = getEndpoint(deviceId);
 	if (endpoint != nullptr)
 		return {endpoint->data->plugCount, endpoint->data->plugs};
 	return {};
 }
 
-SubscriberTarget BusInterface::getSubscriberTarget(uint8_t id, uint8_t plugIndex) {
-	auto endpoint = getEndpoint(id);
+SubscriberTarget BusInterface::getSubscriberTarget(uint8_t deviceId, uint8_t plugIndex) {
+	auto endpoint = getEndpoint(deviceId);
 	if (endpoint != nullptr && plugIndex < endpoint->data->plugCount)
 		return {endpoint->data->plugs[plugIndex], &this->publishBarrier};
 	return {};
@@ -148,16 +148,16 @@ void BusInterface::listen(Listener &listener) {
 	this->listeners.add(listener);
 }
 
-void BusInterface::erase(uint8_t id) {
+void BusInterface::erase(uint8_t deviceId) {
 	auto d = &this->devices;
 	while (*d != nullptr) {
 		auto device = *d;
 
-		// iterate over endpoints
+		// iterate over endpoints (each endpoint is exposed as a device)
 		auto e = &device->endpoints;
 		while (*e != nullptr) {
 			auto endpoint = *e;
-			if (endpoint->data->id == id) {
+			if (endpoint->data->id == deviceId) {
 				// remove endpoint from linked list
 				*e = endpoint->next;
 
@@ -174,7 +174,7 @@ void BusInterface::erase(uint8_t id) {
 				}
 
 				// erase endpoint from flash
-				Storage::erase(STORAGE_CONFIG, STORAGE_ID_BUS1 | id);
+				Storage::erase(STORAGE_CONFIG, STORAGE_ID_BUS1 | deviceId);
 
 				// delete endpoint
 				delete endpoint;
@@ -188,7 +188,7 @@ void BusInterface::erase(uint8_t id) {
 list:
 
 	// erase from list of device id's
-	this->deviceCount = eraseId(this->deviceCount, this->deviceIds, id);
+	this->deviceCount = eraseDevice(this->deviceCount, this->deviceIds, deviceId);
 	Storage::write(STORAGE_CONFIG, STORAGE_ID_BUS1, this->deviceCount, this->deviceIds);
 }
 
@@ -210,12 +210,12 @@ BusInterface::Endpoint::~Endpoint() {
 	free(this->data);
 }
 
-BusInterface::Endpoint *BusInterface::getEndpoint(uint8_t id) const {
+BusInterface::Endpoint *BusInterface::getEndpoint(uint8_t deviceId) const {
 	auto device = this->devices;
 	while (device != nullptr) {
 		auto endpoint = device->endpoints;
 		while (endpoint != nullptr) {
-			if (endpoint->data->id == id)
+			if (endpoint->data->id == deviceId)
 				return endpoint;
 			endpoint = endpoint->next;
 		}
@@ -254,21 +254,21 @@ uint8_t BusInterface::allocateDeviceId() {
 	return id;
 }
 
-BusInterface::BusDevice *BusInterface::getOrLoadDevice(uint8_t id) {
+BusInterface::BusDevice *BusInterface::getOrLoadDevice(uint8_t deviceId) {
 	auto device = this->devices;
 	while (device != nullptr) {
-		if (device->data.id == id)
+		if (device->data.id == deviceId)
 			return device;
 		device = device->next;
 	}
 
 	// load data
 	DeviceData data;
-	if (Storage::read(STORAGE_CONFIG, STORAGE_ID_BUS2 | id, sizeof(data), &data) != sizeof(data))
+	if (Storage::read(STORAGE_CONFIG, STORAGE_ID_BUS2 | deviceId, sizeof(data), &data) != sizeof(data))
 		return nullptr;
 
 	// check id
-	if (data.id != id)
+	if (data.id != deviceId)
 		return nullptr;
 
 	// create device
@@ -377,12 +377,12 @@ Coroutine BusInterface::receive() {
 			if (!this->commissioning)
 				continue;
 
-			// get encoded device id
-			uint32_t deviceId = r.id();
+			// get encoded bus device id
+			uint32_t busDeviceId = r.id();
 
 			// check message integrity code (mic)
 			r.setMessageFromEnd(micLength);
-			Nonce nonce(deviceId, 0);
+			Nonce nonce(busDeviceId, 0);
 			if (!r.decrypt(micLength, nonce, bus::defaultAesKey))
 				continue;
 
@@ -400,7 +400,7 @@ Coroutine BusInterface::receive() {
 
 			// handle commissioning
 			if (endpointCount > 0)
-				this->commissionCoroutine = handleCommission(deviceId, endpointCount);
+				this->commissionCoroutine = handleCommission(busDeviceId, endpointCount);
 		} else {
 			// data message
 
@@ -511,12 +511,12 @@ Coroutine BusInterface::receive() {
 	}
 }
 
-AwaitableCoroutine BusInterface::handleCommission(uint32_t deviceId, uint8_t endpointCount) {
+AwaitableCoroutine BusInterface::handleCommission(uint32_t busDeviceId, uint8_t endpointCount) {
 	// find existing device if any
 	auto od = &this->devices;
 	while (*od != nullptr) {
 		auto device = *od;
-		if (device->data.deviceId == deviceId)
+		if (device->data.deviceId == busDeviceId)
 			break;
 		od = &device->next;
 	}
@@ -532,7 +532,7 @@ AwaitableCoroutine BusInterface::handleCommission(uint32_t deviceId, uint8_t end
 	// create new bus device
 	DeviceData deviceData;
 	deviceData.id = oldDevice != nullptr ? oldDevice->data.id : allocateDeviceId();
-	deviceData.deviceId = deviceId;
+	deviceData.deviceId = busDeviceId;
 
 	// create address for the bus device from storage id which starts at 0
 	uint8_t address = deviceData.id;
@@ -559,7 +559,7 @@ AwaitableCoroutine BusInterface::handleCommission(uint32_t deviceId, uint8_t end
 		w.u8(0);
 
 		// device id
-		w.u32L(deviceId);
+		w.u32L(busDeviceId);
 
 		// address that gets assigned to the device (use storage id)
 		w.u8(address);
@@ -569,7 +569,7 @@ AwaitableCoroutine BusInterface::handleCommission(uint32_t deviceId, uint8_t end
 
 		// only add message integrity code (mic) using default key, message stays unencrypted
 		w.setMessage();
-		Nonce nonce(deviceId, 0);
+		Nonce nonce(busDeviceId, 0);
 		w.encrypt(micLength, nonce, bus::defaultAesKey);
 
 		length = w.getLength();
@@ -629,7 +629,7 @@ AwaitableCoroutine BusInterface::handleCommission(uint32_t deviceId, uint8_t end
 
 	// remove remaining old endpoints from device list
 	while (oldEndpoint != nullptr) {
-		deviceCount = eraseId(deviceCount, this->deviceIds, oldEndpoint->data->id);
+		deviceCount = eraseDevice(deviceCount, this->deviceIds, oldEndpoint->data->id);
 		oldEndpoint = oldEndpoint->next;
 	}
 
