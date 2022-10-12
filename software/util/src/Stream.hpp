@@ -31,7 +31,7 @@ public:
 /**
  * Streamable concept, a streamable object can be streamed into a stream using the shift left operator
  */
-template<typename T>
+template <typename T>
 concept Streamable = requires(Stream &s, T value) {
 	{ s << value } -> std::convertible_to<Stream &>;
 };

@@ -174,16 +174,6 @@ Plus<A, B> operator +(A const &a, B const &b) {
 }
 
 template <Streamable B>
-Plus<char, B> operator +(char const &a, B const &b) {
-	return {a, b};
-}
-
-template <Streamable A>
-Plus<A, char> operator +(A const &a, char const &b) {
-	return {a, b};
-}
-
-template <Streamable B>
 Plus<String, B> operator +(String const &a, B const &b) {
 	return {a, b};
 }
