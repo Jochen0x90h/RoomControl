@@ -7,6 +7,7 @@
 
 // device names
 constexpr String deviceNames[] = {
+	"Wheel",
 	"Air Sensor",
 	"Digital Inputs",
 	"Digital Outputs",
@@ -14,6 +15,19 @@ constexpr String deviceNames[] = {
 	"Sound",
 	"Brightness Sensor",
 	"Motion Detector",
+};
+
+
+// wheel
+constexpr MessageType wheelPlugs[] = {
+	MessageType::ENCODER_OUT,
+	MessageType::ENCODER_OUT,
+	MessageType::ENCODER_OUT,
+	MessageType::ENCODER_OUT,
+	MessageType::ENCODER_OUT,
+	MessageType::ENCODER_OUT,
+	MessageType::ENCODER_OUT,
+	MessageType::ENCODER_OUT,
 };
 
 // air sensor plugs
@@ -42,7 +56,7 @@ constexpr MessageType outPlugs[] = {
 
 // heating plugs (max 2)
 constexpr MessageType heatingPlugs[] = {
-	MessageType::BINARY_OPEN_VALVE_CMD_OUT, MessageType::BINARY_OPEN_VALVE_CMD_OUT
+	MessageType::BINARY_OPENING_VALVE_CMD_OUT, MessageType::BINARY_OPENING_VALVE_CMD_OUT
 };
 
 // brightness sensor plugs
@@ -56,8 +70,9 @@ constexpr MessageType motionDetectorPlugs[] = {
 };
 
 
-LocalInterface::LocalInterface()
+LocalInterface::LocalInterface(uint8_t interfaceId)
 	: devices{
+		{WHEEL_ID, this->listeners},
 		{BME680_ID, this->listeners},
 		{IN_ID, this->listeners},
 		{OUT_ID, this->listeners},
@@ -66,6 +81,7 @@ LocalInterface::LocalInterface()
 		{BRIGHTNESS_SENSOR_ID, this->listeners},
 		{MOTION_DETECTOR_ID, this->listeners},
 	}
+	, listeners(interfaceId)
 {
 	// convert available sounds to plugs of sound device
 	auto types = Sound::getTypes();
@@ -104,6 +120,7 @@ LocalInterface::LocalInterface()
 
 	// set available devices to deviceIds array
 	int i = 0;
+	this->deviceIds[i++] = WHEEL_ID;
 	this->deviceIds[i++] = BME680_ID;
 	if (INPUT_EXT_COUNT > 0)
 		this->deviceIds[i++] = IN_ID;
@@ -116,11 +133,6 @@ LocalInterface::LocalInterface()
 	this->deviceIds[i++] = BRIGHTNESS_SENSOR_ID;
 	this->deviceIds[i++] = MOTION_DETECTOR_ID;
 	this->deviceCount = i;
-
-	// set device id's
-	//for (i = 0; i < DEVICE_COUNT; ++i) {
-	//	this->devices[i].id = i + 1;
-	//}
 
 	// start coroutines
 	readAirSensor();
@@ -141,17 +153,19 @@ Array<uint8_t const> LocalInterface::getDeviceIds() {
 	return {this->deviceCount, this->deviceIds};
 }
 
-String LocalInterface::getName(uint8_t id) const {
-	if (id >= 1 && id <= DEVICE_COUNT)
-		return deviceNames[id - 1];
+String LocalInterface::getName(uint8_t deviceId) const {
+	if (deviceId >= 1 && deviceId <= DEVICE_COUNT)
+		return deviceNames[deviceId - 1];
 	return {};
 }
 
-void LocalInterface::setName(uint8_t id, String name) {
+void LocalInterface::setName(uint8_t deviceId, String name) {
 }
 
-Array<MessageType const> LocalInterface::getPlugs(uint8_t id) const {
-	switch (id) {
+Array<MessageType const> LocalInterface::getPlugs(uint8_t deviceId) const {
+	switch (deviceId) {
+	case WHEEL_ID:
+		return {this->wheelPlugCount, wheelPlugs};
 	case BME680_ID:
 		return bme680Plugs;
 	case IN_ID:
@@ -171,8 +185,8 @@ Array<MessageType const> LocalInterface::getPlugs(uint8_t id) const {
 	}
 }
 
-SubscriberInfo LocalInterface::getSubscriberInfo(uint8_t id, uint8_t plugIndex) {
-	auto plugs = getPlugs(id);
+SubscriberTarget LocalInterface::getSubscriberTarget(uint8_t deviceId, uint8_t plugIndex) {
+	auto plugs = getPlugs(deviceId);
 	if (plugIndex < plugs.count())
 		return {plugs[plugIndex], &this->publishBarrier};
 	return {};
@@ -191,8 +205,13 @@ void LocalInterface::listen(Listener &listener) {
 	this->listeners.add(listener);
 }
 
-void LocalInterface::erase(uint8_t id) {
+void LocalInterface::erase(uint8_t deviceId) {
 	// not possible to erase local devices
+}
+
+void LocalInterface::publishWheel(uint8_t plugIndex, int8_t delta) {
+	this->listeners.publishInt8(WHEEL_ID, plugIndex, delta);
+	this->devices[0].subscribers.publishInt8(plugIndex, delta);
 }
 
 Coroutine LocalInterface::readAirSensor() {
@@ -228,7 +247,7 @@ Coroutine LocalInterface::readAirSensor() {
 Coroutine LocalInterface::publish() {
 	while (true) {
 		// wait for message
-		MessageInfo info;
+		SubscriberInfo info;
 		Message message;
 		co_await this->publishBarrier.wait(info, &message);
 

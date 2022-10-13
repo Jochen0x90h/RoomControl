@@ -5,10 +5,10 @@ RELEASE="s/build_type=/build_type=Release/g"
 MACOS_EMU="s/platform=/platform=Macos;emu/g"
 PROFILES=$HOME/.conan/profiles
 
-# linux-debug
+# macos-debug
 sed -e $DEBUG -e "/platform=/d" -e "/board=/d" template > $PROFILES/macos-debug
 
-# linux-release
+# macos-release
 sed -e $RELEASE -e "/platform=/d" -e "/board=/d" template > $PROFILES/macos-release
 
 # emuControl-debug

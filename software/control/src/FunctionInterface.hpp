@@ -10,24 +10,24 @@ public:
 	// maximum number of functions
 	static constexpr int MAX_FUNCTION_COUNT = 128;
 
-	FunctionInterface();
+	FunctionInterface(uint8_t interfaceId);
 	~FunctionInterface() override;
 
 	String getName() override;
 	void setCommissioning(bool enabled) override;
 
 	Array<uint8_t const> getDeviceIds() override;
-	String getName(uint8_t id) const override;
-	void setName(uint8_t id, String name) override;
-	Array<MessageType const> getPlugs(uint8_t id) const override;
-	SubscriberInfo getSubscriberInfo(uint8_t id, uint8_t plugIndex) override;
+	String getName(uint8_t deviceId) const override;
+	void setName(uint8_t deviceId, String name) override;
+	Array<MessageType const> getPlugs(uint8_t deviceId) const override;
+	SubscriberTarget getSubscriberTarget(uint8_t deviceId, uint8_t plugIndex) override;
 	void subscribe(Subscriber &subscriber) override;
 	void listen(Listener &listener) override;
-	void erase(uint8_t id) override;
+	void erase(uint8_t deviceId) override;
 
 
 	enum class Type : uint8_t {
-		INVALID = 0,
+		//INVALID = 0,
 
 		// on/off switch with timeout
 		SWITCH = 1,
@@ -138,15 +138,15 @@ public:
 	};
 
 	// edit helpers
-	void getData(uint8_t id, DataUnion &data) const;
+	void getData(uint8_t deviceId, DataUnion &data) const;
 	void set(DataUnion &data);
 	static String getName(Type type);
 	static Type getNextType(Type type, int delta);
 	static void setType(DataUnion &data, Type type);
 	static Array<MessageType const> getPlugs(Type type);
 
-	// configuration methods
-	void publishSwitch(uint8_t id, uint8_t plugIndex, uint8_t value);
+	// publish switch message on given plug, used e.g. for measuring blind runtime
+	void publishSwitch(uint8_t deviceId, uint8_t plugIndex, uint8_t value);
 
 
 	class Function : public Device {
@@ -171,7 +171,7 @@ public:
 		Coroutine coroutine;
 
 		// coroutines wait here until something gets published to them
-		MessageBarrier publishBarrier;
+		SubscriberBarrier barrier;
 	};
 
 	int functionCount = 0;
@@ -179,7 +179,7 @@ public:
 	Function *functions = nullptr;
 
 	// find function by id
-	Function *findFunction(uint8_t id) const;
+	Function *findFunction(uint8_t deviceId) const;
 
 	uint8_t allocateId();
 

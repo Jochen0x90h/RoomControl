@@ -631,7 +631,6 @@ struct Awaitable2 {
 	A1 &a1;
 	A2 &a2;
 
-
 	bool await_ready() noexcept {
 		return this->a1.await_ready() || this->a2.await_ready();
 	}
@@ -647,6 +646,7 @@ struct Awaitable2 {
 			result = 2;
 		if (this->a1.await_ready())
 			result = 1;
+		await_suspend(nullptr);
 		return result;
 	}
 };
@@ -693,6 +693,7 @@ struct Awaitable3 {
 			result = 2;
 		if (this->a1.await_ready())
 			result = 1;
+		await_suspend(nullptr);
 		return result;
 	}
 };
@@ -704,6 +705,50 @@ template <typename A1, typename A2, typename A3>
 [[nodiscard]] inline Awaitable3<A1, A2, A3> select(A1 &&a1, A2 &&a2, A3 &&a3) {
 	return {a1, a2, a3};
 }
+
+
+// helper struct
+template <typename A1, typename A2, typename A3, typename A4>
+struct Awaitable4 {
+	A1 &a1;
+	A2 &a2;
+	A3 &a3;
+	A4 &a4;
+
+	bool await_ready() noexcept {
+		return this->a1.await_ready() || this->a2.await_ready() || this->a3.await_ready() || this->a4.await_ready();
+	}
+
+	void await_suspend(std::coroutine_handle<> handle) noexcept {
+		this->a1.await_suspend(handle);
+		this->a2.await_suspend(handle);
+		this->a3.await_suspend(handle);
+		this->a4.await_suspend(handle);
+	}
+
+	int await_resume() noexcept {
+		int result = 0;
+		if (this->a4.await_ready())
+			result = 4;
+		if (this->a3.await_ready())
+			result = 3;
+		if (this->a2.await_ready())
+			result = 2;
+		if (this->a1.await_ready())
+			result = 1;
+		await_suspend(nullptr);
+		return result;
+	}
+};
+
+/**
+ * Wait on four awaitables and return index 1 to 4 of the awaitable that is ready
+ */
+template <typename A1, typename A2, typename A3, typename A4>
+[[nodiscard]] inline Awaitable4<A1, A2, A3, A4> select(A1 &&a1, A2 &&a2, A3 &&a3, A4 &&a4) {
+	return {a1, a2, a3, a4};
+}
+
 
 
 /**

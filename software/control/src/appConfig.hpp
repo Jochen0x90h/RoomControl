@@ -19,7 +19,7 @@ constexpr int CALENDAR_ROOM_CONTROL = 0;
 // inputs
 // ------
 
-constexpr int INPUT_POTI_BUTTON = 0;
+constexpr int INPUT_WHEEL_BUTTON = 0;
 constexpr int INPUT_EXT_INDEX = 1;
 constexpr int INPUT_EXT_COUNT = 1;
 
@@ -83,6 +83,8 @@ constexpr int NETWORK_MDNS = 1;
 // -------
 
 constexpr int STORAGE_CONFIG = 0;
+constexpr int STORAGE_ID_CONFIG = 0x0000;
+constexpr int STORAGE_ID_DISPLAY_LISTENER = 0x0010;
 constexpr int STORAGE_ID_BUS1 = 0x0100;
 constexpr int STORAGE_ID_BUS2 = 0x0200;
 constexpr int STORAGE_ID_RADIO1 = 0x0300;

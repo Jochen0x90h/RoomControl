@@ -16,6 +16,8 @@ struct Configuration {
 	// name of this node
 	char name[16];
 
+	String getName() const {return String(this->name);}
+
 // encryption
 
 	// same key used for all interfaces
@@ -50,5 +52,7 @@ struct Configuration {
 	Network::Endpoint mqttGateway;
 
 
-	String getName() const {return String(this->name);}
+// wheel
+
+	uint8_t wheelPlugCount;
 };

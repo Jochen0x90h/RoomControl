@@ -1,6 +1,7 @@
 #pragma once
 
 #include "String.hpp"
+#include "Stream.hpp"
 
 
 /**
@@ -9,8 +10,8 @@
  */
 template <int N>
 class StringBuffer {
-	template <int M>
-	friend int toString(int length, char *str, StringBuffer<M> const &b);
+	//template <int M>
+	//friend int toString(int length, char *str, StringBuffer<M> const &b);
 
 public:
 	StringBuffer() : index(0) {}
@@ -44,6 +45,11 @@ public:
 		return (*this) += str;
 	}
 
+	/**
+	 * Plus assign for character
+	 * @param ch character
+	 * @return reference to this StringBuffer
+	 */
 	StringBuffer &operator +=(char ch) {
 		if (this->index < N)
 			this->buffer[this->index++] = ch;
@@ -53,6 +59,11 @@ public:
 		return *this;
 	}
 
+	/**
+	 * Plus assign for string
+	 * @param str string
+	 * @return reference to this StringBuffer
+	 */
 	StringBuffer &operator +=(String const &str) {
 		int l = min(N - this->index, str.count());
 		array::copy(l, this->buffer + this->index, str.data);
@@ -63,18 +74,17 @@ public:
 		return *this;
 	}
 
+	/**
+	 * Generic plus assign, works when there is an operator << implemented for Stream
+	 * @tparam T type
+	 * @param value value
+	 * @return reference to this StringBuffer
+	 */
 	template <typename T>
 	StringBuffer &operator +=(T const &value) {
-		*this << value;
+		Stream s(*this);
+		s << value;
 		return *this;
-	}
-
-	// fulfill stream concept
-	StringBuffer &operator <<(char ch) {
-		return *this += ch;
-	}
-	StringBuffer &operator <<(String const &str) {
-		return *this += str;
 	}
 
 	char operator [](int index) const {return this->buffer[index];}
@@ -88,7 +98,46 @@ public:
 	String string() const {
 		return {this->index, this->buffer};
 	}
-	
+
+/*
+	Stream &operator <<(char ch) override {
+		return *this += ch;
+	}
+	Stream &operator <<(String const &str) override {
+		return *this += str;
+	}
+	Stream &operator <<(Command command) override {
+		return *this;
+	}
+*/
+	class Stream : public ::Stream {
+	public:
+		StringBuffer<N> &buffer;
+
+		Stream(StringBuffer<N> &buffer) : buffer(buffer) {}
+		~Stream() override {}
+		Stream &operator <<(char ch) override {
+			this->buffer += ch;
+			return *this;
+		}
+		Stream &operator <<(String const &str) override {
+			this->buffer += str;
+			return *this;
+		}
+		Stream &operator <<(Command command) override {
+			return *this;
+		}
+	};
+
+	/**
+	 * Clear the buffer and return a new stream
+	 * @return stream
+	 */
+	Stream stream() {
+		this->index = 0;
+		return {*this};
+	}
+
 protected:
 
 #ifdef DEBUG

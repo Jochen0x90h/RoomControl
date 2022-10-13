@@ -1,6 +1,6 @@
 #include <SSD1309.hpp>
 #include <Timer.hpp>
-#include <Poti.hpp>
+#include <QuadratureDecoder.hpp>
 #include <Debug.hpp>
 #include <Loop.hpp>
 
@@ -31,7 +31,7 @@ int main(void) {
 	Loop::init();
 	Timer::init();
 	Spi::init();
-	Poti::init();
+	QuadratureDecoder::init();
 	Output::init();
 	
 	draw();

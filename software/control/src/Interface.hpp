@@ -38,29 +38,32 @@ public:
 
 	/**
 	 * Get device name
+	 * @param deviceId device id
 	 * @return device name
 	 */
-	virtual String getName(uint8_t id) const = 0;
+	virtual String getName(uint8_t deviceId) const = 0;
 
 	/**
 	 * Set device name
+	 * @param deviceId device id
 	 * @param device name
 	 */
-	virtual void setName(uint8_t id, String name) = 0;
+	virtual void setName(uint8_t deviceId, String name) = 0;
 
 	/**
 	 * Get plugs (message type for each plug). Use immediately and don't use after a co_await
+	 * @param deviceId device id
 	 * @return array of plugs
 	 */
-	virtual Array<MessageType const> getPlugs(uint8_t id) const = 0;
+	virtual Array<MessageType const> getPlugs(uint8_t deviceId) const = 0;
 
 	/**
 	 * Get information necessary to subscribe this plug to another plug using subscribe()
-	 * @param id device id
+	 * @param deviceId device id
 	 * @param plugIndex plug index
-	 * @return publish info
+	 * @return SubscriberTarget
 	 */
-	virtual SubscriberInfo getSubscriberInfo(uint8_t id, uint8_t plugIndex) = 0;
+	virtual SubscriberTarget getSubscriberTarget(uint8_t deviceId, uint8_t plugIndex) = 0;
 
 	/**
 	 * Subscribe to receive messages messages from an endpoint
@@ -76,13 +79,14 @@ public:
 
 	/**
 	 * Erase a device by id. Make sure that all PublishInfo's obtained with getPublishInfo() are erased too
-	 * @param id device id
+	 * @param deviceId device id
 	 */
-	virtual void erase(uint8_t id) = 0;
+	virtual void erase(uint8_t deviceId) = 0;
 
 protected:
 
-	static int eraseId(int deviceCount, uint8_t *deviceIds, uint8_t id) {
+	// erase the device from a list of device id
+	static int eraseDevice(int deviceCount, uint8_t *deviceIds, uint8_t id) {
 		int j = 0;
 		for (int i = 0; i < deviceCount; ++i) {
 			uint8_t id2 = deviceIds[i];

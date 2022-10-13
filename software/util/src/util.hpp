@@ -140,11 +140,11 @@ void copy(int length, OutputIt dst, InputIt src) {
 }
 
 /**
- * Insert elements at the beginning of the array defined by (length, begin)
+ * Insert elements at the beginning of the array defined by (length, begin), without initializing the new elements
  * @tparam It
- * @param length
+ * @param length length of the array after insert
  * @param it
- * @param count
+ * @param count number of elements to insert
  */
 template <typename It>
 void insert(int length, It begin, int count = 1) {
@@ -157,9 +157,9 @@ void insert(int length, It begin, int count = 1) {
 
 /**
  * Erase elements from the beginning of the array defined by (length, begin)
- * @param length
+ * @param length length of the array before erase
  * @param begin
- * @param count
+ * @param count number of elements to erase
  */
 template <typename It>
 void erase(int length, It begin, int count = 1) {
@@ -203,10 +203,25 @@ int binaryLowerBound(T (&array)[N], V const &element) {
 template <typename T, int N, typename C>
 int binaryLowerBound(T (&array)[N], C const &compare) {
 	int l = 0;
-	int h = N;
+	int h = N - 1;
 	while (l < h) {
 		int mid = l + (h - l) / 2;
 		if (compare(array[mid])) {
+			l = mid + 1;
+		} else {
+			h = mid;
+		}
+	}
+	return l;
+}
+
+template <typename It, typename C>
+int binaryLowerBound(int length, It begin, C const &compare) {
+	int l = 0;
+	int h = length - 1;
+	while (l < h) {
+		int mid = l + (h - l) / 2;
+		if (compare(begin[mid])) {
 			l = mid + 1;
 		} else {
 			h = mid;

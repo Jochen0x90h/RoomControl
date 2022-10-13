@@ -8,17 +8,18 @@ class LocalInterface : public Interface {
 public:
 	// device id's
 	enum DeviceIds {
-		BME680_ID = 1, // air sensor
-		IN_ID = 2, // generic binary input
-		OUT_ID = 3, // generic binary output
-		HEATING_ID = 4, // heating
-		SOUND_ID = 5, // audio via built-in (or bluetooth) speaker
-		BRIGHTNESS_SENSOR_ID = 6,
-		MOTION_DETECTOR_ID = 7,
-		DEVICE_COUNT = 7
+		WHEEL_ID = 1, // wheel (rotary encoder)
+		BME680_ID = 2, // air sensor
+		IN_ID = 3, // generic binary input
+		OUT_ID = 4, // generic binary output
+		HEATING_ID = 5, // heating
+		SOUND_ID = 6, // audio via built-in (or bluetooth) speaker
+		BRIGHTNESS_SENSOR_ID = 7,
+		MOTION_DETECTOR_ID = 8,
+		DEVICE_COUNT = 8
 	};
 
-	LocalInterface();
+	LocalInterface(uint8_t interfaceId);
 
 	~LocalInterface() override;
 
@@ -26,13 +27,19 @@ public:
 	void setCommissioning(bool enabled) override;
 
 	Array<uint8_t const> getDeviceIds() override;
-	String getName(uint8_t id) const override;
-	void setName(uint8_t id, String name) override;
-	Array<MessageType const> getPlugs(uint8_t id) const override;
-	SubscriberInfo getSubscriberInfo(uint8_t id, uint8_t plugIndex) override;
+	String getName(uint8_t deviceId) const override;
+	void setName(uint8_t deviceId, String name) override;
+	Array<MessageType const> getPlugs(uint8_t deviceId) const override;
+	SubscriberTarget getSubscriberTarget(uint8_t deviceId, uint8_t plugIndex) override;
 	void subscribe(Subscriber &subscriber) override;
 	void listen(Listener &listener) override;
-	void erase(uint8_t id) override;
+	void erase(uint8_t deviceId) override;
+
+	// set number of plugs for the wheel device
+	void setWheelPlugCount(uint8_t plugCount) {this->wheelPlugCount = plugCount;}
+
+	// publish increment of digital potentiometer
+	void publishWheel(uint8_t plugIndex, int8_t delta);
 
 protected:
 
@@ -46,12 +53,13 @@ protected:
 	uint8_t deviceCount;
 	uint8_t deviceIds[DEVICE_COUNT];
 	Device devices[DEVICE_COUNT];
+	uint8_t wheelPlugCount = 1;
 
 	// sounds
 	int soundCount;
 	MessageType soundPlugs[32];
 
-	MessageBarrier publishBarrier;
+	SubscriberBarrier publishBarrier;
 
 	// listeners that listen on all messages of the interface (as opposed to subscribers that subscribe to one plug)
 	ListenerList listeners;

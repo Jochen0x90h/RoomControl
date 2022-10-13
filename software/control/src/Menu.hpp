@@ -19,7 +19,8 @@ public:
 	void beginSection();
 	void endSection();
 
-	struct Stream {
+	class Stream : public ::Stream {
+	public:
 		int x;
 		int y;
 		Bitmap<DISPLAY_WIDTH, DISPLAY_HEIGHT> *bitmap;
@@ -29,26 +30,30 @@ public:
 		int16_t invertStart;
 
 
-		Stream &operator <<(char ch) {
+		Stream(int x, int y, Bitmap<DISPLAY_WIDTH, DISPLAY_HEIGHT> *bitmap) : x(x), y(y), bitmap(bitmap) {}
+
+		~Stream() override {}
+
+		Stream &operator <<(char ch) override {
 			if (this->bitmap != nullptr)
 				this->x = this->bitmap->drawText(this->x, this->y, tahoma_8pt, String(1, &ch));
 			return *this;
 		}
 		
-		Stream &operator <<(String const &str) {
+		Stream &operator <<(String const &str) override {
 			if (this->bitmap != nullptr)
 				this->x = this->bitmap->drawText(this->x, this->y, tahoma_8pt, str);
 			return *this;
 		}
 		
-		Stream &operator <<(StreamCommand command) {
+		Stream &operator <<(Command command) override {
 			switch (command) {
-				case StreamCommand::SET_UNDERLINE:
+				case Command::SET_UNDERLINE:
 					if (this->underlineCount == 0)
 						this->underlineStart = this->x;
 					++this->underlineCount;
 					break;
-				case StreamCommand::CLEAR_UNDERLINE:
+				case Command::CLEAR_UNDERLINE:
 					if (this->underlineCount > 0) {
 						if (--this->underlineCount == 0) {
 							int x = this->underlineStart;
@@ -57,12 +62,12 @@ public:
 						}
 					}
 					break;
-				case StreamCommand::SET_INVERT:
+				case Command::SET_INVERT:
 					if (this->invertCount == 0)
 						this->invertStart = this->x;
 					++this->invertCount;
 					break;
-				case StreamCommand::CLEAR_INVERT:
+				case Command::CLEAR_INVERT:
 					if (this->invertCount > 0) {
 						if (--this->invertCount == 0) {
 							int x = this->invertStart;
@@ -110,10 +115,12 @@ public:
 		return entry();
 	}
 
+	int getSelected() const {return this->selected;}
+
 	/**
 	 * Returns true if the current entry is selected
 	 */
-	bool isSelectedEntry() const {
+	bool isSelected() const {
 		return this->selected == this->entryIndex;
 	}
 
@@ -151,7 +158,7 @@ protected:
 		BODY,
 		END
 	};
-	Section section = Section::BODY;
+	Section section = Section::END;
 
 	// index of selected menu entry
 	uint16_t selected = 0;

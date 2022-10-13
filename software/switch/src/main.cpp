@@ -19,7 +19,7 @@
 constexpr SystemDuration RELAY_TIME = 10ms;
 
 
-constexpr auto ROCKER = bus::PlugType::TERNARY_BUTTON_OUT;
+constexpr auto ROCKER = bus::PlugType::TERNARY_ROCKER_OUT;
 constexpr auto LIGHT = bus::PlugType::BINARY_POWER_LIGHT_IN;
 constexpr auto BLIND = bus::PlugType::TERNARY_OPENING_BLIND_IN;
 

@@ -503,7 +503,7 @@ Coroutine MqttSnBroker::publish() {
 		auto &thisName = this->connections[0].name;
 
 		// wait for message
-		MessageInfo info;
+		SubscriberInfo info;
 		Message message;
 		co_await this->publishBarrier.wait(info, &message);
 		uint16_t topicId = 0;//!info.topic.id;

@@ -1,4 +1,4 @@
-#include <Poti.hpp>
+#include <QuadratureDecoder.hpp>
 #include <Input.hpp>
 #include <Debug.hpp>
 #include <Loop.hpp>
@@ -15,7 +15,10 @@ Coroutine handlePoti() {
 		bool value;
 
 		// wait until poti has changed or trigger detected on input
-		switch (co_await select(Poti::change(0, delta), Input::trigger(1 << INPUT_POTI_BUTTON, 1 << INPUT_PCB_BUTTON, index, value))) {
+		int s = co_await select(
+			QuadratureDecoder::change(0, delta),
+			Input::trigger(1 << INPUT_POTI_BUTTON, 1 << INPUT_PCB_BUTTON, index, value));
+		switch (s) {
 		case 1:
 			// poti changed
 #ifdef EMU
@@ -45,7 +48,7 @@ Coroutine handlePoti() {
 
 int main(void) {
 	Loop::init();
-	Poti::init();
+	QuadratureDecoder::init();
 	Output::init(); // for debug signals on pins
 	Input::init();
 

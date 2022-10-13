@@ -1,4 +1,4 @@
-#include "../Poti.hpp"
+#include "../QuadratureDecoder.hpp"
 #include "Loop.hpp"
 #include "defs.hpp"
 #include <assert.hpp>
@@ -12,7 +12,7 @@
 	Resources:
 		NRF_QDEC
 */
-namespace Poti {
+namespace QuadratureDecoder {
 
 // waiting coroutines
 Waitlist<Parameters> waitlist;
@@ -27,14 +27,14 @@ void handle() {
 		NRF_QDEC->EVENTS_REPORTRDY = 0;
 		clearInterrupt(QDEC_IRQn);
 
-		Poti::acc += NRF_QDEC->ACCREAD;
-		int poti = Poti::acc & ~3;
+		QuadratureDecoder::acc += NRF_QDEC->ACCREAD;
+		int poti = QuadratureDecoder::acc & ~3;
 		if (poti != 0) {
-			Poti::acc -= poti;
+			QuadratureDecoder::acc -= poti;
 			int delta = poti >> 2;
 
 			// resume all waiting coroutines
-			Poti::waitlist.resumeAll([delta](Parameters parameters) {
+			QuadratureDecoder::waitlist.resumeAll([delta](Parameters parameters) {
 				parameters.delta = delta;
 				return true;
 			});
@@ -42,16 +42,16 @@ void handle() {
 	}
 
 	// call next handler in chain
-	Poti::nextHandler();
+	QuadratureDecoder::nextHandler();
 }
 
 void init() {
 	// check if already initialized
-	if (Poti::nextHandler != nullptr)
+	if (QuadratureDecoder::nextHandler != nullptr)
 		return;
 	
 	// add to event loop handler chain
-	Poti::nextHandler = Loop::addHandler(handle);
+	QuadratureDecoder::nextHandler = Loop::addHandler(handle);
 
 	configureInput(POTI_A_PIN, gpio::Pull::UP);
 	configureInput(POTI_B_PIN, gpio::Pull::UP);
@@ -70,7 +70,7 @@ void init() {
 
 Awaitable<Parameters> change(int index, int8_t& delta) {
 	// only one poti supported
-	return {Poti::waitlist, delta};
+	return {QuadratureDecoder::waitlist, delta};
 }
 
-} // namespace Poti
+} // namespace QuadratureDecoder

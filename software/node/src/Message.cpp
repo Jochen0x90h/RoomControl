@@ -55,8 +55,37 @@ bool convertSwitch(MessageType dstType, Message &dst, uint8_t src, ConvertOption
 	return true;
 }
 
-bool convertFloat(MessageType dstType, Message &dst, float src, ConvertOptions const &convertOptions)
-{
+bool convertInt8(MessageType dstType, Message &dst, int src, ConvertOptions const &convertOptions) {
+	switch (dstType & PlugType::CATEGORY) {
+	case PlugType::LEVEL:
+	case PlugType::PHYSICAL:
+	case PlugType::CONCENTRATION: {
+		// int -> float, use value in convertOptions
+		dst.value.f32 = float(src) * convertOptions.value.f[0];
+		if ((dstType & PlugType::CMD) == 0)
+			return false; // conversion failed, destination must support command
+		dst.command = 1;
+		break;
+	}
+	case PlugType::LIGHTING: {
+		// int -> float, use value in convertOptions
+		dst.value.f32 = float(src) * convertOptions.value.f[0];
+		if ((dstType & PlugType::CMD) == 0)
+			return false; // conversion failed, destination must support command
+		dst.command = 1;
+		dst.transition = convertOptions.transition;
+		break;
+	}
+	default:
+		// conversion failed
+		return false;
+	}
+
+	// conversion successful
+	return true;
+}
+
+bool convertFloat(MessageType dstType, Message &dst, float src, ConvertOptions const &convertOptions) {
 	switch (dstType & PlugType::CATEGORY) {
 	case PlugType::BINARY:
 	case PlugType::TERNARY: {

@@ -1,6 +1,6 @@
 #include "Menu.hpp"
 #include <Timer.hpp>
-#include <Poti.hpp>
+#include <QuadratureDecoder.hpp>
 #include <Input.hpp>
 #include "tahoma_8pt.hpp" // font
 
@@ -86,6 +86,7 @@ int Menu::getEdit(int editCount) {
 }
 
 AwaitableCoroutine Menu::show() {
+	this->section = Section::END;
 	const int lineHeight = tahoma_8pt.height + 4;
 
 	// adjust yOffset so that selected entry is visible
@@ -115,14 +116,16 @@ AwaitableCoroutine Menu::show() {
 		this->swapChain.show(this->bitmap);
 		this->bitmap = nullptr;
 
-		// get a new bitmap from the swap chain when poti::change returns or is interrupted
+		// get a new bitmap from the swap chain also when the coroutine is cancelled during co_await
 		BitmapGetter getter{*this};
 
 		// wait for event, may be interrupted e.g. by a timeout
 		int index;
-		int s = co_await select(Poti::change(0, this->delta), Input::trigger(1 << INPUT_POTI_BUTTON, 0, index, this->activated));
+		co_await select(
+			QuadratureDecoder::change(0, this->delta),
+			Input::trigger(1 << INPUT_WHEEL_BUTTON, 0, index, this->activated));
 
-		// update selected according to delta motion of poti when not in edit mode
+		// update selected entry according to delta motion of poti when not in edit mode
 		if (this->edit == 0) {
 			int selected = this->selected + this->delta;
 			if (selected < 0) {

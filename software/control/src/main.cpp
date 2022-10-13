@@ -3,7 +3,7 @@
 #include <Flash.hpp>
 #include <BusMaster.hpp>
 #include <Radio.hpp>
-#include <Poti.hpp>
+#include <QuadratureDecoder.hpp>
 #include <Input.hpp>
 #include <Timer.hpp>
 #include <Debug.hpp>
@@ -23,7 +23,7 @@ int main(int argc, const char **argv) {
 	Timer::init();
 	Calendar::init();
 	Spi::init();
-	Poti::init();
+	QuadratureDecoder::init();
 	BusMaster::init();
 	Radio::init();
 	Network::init();
@@ -37,7 +37,7 @@ int main(int argc, const char **argv) {
 
 	// set default configuration
 	Configuration configuration;
-	if (Storage::read(STORAGE_CONFIG, 0, sizeof(Configuration), &configuration) != sizeof(Configuration)) {
+	if (Storage::read(STORAGE_CONFIG, STORAGE_ID_CONFIG, sizeof(Configuration), &configuration) != sizeof(Configuration)) {
 		static uint8_t const networkKey[] = {0xe6, 0x63, 0x2b, 0xa3, 0x55, 0xd4, 0x76, 0x82, 0x63, 0xe8, 0xb5, 0x9a, 0x2a, 0x6b, 0x41, 0x44};
 		configuration.key.setData(0, 16, networkKey);
 		setKey(configuration.aesKey, configuration.key);
@@ -45,8 +45,9 @@ int main(int argc, const char **argv) {
 		configuration.zbeePanId = 0x1a62;
 		configuration.mqttLocalPort = 1337;
 		configuration.mqttGateway = {Network::Address::fromString("::1"), 10000};
+		configuration.wheelPlugCount = 1;
 
-		Storage::write(STORAGE_CONFIG, 0, sizeof(Configuration), &configuration);
+		Storage::write(STORAGE_CONFIG, STORAGE_ID_CONFIG, sizeof(Configuration), &configuration);
 	}
 
 	// the room control application

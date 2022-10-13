@@ -176,6 +176,7 @@ set(UTIL
 	util/src/optional.hpp
 	util/src/Pointer.hpp
 	util/src/Queue.hpp
+	util/src/Stream.cpp
 	util/src/Stream.hpp
 	util/src/String.hpp
 	util/src/StringBuffer.hpp
@@ -257,7 +258,7 @@ if(EMU)
 		glad/khrplatform.h
 	)
 	set(OUTPUT system/src/Output.hpp system/src/emu/Output.cpp system/src/Debug.hpp)
-	set(POTI system/src/Poti.hpp system/src/emu/Poti.cpp)
+	set(QUADRATURE_DECODER system/src/QuadratureDecoder.hpp system/src/emu/QuadratureDecoder.cpp)
 	set(RADIO system/src/RadioDefs.hpp system/src/Radio.hpp system/src/emu/Radio.cpp)
 	set(RANDOM system/src/Random.hpp system/src/emu/Random.cpp)
 	set(SPI system/src/Spi.hpp system/src/emu/Spi.hpp system/src/emu/Spi.cpp)
@@ -275,7 +276,7 @@ if("nrf52" IN_LIST PLATFORM)
 		system/src/nrf52/system/system_nrf52840.c
 	)
 	set(OUTPUT system/src/Output.hpp system/src/nrf52/Output.cpp system/src/Debug.hpp)
-	set(POTI system/src/Poti.hpp system/src/nrf52/Poti.cpp)
+	set(QUADRATURE_DECODER system/src/QuadratureDecoder.hpp system/src/nrf52/QuadratureDecoder.cpp)
 	set(RADIO system/src/RadioDefs.hpp system/src/Radio.hpp system/src/nrf52/Radio.cpp)
 	set(RANDOM system/src/Random.hpp system/src/nrf52/Random.cpp)
 	set(SPI system/src/Spi.hpp system/src/nrf52/Spi.cpp)
@@ -309,7 +310,7 @@ set(SYSTEM
 	${LOOP}
 	${NETWORK}
 	${OUTPUT}
-	${POTI}
+	${QUADRATURE_DECODER}
 	${RADIO}
 	${RANDOM}
 	${SOUND}
@@ -571,7 +572,7 @@ add_system_test_executable(BusMaster)
 add_system_test_executable(Calendar)
 add_system_test_executable(Input)
 add_system_test_executable(Network)
-add_system_test_executable(Poti)
+add_system_test_executable(QuadratureDecoder)
 add_system_test_executable(Radio)
 add_system_test_executable(Random)
 add_system_test_executable(Sound)

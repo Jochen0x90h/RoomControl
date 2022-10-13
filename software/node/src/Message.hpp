@@ -19,6 +19,7 @@ inline bool isOutput(MessageType type) {
 }
 
 union Value {
+	int8_t i8;
 	uint8_t u8;
 	uint16_t u16;
 	float f32;
@@ -33,7 +34,7 @@ struct Message {
 /**
  * Info for the receiver of a message
  */
-struct MessageInfo {
+/*struct MessageInfo {
 	// subscribers: connection index, listeners: device index
 	uint8_t sourceIndex;
 
@@ -43,8 +44,11 @@ struct MessageInfo {
 	// subscribers: receiver plug index, listeners: sender plug index
 	uint8_t plugIndex;
 
+	// subscribers: connection index
+	uint8_t connectionIndex;
+
 	// message type
-	//MessageType type;
+	MessageType type;
 };
 
 struct MessageParameters {
@@ -57,7 +61,7 @@ public:
 };
 
 using MessageBarrier = Barrier<MessageParameters>;
-
+*/
 
 struct ConvertOptions {
 	static constexpr int MAX_VALUE_COUNT = 3;
@@ -84,6 +88,7 @@ Usage getUsage(MessageType type);
 bool isCompatible(MessageType dstType, MessageType srcType);
 
 bool convertSwitch(MessageType dstType, Message &dst, uint8_t src, ConvertOptions const &convertOptions);
+bool convertInt8(MessageType dstType, Message &dst, int src, ConvertOptions const &convertOptions);
 bool convertFloat(MessageType dstType, Message &dst, float src, ConvertOptions const &convertOptions);
 bool convertFloatCommand(MessageType dstType, Message &dst, float src, uint8_t command, ConvertOptions const &convertOptions);
 bool convertFloatTransition(MessageType dstType, Message &dst, float src, uint8_t command, uint16_t transition, ConvertOptions const &convertOptions);
