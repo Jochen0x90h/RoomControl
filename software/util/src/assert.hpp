@@ -1,6 +1,6 @@
 #pragma once
 
-#ifdef EMU
+#ifdef DEBUG
 
 #include <assert.h>
 

@@ -7,7 +7,8 @@
 
 
 /**
- * Interface to devices connected locally, via a bus or radio
+ * Interface to devices connected locally, via a bus or radio.
+ * An interface contains multiple elements which can be devices or endpoints of devices
  */
 class Interface {
 public:
@@ -31,39 +32,39 @@ public:
 	virtual void setCommissioning(bool enabled) = 0;
 
 	/**
-	 * Get list of device id's
-	 * @return list of device id's
+	 * Get list of element id's
+	 * @return list of element id's
 	 */
-	virtual Array<uint8_t const> getDeviceIds() = 0;
+	virtual Array<uint8_t const> getElementIds() = 0;
 
 	/**
-	 * Get device name
-	 * @param deviceId device id
-	 * @return device name
+	 * Get element name
+	 * @param id element id
+	 * @return element name
 	 */
-	virtual String getName(uint8_t deviceId) const = 0;
+	virtual String getName(uint8_t id) const = 0;
 
 	/**
 	 * Set device name
-	 * @param deviceId device id
-	 * @param device name
+	 * @param id element id
+	 * @param name element name
 	 */
-	virtual void setName(uint8_t deviceId, String name) = 0;
+	virtual void setName(uint8_t id, String name) = 0;
 
 	/**
 	 * Get plugs (message type for each plug). Use immediately and don't use after a co_await
-	 * @param deviceId device id
+	 * @param id element id
 	 * @return array of plugs
 	 */
-	virtual Array<MessageType const> getPlugs(uint8_t deviceId) const = 0;
+	virtual Array<MessageType const> getPlugs(uint8_t id) const = 0;
 
 	/**
 	 * Get information necessary to subscribe this plug to another plug using subscribe()
-	 * @param deviceId device id
+	 * @param id element id
 	 * @param plugIndex plug index
 	 * @return SubscriberTarget
 	 */
-	virtual SubscriberTarget getSubscriberTarget(uint8_t deviceId, uint8_t plugIndex) = 0;
+	virtual SubscriberTarget getSubscriberTarget(uint8_t id, uint8_t plugIndex) = 0;
 
 	/**
 	 * Subscribe to receive messages messages from an endpoint
@@ -78,29 +79,30 @@ public:
 	virtual void listen(Listener &listener) = 0;
 
 	/**
-	 * Erase a device by id. Make sure that all PublishInfo's obtained with getPublishInfo() are erased too
-	 * @param deviceId device id
+	 * Erase an element by id. Make sure that all SubscriberTarget's obtained with getSubscriberTarget() are erased too
+	 * @param id element id
 	 */
-	virtual void erase(uint8_t deviceId) = 0;
+	virtual void erase(uint8_t id) = 0;
 
 protected:
 
-	// erase the device from a list of device id
-	static int eraseDevice(int deviceCount, uint8_t *deviceIds, uint8_t id) {
+	// erase an element id from a list of id's
+	static int eraseElement(int count, uint8_t *ids, uint8_t id) {
 		int j = 0;
-		for (int i = 0; i < deviceCount; ++i) {
-			uint8_t id2 = deviceIds[i];
+		for (int i = 0; i < count; ++i) {
+			uint8_t id2 = ids[i];
 			if (id2 != id) {
-				deviceIds[j] = id2;
+				ids[j] = id2;
 				++j;
 			}
 		}
 		return j;
 	}
 
-	class Device {
+	// device or endpoint of device with multiple endpoints that is exposed by the interface
+	class Element {
 	public:
-		Device(uint8_t id, ListenerList &listeners) : id(id), listeners(listeners) {}
+		Element(uint8_t id, ListenerList &listeners) : id(id), listeners(listeners) {}
 
 		void publishSwitch(uint8_t plugIndex, uint8_t value) {
 			this->listeners.publishSwitch(this->id, plugIndex, value);
@@ -122,6 +124,7 @@ protected:
 			this->subscribers.publishFloatTransition(plugIndex, value, command, transition);
 		}
 
+		// element id
 		uint8_t id;
 
 		// list of listeners (listen to all messages)

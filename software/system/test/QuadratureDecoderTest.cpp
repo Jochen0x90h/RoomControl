@@ -2,7 +2,7 @@
 #include <Input.hpp>
 #include <Debug.hpp>
 #include <Loop.hpp>
-#ifdef EMU
+#ifdef DEBUG
 #include <Terminal.hpp>
 #include <StringOperators.hpp>
 #endif
@@ -21,7 +21,7 @@ Coroutine handlePoti() {
 		switch (s) {
 		case 1:
 			// poti changed
-#ifdef EMU
+#ifdef DEBUG
 			Terminal::out << "delta " << dec(delta) << '\n';
 #endif
 			Debug::setRedLed(delta & 1);
@@ -30,7 +30,7 @@ Coroutine handlePoti() {
 			break;
 		case 2:
 			// button activated
-#ifdef EMU
+#ifdef DEBUG
 			Terminal::out << "activated " << dec(index) << '\n';
 #endif
 			if (index == 0) {

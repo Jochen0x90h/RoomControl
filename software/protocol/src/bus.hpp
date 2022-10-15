@@ -75,13 +75,13 @@ class MessageWriter : public EncryptWriter {
 public:
 	template <int N>
 	MessageWriter(uint8_t (&message)[N]) : EncryptWriter(message)
-#ifdef EMU
+#ifdef DEBUG
 		, end(message + N)
 #endif
 	{}
 
 	MessageWriter(int length, uint8_t *message) : EncryptWriter(message)
-#ifdef EMU
+#ifdef DEBUG
 		, end(message + length)
 #endif
 	{}
@@ -116,13 +116,13 @@ public:
 	 */
 	int getLength() {
 		int length = int(this->current - this->begin);
-#ifdef EMU
+#ifdef DEBUG
 		assert(this->current <= this->end);
 #endif
 		return length;
 	}
 
-#ifdef EMU
+#ifdef DEBUG
 	uint8_t *end;
 #endif
 };

@@ -20,7 +20,7 @@ struct Parameters {
 /**
  * Initialize SPI
  */
-#ifdef EMU
+#ifdef PLATFORM_POSIX
 void init(char const *fileName = "fram.bin");
 #else
 void init();

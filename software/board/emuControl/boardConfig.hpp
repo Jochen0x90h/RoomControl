@@ -1,6 +1,9 @@
 #pragma once
 
 #include <util.hpp>
+#include <emu/SpiBME680.hpp>
+#include <emu/SpiSSD1309.hpp>
+#include <posix/FileStorage.hpp>
 
 
 // flash
@@ -32,11 +35,22 @@ constexpr int OUTPUT_COUNT = array::count(OUTPUTS);
 
 // spi
 // ---
-
+/*
 constexpr int SPI_CONTEXT_COUNT = 3;
 #define SPI_EMU_BME680 0
 #define SPI_EMU_SSD1309 1
 #define SPI_EMU_MR45V064B 2
+*/
+constexpr int FERAM_SIZE = 8192;
+constexpr int DISPLAY_WIDTH = 128;
+constexpr int DISPLAY_HEIGHT = 64;
+
+struct Drivers {
+	SpiBME680 airSensor;
+	SpiSSD1309 display{DISPLAY_WIDTH, DISPLAY_HEIGHT};
+	FileStorage storage{"storage.bin", 65536, 1024};
+	FileStorage counters{"counters.bin", FERAM_SIZE / 10, 4};
+};
 
 
 // radio

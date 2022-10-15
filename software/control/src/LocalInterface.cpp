@@ -70,7 +70,7 @@ constexpr MessageType motionDetectorPlugs[] = {
 };
 
 
-LocalInterface::LocalInterface(uint8_t interfaceId)
+LocalInterface::LocalInterface(uint8_t interfaceId, SpiMaster &airSensor)
 	: devices{
 		{WHEEL_ID, this->listeners},
 		{BME680_ID, this->listeners},
@@ -135,7 +135,7 @@ LocalInterface::LocalInterface(uint8_t interfaceId)
 	this->deviceCount = i;
 
 	// start coroutines
-	readAirSensor();
+	readAirSensor(airSensor);
 	publish();
 }
 
@@ -149,21 +149,21 @@ String LocalInterface::getName() {
 void LocalInterface::setCommissioning(bool enabled) {
 }
 
-Array<uint8_t const> LocalInterface::getDeviceIds() {
+Array<uint8_t const> LocalInterface::getElementIds() {
 	return {this->deviceCount, this->deviceIds};
 }
 
-String LocalInterface::getName(uint8_t deviceId) const {
-	if (deviceId >= 1 && deviceId <= DEVICE_COUNT)
-		return deviceNames[deviceId - 1];
+String LocalInterface::getName(uint8_t id) const {
+	if (id >= 1 && id <= DEVICE_COUNT)
+		return deviceNames[id - 1];
 	return {};
 }
 
-void LocalInterface::setName(uint8_t deviceId, String name) {
+void LocalInterface::setName(uint8_t id, String name) {
 }
 
-Array<MessageType const> LocalInterface::getPlugs(uint8_t deviceId) const {
-	switch (deviceId) {
+Array<MessageType const> LocalInterface::getPlugs(uint8_t id) const {
+	switch (id) {
 	case WHEEL_ID:
 		return {this->wheelPlugCount, wheelPlugs};
 	case BME680_ID:
@@ -185,8 +185,8 @@ Array<MessageType const> LocalInterface::getPlugs(uint8_t deviceId) const {
 	}
 }
 
-SubscriberTarget LocalInterface::getSubscriberTarget(uint8_t deviceId, uint8_t plugIndex) {
-	auto plugs = getPlugs(deviceId);
+SubscriberTarget LocalInterface::getSubscriberTarget(uint8_t id, uint8_t plugIndex) {
+	auto plugs = getPlugs(id);
 	if (plugIndex < plugs.count())
 		return {plugs[plugIndex], &this->publishBarrier};
 	return {};
@@ -194,7 +194,9 @@ SubscriberTarget LocalInterface::getSubscriberTarget(uint8_t deviceId, uint8_t p
 
 void LocalInterface::subscribe(Subscriber &subscriber) {
 	subscriber.remove();
-	auto index = subscriber.data->source.deviceId - 1;
+	if (subscriber.target.barrier == nullptr)
+		return;
+	auto index = subscriber.data->source.elementId - 1;
 	if (index >= 0 && index < array::count(this->devices))
 		this->devices[index].subscribers.add(subscriber);
 }
@@ -205,7 +207,7 @@ void LocalInterface::listen(Listener &listener) {
 	this->listeners.add(listener);
 }
 
-void LocalInterface::erase(uint8_t deviceId) {
+void LocalInterface::erase(uint8_t id) {
 	// not possible to erase local devices
 }
 
@@ -214,8 +216,8 @@ void LocalInterface::publishWheel(uint8_t plugIndex, int8_t delta) {
 	this->devices[0].subscribers.publishInt8(plugIndex, delta);
 }
 
-Coroutine LocalInterface::readAirSensor() {
-	BME680 airSensor;
+Coroutine LocalInterface::readAirSensor(SpiMaster &spi) {
+	BME680 airSensor(spi);
 
 	// initialize the air sensor
 	co_await airSensor.init();
@@ -252,7 +254,7 @@ Coroutine LocalInterface::publish() {
 		co_await this->publishBarrier.wait(info, &message);
 
 		// set to device
-		switch (info.deviceId) {
+		switch (info.elementId) {
 		case OUT_ID:
 			// set "ext" output
 			if (info.plugIndex < OUTPUT_EXT_COUNT) {

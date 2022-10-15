@@ -1,6 +1,7 @@
 #pragma once
 
 #include <nrf52/gpio.hpp>
+#include <nrf52/SpiMasterDevice.hpp>
 #include <util.hpp>
 
 
@@ -47,7 +48,7 @@ constexpr int POTI_B_PIN = gpio::P0(5);
 
 // spi
 // ---
-
+/*
 struct SpiConfig {
 	enum Type {MASTER, WRITE_ONLY_MASTER};
 
@@ -65,6 +66,17 @@ constexpr int SPI_SCK_PIN = gpio::P0(19);
 constexpr int SPI_MOSI_PIN = gpio::P0(20);
 constexpr int SPI_MISO_PIN = gpio::P0(21);
 constexpr int SPI_DC_PIN = gpio::P0(21); // data/command for write-only display, can be same as MISO
+*/
+struct Drivers {
+	SpiMasterDevice spi{3,
+		gpio::P0(19),
+		gpio::P0(20),
+		gpio::P0(21),
+		gpio::P0(21)}; // data/command for write-only display, can be same as MISO
+	SpiMasterDevice::Channel airSensor{spi, gpio::P0(2)};
+	SpiMasterDevice::Channel display{spi, gpio::P0(3), true};
+	SpiMasterDevice::Channel feRam{spi, gpio::P0(3)};
+};
 
 
 // audio

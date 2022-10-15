@@ -3,7 +3,8 @@
 #include <Bitmap.hpp>
 #include <appConfig.hpp>
 #include <Coroutine.hpp>
-#include <Spi.hpp>
+#include <SpiMaster.hpp>
+#include <boardConfig.hpp>
 
 
 /**
@@ -11,7 +12,8 @@
  */
 class SSD1309 {
 public:
-	
+	explicit SSD1309(SpiMaster &spi) : spi(spi) {}
+
 	/**
 	 * Initializate the display
 	 * @return use co_await on return value to await end of initialization
@@ -47,11 +49,10 @@ public:
 	 * @return use co_await on return value to await end of operation
 	 */
 	auto set(Bitmap<DISPLAY_WIDTH, DISPLAY_HEIGHT> const &bitmap) {
-		return Spi::transfer(SPI_DISPLAY, array::count(bitmap.data), bitmap.data, 0, nullptr);
+		return this->spi.writeData(array::count(bitmap.data), bitmap.data);
 	}
 
 protected:
-
+	SpiMaster &spi;
 	bool enabled = false;
-	uint8_t command[4];
 };

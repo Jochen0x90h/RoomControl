@@ -5,12 +5,12 @@ enum class PlugType : uint16_t {
 	OUT = 1 << 14,
 	DIRECTION_MASK = 3 << 14,
 	
-	// explicit command (set, increase, decrease)
+	// command (e.g set, toggle, step) included in message
 	CMD = 1 << 13,
 	
 	// type
 	TYPE_MASK = 0x1fff,	
-	UNKNOWN = 0,
+	INVALID = 0,
 	CATEGORY = 15 << 9,
 	// binary category (uint8)
 	BINARY = 1 << 9,

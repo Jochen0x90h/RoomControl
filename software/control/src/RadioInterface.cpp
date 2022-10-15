@@ -26,25 +26,26 @@ constexpr zb::SecurityControl securityLevel = zb::SecurityControl::LEVEL_ENC_MIC
 
 // RadioInterface
 
-RadioInterface::RadioInterface(uint8_t interfaceId, PersistentStateManager &stateManager)
-	: securityCounter(stateManager), listeners(interfaceId)
+RadioInterface::RadioInterface(uint8_t interfaceId, Storage2 &storage, Storage2 &counters)
+	: listeners(interfaceId), storage(storage), counters(counters)
 {
 	// load list of device ids
-	int deviceCount = Storage::read(STORAGE_CONFIG, STORAGE_ID_RADIO1, sizeof(this->deviceIds), this->deviceIds);
+	int elementCount = sizeof(this->elementIds);
+	storage.readBlocking(STORAGE_ID_RADIO1, elementCount, this->elementIds);
 
 	// load devices
 	int j = 0;
-	for (int i = 0; i < deviceCount; ++i) {
-		uint8_t id = this->deviceIds[i];
+	for (int i = 0; i < sizeof(this->elementIds) && i < elementCount; ++i) {
+		uint8_t id = this->elementIds[i];
 
 		// get size of stored data
-		int size = Storage::size(STORAGE_CONFIG, STORAGE_ID_RADIO1 | id);
-		if (size < sizeof(DeviceData))
+		int size = storage.getSizeBlocking(STORAGE_ID_RADIO1 | id);
+		if (size < min(offsetOf(GpDeviceData, plugs), offsetOf(ZbEndpointData, buffer)))
 			continue;
 
 		// allocate memory and read data
 		auto data = reinterpret_cast<DeviceData *>(malloc(size));
-		Storage::read(STORAGE_CONFIG, STORAGE_ID_RADIO1 | id, size, data);
+		storage.readBlocking(STORAGE_ID_RADIO1 | id, size, data);
 
 		// check id
 		if (data->id != id) {
@@ -89,17 +90,31 @@ RadioInterface::RadioInterface(uint8_t interfaceId, PersistentStateManager &stat
 		}
 
 		// device was correctly loaded
-		this->deviceIds[j] = id;
+		this->elementIds[j] = id;
 		++j;
 	}
-	this->deviceCount = j;
+	this->elementCount = j;
+
+	// load security counter
+	int counterSize = 4;
+	counters.readBlocking(COUNTERS_ID_BUS, counterSize, &this->securityCounter);
+	if (counterSize != 4)
+		this->securityCounter = 0;
+
+	// start coroutines
+	broadcast();
+	sendBeacon();
+	for (int i = 0; i < PUBLISH_COUNT; ++i)
+		publish();
+	for (int i = 0; i < RECEIVE_COUNT; ++i)
+		receive();
 }
 
 RadioInterface::~RadioInterface() {
 }
 
 void RadioInterface::setConfiguration(uint16_t panId, DataBuffer<16> const &key, AesKey const &aesKey) {
-	bool first = this->key == nullptr;
+	//bool first = this->key == nullptr;
 	this->panId = panId;
 	this->key = &key;
 	this->aesKey = &aesKey;
@@ -107,8 +122,15 @@ void RadioInterface::setConfiguration(uint16_t panId, DataBuffer<16> const &key,
 	// set pan id of coordinator
 	Radio::setPan(RADIO_ZBEE, panId);
 
-	if (first)
-		start();
+	// set short address of coordinator
+	Radio::setShortAddress(RADIO_ZBEE, 0x0000);
+
+	// filter packets with the coordinator as destination (and broadcast pan/address)
+	Radio::setFlags(RADIO_ZBEE, Radio::ContextFlags::PASS_DEST_SHORT | Radio::ContextFlags::PASS_DEST_LONG
+		| Radio::ContextFlags::HANDLE_ACK);
+
+	//if (first)
+	//	start();
 }
 
 String RadioInterface::getName() {
@@ -126,8 +148,8 @@ void RadioInterface::setCommissioning(bool enabled) {
 	}
 }
 
-Array<uint8_t const> RadioInterface::getDeviceIds() {
-	return {this->deviceCount, this->deviceIds};
+Array<uint8_t const> RadioInterface::getElementIds() {
+	return {this->elementCount, this->elementIds};
 }
 /*
 Interface::Device *RadioInterface::getDevice(uint8_t id) {
@@ -155,39 +177,39 @@ Interface::Device *RadioInterface::getDevice(uint8_t id) {
 	return nullptr;
 }*/
 
-String RadioInterface::getName(uint8_t deviceId) const {
-	auto gpDevice = getGpDevice(deviceId);
+String RadioInterface::getName(uint8_t id) const {
+	auto gpDevice = getGpDevice(id);
 	if (gpDevice != nullptr)
 		return String(gpDevice->data->name);
-	auto zbEndpoint = getZbEndpoint(deviceId);
+	auto zbEndpoint = getZbEndpoint(id);
 	if (zbEndpoint != nullptr)
 		return String(zbEndpoint->data->name);
 	return {};
 }
 
-void RadioInterface::setName(uint8_t deviceId, String name) {
-	auto gpDevice = getGpDevice(deviceId);
+void RadioInterface::setName(uint8_t id, String name) {
+	auto gpDevice = getGpDevice(id);
 	if (gpDevice != nullptr) {
 		assign(gpDevice->data->name, name);
 
 		// write to flash
-		Storage::write(STORAGE_CONFIG, STORAGE_ID_RADIO1 | gpDevice->data->id, gpDevice->data->size(), gpDevice->data);
+		this->storage.writeBlocking(STORAGE_ID_RADIO1 | gpDevice->data->id, gpDevice->data->size(), gpDevice->data);
 		return;
 	}
-	auto zbEndpoint = getZbEndpoint(deviceId);
+	auto zbEndpoint = getZbEndpoint(id);
 	if (zbEndpoint != nullptr) {
 		assign(zbEndpoint->data->name, name);
 
 		// write to flash
-		Storage::write(STORAGE_CONFIG, STORAGE_ID_RADIO1 | zbEndpoint->data->id, zbEndpoint->data->size(), zbEndpoint->data);
+		this->storage.writeBlocking(STORAGE_ID_RADIO1 | zbEndpoint->data->id, zbEndpoint->data->size(), zbEndpoint->data);
 	}
 }
 
-Array<MessageType const> RadioInterface::getPlugs(uint8_t deviceId) const {
-	auto gpDevice = getGpDevice(deviceId);
+Array<MessageType const> RadioInterface::getPlugs(uint8_t id) const {
+	auto gpDevice = getGpDevice(id);
 	if (gpDevice != nullptr)
 		return {gpDevice->data->plugCount, gpDevice->data->plugs};
-	auto zbEndpoint = getZbEndpoint(deviceId);
+	auto zbEndpoint = getZbEndpoint(id);
 	if (zbEndpoint != nullptr) {
 		auto plugs = reinterpret_cast<MessageType *>(zbEndpoint->data->buffer);
 		return {zbEndpoint->data->plugCount, plugs};
@@ -195,13 +217,13 @@ Array<MessageType const> RadioInterface::getPlugs(uint8_t deviceId) const {
 	return {};
 }
 
-SubscriberTarget RadioInterface::getSubscriberTarget(uint8_t deviceId, uint8_t plugIndex) {
-	auto gpDevice = getGpDevice(deviceId);
+SubscriberTarget RadioInterface::getSubscriberTarget(uint8_t id, uint8_t plugIndex) {
+	auto gpDevice = getGpDevice(id);
 	if (gpDevice != nullptr) {
 		if (plugIndex < gpDevice->data->plugCount)
 			return {gpDevice->data->plugs[plugIndex], &this->publishBarrier};
 	} else {
-		auto zbEndpoint = getZbEndpoint(deviceId);
+		auto zbEndpoint = getZbEndpoint(id);
 		if (zbEndpoint != nullptr && plugIndex < zbEndpoint->data->plugCount) {
 			auto plugs = reinterpret_cast<MessageType *>(zbEndpoint->data->buffer);
 			return {plugs[plugIndex], &this->publishBarrier};
@@ -212,7 +234,9 @@ SubscriberTarget RadioInterface::getSubscriberTarget(uint8_t deviceId, uint8_t p
 
 void RadioInterface::subscribe(Subscriber &subscriber) {
 	subscriber.remove();
-	auto id = subscriber.data->source.deviceId;
+	if (subscriber.target.barrier == nullptr)
+		return;
+	auto id = subscriber.data->source.elementId;
 	auto gpDevice = getGpDevice(id);
 	if (gpDevice != nullptr) {
 		gpDevice->subscribers.add(subscriber);
@@ -230,17 +254,17 @@ void RadioInterface::listen(Listener &listener) {
 	this->listeners.add(listener);
 }
 
-void RadioInterface::erase(uint8_t deviceId) {
+void RadioInterface::erase(uint8_t id) {
 	{
 		auto d = &this->gpDevices;
 		while (*d != nullptr) {
 			auto device = *d;
-			if (device->data->id == deviceId) {
+			if (device->data->id == id) {
 				// remove device from linked list
 				*d = device->next;
 
 				// erase from flash
-				Storage::erase(STORAGE_CONFIG, STORAGE_ID_RADIO1 | deviceId);
+				this->storage.eraseBlocking(STORAGE_ID_RADIO1 | id);
 
 				// delete device
 				delete device;
@@ -259,7 +283,7 @@ void RadioInterface::erase(uint8_t deviceId) {
 			auto e = &device->endpoints;
 			while (*e != nullptr) {
 				auto endpoint = *e;
-				if (endpoint->data->id == deviceId) {
+				if (endpoint->data->id == id) {
 					// remove endpoint from linked list
 					*e = endpoint->next;
 
@@ -269,14 +293,14 @@ void RadioInterface::erase(uint8_t deviceId) {
 						*d = device->next;
 
 						// erase device from flash
-						Storage::erase(STORAGE_CONFIG, STORAGE_ID_RADIO2 | device->data.id);
+						this->storage.eraseBlocking(STORAGE_ID_RADIO2 | device->data.id);
 
 						// delete device
 						delete device;
 					}
 
 					// erase endpoint from flash
-					Storage::erase(STORAGE_CONFIG, STORAGE_ID_RADIO1 | deviceId);
+					this->storage.eraseBlocking(STORAGE_ID_RADIO1 | id);
 
 					// delete endpoint
 					delete endpoint;
@@ -291,8 +315,8 @@ void RadioInterface::erase(uint8_t deviceId) {
 list:
 
 	// erase from list of device id's
-	this->deviceCount = eraseDevice(this->deviceCount, this->deviceIds, deviceId);
-	Storage::write(STORAGE_CONFIG, STORAGE_ID_RADIO1, this->deviceCount, this->deviceIds);
+	this->elementCount = eraseElement(this->elementCount, this->elementIds, id);
+	this->storage.writeBlocking(STORAGE_ID_RADIO1, this->elementCount, this->elementIds);
 }
 
 // private:
@@ -377,7 +401,7 @@ RadioInterface::PlugRange RadioInterface::ZbEndpoint::findServerCluster(zcl::Clu
 
 RadioInterface::ClusterInfo RadioInterface::ZbEndpoint::getClientCluster(int plugIndex) const {
 	// get clusterInfos array
-	int s1 = (this->data->plugCount * sizeof(MessageType) + 3) / 4;
+	auto s1 = (this->data->plugCount * sizeof(MessageType) + 3) / 4;
 	auto clusterInfos = reinterpret_cast<ClusterInfo *>(&this->data->buffer[s1]) + this->data->serverClusterCount;
 
 	for (int i = 0; i < this->data->clientClusterCount; ++i) {
@@ -415,12 +439,12 @@ RadioInterface::ZbEndpoint *RadioInterface::getZbEndpoint(uint8_t id) const {
 	return nullptr;
 }
 
-uint8_t RadioInterface::allocateId(int deviceCount) {
+uint8_t RadioInterface::allocateId(int elementCount) {
 	// find a free id
 	int id;
 	for (id = 1; id < 256; ++id) {
-		for (int j = 0; j < deviceCount; ++j) {
-			if (this->deviceIds[j] == id)
+		for (int j = 0; j < elementCount; ++j) {
+			if (this->elementIds[j] == id)
 				goto found;
 		}
 		break;
@@ -429,15 +453,21 @@ uint8_t RadioInterface::allocateId(int deviceCount) {
 	return id;
 }
 
-uint8_t RadioInterface::allocateZbDeviceId() {
+uint8_t RadioInterface::allocateDeviceId() {
 	// find a free id
 	int id;
 	for (id = 1; id < 256; ++id) {
-		auto device = this->zbDevices;
-		while (device != nullptr) {
-			if (device->data.id == id)
+		auto gpDevice = this->gpDevices;
+		auto zbDevice = this->zbDevices;
+		while (gpDevice != nullptr) {
+			if (gpDevice->data->counterId == id)
 				goto found;
-			device = device->next;
+			gpDevice = gpDevice->next;
+		}
+		while (zbDevice != nullptr) {
+			if (zbDevice->data.id == id)
+				goto found;
+			zbDevice = zbDevice->next;
 		}
 		break;
 		found:;
@@ -445,37 +475,39 @@ uint8_t RadioInterface::allocateZbDeviceId() {
 	return id;
 }
 
-RadioInterface::ZbDevice *RadioInterface::getOrLoadZbDevice(uint8_t id) {
+RadioInterface::ZbDevice *RadioInterface::getOrLoadZbDevice(uint8_t deviceId) {
 	auto device = this->zbDevices;
 	while (device != nullptr) {
-		if (device->data.id == id)
+		if (device->data.id == deviceId)
 			return device;
 		device = device->next;
 	}
 
 	// load data
 	ZbDeviceData data;
-	if (Storage::read(STORAGE_CONFIG, STORAGE_ID_RADIO2 | id, sizeof(data), &data) != sizeof(data))
+	int size = sizeof(data);
+	this->storage.readBlocking(STORAGE_ID_RADIO2 | deviceId, size, &data);
+	if (size != sizeof(data))
 		return nullptr;
 
 	// check id
-	if (data.id != id)
+	if (data.id != deviceId)
 		return nullptr;
 
 	// create device
 	return new ZbDevice(this, data);
 }
-
-void RadioInterface::eraseZbDevice(uint8_t id) {
+/*
+void RadioInterface::eraseZbDevice(uint8_t deviceId) {
 	auto d = &this->zbDevices;
 	while (*d != nullptr) {
 		auto device = *d;
-		if (device->data.id == id) {
+		if (device->data.id == deviceId) {
 			// remove device from linked list
 			*d = device->next;
 
 			// erase device from flash
-			Storage::erase(STORAGE_CONFIG, STORAGE_ID_RADIO2 | device->data.id);
+			this->storage.eraseBlocking(STORAGE_ID_RADIO2 | device->data.id);
 
 			// erase endpoints from flash
 			auto endpoint = device->endpoints;
@@ -484,7 +516,7 @@ void RadioInterface::eraseZbDevice(uint8_t id) {
 				this->deviceCount = eraseDevice(this->deviceCount, this->deviceIds, endpoint->data->id);
 
 				// erase endpoint from flash
-				Storage::erase(STORAGE_CONFIG, STORAGE_ID_RADIO1 | id);
+				this->storage.eraseBlocking(STORAGE_ID_RADIO1 | deviceId);
 
 				endpoint = endpoint->next;
 			}
@@ -493,8 +525,8 @@ void RadioInterface::eraseZbDevice(uint8_t id) {
 			delete device;
 		}
 	}
-}
-
+}*/
+/*
 Coroutine RadioInterface::start() {
 	// restore security counter
 	co_await this->securityCounter.restore();
@@ -513,7 +545,7 @@ Coroutine RadioInterface::start() {
 		publish();
 	for (int i = 0; i < RECEIVE_COUNT; ++i)
 		receive();
-}
+}*/
 
 RadioInterface::ZbDevice *RadioInterface::findZbDevice(uint16_t address) {
 	auto device = this->zbDevices;
@@ -1276,7 +1308,15 @@ static bool handleZclCommand(MessageType dstType, void *dstMessage, int plugInde
 }*/
 
 Coroutine RadioInterface::receive() {
+	auto lastSecurityCounter = this->securityCounter;
 	while (true) {
+		// store security counter if necessary
+		if (this->securityCounter != lastSecurityCounter) {
+			lastSecurityCounter = this->securityCounter;
+			Storage2::Status status;
+			co_await this->counters.write(COUNTERS_ID_RADIO, 4, &this->securityCounter, status);
+		}
+
 		// wait until we receive a packet
 		Radio::Packet packet;
 		co_await Radio::receive(RADIO_ZBEE, packet);
@@ -1318,10 +1358,111 @@ Terminal::out << ("Beacon Request\n");
 			} else if (ieeeFrameType == ieee::FrameControl::TYPE_DATA) {
 				// network layer: handle dependent on protocol version
 				auto version = r.peekE8<gp::NwkFrameControl>() & gp::NwkFrameControl::VERSION_MASK;
-				if (version == gp::NwkFrameControl::VERSION_3_GP)
-					handleGp(mac, r);
+				if (version == gp::NwkFrameControl::VERSION_3_GP) {
+					// zgp stub nwk header
+
+					// set start of header
+					r.setHeader();
+
+					// frame control
+					auto frameControl = r.e8<gp::NwkFrameControl>();
+
+					// extended frame conrol
+					auto extendedFrameControl = gp::NwkExtendedFrameControl::NONE;
+					if ((frameControl & gp::NwkFrameControl::EXTENDED) != 0)
+						extendedFrameControl = r.e8<gp::NwkExtendedFrameControl>();
+					auto securityLevel = extendedFrameControl & gp::NwkExtendedFrameControl::SECURITY_LEVEL_MASK;
+
+					// device id
+					uint32_t deviceId = r.u32L();
+
+					if (this->commissioning && securityLevel == gp::NwkExtendedFrameControl::SECURITY_LEVEL_NONE
+						&& r.peekE8<gp::Command>() == gp::Command::COMMISSIONING)
+					{
+						// commissioning
+						handleGpCommission(deviceId, r);
+						continue; // -> receive
+					}
+
+					// search device
+					auto device = this->gpDevices;
+					while (device != nullptr) {
+						if (device->data->deviceId != deviceId) {
+							device = device->next;
+							continue;
+						}
+
+						// security
+						// --------
+						// header: header that is not encrypted, payload is part of header for security levels 0 and 1
+						// payload: payload that is encrypted, has zero length for security levels 0 and 1
+						// mic: message integrity code, 2 or 4 bytes
+						uint32_t securityCounter = 0;
+						int micLength;
+						switch (securityLevel) {
+							// todo: compare securityLevel with security level from commissioning
+						/*case gp::NwkExtendedFrameControl::SECURITY_LEVEL_CNT8_MIC16:
+							// security level 1: 1 byte counter, 2 byte mic
+
+							// header starts at mac sequence number and includes also payload
+							r.setHeader(mac + 2);
+
+							// use mac sequence number as security counter
+							securityCounter = mac[2];
+
+							// only decrypt message integrity code of length 2
+							micLength = 2;
+							r.setMessageFromEnd(micLength);
+							break;*/
+						case gp::NwkExtendedFrameControl::SECURITY_LEVEL_CNT32_MIC32:
+							// security level 2: 4 byte counter, 4 byte mic
+
+							// security counter
+							securityCounter = r.u32L();
+
+							// only decrypt message integrity code of length 4
+							micLength = 4;
+							r.setMessageFromEnd(micLength);
+							break;
+						case gp::NwkExtendedFrameControl::SECURITY_LEVEL_ENC_CNT32_MIC32:
+							// security level 3: 4 byte counter, encrypted message, 4 byte mic
+
+							// security counter
+							securityCounter = r.u32L();
+
+							// decrypt message and message integrity code of length 4
+							r.setMessage();
+							micLength = 4;
+							break;
+						default:
+							// security is required
+							break;
+						}
+
+						// check security counter
+						if (securityCounter <= device->securityCounter)
+							break; // -> receive
+						device->securityCounter = securityCounter;
+
+						// store security counter
+						Storage2::Status status;
+						co_await this->counters.write(COUNTERS_ID_RADIO + device->data->counterId, 4, &securityCounter, status);
+
+						// check message integrity code or decrypt message, depending on security level
+						Nonce nonce(deviceId, securityCounter);
+						if (!r.decrypt(micLength, nonce, device->data->aesKey)) {
+							//printf("error while decrypting message!\n");
+							break; // -> receive
+						}
+
+						handleGp(r, *device);
+
+						// finished with device
+						break; // -> receive
+					}
+				}
 			}
-			continue;
+			continue; // -> receive
 		}
 
 		// get source pan id
@@ -1439,6 +1580,16 @@ Terminal::out << ("Beacon Request\n");
 				}
 			}
 
+			// lookup actual source device at the start of the route
+			ZbDevice &router = *pDevice;
+			if (router.data.shortAddress != sourceAddress) {
+				// source device is not a neighbor: lookup the source device
+				pDevice = findZbDevice(sourceAddress);
+				if (pDevice == nullptr)
+					continue;
+			}
+			ZbDevice &device = *pDevice;
+
 			// security header
 			// note: does in-place decryption of the payload
 			uint8_t const *extendedSource = nullptr;
@@ -1449,14 +1600,23 @@ Terminal::out << ("Beacon Request\n");
 				// security control field (4.5.1.1)
 				auto securityControl = r.e8<zb::SecurityControl>();
 
-				// security counter
-				uint32_t securityCounter = r.u32L();
-
 				// key type
 				if ((securityControl & zb::SecurityControl::KEY_MASK) != zb::SecurityControl::KEY_NETWORK) {
 					// only network key supported
 					continue;
 				}
+
+				// security counter
+				uint32_t securityCounter = r.u32L();
+
+				// check security counter
+				if (securityCounter <= device.securityCounter)
+					continue;
+				device.securityCounter = securityCounter;
+
+				// store security counter
+				Storage2::Status status;
+				co_await this->counters.write(COUNTERS_ID_RADIO + device.data.id, 4, &securityCounter, status);
 
 				// extended source
 				if ((securityControl & zb::SecurityControl::EXTENDED_NONCE) == 0) {
@@ -1485,16 +1645,6 @@ Terminal::out << ("Beacon Request\n");
 				// security is required
 				continue;
 			}
-
-			// lookup actual source device at the start of the route
-			ZbDevice &router = *pDevice;
-			if (router.data.shortAddress != sourceAddress) {
-				// source device is not a neighbor: lookup the source device
-				pDevice = findZbDevice(sourceAddress);
-				if (pDevice == nullptr)
-					continue;
-			}
-			ZbDevice &device = *pDevice;
 
 			// set first hop of route if not known yet (this is probably a hack)
 			if (device.routerAddress == 0xffff) {
@@ -1593,7 +1743,8 @@ Terminal::out << ("Beacon Request\n");
 					break;
 				case zb::NwkCommand::LEAVE:
 					// device leaves the network
-					eraseZbDevice(device.data.id);
+					//eraseZbDevice(device.data.id);
+					erase(device.data.id);
 					break;
 				case zb::NwkCommand::ROUTE_RECORD:
 					// we need to store the route to the device
@@ -2150,6 +2301,93 @@ Terminal::out << ("Beacon Request\n");
 	}
 }
 
+void RadioInterface::handleGp(PacketReader &r, GpDevice &device) {
+	int plugIndex = -1;
+	uint8_t message = 0;
+	switch (device.data->type) {
+	case DeviceData::Type::PTM215Z:
+		if (r.getRemaining() >= 1) {
+			uint8_t command = r.u8();
+			switch (command) {
+				// A
+			case 0x14:
+			case 0x15:
+				plugIndex = 0;
+				message = 0;
+				break;
+			case 0x10:
+				plugIndex = 0;
+				message = 1;
+				break;
+			case 0x11:
+				plugIndex = 0;
+				message = 2;
+				break;
+				// B
+			case 0x17:
+			case 0x16:
+				plugIndex = 1;
+				message = 0;
+				break;
+			case 0x13:
+				plugIndex = 1;
+				message = 1;
+				break;
+			case 0x12:
+				plugIndex = 1;
+				message = 2;
+				break;
+				// AB
+			case 0x65:
+			case 0x63:
+				plugIndex = 2;
+				message = 0;
+				break;
+			case 0x64:
+				plugIndex = 2;
+				message = 1;
+				break;
+			case 0x62:
+				plugIndex = 2;
+				message = 2;
+				break;
+			}
+		}
+		break;
+	case DeviceData::Type::PTM216Z:
+		if (r.getRemaining() >= 2) {
+			uint8_t bar = r.u8();
+			uint8_t buttons = r.u8();
+
+			uint8_t change = (buttons ^ device.state) & 0x0f;
+
+			// check AB0 and AB1 (A and B pressed simultaneously)
+			if (change == 0x5 || change == 0xa) {
+				plugIndex = 2;
+				message = buttons & 0x3;
+			} else {
+				// check A0 and A1
+				if (change & 0x3) {
+					plugIndex = 0;
+					message = buttons & 0x3;
+				}
+
+				// check B0 and B1
+				if (change & 0xc) {
+					plugIndex = 1;
+					message = (buttons >> 2) & 0x3;
+				}
+			}
+
+			device.state = buttons;
+		}
+	default:;
+	}
+
+	// publish to subscribers
+	device.publishSwitch(plugIndex, message);
+}
+/*
 void RadioInterface::handleGp(uint8_t const *mac, PacketReader &r) {
 	// zgp stub nwk header
 
@@ -2189,11 +2427,11 @@ void RadioInterface::handleGp(uint8_t const *mac, PacketReader &r) {
 		// header: header that is not encrypted, payload is part of header for security levels 0 and 1
 		// payload: payload that is encrypted, has zero length for security levels 0 and 1
 		// mic: message integrity code, 2 or 4 bytes
-		uint32_t securityCounter;
+		uint32_t securityCounter = 0;
 		int micLength;
 		switch (securityLevel) {
 		// todo: compare securityLevel with security level from commissioning
-		/*case gp::NwkExtendedFrameControl::SECURITY_LEVEL_CNT8_MIC16:
+		/ *case gp::NwkExtendedFrameControl::SECURITY_LEVEL_CNT8_MIC16:
 			// security level 1: 1 byte counter, 2 byte mic
 
 			// header starts at mac sequence number and includes also payload
@@ -2205,7 +2443,7 @@ void RadioInterface::handleGp(uint8_t const *mac, PacketReader &r) {
 			// only decrypt message integrity code of length 2
 			micLength = 2;
 			r.setMessageFromEnd(micLength);
-			break;*/
+			break;* /
 		case gp::NwkExtendedFrameControl::SECURITY_LEVEL_CNT32_MIC32:
 			// security level 2: 4 byte counter, 4 byte mic
 
@@ -2228,116 +2466,38 @@ void RadioInterface::handleGp(uint8_t const *mac, PacketReader &r) {
 			break;
 		default:
 			// security is required
-			return;
+			break;
 		}
 
-		// todo: check if security counter is greater than last security counter
-		if (securityCounter == device->securityCounter)
-			return;
+		// check security counter
+		if (securityCounter <= device->securityCounter)
+			break;
+
+		// store security counter
 		device->securityCounter = securityCounter;
+		this->counters.writeBlocking(COUNTERS_ID_RADIO + device->data->counterId, 4, &securityCounter);
 
 		// check message integrity code or decrypt message, depending on security level
 		Nonce nonce(deviceId, securityCounter);
 		if (!r.decrypt(micLength, nonce, device->data->aesKey)) {
 			//printf("error while decrypting message!\n");
-			return;
-		}
-
-		int plugIndex = -1;
-		uint8_t message = 0;
-		switch (device->data->type) {
-		case DeviceData::Type::PTM215Z:
-			if (r.getRemaining() >= 1) {
-				uint8_t command = r.u8();
-				switch (command) {
-				// A
-				case 0x14:
-				case 0x15:
-					plugIndex = 0;
-					message = 0;
-					break;
-				case 0x10:
-					plugIndex = 0;
-					message = 1;
-					break;
-				case 0x11:
-					plugIndex = 0;
-					message = 2;
-					break;
-				// B
-				case 0x17:
-				case 0x16:
-					plugIndex = 1;
-					message = 0;
-					break;
-				case 0x13:
-					plugIndex = 1;
-					message = 1;
-					break;
-				case 0x12:
-					plugIndex = 1;
-					message = 2;
-					break;
-				// AB
-				case 0x65:
-				case 0x63:
-					plugIndex = 2;
-					message = 0;
-					break;
-				case 0x64:
-					plugIndex = 2;
-					message = 1;
-					break;
-				case 0x62:
-					plugIndex = 2;
-					message = 2;
-					break;
-				}
-			}
 			break;
-		case DeviceData::Type::PTM216Z:
-			if (r.getRemaining() >= 2) {
-				uint8_t bar = r.u8();
-				uint8_t buttons = r.u8();
-
-				uint8_t change = (buttons ^ device->state) & 0x0f;
-
-				// check AB0 and AB1 (A and B pressed simultaneously)
-				if (change == 0x5 || change == 0xa) {
-					plugIndex = 2;
-					message = buttons & 0x3;
-				} else {
-					// check A0 and A1
-					if (change & 0x3) {
-						plugIndex = 0;
-						message = buttons & 0x3;
-					}
-
-					// check B0 and B1
-					if (change & 0xc) {
-						plugIndex = 1;
-						message = (buttons >> 2) & 0x3;
-					}
-				}
-
-				device->state = buttons;
-			}
-		default:;
 		}
 
-		// publish to subscribers
-		device->publishSwitch(plugIndex, message);
+		handleGp(r, *device);
+
 		break;
 	}
-}
+}*/
 
 void RadioInterface::handleGpCommission(uint32_t deviceId, PacketReader& r) {
 	// remove commissioning command (0xe0)
 	r.u8();
 
 	GpDeviceData data;
-	data.id = allocateId(this->deviceCount);
+	data.id = allocateId(this->elementCount);
 	assign(data.name, "Switch");
+	data.counterId = allocateDeviceId();
 	data.deviceId = deviceId;
 
 	// A.4.2.1.1 Commissioning
@@ -2423,16 +2583,17 @@ void RadioInterface::handleGpCommission(uint32_t deviceId, PacketReader& r) {
 
 		// yes: only update security counter
 		device->securityCounter = securityCounter;
+		this->counters.writeBlocking(COUNTERS_ID_RADIO + device->data->counterId, 4, &securityCounter);
 		return;
 	}
 
 	// check if we have space for new devices
-	if (this->deviceCount >= MAX_DEVICE_COUNT)
+	if (this->elementCount >= MAX_ELEMENT_COUNT)
 		return;
 
 	// add device to list of devices
-	this->deviceIds[this->deviceCount++] = data.id;
-	Storage::write(STORAGE_CONFIG, STORAGE_ID_RADIO1, this->deviceCount, this->deviceIds);
+	this->elementIds[this->elementCount++] = data.id;
+	this->storage.writeBlocking(STORAGE_ID_RADIO1, this->elementCount, this->elementIds);
 
 	// allocate data
 	int size = data.size();
@@ -2441,10 +2602,13 @@ void RadioInterface::handleGpCommission(uint32_t deviceId, PacketReader& r) {
 
 	// create device
 	device = new GpDevice(this, d);
+
+	// set security counter
 	device->securityCounter = securityCounter;
+	this->counters.writeBlocking(COUNTERS_ID_RADIO + device->data->counterId, 4, &securityCounter);
 
 	// store device to flash
-	Storage::write(STORAGE_CONFIG, STORAGE_ID_RADIO1 | data.id, size, d);
+	this->storage.writeBlocking(STORAGE_ID_RADIO1 | data.id, size, d);
 }
 
 AwaitableCoroutine RadioInterface::handleZbCommission(uint64_t deviceLongAddress, Radio::SendFlags sendFlags) {
@@ -2464,7 +2628,7 @@ AwaitableCoroutine RadioInterface::handleZbCommission(uint64_t deviceLongAddress
 	auto oldDevice = *od;
 
 	// check if we are out of space for new devices
-	bool outOfDevices = oldDevice == nullptr && this->deviceCount >= MAX_DEVICE_COUNT;
+	bool outOfDevices = oldDevice == nullptr && this->elementCount >= MAX_ELEMENT_COUNT;
 
 	// variables
 	uint8_t packet1[MESSAGE_LENGTH];
@@ -2516,7 +2680,7 @@ AwaitableCoroutine RadioInterface::handleZbCommission(uint64_t deviceLongAddress
 
 	// create new device
 	ZbDeviceData deviceData;
-	deviceData.id = oldDevice != nullptr ? oldDevice->data.id : allocateZbDeviceId();
+	deviceData.id = oldDevice != nullptr ? oldDevice->data.id : allocateDeviceId();
 	deviceData.sendFlags = sendFlags;
 	deviceData.shortAddress = deviceShortAddress;
 	deviceData.longAddress = deviceLongAddress;
@@ -2652,7 +2816,7 @@ AwaitableCoroutine RadioInterface::handleZbCommission(uint64_t deviceLongAddress
 	// get descriptor of each endpoint (packet1)
 	ZbEndpoint *oldEndpoint = oldDevice != nullptr ? oldDevice->endpoints : nullptr;
 	uint8_t endpointCount = endpoints.u8();
-	int deviceCount = this->deviceCount;
+	int elementCount = this->elementCount;
 	for (int endpointIndex = 0; endpointIndex < endpointCount; ++endpointIndex) {
 		// get device endpoint (packet1)
 		uint8_t deviceEndpoint = endpoints.u8();
@@ -2663,9 +2827,9 @@ AwaitableCoroutine RadioInterface::handleZbCommission(uint64_t deviceLongAddress
 			builder.id = oldEndpoint->data->id;
 		} else {
 			// allocate a new device id if possible
-			if (deviceCount >= MAX_DEVICE_COUNT)
+			if (elementCount >= MAX_ELEMENT_COUNT)
 				continue;
-			builder.id = allocateId(deviceCount);
+			builder.id = allocateId(elementCount);
 		}
 
 		// get power source (packet2)
@@ -2716,7 +2880,7 @@ AwaitableCoroutine RadioInterface::handleZbCommission(uint64_t deviceLongAddress
 			uint16_t addressOfInterest = endpointDescriptor.u16L();
 			uint8_t descriptorLength = endpointDescriptor.u8();
 			uint8_t endpoint2 = endpointDescriptor.u8();
-			zcl::Profile profile = endpointDescriptor.e16L<zcl::Profile>();
+			auto profile = endpointDescriptor.e16L<zcl::Profile>();
 			uint16_t applicationDevice = endpointDescriptor.u16L();
 			uint8_t applicationVersion = endpointDescriptor.u8();
 			Terminal::out << "Endpoint Descriptor " << dec(deviceEndpoint) << " Status " << dec(status) << '\n';
@@ -2726,7 +2890,7 @@ AwaitableCoroutine RadioInterface::handleZbCommission(uint64_t deviceLongAddress
 		// iterate over input/server clusters of device and create the counterparts (packet2)
 		uint8_t inputClusterCount = endpointDescriptor.u8();
 		for (int i = 0; i < inputClusterCount && endpointDescriptor.getRemaining() >= 3; ++i) {
-			zcl::Cluster cluster = endpointDescriptor.e16L<zcl::Cluster>();
+			auto cluster = endpointDescriptor.e16L<zcl::Cluster>();
 
 			builder.beginClientCluster(cluster);
 			switch (cluster) {
@@ -2756,7 +2920,7 @@ AwaitableCoroutine RadioInterface::handleZbCommission(uint64_t deviceLongAddress
 		// iterate over output/client clusters and create counterparts (client sends commands to manipulate attributes in server) (packet2)
 		uint8_t outputClusterCount = endpointDescriptor.u8();
 		for (int i = 0; i < outputClusterCount && endpointDescriptor.getRemaining() >= 2; ++i) {
-			zcl::Cluster cluster = endpointDescriptor.e16L<zcl::Cluster>();
+			auto cluster = endpointDescriptor.e16L<zcl::Cluster>();
 
 			builder.beginServerCluster(cluster);
 			switch (cluster) {
@@ -2856,12 +3020,12 @@ AwaitableCoroutine RadioInterface::handleZbCommission(uint64_t deviceLongAddress
 		if (oldEndpoint != nullptr)
 			oldEndpoint = oldEndpoint->next;
 		else
-			this->deviceIds[deviceCount++] = builder.id;
+			this->elementIds[elementCount++] = builder.id;
 	}
 
 	// remove id's of remaining old endpoints from list of device id's
 	while (oldEndpoint != nullptr) {
-		deviceCount = eraseDevice(deviceCount, this->deviceIds, oldEndpoint->data->id);
+		elementCount = eraseElement(elementCount, this->elementIds, oldEndpoint->data->id);
 		oldEndpoint = oldEndpoint->next;
 	}
 
@@ -2885,8 +3049,8 @@ AwaitableCoroutine RadioInterface::handleZbCommission(uint64_t deviceLongAddress
 	}
 
 	// store list of device id's (each endpoint is treated as a device)
-	this->deviceCount = deviceCount;
-	Storage::write(STORAGE_CONFIG, STORAGE_ID_RADIO1, deviceCount, this->deviceIds);
+	this->elementCount = elementCount;
+	this->storage.writeBlocking(STORAGE_ID_RADIO1, elementCount, this->elementIds);
 
 	// check if device has any endpoints
 	if (device->endpoints == nullptr)
@@ -2895,12 +3059,12 @@ AwaitableCoroutine RadioInterface::handleZbCommission(uint64_t deviceLongAddress
 	// store endpoints
 	auto endpoint = device->endpoints;
 	while (endpoint != nullptr) {
-		Storage::write(STORAGE_CONFIG, STORAGE_ID_RADIO1 | endpoint->data->id, endpoint->data->size(), endpoint->data);
+		this->storage.writeBlocking(STORAGE_ID_RADIO1 | endpoint->data->id, endpoint->data->size(), endpoint->data);
 		endpoint = endpoint->next;
 	}
 
 	// store device
-	Storage::write(STORAGE_CONFIG, STORAGE_ID_RADIO2 | device->data.id, sizeof(device->data), &device->data);
+	this->storage.writeBlocking(STORAGE_ID_RADIO2 | device->data.id, sizeof(device->data), &device->data);
 
 	// transfer ownership of new device to devices list
 	device->next = this->zbDevices;
@@ -2924,7 +3088,7 @@ Coroutine RadioInterface::publish() {
 		while (device != nullptr) {
 			auto endpoint = device->endpoints;
 			while (endpoint != nullptr) {
-				if (endpoint->data->id != info.deviceId) {
+				if (endpoint->data->id != info.elementId) {
 					endpoint = endpoint->next;
 					continue;
 				}
@@ -3024,6 +3188,10 @@ Coroutine RadioInterface::publish() {
 
 							writeFooter(w, Radio::SendFlags::NONE);
 						}
+
+						// store security counter
+						Storage2::Status status;
+						co_await this->counters.write(COUNTERS_ID_RADIO, 4, &this->securityCounter, status);
 
 						// send packet
 						uint8_t sendResult;

@@ -98,8 +98,8 @@ if(POSIX)
 	endif()
 	set(CMAKE_BUILD_WITH_INSTALL_RPATH ON)
 
-	# define emulator flag
-	add_definitions(-DEMU)
+	# define platform
+	add_definitions(-DPLATFORM_POSIX)
 endif()
 if(LINUX)
 	#message("*** linux")
@@ -109,6 +109,9 @@ if(LINUX)
 	if(TARGET PkgConfig::BlueZ)
 		set(LIBRARIES ${LIBRARIES} PkgConfig::BlueZ)
 	endif()
+
+	# define platform
+	add_definitions(-DPLATFORM_LINUX)
 endif()
 if(EMU)
 	#message("*** emu")
@@ -116,16 +119,25 @@ if(EMU)
 	set(LIBRARIES ${LIBRARIES}
 		glfw
 	)
+
+	# define platform
+	add_definitions(-DPLATFORM_EMU)
 endif()
 
 if("nrf52" IN_LIST PLATFORM)
 	# Nordic nRF52
 	set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -L${CMAKE_SOURCE_DIR}/system/src/nrf52/system -T${CMAKE_SOURCE_DIR}/board/${BOARD}/link.ld")
+
+	# define platform
+	add_definitions(-DPLATFORM_NRF52)
 endif()
 
 if("stm32f0" IN_LIST PLATFORM)
 	# ST STM32F0
 	set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -T${CMAKE_SOURCE_DIR}/board/${BOARD}/link.ld")
+
+	# define platform
+	add_definitions(-DPLATFORM_STM32F0)
 endif()
 
 
@@ -230,7 +242,19 @@ if(POSIX)
 	set(NETWORK system/src/Network.hpp system/src/posix/Network.cpp)
 	set(OUTPUT system/src/Output.hpp system/src/posix/Output.cpp system/src/Debug.hpp)
 	set(SOUND system/src/Sound.hpp system/src/posix/Sound.cpp)
-	set(STORAGE system/src/Storage.hpp system/src/posix/Storage.cpp)
+	set(SPI_MASTER
+		system/src/SpiMaster.hpp
+		system/src/SpiMaster.cpp
+		system/src/posix/PrintSpiMaster.hpp
+		system/src/posix/PrintSpiMaster.cpp
+	)
+	#set(STORAGE system/src/Storage.hpp system/src/posix/Storage.cpp)
+	set(STORAGE2
+		system/src/Storage2.hpp
+		system/src/Storage2.cpp
+		system/src/posix/FileStorage.hpp
+		system/src/posix/FileStorage.cpp
+	)
 	set(TERMINAL system/src/Terminal.hpp system/src/posix/Terminal.cpp)
 	set(TIMER system/src/SystemTime.hpp system/src/Timer.hpp system/src/posix/Timer.cpp)
 endif()
@@ -261,7 +285,15 @@ if(EMU)
 	set(QUADRATURE_DECODER system/src/QuadratureDecoder.hpp system/src/emu/QuadratureDecoder.cpp)
 	set(RADIO system/src/RadioDefs.hpp system/src/Radio.hpp system/src/emu/Radio.cpp)
 	set(RANDOM system/src/Random.hpp system/src/emu/Random.cpp)
-	set(SPI system/src/Spi.hpp system/src/emu/Spi.hpp system/src/emu/Spi.cpp)
+	#set(SPI system/src/Spi.hpp system/src/emu/Spi.hpp system/src/emu/Spi.cpp)
+	set(SPI_MASTER
+		system/src/SpiMaster.hpp
+		system/src/SpiMaster.cpp
+		system/src/emu/SpiBME680.hpp
+		system/src/emu/SpiBME680.cpp
+		system/src/emu/SpiSSD1309.hpp
+		system/src/emu/SpiSSD1309.cpp
+	)
 	set(USB_DEVICE system/src/UsbDevice.hpp system/src/emu/UsbDevice.cpp)
 endif()
 if("nrf52" IN_LIST PLATFORM)
@@ -279,7 +311,13 @@ if("nrf52" IN_LIST PLATFORM)
 	set(QUADRATURE_DECODER system/src/QuadratureDecoder.hpp system/src/nrf52/QuadratureDecoder.cpp)
 	set(RADIO system/src/RadioDefs.hpp system/src/Radio.hpp system/src/nrf52/Radio.cpp)
 	set(RANDOM system/src/Random.hpp system/src/nrf52/Random.cpp)
-	set(SPI system/src/Spi.hpp system/src/nrf52/Spi.cpp)
+	#set(SPI system/src/Spi.hpp system/src/nrf52/Spi.cpp)
+	set(SPI_MASTER
+		system/src/SpiMaster.hpp
+		system/src/SpiMaster.cpp
+		system/src/nrf52/SpiMasterDevice.hpp
+		system/src/nrf52/SpiMasterDevice.cpp
+	)
 	set(TERMINAL system/src/Terminal.hpp system/src/nrf52/Terminal.cpp)
 	set(TIMER system/src/SystemTime.hpp system/src/Timer.hpp system/src/nrf52/Timer.cpp)
 	set(USB_DEVICE system/src/UsbDevice.hpp system/src/nrf52/UsbDevice.cpp)
@@ -295,7 +333,7 @@ if("stm32f0" IN_LIST PLATFORM)
 		system/src/stm32f0/system/startup_stm32f042x6.s
 	)
 	set(OUTPUT system/src/Output.hpp system/src/stm32f0/Output.cpp system/src/Debug.hpp)
-	set(SPI system/src/Spi.hpp system/src/stm32f0/Spi.cpp)
+	#set(SPI system/src/Spi.hpp system/src/stm32f0/Spi.cpp)
 	set(TERMINAL system/src/Terminal.hpp system/src/stm32f0/Terminal.cpp)
 	set(TIMER system/src/SystemTime.hpp system/src/Timer.hpp system/src/stm32f0/Timer.cpp)
 endif()
@@ -314,8 +352,8 @@ set(SYSTEM
 	${RADIO}
 	${RANDOM}
 	${SOUND}
-	${SPI}
-	${STORAGE}
+	${SPI_MASTER}
+	${STORAGE2}
 	${TERMINAL}
 	${TIMER}
 	${USB_DEVICE}
@@ -331,8 +369,8 @@ set(NODE
 	node/src/MqttSnClient.hpp
 	node/src/MqttSnBroker.cpp
 	node/src/MqttSnBroker.hpp
-	node/src/State.cpp
-	node/src/State.hpp
+	#node/src/State.cpp
+	#node/src/State.hpp
 	node/src/ArrayStorage.cpp
 	node/src/ArrayStorage.hpp
 	node/src/Subscriber.cpp
@@ -576,7 +614,7 @@ add_system_test_executable(QuadratureDecoder)
 add_system_test_executable(Radio)
 add_system_test_executable(Random)
 add_system_test_executable(Sound)
-add_system_test_executable(Spi)
+add_system_test_executable(SpiMaster)
 add_system_test_executable(Storage)
 add_system_test_executable(Timer)
 add_system_test_executable(UsbDevice)

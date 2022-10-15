@@ -5,14 +5,17 @@
 #include <functional>
 
 
+struct Source {
+	uint8_t interfaceId;
+	uint8_t elementId;
+	uint8_t plugIndex;
+};
+
 // connection data stored in flash
 struct Connection {
-	struct {
-		uint8_t interfaceId;
-		uint8_t deviceId;
-		uint8_t plugIndex;
-	} source;
+	Source source;
 
+	// we only need plugIndex for destination as interfaceId and elementId are stored externally in struct Connections
 	struct {
 		uint8_t plugIndex;
 	} destination;
@@ -28,8 +31,8 @@ struct SubscriberInfo {
 	// connection index
 	uint8_t connectionIndex;
 
-	// receiver device id
-	uint8_t deviceId;
+	// receiver element id
+	uint8_t elementId;
 
 	// receiver plug index
 	uint8_t plugIndex;
@@ -61,7 +64,7 @@ class Subscriber : public LinkedListNode {
 public:
 	Connection const *data;
 
-	uint8_t deviceId;
+	uint8_t elementId;
 	uint8_t connectionIndex;
 
 	SubscriberTarget target;
@@ -113,14 +116,15 @@ public:
  * Info for the listener of a message
  */
 struct ListenerInfo {
-	// interface index
+	Source source;
+/*	// interface index
 	uint8_t interfaceId;
 
 	// sender device id
 	uint8_t deviceId;
 
 	// sender plug index
-	uint8_t plugIndex;
+	uint8_t plugIndex;*/
 
 	// message type
 	//MessageType type;

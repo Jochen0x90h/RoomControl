@@ -31,7 +31,6 @@ void runOnce(bool wait) {
 				activated = true;
 			}
 		}
-
 	} while (activated);
 
 	// get next timeout

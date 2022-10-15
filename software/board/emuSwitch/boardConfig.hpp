@@ -31,9 +31,13 @@ constexpr int OUTPUT_COUNT = array::count(OUTPUTS);
 // spi
 // ---
 
-constexpr int SPI_CONTEXT_COUNT = 1;
-#define SPI_EMU_MPQ6526 0
+//constexpr int SPI_CONTEXT_COUNT = 1;
+//#define SPI_EMU_MPQ6526 0
 constexpr int MPQ6526_MAPPING[] = {0, 1, 2, 3, 4, 5};
+
+struct Drivers {
+	//relays;
+};
 
 
 // radio

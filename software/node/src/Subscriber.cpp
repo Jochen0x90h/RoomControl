@@ -2,7 +2,7 @@
 
 static void setInfo(SubscriberParameters &p, Subscriber const &subscriber) {
 	p.info.connectionIndex = subscriber.connectionIndex;
-	p.info.deviceId = subscriber.deviceId;
+	p.info.elementId = subscriber.elementId;
 	p.info.plugIndex = subscriber.data->destination.plugIndex;
 	//p.info.type = subscriber.info.type;
 }

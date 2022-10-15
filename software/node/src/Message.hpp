@@ -32,43 +32,18 @@ struct Message {
 };
 
 /**
- * Info for the receiver of a message
+ * Convert options for converting messages from a source type to a destination type
  */
-/*struct MessageInfo {
-	// subscribers: connection index, listeners: device index
-	uint8_t sourceIndex;
-
-	// subscribers: receiver device id, listeners: sender device id
-	uint8_t deviceId;
-
-	// subscribers: receiver plug index, listeners: sender plug index
-	uint8_t plugIndex;
-
-	// subscribers: connection index
-	uint8_t connectionIndex;
-
-	// message type
-	MessageType type;
-};
-
-struct MessageParameters {
-public:
-	// info about the message source for the subscriber to identify the message
-	MessageInfo &info;
-
-	// message (length is defined by the message type)
-	void *message;
-};
-
-using MessageBarrier = Barrier<MessageParameters>;
-*/
-
 struct ConvertOptions {
 	static constexpr int MAX_VALUE_COUNT = 3;
 
 	// mapping from input command to output command in a connection
 	uint16_t commands;
+
+	// transition in 1/10s
 	uint16_t transition;
+
+	// values for conversion from switch to set/step value or comparison against a threshold
 	union {
 		float f[MAX_VALUE_COUNT];
 	} value;

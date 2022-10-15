@@ -7,7 +7,6 @@ namespace Loop {
 // wait for event
 // see http://infocenter.arm.com/help/index.jsp?topic=/com.arm.doc.dai0321a/BIHICBGB.html
 void waitForEvent() {
-	
 	// data synchronization barrier
 	__DSB();
 	
@@ -22,6 +21,8 @@ Handler addHandler(Handler handler) {
 	Loop::nextHandler = handler;
 	return h;
 }
+
+HandlerList handlers;
 
 void init() {
 	// configure system clock
@@ -44,6 +45,18 @@ void init() {
 
 void run() {
 	while (true) {
+		// call all handlers
+		auto it = Loop::handlers.begin();
+		while (it != Loop::handlers.end()) {
+			// increment iterator beforehand because a handler can remove() itself
+			auto current = it;
+			++it;
+			current->handle();
+		}
+
+		// wait for something to happen
+		// waitForEvent();
+
 		// call handler chain of drivers
 		Loop::nextHandler();
 	}

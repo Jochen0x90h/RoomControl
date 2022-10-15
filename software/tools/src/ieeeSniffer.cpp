@@ -460,15 +460,15 @@ void handleNwk(PacketReader &r) {
 		// security control field (4.5.1.1)
 		auto securityControl = r.e8<zb::SecurityControl>();
 
-		// security counter
-		uint32_t securityCounter = r.u32L();
-		Terminal::out << ("SecCnt " + hex(securityCounter) + "; ");
-
 		// key type
 		if ((securityControl & zb::SecurityControl::KEY_MASK) != zb::SecurityControl::KEY_NETWORK) {
 			Terminal::out << ("Error: Only network key supported!\n");
 			return;
 		}
+
+		// security counter
+		uint32_t securityCounter = r.u32L();
+		Terminal::out << ("SecCnt " + hex(securityCounter) + "; ");
 
 		// extended source
 		if ((securityControl & zb::SecurityControl::EXTENDED_NONCE) == 0) {

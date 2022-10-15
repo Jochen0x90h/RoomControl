@@ -19,21 +19,21 @@ public:
 		DEVICE_COUNT = 8
 	};
 
-	LocalInterface(uint8_t interfaceId);
+	LocalInterface(uint8_t interfaceId, SpiMaster &airSensor);
 
 	~LocalInterface() override;
 
 	String getName() override;
 	void setCommissioning(bool enabled) override;
 
-	Array<uint8_t const> getDeviceIds() override;
-	String getName(uint8_t deviceId) const override;
-	void setName(uint8_t deviceId, String name) override;
-	Array<MessageType const> getPlugs(uint8_t deviceId) const override;
-	SubscriberTarget getSubscriberTarget(uint8_t deviceId, uint8_t plugIndex) override;
+	Array<uint8_t const> getElementIds() override;
+	String getName(uint8_t id) const override;
+	void setName(uint8_t id, String name) override;
+	Array<MessageType const> getPlugs(uint8_t id) const override;
+	SubscriberTarget getSubscriberTarget(uint8_t id, uint8_t plugIndex) override;
 	void subscribe(Subscriber &subscriber) override;
 	void listen(Listener &listener) override;
-	void erase(uint8_t deviceId) override;
+	void erase(uint8_t id) override;
 
 	// set number of plugs for the wheel device
 	void setWheelPlugCount(uint8_t plugCount) {this->wheelPlugCount = plugCount;}
@@ -44,7 +44,7 @@ public:
 protected:
 
 	// reads the air sensor every minute and publishes the values to the subscribers
-	Coroutine readAirSensor();
+	Coroutine readAirSensor(SpiMaster &spi);
 
 	// handles messages published to devices in this interface
 	Coroutine publish();
@@ -52,7 +52,7 @@ protected:
 
 	uint8_t deviceCount;
 	uint8_t deviceIds[DEVICE_COUNT];
-	Device devices[DEVICE_COUNT];
+	Element devices[DEVICE_COUNT];
 	uint8_t wheelPlugCount = 1;
 
 	// sounds

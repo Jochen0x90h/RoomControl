@@ -106,8 +106,8 @@ void fill(T (&dst)[N], V const &value) {
  * @param value fill value
  */
 template <typename OutputIt, typename V>
-void fill(int length, OutputIt dst, V const &value) {
-	auto end = dst + length;
+void fill(int count, OutputIt dst, V const &value) {
+	auto end = dst + count;
 	for (; dst < end; ++dst) {
 		*dst = value;
 	}

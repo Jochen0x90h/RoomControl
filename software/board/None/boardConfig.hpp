@@ -1,3 +1,5 @@
+#include <posix/PrintSpiMaster.hpp>
+
 // flash
 // -----
 
@@ -22,3 +24,12 @@ constexpr int NETWORK_CONTEXT_COUNT = 1;
 // -------
 
 constexpr int STORAGE_CONTEXT_COUNT = 1;
+
+
+// spi
+// ---
+
+struct Drivers {
+	PrintSpiMaster airSensor{"airSensor"};
+	PrintSpiMaster display{"display"};
+};

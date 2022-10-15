@@ -1,6 +1,7 @@
 #pragma once
 
 #include "SSD1309.hpp"
+#include <boardConfig.hpp>
 
 
 /**
@@ -11,7 +12,7 @@ public:
 	/**
 	 * Constructor starts a coroutine that transfers the bitmaps to the display
 	 */
-	SwapChain() : freeList{&bitmaps[0], &bitmaps[1]} {
+	SwapChain(SpiMaster &spi) : freeList{&bitmaps[0], &bitmaps[1]}, display(spi) {
 		// start transfer coroutine
 		transfer();
 	}

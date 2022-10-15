@@ -1,9 +1,9 @@
 #pragma once
 
 #include "Interface.hpp"
+#include "Storage2.hpp"
 #include <MessageReader.hpp>
 #include <MessageWriter.hpp>
-#include <State.hpp>
 #include <appConfig.hpp>
 
 
@@ -12,8 +12,8 @@
  */
 class BusInterface : public Interface {
 public:
-	// maximum number of devices that can be commissioned (each endpoint counts as one device)
-	static constexpr int MAX_DEVICE_COUNT = 128;
+	// maximum number of elements that can be commissioned (each device endpoint is one element)
+	static constexpr int MAX_ELEMENT_COUNT = 128;
 
 	// last valid bus device address
 	static constexpr int LAST_ADDRESS = 8 * 9 - 1;
@@ -24,10 +24,11 @@ public:
 
 	/**
 	 * Constructor
-	 * @param configuration global configuration
-	 * @param stateManager persistent state manager for counters
+	 * @param interfaceId id of interface
+	 * @param storage persistent storage for device configuration
+	 * @param counters persistent storage for security counters
 	 */
-	BusInterface(uint8_t interfaceId, PersistentStateManager &stateManager);
+	BusInterface(uint8_t interfaceId, Storage2 &storage, Storage2 &counters);
 
 	~BusInterface() override;
 
@@ -41,14 +42,14 @@ public:
 	String getName() override;
 	void setCommissioning(bool enabled) override;
 
-	Array<uint8_t const> getDeviceIds() override;
-	String getName(uint8_t deviceId) const override;
-	void setName(uint8_t deviceId, String name) override;
-	Array<MessageType const> getPlugs(uint8_t deviceId) const override;
-	SubscriberTarget getSubscriberTarget(uint8_t deviceId, uint8_t plugIndex) override;
+	Array<uint8_t const> getElementIds() override;
+	String getName(uint8_t id) const override;
+	void setName(uint8_t id, String name) override;
+	Array<MessageType const> getPlugs(uint8_t id) const override;
+	SubscriberTarget getSubscriberTarget(uint8_t id, uint8_t plugIndex) override;
 	void subscribe(Subscriber &subscriber) override;
 	void listen(Listener &listener) override;
-	void erase(uint8_t deviceId) override;
+	void erase(uint8_t id) override;
 
 private:
 	static constexpr int MAX_PLUG_COUNT = 64;
@@ -57,33 +58,37 @@ private:
 
 	// device data that is stored in flash
 	struct DeviceData {
-		// storage id, also used as bus address
+		// device id, also used as storage index
 		uint8_t id;
 
-		// device id
-		uint32_t deviceId;
+		// bus address (is equal to id - 1)
+		uint8_t address;
+
+		// id of device on bus
+		uint32_t busDeviceId;
 	};
 
 	class Endpoint;
-	class BusDevice {
+	class Device {
 	public:
 		static constexpr int MESSAGE_LENGTH = 80;
 
-		BusDevice(DeviceData const &data)
-			: data(data)
-		{}
-		BusDevice(BusInterface *interface, DeviceData const &data)
-			: next(interface->devices), data(data)
-		{
-			interface->devices = this;
-		}
-		~BusDevice();
+		// constructor for loading devices on startup
+		Device(BusInterface *interface, DeviceData const &data);
+
+		// constructor for commissioning new devices
+		Device(DeviceData const &data) : data(data), securityCounter(0) {}
+
+		~Device();
 
 		// next device
-		BusDevice *next;
+		Device *next;
 
 		// device data that is stored in flash
 		DeviceData data;
+
+		// last security counter seen from bus device
+		uint32_t securityCounter;
 
 		// linked list of endpoints
 		Endpoint *endpoints = nullptr;
@@ -107,11 +112,11 @@ private:
 		int size() {return offsetOf(EndpointData, plugs[this->plugCount]);}
 	};
 
-	class Endpoint : public Device {
+	class Endpoint : public Element {
 	public:
 		// adds to linked list and takes ownership of the data
-		Endpoint(BusInterface *interface, BusDevice *device, EndpointData *data)
-			: Device(data->id, interface->listeners), next(nullptr), data(data)
+		Endpoint(BusInterface *interface, Device *device, EndpointData *data)
+			: Element(data->id, interface->listeners), next(nullptr), data(data)
 		{
 			// add to end of linked list to preserve endpoint index
 			auto e = &device->endpoints;
@@ -129,32 +134,40 @@ private:
 		EndpointData *data;
 	};
 
-	Endpoint *getEndpoint(uint8_t deviceId) const;
-	uint8_t allocateId(int deviceCount);
+	Endpoint *getEndpoint(uint8_t id) const;
+	uint8_t allocateId(int elementCount);
 	uint8_t allocateDeviceId();
-	BusDevice *getOrLoadDevice(uint8_t deviceId);
+	Device *getOrLoadDevice(uint8_t deviceId);
 
 	// start the interface
-	Coroutine start();
+	//Coroutine start();
 
-	// counters
-	PersistentState<uint32_t> securityCounter;
+
+	// listeners that listen on all messages of the interface (as opposed to subscribers that subscribe to one plug)
+	ListenerList listeners;
+
+	// persistent storage
+	Storage2 &storage;
+
+	// persistent counters
+	Storage2 &counters;
+	uint32_t securityCounter;
 
 	// configuration
 	DataBuffer<16> const *key = nullptr;
 	AesKey const *aesKey;
 
-
-	int deviceCount = 0;
-	uint8_t deviceIds[MAX_DEVICE_COUNT];
-	BusDevice *devices = nullptr;
+	// devices
+	Device *devices = nullptr;
+	int elementCount = 0;
+	uint8_t elementIds[MAX_ELEMENT_COUNT];
 
 	// receive from bus nodes
 	Coroutine receive();
 
 	[[nodiscard]] AwaitableCoroutine handleCommission(uint32_t busDeviceId, uint8_t endpointCount);
 
-	[[nodiscard]] AwaitableCoroutine readAttribute(int &length, uint8_t (&message)[MESSAGE_LENGTH], BusDevice &device,
+	[[nodiscard]] AwaitableCoroutine readAttribute(int &length, uint8_t (&message)[MESSAGE_LENGTH], Device &device,
 		uint8_t endpointIndex, bus::Attribute attribute);
 
 	// publish messages to bus nodes
@@ -164,7 +177,7 @@ private:
 	bool commissioning = false;
 
 	AwaitableCoroutine commissionCoroutine;
-	BusDevice *tempDevice;
+	Device *tempDevice;
 
 
 	struct Response {
@@ -187,7 +200,4 @@ private:
 
 	// publish() coroutine waits here until something gets published to a bus device
 	SubscriberBarrier publishBarrier;
-
-	// listeners that listen on all messages of the interface (as opposed to subscribers that subscribe to one plug)
-	ListenerList listeners;
 };

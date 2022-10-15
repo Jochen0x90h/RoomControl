@@ -46,7 +46,7 @@ constexpr int SPI_FRAM = 2;
 
 // fram
 // ----
-
+/*
 constexpr int FRAM_SIZE = 8192;
 constexpr int FRAM_WREN = 6; // write enable
 constexpr int FRAM_WRDI = 4; // write disable
@@ -56,13 +56,13 @@ constexpr int FRAM_READ = 3; // read from memory array
 constexpr int FRAM_WRITE = 2; // write to memory array
 constexpr int FRAM_FSTRD = 11; // fast read from memory array
 constexpr int FRAM_RDID = 0x9f; // read device id
-
+*/
 
 // display
 // -------
 
-constexpr int DISPLAY_WIDTH = 128;
-constexpr int DISPLAY_HEIGHT = 64;
+//constexpr int DISPLAY_WIDTH = 128;
+//constexpr int DISPLAY_HEIGHT = 64;
 
 
 // radio
@@ -82,7 +82,7 @@ constexpr int NETWORK_MDNS = 1;
 // storage
 // -------
 
-constexpr int STORAGE_CONFIG = 0;
+//constexpr int STORAGE_CONFIG = 0;
 constexpr int STORAGE_ID_CONFIG = 0x0000;
 constexpr int STORAGE_ID_DISPLAY_LISTENER = 0x0010;
 constexpr int STORAGE_ID_BUS1 = 0x0100;
@@ -91,5 +91,8 @@ constexpr int STORAGE_ID_RADIO1 = 0x0300;
 constexpr int STORAGE_ID_RADIO2 = 0x0400;
 constexpr int STORAGE_ID_ALARM = 0x0500;
 constexpr int STORAGE_ID_FUNCTION = 0x0600;
-
 constexpr int STORAGE_ID_CONNECTION = 0x1000;
+
+constexpr int COUNTERS_ID_BUS = 0x000;
+constexpr int COUNTERS_ID_RADIO = 0x100;
+constexpr int COUNTERS_ID_FUNCTION = 0x200;

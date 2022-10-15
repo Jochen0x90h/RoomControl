@@ -8,7 +8,6 @@
 #include "SwapChain.hpp"
 #include "Menu.hpp"
 #include <MqttSnBroker.hpp> // include at first because of strange compiler error
-#include <State.hpp>
 #include <ArrayStorage.hpp>
 #include <ClockTime.hpp>
 #include <Coroutine.hpp>
@@ -30,15 +29,18 @@ public:
 	static constexpr int MAX_TIMER_COUNT = 32;
 
 
-	RoomControl();
+	RoomControl(Drivers &drivers);
 
 	~RoomControl();
+
+
 
 
 // Storage
 // -------
 
-	PersistentStateManager stateManager;
+	Storage2 &storage;
+	//PersistentStateManager stateManager;
 	
 
 // Configuration
@@ -78,7 +80,7 @@ public:
 		Connections *next;
 
 		uint8_t interfaceIndex;
-		uint8_t deviceId;
+		uint8_t elementId;
 
 		// dynamically allocated lists of data and subscribers
 		uint8_t count;
@@ -109,7 +111,15 @@ public:
 	TempConnections getConnections(uint8_t interfaceIndex, uint8_t deviceId);
 	void writeConnections(uint8_t interfaceIndex, uint8_t deviceId, TempConnections &tc);
 	void eraseConnections(uint8_t interfaceIndex, uint8_t deviceId, TempConnections &tc);
-	void printConnection(Menu::Stream &stream, Connection const &connection);
+	void printSource(Menu::Stream &stream, Source const &source);
+
+	MessageType getSrcType(Source const &source) {
+		auto &interface = *this->interfaces[source.interfaceId];
+		auto plugs = interface.getPlugs(source.elementId);
+		if (source.plugIndex < plugs.count())
+			return plugs[source.plugIndex];
+		return MessageType::INVALID;
+	}
 
 	// linked list of connections
 	Connections *connectionsList = nullptr;
@@ -120,7 +130,7 @@ public:
 
 	// message that gets displayed, stored in flash
 	struct DisplaySource {
-		uint8_t deviceId;
+		uint8_t elementId;
 		uint8_t plugIndex;
 	};
 
@@ -243,10 +253,8 @@ public:
 	// connections
 	[[nodiscard]] AwaitableCoroutine connectionsMenu(Array<MessageType const> plugs, TempConnections &tc);
 	[[nodiscard]] AwaitableCoroutine editConnection(Connection &connection, MessageType dstType, Result &result);
-//	[[nodiscard]] AwaitableCoroutine editConnection(TempConnections &tc, int index, ConnectionData connection, MessageType dstType, bool add);
 	[[nodiscard]] AwaitableCoroutine selectDevice(Connection &connection, MessageType dstType);
-	[[nodiscard]] AwaitableCoroutine detectConnection(Connection &connection, MessageType dstType);
-//	[[nodiscard]] AwaitableCoroutine selectDevice(ConnectionData &connection, MessageType dstType);
+	[[nodiscard]] AwaitableCoroutine detectSource(Source &source, MessageType dstType);
 	[[nodiscard]] AwaitableCoroutine selectPlug(Interface &interface, uint8_t deviceId, Connection &connection, MessageType dstType);
 
 	// helpers

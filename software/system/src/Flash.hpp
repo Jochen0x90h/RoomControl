@@ -9,7 +9,7 @@ namespace Flash {
 /**
  * Initialize the flash
  */
-#ifdef EMU
+#ifdef PLATFORM_POSIX
 void init(char const *fileName = "flash.bin");
 #else
 void init();
