@@ -2,7 +2,6 @@
 #include <Input.hpp>
 #include <Output.hpp>
 #include <Debug.hpp>
-#include <Spi.hpp>
 #include <BusNode.hpp>
 #include <Loop.hpp>
 #include <Terminal.hpp>
@@ -15,6 +14,21 @@
 #include "appConfig.hpp"
 #include <boardConfig.hpp>
 
+
+/*
+	Commission: Press all 4 buttons at the same time (emulator: press on center) and release again
+
+	Configure: Press all 4 buttons at the same time (emulator: press on center), then release some buttons for
+	the desired configuration and keep the remaining buttons held for at least 3 seconds.
+	Buttons on left (A) side:
+		Upper (A0): Light
+		Lower (A1): Double Light
+		Both (A0+A1): Blind
+	Buttons on right (B) side:
+		Upper (B0): Light
+		Lower (B1): Double Light
+		Both (B0+B1): Blind
+*/
 
 constexpr SystemDuration RELAY_TIME = 10ms;
 
@@ -61,7 +75,7 @@ uint32_t securityCounter = 0;
 class Switch {
 public:
 
-	Switch() {
+	Switch(Drivers &drivers) : relayDriver(drivers.relayDriver) {
 		// start coroutines
 		checkButtons();
 		send();
@@ -98,15 +112,15 @@ public:
 			// check if all buttons are pressed
 			if (this->buttons == 0x0f) {
 				this->allTime = Timer::now();
-				this->enumerate = true;
+				this->commission = true;
 				this->configure = true;
 				//Terminal::out << "all\n";
 			}
 
-			// enumerate when all buttons were released
-			if (this->enumerate && this->buttons == 0) {
+			// commission when all buttons were released
+			if (this->commission && this->buttons == 0) {
 				//Terminal::out << "enumerate\n";
-				this->enumerate = false;
+				this->commission = false;
 				this->configure = false;
 
 				// switch to standalone mode
@@ -474,7 +488,7 @@ public:
 					| (by << (MPQ6526_MAPPING[4] * 2 + 1))
 					| (bz << (MPQ6526_MAPPING[5] * 2 + 1));
 				//Terminal::out << "spi " << hex(word) << "\n";
-				co_await Spi::transfer(SPI_RELAY_DRIVER, 1, &word, 0, nullptr);
+				co_await relayDriver.transfer(1, &word, 0, nullptr);
 
 				// wait some time until relay contacts react
 				co_await Timer::sleep(RELAY_TIME);
@@ -482,15 +496,17 @@ public:
 
 			// switch off all half bridges
 			uint16_t word = 0;
-			co_await Spi::transfer(SPI_RELAY_DRIVER, 1, &word, 0, nullptr);
+			co_await relayDriver.transfer(1, &word, 0, nullptr);
 		}
 	}
-	
+
+
+	SpiMaster &relayDriver;
 
 	// commissioning and configuration
 	uint8_t buttons = 0;
 	SystemTime allTime;
-	bool enumerate = false;
+	bool commission = false;
 	bool configure = false;
 
 	// sending over bus
@@ -508,11 +524,11 @@ int main(void) {
 	Loop::init();
 	Output::init(); // for debug signals on pins
 	Input::init();
-	Spi::init();
 	Timer::init();
 	BusNode::init();
+	Drivers drivers;
 
-	Switch s;
+	Switch s(drivers);
 
 	Loop::run();
 }

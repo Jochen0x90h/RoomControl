@@ -27,7 +27,7 @@ constexpr int SPI_DISPLAY = 2;
 // feram
 // -----
 
-constexpr int FERAM_SIZE = 8192;
+//constexpr int FERAM_SIZE = 8192;
 /*constexpr int FRAM_WREN = 6; // write enable
 constexpr int FRAM_WRDI = 4; // write disable
 constexpr int FRAM_RDSR = 5; // read status register
@@ -41,5 +41,5 @@ constexpr int FRAM_RDID = 0x9f; // read device id
 // display
 // -------
 
-constexpr int DISPLAY_WIDTH = 128;
-constexpr int DISPLAY_HEIGHT = 64;
+//constexpr int DISPLAY_WIDTH = 128;
+//constexpr int DISPLAY_HEIGHT = 64;

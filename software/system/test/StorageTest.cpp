@@ -3,6 +3,7 @@
 #include <Storage.hpp>
 #include <Debug.hpp>
 #include <Coroutine.hpp>
+#include <boardConfig.hpp>
 
 
 uint8_t writeData[] = {0x12, 0x34, 0x56, 0x78};
@@ -23,15 +24,17 @@ bool compare() {
 	return true;
 }
 
-Coroutine store() {
+Coroutine store(Storage &storage) {
 	// read from last run
-	Storage::read(0, 5, 4, readData);
+	int size = 4;
+	storage.readBlocking(5, size, readData);
 	compare();
 
 	co_await Timer::sleep(1s);
 
-	Storage::write(0, 5, 4, writeData);
-	Storage::read(0, 5, 4, readData);
+	storage.writeBlocking(5, 4, writeData);
+	size = 4;
+	storage.readBlocking(5, size, readData);
 	compare();
 
 	while (true) {
@@ -43,10 +46,10 @@ Coroutine store() {
 int main(void) {
 	Loop::init();
 	Timer::init();
-	Storage::init();
 	Output::init(); // for debug led's
+	Drivers drivers;
 
-	store();
+	store(drivers.storage);
 
 	Loop::run();
 }

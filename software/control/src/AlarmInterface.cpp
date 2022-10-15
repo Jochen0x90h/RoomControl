@@ -9,7 +9,7 @@
 static MessageType const plugs[1] = {MessageType::BINARY_ALARM_OUT};
 
 
-AlarmInterface::AlarmInterface(uint8_t interfaceId, Storage2 &storage) : listeners(interfaceId), storage(storage) {
+AlarmInterface::AlarmInterface(uint8_t interfaceId, Storage &storage) : listeners(interfaceId), storage(storage) {
 	// load list of element ids
 	int elementCount = sizeof(this->alarmIds);
 	storage.readBlocking(STORAGE_ID_ALARM, elementCount, this->alarmIds);

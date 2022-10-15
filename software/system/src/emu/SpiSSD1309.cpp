@@ -21,7 +21,7 @@ SpiSSD1309::~SpiSSD1309() {
 }
 
 Awaitable <SpiMaster::Parameters> SpiSSD1309::transfer(int writeCount, void const *writeData, int readCount, void *readData) {
-	return {this->waitlist, 0, writeCount, writeData, readCount, readData};
+	return {this->waitlist, nullptr, writeCount, writeData, readCount, readData};
 }
 
 void SpiSSD1309::transferBlocking(int writeCount, void const *writeData, int readCount, void *readData) {

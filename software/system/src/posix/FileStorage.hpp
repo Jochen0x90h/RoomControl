@@ -1,4 +1,4 @@
-#include "../Storage2.hpp"
+#include "../Storage.hpp"
 #include <String.hpp>
 #include <map>
 #include <vector>
@@ -8,7 +8,7 @@
 /**
  * Implementation of Storage interface using files
  */
-class FileStorage : public Storage2 {
+class FileStorage : public Storage {
 public:
 	FileStorage(std::string const &filename, int maxElementCount, int maxElementSize);
 

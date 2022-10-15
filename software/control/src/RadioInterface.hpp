@@ -29,7 +29,7 @@ public:
 	 * @param configuration global configuration
 	 * @param stateManager persistent state manager for counters
 	 */
-	RadioInterface(uint8_t interfaceId, Storage2 &storage, Storage2 &counters);
+	RadioInterface(uint8_t interfaceId, Storage &storage, Storage &counters);
 
 	~RadioInterface() override;
 
@@ -295,10 +295,10 @@ private:
 	ListenerList listeners;
 
 	// persistent storage
-	Storage2 &storage;
+	Storage &storage;
 
 	// persistent counters
-	Storage2 &counters;
+	Storage &counters;
 	uint32_t securityCounter;
 
 	// volatile counters

@@ -26,7 +26,7 @@ constexpr zb::SecurityControl securityLevel = zb::SecurityControl::LEVEL_ENC_MIC
 
 // RadioInterface
 
-RadioInterface::RadioInterface(uint8_t interfaceId, Storage2 &storage, Storage2 &counters)
+RadioInterface::RadioInterface(uint8_t interfaceId, Storage &storage, Storage &counters)
 	: listeners(interfaceId), storage(storage), counters(counters)
 {
 	// load list of device ids
@@ -1313,7 +1313,7 @@ Coroutine RadioInterface::receive() {
 		// store security counter if necessary
 		if (this->securityCounter != lastSecurityCounter) {
 			lastSecurityCounter = this->securityCounter;
-			Storage2::Status status;
+			Storage::Status status;
 			co_await this->counters.write(COUNTERS_ID_RADIO, 4, &this->securityCounter, status);
 		}
 
@@ -1445,7 +1445,7 @@ Terminal::out << ("Beacon Request\n");
 						device->securityCounter = securityCounter;
 
 						// store security counter
-						Storage2::Status status;
+						Storage::Status status;
 						co_await this->counters.write(COUNTERS_ID_RADIO + device->data->counterId, 4, &securityCounter, status);
 
 						// check message integrity code or decrypt message, depending on security level
@@ -1615,7 +1615,7 @@ Terminal::out << ("Beacon Request\n");
 				device.securityCounter = securityCounter;
 
 				// store security counter
-				Storage2::Status status;
+				Storage::Status status;
 				co_await this->counters.write(COUNTERS_ID_RADIO + device.data.id, 4, &securityCounter, status);
 
 				// extended source
@@ -3190,7 +3190,7 @@ Coroutine RadioInterface::publish() {
 						}
 
 						// store security counter
-						Storage2::Status status;
+						Storage::Status status;
 						co_await this->counters.write(COUNTERS_ID_RADIO, 4, &this->securityCounter, status);
 
 						// send packet

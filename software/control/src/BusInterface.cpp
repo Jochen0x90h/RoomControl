@@ -22,7 +22,7 @@ constexpr int MAX_RETRY = 2;
 
 // BusInterface
 
-BusInterface::BusInterface(uint8_t interfaceId, Storage2 &storage, Storage2 &counters)
+BusInterface::BusInterface(uint8_t interfaceId, Storage &storage, Storage &counters)
 	: listeners(interfaceId), storage(storage), counters(counters)
 {
 	// load list of element ids
@@ -496,7 +496,7 @@ Coroutine BusInterface::receive() {
 					device->securityCounter = securityCounter;
 
 					// store security counter
-					Storage2::Status status;
+					Storage::Status status;
 					co_await this->counters.write(COUNTERS_ID_BUS + device->data.id, 4, &securityCounter, status);
 
 					// search endpoint with index
@@ -772,7 +772,7 @@ AwaitableCoroutine BusInterface::readAttribute(int &length, uint8_t (&message)[M
 
 		// increment and store security counter
 		++this->securityCounter;
-		Storage2::Status status;
+		Storage::Status status;
 		co_await this->counters.write(COUNTERS_ID_BUS, 4, &this->securityCounter, status);
 
 		// send
@@ -918,7 +918,7 @@ Coroutine BusInterface::publish() {
 					}
 
 					// store security counter
-					Storage2::Status status;
+					Storage::Status status;
 					co_await this->counters.write(COUNTERS_ID_BUS, 4, &this->securityCounter, status);
 
 					// send

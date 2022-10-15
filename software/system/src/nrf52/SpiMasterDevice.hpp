@@ -21,11 +21,11 @@ public:
 
 	void handle() override;
 
-	void startTransfer(SpiMaster::Parameters const &p);
+	void startTransfer(const SpiMaster::Parameters &p);
 
 
 	int misoPin;
-	int dcPin;
+	bool sharedPin;
 	Waitlist<SpiMaster::Parameters> waitlist;
 
 
@@ -42,11 +42,12 @@ public:
 		 */
 		Channel(SpiMasterDevice &device, int csPin, bool writeOnly = false);
 
-		Awaitable<Parameters> transfer(int writeCount, void const *writeData, int readCount, void *readData) override;
-		void transferBlocking(int writeCount, void const *writeData, int readCount, void *readData) override;
+		Awaitable<Parameters> transfer(int writeCount, const void *writeData, int readCount, void *readData) override;
+		void transferBlocking(int writeCount, const void *writeData, int readCount, void *readData) override;
+
 
 		SpiMasterDevice &device;
 		int csPin;
-		int writeOnly;
+		bool writeOnly;
 	};
 };

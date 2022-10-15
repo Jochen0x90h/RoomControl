@@ -12,7 +12,8 @@ public:
 
 	// Internal helper: Stores the parameters in the awaitable during co_await
 	struct Parameters {
-		int csPin;
+		// pointer to configuration
+		void const *config;
 
 		// write data
 		int writeCount;

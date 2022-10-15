@@ -8,7 +8,6 @@
 #include "SwapChain.hpp"
 #include "Menu.hpp"
 #include <MqttSnBroker.hpp> // include at first because of strange compiler error
-#include <ArrayStorage.hpp>
 #include <ClockTime.hpp>
 #include <Coroutine.hpp>
 #include <StringBuffer.hpp>
@@ -39,7 +38,7 @@ public:
 // Storage
 // -------
 
-	Storage2 &storage;
+	Storage &storage;
 	//PersistentStateManager stateManager;
 	
 

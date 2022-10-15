@@ -905,7 +905,7 @@ static TypeInfo const &findInfo(FunctionInterface::Type type) {
 }
 
 
-FunctionInterface::FunctionInterface(uint8_t interfaceId, Storage2 &storage)
+FunctionInterface::FunctionInterface(uint8_t interfaceId, Storage &storage)
 	: listeners(interfaceId), storage(storage)
 {
 	// load list of function ids

@@ -1,9 +1,9 @@
 #pragma once
 
 #include "Interface.hpp"
-#include "Storage2.hpp"
 #include <MessageReader.hpp>
 #include <MessageWriter.hpp>
+#include <Storage.hpp>
 #include <appConfig.hpp>
 
 
@@ -28,7 +28,7 @@ public:
 	 * @param storage persistent storage for device configuration
 	 * @param counters persistent storage for security counters
 	 */
-	BusInterface(uint8_t interfaceId, Storage2 &storage, Storage2 &counters);
+	BusInterface(uint8_t interfaceId, Storage &storage, Storage &counters);
 
 	~BusInterface() override;
 
@@ -147,10 +147,10 @@ private:
 	ListenerList listeners;
 
 	// persistent storage
-	Storage2 &storage;
+	Storage &storage;
 
 	// persistent counters
-	Storage2 &counters;
+	Storage &counters;
 	uint32_t securityCounter;
 
 	// configuration

@@ -18,7 +18,7 @@
 // SpiMasterDevice
 
 SpiMasterDevice::SpiMasterDevice(int index, int sckPin, int mosiPin, int misoPin, int dcPin)
-	: misoPin(misoPin), dcPin(dcPin)
+	: misoPin(misoPin), sharedPin(misoPin == dcPin)
 {
 	// configure SCK pin: output, low on idle
 	gpio::configureOutput(sckPin);
@@ -31,7 +31,7 @@ SpiMasterDevice::SpiMasterDevice(int index, int sckPin, int mosiPin, int misoPin
 
 	// configure MISO pin: input, pull up
 	gpio::configureInput(misoPin, gpio::Pull::UP);
-	if (misoPin != dcPin) {
+	if (!this->sharedPin) {
 		NRF_SPIM3->PSEL.MISO = misoPin;
 
 		// configure DC pin if used: output, low on idle
@@ -64,30 +64,32 @@ void SpiMasterDevice::handle() {
 		NRF_SPIM3->ENABLE = 0;
 
 		// check for more transfers
-		this->waitlist.visitSecond([this](SpiMaster::Parameters const &p) {
+		this->waitlist.visitSecond([this](const SpiMaster::Parameters &p) {
 			startTransfer(p);
 		});
 
 		// resume first waiting coroutine
-		this->waitlist.resumeFirst([](SpiMaster::Parameters const &p) {
+		this->waitlist.resumeFirst([](const SpiMaster::Parameters &p) {
 			return true;
 		});
 	}
 }
 
 void SpiMasterDevice::startTransfer(const SpiMaster::Parameters &p) {
+	auto &channel = *reinterpret_cast<const SpiMasterDevice::Channel *>(p.config);
+
 	// set CS pin
-	NRF_SPIM3->PSEL.CSN = p.csPin;
+	NRF_SPIM3->PSEL.CSN = channel.csPin;
 
 	// check if MISO and DC (data/command) are on the same pin
-	if (this->misoPin == this->dcPin) {
-		if ((p.readCount & 0x80000000) != 0) {
-			// write command or data: use MISO pin for DC signal
+	if (this->sharedPin) {
+		if (channel.writeOnly) {
+			// write only: use MISO pin for DC (command/data) signal
 			NRF_SPIM3->PSEL.MISO = gpio::DISCONNECTED;
-			NRF_SPIM3->PSELDCX = this->dcPin;
+			NRF_SPIM3->PSELDCX = this->misoPin;
 			//configureOutput(this->dcPin); // done automatically by hardware
 		} else {
-			// read/write without DC signal
+			// read/write: no DC signal
 			NRF_SPIM3->PSELDCX = gpio::DISCONNECTED;
 			NRF_SPIM3->PSEL.MISO = this->misoPin;
 		}
@@ -113,26 +115,26 @@ void SpiMasterDevice::startTransfer(const SpiMaster::Parameters &p) {
 // SpiMasterDevice::Channel
 
 SpiMasterDevice::Channel::Channel(SpiMasterDevice &device, int csPin, bool writeOnly)
-	: device(device), csPin(csPin), writeOnly(writeOnly ? 0x80000000 : 0)
+	: device(device), csPin(csPin), writeOnly(writeOnly)
 {
 	// configure CS pin: output, high on idle
 	gpio::setOutput(csPin, true);
 	gpio::configureOutput(csPin);
 }
 
-Awaitable<SpiMaster::Parameters> SpiMasterDevice::Channel::transfer(int writeCount, void const *writeData, int readCount,
+Awaitable<SpiMaster::Parameters> SpiMasterDevice::Channel::transfer(int writeCount, const void *writeData, int readCount,
 	void *readData)
 {
 	// start transfer immediately if SPI is idle
 	if (!NRF_SPIM3->ENABLE) {
-		Parameters parameters{this->csPin, writeCount, writeData, readCount | this->writeOnly, readData};
+		Parameters parameters{this, writeCount, writeData, readCount, readData};
 		this->device.startTransfer(parameters);
 	}
 
-	return {device.waitlist, this->csPin, writeCount, writeData, readCount | this->writeOnly, readData};
+	return {device.waitlist, this, writeCount, writeData, readCount, readData};
 }
 
-void SpiMasterDevice::Channel::transferBlocking(int writeCount, void const *writeData, int readCount, void *readData) {
+void SpiMasterDevice::Channel::transferBlocking(int writeCount, const void *writeData, int readCount, void *readData) {
 	// check if a transfer is running
 	bool running = NRF_SPIM3->ENABLE;
 
@@ -142,7 +144,7 @@ void SpiMasterDevice::Channel::transferBlocking(int writeCount, void const *writ
 			__NOP();
 	}
 
-	Parameters parameters{this->csPin, writeCount, writeData, readCount | this->writeOnly, readData};
+	Parameters parameters{this, writeCount, writeData, readCount, readData};
 	this->device.startTransfer(parameters);
 
 	// wait for end of transfer

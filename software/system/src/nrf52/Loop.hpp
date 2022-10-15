@@ -25,13 +25,4 @@ public:
 using HandlerList = LinkedList<Handler2>;
 extern HandlerList handlers;
 
-
-/**
- * Set a handler to the event loop
- * @param handler handler to add
- * @return previous handler, needs to be called next
- */
-//Handler2 *setHandler(Handler2 *handler);
-
-
 } // namespace Loop

@@ -47,7 +47,7 @@ SpiBME680::SpiBME680() {
 }
 
 Awaitable <SpiMaster::Parameters> SpiBME680::transfer(int writeCount, void const *writeData, int readCount, void *readData) {
-	return {this->waitlist, 0, writeCount, writeData, readCount, readData};
+	return {this->waitlist, nullptr, writeCount, writeData, readCount, readData};
 }
 
 void SpiBME680::transferBlocking(int writeCount, void const *writeData, int readCount, void *readData) {

@@ -28,6 +28,8 @@ Handler addHandler(Handler handler) {
 	return h;
 }
 
+HandlerList handlers;
+
 void init() {
 	// disabled interrupts trigger an event and wake up the processor from WFE
 	// see chapter 5.3.3 in reference manual
@@ -36,6 +38,18 @@ void init() {
 
 void run() {
 	while (true) {
+		// call all handlers
+		auto it = Loop::handlers.begin();
+		while (it != Loop::handlers.end()) {
+			// increment iterator beforehand because a handler can remove() itself
+			auto current = it;
+			++it;
+			current->handle();
+		}
+
+		// wait for something to happen
+		// waitForEvent();
+
 		// call handler chain of drivers
 		Loop::nextHandler();
 	}

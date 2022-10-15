@@ -1,14 +1,11 @@
 #pragma once
 
+#include <emu/SpiBME680.hpp>
+#include <emu/SpiSSD1309.hpp>
+#include <emu/SpiMPQ6526.hpp>
+#include <posix/FileStorage.hpp>
 #include <util.hpp>
 
-
-// flash
-// -----
-
-constexpr int FLASH_PAGE_SIZE = 4096;
-constexpr int FLASH_PAGE_COUNT = 32;
-constexpr int FLASH_WRITE_ALIGN = 4;
 
 
 // inputs
@@ -35,10 +32,6 @@ constexpr int OUTPUT_COUNT = array::count(OUTPUTS);
 //#define SPI_EMU_MPQ6526 0
 constexpr int MPQ6526_MAPPING[] = {0, 1, 2, 3, 4, 5};
 
-struct Drivers {
-	//relays;
-};
-
 
 // radio
 // -----
@@ -59,7 +52,16 @@ constexpr int BLUETOOTH_CONTEXT_COUNT = 2;
 constexpr int NETWORK_CONTEXT_COUNT = 1;
 
 
-// storage
+// drivers
 // -------
 
-constexpr int STORAGE_CONTEXT_COUNT = 1;
+constexpr int DISPLAY_WIDTH = 128;
+constexpr int DISPLAY_HEIGHT = 64;
+
+struct Drivers {
+	SpiBME680 airSensor;
+	SpiSSD1309 display{DISPLAY_WIDTH, DISPLAY_HEIGHT};
+	SpiMPQ6526 relayDriver;
+	FileStorage storage{"storage.bin", 65536, 1024};
+	FileStorage counters{"counters.bin", 65536, 4};
+};

@@ -237,7 +237,6 @@ list(APPEND PROTOCOL ${TINYCRYPT})
 # drivers
 if(POSIX)
 	set(CALENDAR system/src/ClockTime.hpp system/src/Calendar.hpp system/src/posix/Calendar.cpp)
-	set(FLASH system/src/Flash.hpp system/src/posix/Flash.cpp)
 	set(LOOP system/src/Loop.hpp system/src/posix/Loop.cpp system/src/posix/Loop2.cpp)
 	set(NETWORK system/src/Network.hpp system/src/posix/Network.cpp)
 	set(OUTPUT system/src/Output.hpp system/src/posix/Output.cpp system/src/Debug.hpp)
@@ -248,10 +247,9 @@ if(POSIX)
 		system/src/posix/PrintSpiMaster.hpp
 		system/src/posix/PrintSpiMaster.cpp
 	)
-	#set(STORAGE system/src/Storage.hpp system/src/posix/Storage.cpp)
-	set(STORAGE2
-		system/src/Storage2.hpp
-		system/src/Storage2.cpp
+	set(STORAGE
+		system/src/Storage.hpp
+		system/src/Storage.cpp
 		system/src/posix/FileStorage.hpp
 		system/src/posix/FileStorage.cpp
 	)
@@ -285,12 +283,15 @@ if(EMU)
 	set(QUADRATURE_DECODER system/src/QuadratureDecoder.hpp system/src/emu/QuadratureDecoder.cpp)
 	set(RADIO system/src/RadioDefs.hpp system/src/Radio.hpp system/src/emu/Radio.cpp)
 	set(RANDOM system/src/Random.hpp system/src/emu/Random.cpp)
-	#set(SPI system/src/Spi.hpp system/src/emu/Spi.hpp system/src/emu/Spi.cpp)
 	set(SPI_MASTER
 		system/src/SpiMaster.hpp
 		system/src/SpiMaster.cpp
 		system/src/emu/SpiBME680.hpp
 		system/src/emu/SpiBME680.cpp
+		system/src/emu/SpiMPQ6526.hpp
+		system/src/emu/SpiMPQ6526.cpp
+		system/src/emu/SpiMR45Vxxx.hpp
+		system/src/emu/SpiMR45Vxxx.cpp
 		system/src/emu/SpiSSD1309.hpp
 		system/src/emu/SpiSSD1309.cpp
 	)
@@ -299,7 +300,6 @@ endif()
 if("nrf52" IN_LIST PLATFORM)
 	set(BUS_MASTER system/src/BusMaster.hpp system/src/nrf52/BusMaster.cpp)
 	set(CALENDAR system/src/ClockTime.hpp system/src/Calendar.hpp system/src/nrf52/Calendar.cpp)
-	set(FLASH system/src/Flash.hpp system/src/nrf52/Flash.cpp)
 	set(INPUT system/src/Input.hpp system/src/nrf52/Input.cpp)
 	set(LOOP
 		system/src/Loop.hpp system/src/nrf52/Loop.hpp
@@ -311,7 +311,6 @@ if("nrf52" IN_LIST PLATFORM)
 	set(QUADRATURE_DECODER system/src/QuadratureDecoder.hpp system/src/nrf52/QuadratureDecoder.cpp)
 	set(RADIO system/src/RadioDefs.hpp system/src/Radio.hpp system/src/nrf52/Radio.cpp)
 	set(RANDOM system/src/Random.hpp system/src/nrf52/Random.cpp)
-	#set(SPI system/src/Spi.hpp system/src/nrf52/Spi.cpp)
 	set(SPI_MASTER
 		system/src/SpiMaster.hpp
 		system/src/SpiMaster.cpp
@@ -333,7 +332,12 @@ if("stm32f0" IN_LIST PLATFORM)
 		system/src/stm32f0/system/startup_stm32f042x6.s
 	)
 	set(OUTPUT system/src/Output.hpp system/src/stm32f0/Output.cpp system/src/Debug.hpp)
-	#set(SPI system/src/Spi.hpp system/src/stm32f0/Spi.cpp)
+	set(SPI_MASTER
+		system/src/SpiMaster.hpp
+		system/src/SpiMaster.cpp
+		system/src/stm32f0/SpiMasterDevice.hpp
+		system/src/stm32f0/SpiMasterDevice.cpp
+	)
 	set(TERMINAL system/src/Terminal.hpp system/src/stm32f0/Terminal.cpp)
 	set(TIMER system/src/SystemTime.hpp system/src/Timer.hpp system/src/stm32f0/Timer.cpp)
 endif()
@@ -343,7 +347,6 @@ set(SYSTEM
 	${BUS_NODE}
 	${BUS_MASTER}
 	${CALENDAR}
-	${FLASH}
 	${INPUT}
 	${LOOP}
 	${NETWORK}
@@ -353,7 +356,7 @@ set(SYSTEM
 	${RANDOM}
 	${SOUND}
 	${SPI_MASTER}
-	${STORAGE2}
+	${STORAGE}
 	${TERMINAL}
 	${TIMER}
 	${USB_DEVICE}
@@ -369,10 +372,6 @@ set(NODE
 	node/src/MqttSnClient.hpp
 	node/src/MqttSnBroker.cpp
 	node/src/MqttSnBroker.hpp
-	#node/src/State.cpp
-	#node/src/State.hpp
-	node/src/ArrayStorage.cpp
-	node/src/ArrayStorage.hpp
 	node/src/Subscriber.cpp
 	node/src/Subscriber.hpp
 )
@@ -526,7 +525,8 @@ if(${BOARD} IN_LIST SWITCH_BOARDS)
 		${INPUT}
 		${LOOP}
 		${OUTPUT}
-		${SPI}
+		${SPI_MASTER}
+		${STORAGE}
 		${TIMER}
 		${TERMINAL}
 	)
@@ -744,32 +744,6 @@ target_include_directories(SSD1309Test
 )
 target_link_libraries(SSD1309Test ${LIBRARIES})
 
-
-# test for Storage class
-add_executable(StorageTestOld
-	control/test/StorageTest.cpp
-	board/${BOARD}/boardConfig.hpp
-	${UTIL}
-	${PROTOCOL}
-	${SYSTEM}
-	node/src/State.cpp
-	node/src/State.hpp
-	node/src/ArrayStorage.cpp
-	node/src/ArrayStorage.hpp
-	system/src/posix/Flash.cpp
-)
-target_include_directories(StorageTestOld
-	PRIVATE
-	board/${BOARD} # boardConfig.hpp
-	font
-	control/src
-	node/src
-	system/src
-	protocol/src
-	util/src
-	glad
-)
-target_link_libraries(StorageTestOld ${LIBRARIES})
 
 endif() # ${BOARD} STREQUAL "emuControl"
 

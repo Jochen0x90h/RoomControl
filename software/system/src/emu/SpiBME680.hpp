@@ -32,6 +32,4 @@ public:
 	uint8_t *page;
 
 	Waitlist<SpiMaster::Parameters> waitlist;
-
-	Loop::Handler2 *nextHandler;
 };

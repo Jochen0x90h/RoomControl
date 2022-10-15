@@ -8,7 +8,7 @@ Awaitable<SpiMaster::Parameters> PrintSpiMaster::transfer(int writeCount, void c
 	this->remove();
 	this->time = Loop::now() + 100ms; // emulate 100ms transfer time
 	Loop::timeouts.add(*this);
-	return {this->waitlist, 0, writeCount, writeData, readCount, readData};
+	return {this->waitlist, nullptr, writeCount, writeData, readCount, readData};
 }
 
 void PrintSpiMaster::transferBlocking(int writeCount, void const *writeData, int readCount, void *readData) {

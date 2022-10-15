@@ -23,4 +23,4 @@ constexpr int OUTPUT_LED_B = 1;
 // spi
 // ---
 
-constexpr int SPI_RELAY_DRIVER = 0;
+//constexpr int SPI_RELAY_DRIVER = 0;

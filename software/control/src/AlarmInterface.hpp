@@ -2,8 +2,7 @@
 
 #include "Interface.hpp"
 #include <ClockTime.hpp>
-#include <Coroutine.hpp>
-#include <Storage2.hpp>
+#include <Storage.hpp>
 
 
 class AlarmInterface : public Interface {
@@ -11,7 +10,7 @@ public:
 	// maximum number of alarms
 	static constexpr int MAX_ALARM_COUNT = 64;
 
-	AlarmInterface(uint8_t interfaceId, Storage2 &storage);
+	AlarmInterface(uint8_t interfaceId, Storage &storage);
 	~AlarmInterface() override;
 
 	String getName() override;
@@ -96,7 +95,7 @@ protected:
 	ListenerList listeners;
 
 	// persistent storage
-	Storage2 &storage;
+	Storage &storage;
 
 
 	int alarmCount = 0;

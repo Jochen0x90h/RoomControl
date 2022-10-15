@@ -39,9 +39,9 @@ constexpr int OUTPUT_HEATING_COUNT = 1;
 // spi
 // ---
 
-constexpr int SPI_AIR_SENSOR = 0;
-constexpr int SPI_DISPLAY = 1;
-constexpr int SPI_FRAM = 2;
+//constexpr int SPI_AIR_SENSOR = 0;
+//constexpr int SPI_DISPLAY = 1;
+//constexpr int SPI_FRAM = 2;
 
 
 // fram

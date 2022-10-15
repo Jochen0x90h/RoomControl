@@ -1,8 +1,7 @@
 #pragma once
 
 #include "Interface.hpp"
-#include <Storage2.hpp>
-#include <Coroutine.hpp>
+#include <Storage.hpp>
 #include <Data.hpp>
 
 
@@ -12,7 +11,7 @@ public:
 	// maximum number of functions
 	static constexpr int MAX_FUNCTION_COUNT = 128;
 
-	FunctionInterface(uint8_t interfaceId, Storage2 &storage);
+	FunctionInterface(uint8_t interfaceId, Storage &storage);
 	~FunctionInterface() override;
 
 	String getName() override;
@@ -186,7 +185,7 @@ public:
 	ListenerList listeners;
 
 	// persistent storage
-	Storage2 &storage;
+	Storage &storage;
 
 	// functions
 	Function *functions = nullptr;
