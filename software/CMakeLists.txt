@@ -366,6 +366,8 @@ source_group(system FILES ${SYSTEM})
 
 # base code for nodes (control and gateway)
 set(NODE
+	node/src/FeRamCounters.cpp
+	node/src/FeRamCounters.hpp
 	node/src/Message.cpp
 	node/src/Message.hpp
 	node/src/MqttSnClient.cpp

@@ -4,6 +4,7 @@
 #include "Loop.hpp"
 #include "gpio.hpp"
 
+
 /**
  * Implementation of SPI hardware interface for nrf52 platform
  */
@@ -12,9 +13,9 @@ public:
 	/**
 	 * Constructor
 	 * @param index index of device, 1-2 for SPI1 or SPI2
-	 * @param sckPin clock pin (must be PA5 or PB3)
-	 * @param mosiPin master out slave in pin (must be PA7)
-	 * @param misoPin master in slave out pin (must be PA6)
+	 * @param sckPin clock pin (SPI1: PA5 or PB3)
+	 * @param mosiPin master out slave in pin (SPI1: PA7 or PB5)
+	 * @param misoPin master in slave out pin (SPI1: PA6 or PB4)
 	 */
 	SpiMasterDevice(int index, int sckPin, int mosiPin, int misoPin);
 

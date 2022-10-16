@@ -460,7 +460,7 @@ Coroutine BusInterface::receive() {
 				if (this->commissionCoroutine.isAlive() && this->tempDevice->data.address == address) {
 					// check security counter
 					if (securityCounter <= this->tempDevice->securityCounter) {
-						Terminal::out << "security counter error\n";
+						Terminal::out << "security counter error " << dec(securityCounter) << " <= " << dec(this->tempDevice->securityCounter) << '\n';
 						//continue;
 					}
 					this->tempDevice->securityCounter = securityCounter;
@@ -490,7 +490,7 @@ Coroutine BusInterface::receive() {
 
 					// check security counter
 					if (securityCounter <= device->securityCounter) {
-						Terminal::out << "security counter error\n";
+						Terminal::out << "security counter error " << dec(securityCounter) << " <= " << dec(device->securityCounter) << '\n';
 						//break;
 					}
 					device->securityCounter = securityCounter;
