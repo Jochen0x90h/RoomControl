@@ -25,15 +25,15 @@ protected:
 	Status readBuffer(int &size, void *data, int index, uint8_t const *buffer);
 
 	void setSequenceCounter(int index, int counter) {
-		uint8_t &sc = this->sequenceCounters[index / 4];
-		int pos = index & 3;
+		uint8_t &sc = this->sequenceCounters[index >> 2];
+		int pos = (index & 3) * 2;
 		sc = (sc & ~(3 << pos)) | (counter << pos);
 	}
 
 	int nextSequenceCounter(int index) {
-		uint8_t &sc = this->sequenceCounters[index / 4];
-		int pos = index & 3;
-		int counter = ((sc >> pos) & 3) + 1;
+		uint8_t &sc = this->sequenceCounters[index >> 2];
+		int pos = (index & 3) * 2;
+		int counter = ((sc >> pos) + 1) & 3;
 		sc = (sc & ~(3 << pos)) | (counter << pos);
 		return counter;
 	}

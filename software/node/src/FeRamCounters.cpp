@@ -1,4 +1,6 @@
 #include "FeRamCounters.hpp"
+#include <Terminal.hpp>
+#include <StringOperators.hpp>
 #include <util.hpp>
 
 
@@ -15,10 +17,15 @@ constexpr uint8_t FERAM_RDID = 0x9f; // read device id
 
 
 static uint8_t checksum(uint8_t const *buffer) {
-	// layout of value: sequence counter (2 bit), checksum (3 bit), size (3 bit)
-	// idea: the checksum is the sum of the inverted sequence counter and the size
+	// layout of value: checksum (4 bit), sequence bit (1 bit), size (3 bit)
+	// idea: the checksum is the sum of groups 4 bits of all 5 buffer bytes excluding the checksum itself
 	auto value = buffer[4];
-	return (value & 0x38) | ((~(value >> 3) + (value << 3)) & ~0x38);
+	uint8_t checksum = value;
+	for (int i = 0; i < 4; ++i) {
+		auto b = buffer[i];
+		checksum += b + (b >> 4);
+	}
+	return (value & 0x0f) | (checksum << 4);
 }
 
 struct Resumer {
@@ -102,11 +109,12 @@ Storage::Status FeRamCountersBase::writeBlocking(int index, int size, void const
 	int address = index * 10 + 5 * (sequenceCounter & 1);
 	uint8_t hi = address >> 8;
 	uint8_t lo = address;
-	uint8_t c = (sequenceCounter << 6) | size;
+	uint8_t c = ((sequenceCounter & 2) << 2) | size;
 	uint8_t buffer[3 + 5] = {FERAM_WRITE, hi, lo,0xff, 0xff, 0xff, 0xff, c};
 	array::copy(size, buffer + 3, reinterpret_cast<uint8_t const *>(data));
 	buffer[3 + 4] = checksum(buffer + 3);
 	this->spi.transferBlocking(3 + size + 1, buffer, 0, nullptr);
+	//Terminal::out << "write " << dec(*(int*)data) << " seq " << dec(sequenceCounter) << '\n';
 	return Status::OK;
 }
 
@@ -151,7 +159,7 @@ Coroutine FeRamCountersBase::writer() {
 			int address = p.index * 10 + 5 * (sequenceCounter & 1);
 			uint8_t hi = address >> 8;
 			uint8_t lo = address;
-			uint8_t c = (sequenceCounter << 6) | p.size;
+			uint8_t c = ((sequenceCounter & 2) << 2) | p.size;
 			uint8_t buffer[3 + 5] = {FERAM_WRITE, hi, lo,0xff, 0xff, 0xff, 0xff, c};
 			array::copy(p.size, buffer + 3, reinterpret_cast<uint8_t const *>(p.data));
 			buffer[3 + 4] = checksum(buffer + 3);
@@ -166,33 +174,34 @@ Coroutine FeRamCountersBase::writer() {
 	}
 }
 
-Storage::Status FeRamCountersBase::readBuffer(int &size, void *data, int id, uint8_t const *buffer) {
+Storage::Status FeRamCountersBase::readBuffer(int &size, void *data, int index, uint8_t const *buffer) {
 	// check if a value is valid
 	auto c1 = buffer[4];
 	auto c2 = buffer[9];
-	bool c1Valid = c1 == checksum(buffer + 0) && (c1 & 0x40) == 0;
-	bool c2Valid = c2 == checksum(buffer + 5) && (c2 & 0x40) != 0;
+	bool c1Valid = c1 == checksum(buffer + 0);
+	bool c2Valid = c2 == checksum(buffer + 5);
 
 	// check if at least one value is valid
 	if (c1Valid || c2Valid) {
 		int s = size;
 		uint8_t const *b;
 		int sequenceCounter;
-		if (int8_t(c1 - c2) > 0) {
+		if ((c1Valid && ((c1 ^ c2) & 0x08) != 0) || !c2Valid) {
 			// first is more recent
 			size = c1 & 7;
 			b = buffer;
-			sequenceCounter = c1 >> 6;
+			sequenceCounter = (c1 >> 2) & 2;
 		} else {
 			// second is more recent
 			size = c2 & 7;
 			b = buffer + 5;
-			sequenceCounter = c2 >> 6;
+			sequenceCounter = ((c2 >> 2) & 2) | 1;
 		}
 		array::copy(min(s, size), reinterpret_cast<uint8_t *>(data), b);
+		//Terminal::out << "read " << dec(*(int*)data) << " seq " << dec(sequenceCounter) << '\n';
 
 		// set sequence counter
-		setSequenceCounter(id, sequenceCounter);
+		setSequenceCounter(index, sequenceCounter);
 
 		return Status::OK;
 	} else {

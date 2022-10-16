@@ -2,7 +2,9 @@
 
 #include <emu/SpiBME680.hpp>
 #include <emu/SpiSSD1309.hpp>
+#include <emu/SpiMR45Vxxx.hpp>
 #include <posix/FileStorage.hpp>
+#include <FeRamCounters.hpp>
 #include <util.hpp>
 
 
@@ -66,5 +68,7 @@ struct Drivers {
 	SpiBME680 airSensor;
 	SpiSSD1309 display{DISPLAY_WIDTH, DISPLAY_HEIGHT};
 	FileStorage storage{"storage.bin", 65536, 1024};
-	FileStorage counters{"counters.bin", FERAM_SIZE / 10, 4};
+	//FileStorage counters{"counters.bin", FERAM_SIZE / 10, 4};
+	SpiMR45Vxxx feRam{"feram.bin", FERAM_SIZE};
+	FeRamCounters<FERAM_SIZE> counters{feRam};
 };

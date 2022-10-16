@@ -462,6 +462,8 @@ Coroutine BusInterface::receive() {
 					if (securityCounter <= this->tempDevice->securityCounter) {
 						Terminal::out << "security counter error " << dec(securityCounter) << " <= " << dec(this->tempDevice->securityCounter) << '\n';
 						//continue;
+					} else {
+						Terminal::out << "security counter ok " << dec(securityCounter) << " > " << dec(this->tempDevice->securityCounter) << '\n';
 					}
 					this->tempDevice->securityCounter = securityCounter;
 
@@ -490,14 +492,17 @@ Coroutine BusInterface::receive() {
 
 					// check security counter
 					if (securityCounter <= device->securityCounter) {
-						Terminal::out << "security counter error " << dec(securityCounter) << " <= " << dec(device->securityCounter) << '\n';
+						Terminal::out << dec(device->data.busDeviceId) << ": security counter error " << dec(securityCounter) << " <= " << dec(device->securityCounter) << '\n';
 						//break;
+					} else {
+						Terminal::out << dec(device->data.busDeviceId) << ": security counter ok " << dec(securityCounter) << " > " << dec(device->securityCounter) << '\n';
 					}
 					device->securityCounter = securityCounter;
 
 					// store security counter
 					Storage::Status status;
 					co_await this->counters.write(COUNTERS_ID_BUS + device->data.id, 4, &securityCounter, status);
+					//this->counters.writeBlocking(COUNTERS_ID_BUS + device->data.id, 4, &securityCounter);
 
 					// search endpoint with index
 					auto endpoint = device->endpoints;
@@ -668,7 +673,7 @@ AwaitableCoroutine BusInterface::handleCommission(uint32_t busDeviceId, uint8_t 
 		// set device id
 		data->deviceId = device->data.id;
 
-		// set name
+		// get name
 		co_await readAttribute(length, message, *device, endpointIndex, bus::Attribute::MODEL_IDENTIFIER);
 		if (length > 0)
 			assign(data->name, String(length, message));

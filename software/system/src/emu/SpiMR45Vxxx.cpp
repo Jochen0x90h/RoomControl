@@ -1,5 +1,6 @@
 #include "SpiMR45Vxxx.hpp"
 #include <fcntl.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 
@@ -12,12 +13,17 @@ constexpr uint8_t FERAM_WRITE = 2; // write to memory array
 constexpr uint8_t FERAM_FSTRD = 11; // fast read from memory array
 constexpr uint8_t FERAM_RDID = 0x9f; // read device id
 
+inline int fsize(int fd) {
+	struct stat stat;
+	fstat(fd, &stat);
+	return stat.st_size;
+}
 
 SpiMR45Vxxx::SpiMR45Vxxx(std::string const &filename, int size) : size(size) {
 	this->file = open(filename.c_str(), O_RDWR | O_CREAT, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH);
 
 	// fill with 0xff
-	int fileSize = lseek(this->file, 0, SEEK_END);
+	int fileSize = fsize(this->file);
 	uint8_t buffer[16] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
 	for (int i = fileSize; i < size; i += 16) {
 		pwrite(this->file, buffer, 16, i);
@@ -46,14 +52,14 @@ void SpiMR45Vxxx::transferBlocking(int writeCount, void const *writeData, int re
 		int addr = (w[1] << 8) | w[2];
 		int count = readCount - 3;
 		assert(addr + count <= this->size);
-		pread(this->file, r + 3, count - 3, addr);
+		pread(this->file, r + 3, count, addr);
 		break;
 	}
 	case FERAM_WRITE: {
 		int addr = (w[1] << 8) | w[2];
 		int count = writeCount - 3;
 		assert(addr + count <= this->size);
-		pwrite(this->file, w + 3, count - 3, addr);
+		pwrite(this->file, w + 3, count, addr);
 		break;
 	}
 	}

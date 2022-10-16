@@ -6,9 +6,10 @@
 #include <util.hpp>
 #include <emu/Gui.hpp>
 #include <emu/Loop.hpp>
-#include <iostream>
-#include <fstream>
 #include <chrono>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 
 // emulator implementation of bus uses virtual devices on user interface
@@ -24,10 +25,12 @@ struct Endpoint {
 };
 
 struct Device {
-	struct Flash {
-		uint8_t commissioning;
-		uint8_t address;
+	// persistent state
+	struct PersistentState {
+		int address;
 		AesKey aesKey;
+		uint32_t securityCounter;
+		int index;
 	};
 
 	// device id
@@ -36,9 +39,12 @@ struct Device {
 	// two endpoint lists to test reconfiguration of device
 	Array<Endpoint const> endpoints[2];
 
-	Flash flash;
-	uint8_t commissioning;
-	uint32_t securityCounter;
+	// offset in file and persistent state that is stored in file
+	int offset;
+	PersistentState persistentState;
+
+	// index to set when commissioned
+	uint8_t nextIndex;
 
 	// attribute reading
 	bool readAttribute;
@@ -81,7 +87,14 @@ Device devices[] = {
 };
 
 
-std::fstream file;
+//std::fstream file;
+int file;
+
+inline int fsize(int fd) {
+	struct stat stat;
+	fstat(fd, &stat);
+	return stat.st_size;
+}
 
 
 std::chrono::steady_clock::time_point time;
@@ -94,10 +107,10 @@ void setHeader(bus::MessageWriter &w, Device &device) {
 	w.setHeader();
 
 	// encoded address
-	w.address(device.flash.address);
+	w.address(device.persistentState.address);
 
 	// security counter
-	w.u32L(device.securityCounter);
+	w.u32L(device.persistentState.securityCounter);
 
 	// set start of message
 	w.setMessage();
@@ -105,11 +118,12 @@ void setHeader(bus::MessageWriter &w, Device &device) {
 
 void sendToMaster(bus::MessageWriter &w, Device &device) {
 	// encrypt
-	Nonce nonce(device.flash.address, device.securityCounter);
-	w.encrypt(4, nonce, device.flash.aesKey);
+	Nonce nonce(device.persistentState.address, device.persistentState.securityCounter);
+	w.encrypt(4, nonce, device.persistentState.aesKey);
 
 	// increment security counter
-	++device.securityCounter;
+	++device.persistentState.securityCounter;
+	pwrite(BusMaster::file, &device.persistentState.securityCounter, 4, device.offset + offsetOf(Device::PersistentState, securityCounter));
 
 	// send to bus master (resume coroutine waiting to receive from device)
 	int length = w.getLength();
@@ -145,35 +159,43 @@ void handle(Gui &gui) {
 			if (r.u8() == 0) {
 				// 0 0: master has sent a commissioning message
 
-				// search device with given device id
+				// get bus device id
 				uint32_t deviceId = r.u32L();
-				int offset = 0;
+
+				// check message integrity code (mic)
+				r.setMessageFromEnd(micLength);
+				Nonce nonce(deviceId, 0);
+				if (!r.decrypt(micLength, nonce, bus::defaultAesKey))
+					return true;
+
+				// get address
+				auto address = r.u8();
+
+				// search device with given bus device id
 				for (Device &device: BusMaster::devices) {
 					if (device.id == deviceId) {
-						// check message integrity code (mic)
-						r.setMessageFromEnd(micLength);
-						Nonce nonce(deviceId, 0);
-						if (!r.decrypt(micLength, nonce, bus::defaultAesKey))
-							break;
-
 						// set address
-						device.flash.address = r.u8();
+						device.persistentState.address = address;
 
 						// set key
-						setKey(device.flash.aesKey, r.data8<16>());
+						setKey(device.persistentState.aesKey, r.data8<16>());
 
 						// reset security counter
-						device.securityCounter = 0;
+						device.persistentState.securityCounter = 0;
 
-						// write to file
-						device.flash.commissioning = device.commissioning;
-						BusMaster::file.seekg(offset);
-						BusMaster::file.write(reinterpret_cast<char *>(&device.flash), sizeof(Device::Flash));
-						BusMaster::file.flush();
+						// set index
+						device.persistentState.index = device.nextIndex;
 
-						break;
+						// write commissioned device to file
+						pwrite(BusMaster::file, &device.persistentState, sizeof(Device::PersistentState), device.offset);
+					} else {
+						if (device.persistentState.address == address) {
+							// other device still has the address: decommission
+							// todo: also do in switch
+							device.persistentState.address = -1;
+							pwrite(BusMaster::file, &device.persistentState, sizeof(Device::PersistentState), device.offset);
+						}
 					}
-					offset += sizeof(Device::Flash);
 				}
 			}
 		} else {
@@ -182,7 +204,7 @@ void handle(Gui &gui) {
 
 			// search device
 			for (Device &device : BusMaster::devices) {
-				if (device.flash.address == address) {
+				if (device.persistentState.address == address) {
 					// security counter
 					uint32_t securityCounter = r.u32L();
 
@@ -191,7 +213,7 @@ void handle(Gui &gui) {
 					// decrypt
 					r.setMessage();
 					Nonce nonce(address, securityCounter);
-					if (!r.decrypt(4, nonce, device.flash.aesKey))
+					if (!r.decrypt(4, nonce, device.persistentState.aesKey))
 						break;
 
 					// get endpoint index
@@ -204,7 +226,7 @@ void handle(Gui &gui) {
 					} else {
 						// plug
 						uint8_t plugIndex = r.u8();
-						auto plugs = device.endpoints[device.flash.commissioning - 1][endpointIndex].plugs;
+						auto plugs = device.endpoints[device.persistentState.index][endpointIndex].plugs;
 						if (plugIndex < plugs.count()) {
 							auto plugType = plugs[plugIndex];
 							int &state = device.states[endpointIndex * 4 + plugIndex];
@@ -250,7 +272,7 @@ void handle(Gui &gui) {
 	// first id for gui
 	uint32_t guiId = 0x81729a00;
 
-	// iterate over devices
+	// draw devices on gui
 	for (Device &device : BusMaster::devices) {
 		gui.newLine();
 		auto id = guiId;
@@ -282,7 +304,7 @@ void handle(Gui &gui) {
 			}
 			case bus::Attribute::PLUG_LIST:
 				// list of plugs
-				w.data16L(device.endpoints[device.commissioning - 1][device.endpointIndex].plugs);
+				w.data16L(device.endpoints[device.persistentState.index][device.endpointIndex].plugs);
 				break;
 			default:;
 			}
@@ -294,7 +316,7 @@ void handle(Gui &gui) {
 		auto value = gui.button(id++, 0.2f);
 		if (value && *value == 1) {
 			// commission device
-			device.commissioning = device.flash.commissioning == 1 ? 2 : 1;
+			device.nextIndex = device.persistentState.address != -1 && device.persistentState.index == 0 ? 1 : 0;
 
 			// send enumerate message
 			bus::MessageWriter w(sendData);
@@ -310,7 +332,7 @@ void handle(Gui &gui) {
 			w.u8(0);
 
 			// number of endpoints
-			w.u8(device.endpoints[device.commissioning - 1].count());
+			w.u8(device.endpoints[device.nextIndex].count());
 
 			// add message integrity code (mic) using default key, message stays unencrypted
 			w.setMessage();
@@ -328,8 +350,8 @@ void handle(Gui &gui) {
 		}
 
 		// add device endpoints to gui if device is commissioned
- 		if (device.flash.commissioning != 0) {
-			auto endpoints = device.endpoints[device.flash.commissioning - 1];
+ 		if (device.persistentState.address != -1) {
+			auto endpoints = device.endpoints[device.persistentState.index];
 			for (int endpointIndex = 0; endpointIndex < endpoints.count(); ++endpointIndex) {
 				auto plugs = endpoints[endpointIndex].plugs;
 				for (int plugIndex = 0; plugIndex < plugs.count(); ++plugIndex) {
@@ -428,30 +450,30 @@ void init() {
 	BusMaster::nextHandler = Loop::addHandler(handle);
 
 	// load permanent configuration of devices
-	char const *fileName = "bus.bin";
-	BusMaster::file.open(fileName, std::fstream::in | std::fstream::binary);
-	for (Device &device : BusMaster::devices) {
-		BusMaster::file.read(reinterpret_cast<char *>(&device.flash), sizeof(Device::Flash));
-	}
+	char const *filename = "bus.bin";
+	BusMaster::file = open(filename, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH);
 
-	// read additional dummy byte to detect if the file is too large
-	char dummy;
-	BusMaster::file.read(&dummy, 1);
-	BusMaster::file.clear();
-	size_t size = BusMaster::file.tellg();
-	BusMaster::file.close();
+	int deviceCount = array::count(BusMaster::devices);
+	int persistentStateSize = sizeof(Device::PersistentState);
 
-	// check if size is ok
-	if (size != array::count(BusMaster::devices) * sizeof(Device::Flash)) {
-		// no: create new file
-		BusMaster::file.open(fileName, std::fstream::trunc | std::fstream::in | std::fstream::out | std::fstream::binary);
-		for (Device &device : BusMaster::devices) {
-			device.flash.commissioning = 0;
-			BusMaster::file.write(reinterpret_cast<char *>(&device.flash), sizeof(Device::Flash));
+	// check file size
+	int fileSize = fsize(BusMaster::file);
+	if (fileSize != deviceCount * persistentStateSize) {
+		// size mismatch: initialize file
+		ftruncate(BusMaster::file, deviceCount * persistentStateSize);
+		for (int i = 0; i < deviceCount; ++i) {
+			auto &device = BusMaster::devices[i];
+			device.offset = i * persistentStateSize;
+			device.persistentState.address = -1;
+			pwrite(BusMaster::file, &device.persistentState, persistentStateSize, device.offset);
 		}
 	} else {
-		// yes: open file again in in/out mode
-		BusMaster::file.open(fileName, std::fstream::in | std::fstream::out | std::fstream::binary);
+		// size ok: read devices
+		for (int i = 0; i < deviceCount; ++i) {
+			auto &device = BusMaster::devices[i];
+			device.offset = i * persistentStateSize;
+			pread(BusMaster::file, &device.persistentState, persistentStateSize, device.offset);
+		}
 	}
 }
 
