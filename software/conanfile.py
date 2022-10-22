@@ -56,11 +56,11 @@ class Project(ConanFile):
         if str(self.settings.os) in p:
             # platform is based on a "normal" operating system such as Linux, e.g. Linux;emu
             self.requires("libusb/1.0.26")
-            self.requires("boost/1.79.0")
+            self.requires("boost/1.80.0")
             self.requires("miniaudio/0.11.9")
             self.requires("opus/1.3.1")
             self.requires("ogg/1.3.5")
-            self.requires("gtest/1.11.0")
+            self.requires("gtest/1.12.1")
         if "emu" in p:
             # platform is an emulator, e.g. Linux;emu
             self.requires("glfw/3.3.7")
