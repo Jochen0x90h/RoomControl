@@ -5,7 +5,6 @@
 #include <Data.hpp>
 
 
-
 class FunctionInterface : public Interface {
 public:
 	// maximum number of functions

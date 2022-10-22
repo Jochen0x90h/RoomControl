@@ -263,7 +263,12 @@ if(LINUX)
 endif()
 if(EMU)
 	set(BUS_NODE system/src/BusNode.hpp system/src/emu/BusNode.cpp)
-	set(BUS_MASTER system/src/BusMaster.hpp system/src/emu/BusMaster.cpp)
+	set(BUS_MASTER
+		system/src/BusMaster.hpp
+		system/src/BusMaster.cpp
+		system/src/emu/BusMasterEmu.hpp
+		system/src/emu/BusMasterEmu.cpp
+	)
 	set(INPUT system/src/Input.hpp system/src/emu/Input.hpp system/src/emu/Input.cpp)
 	set(LOOP
 		system/src/Loop.hpp
@@ -280,7 +285,12 @@ if(EMU)
 		glad/khrplatform.h
 	)
 	set(OUTPUT system/src/Output.hpp system/src/emu/Output.cpp system/src/Debug.hpp)
-	set(QUADRATURE_DECODER system/src/QuadratureDecoder.hpp system/src/emu/QuadratureDecoder.cpp)
+	set(QUADRATURE_DECODER
+		system/src/QuadratureDecoder.hpp
+		system/src/QuadratureDecoder.cpp
+		system/src/emu/QuadratureDecoderEmu.hpp
+		system/src/emu/QuadratureDecoderEmu.cpp
+	)
 	set(RADIO system/src/RadioDefs.hpp system/src/Radio.hpp system/src/emu/Radio.cpp)
 	set(RANDOM system/src/Random.hpp system/src/emu/Random.cpp)
 	set(SPI_MASTER
@@ -298,7 +308,12 @@ if(EMU)
 	set(USB_DEVICE system/src/UsbDevice.hpp system/src/emu/UsbDevice.cpp)
 endif()
 if("nrf52" IN_LIST PLATFORM)
-	set(BUS_MASTER system/src/BusMaster.hpp system/src/nrf52/BusMaster.cpp)
+	set(BUS_MASTER
+		system/src/BusMaster.hpp
+		system/src/BusMaster.cpp
+		system/src/nrf52/BusMasterDevice.hpp
+		system/src/nrf52/BusMasterDevice.cpp
+	)
 	set(CALENDAR system/src/ClockTime.hpp system/src/Calendar.hpp system/src/nrf52/Calendar.cpp)
 	set(INPUT system/src/Input.hpp system/src/nrf52/Input.cpp)
 	set(LOOP
@@ -308,7 +323,12 @@ if("nrf52" IN_LIST PLATFORM)
 		system/src/nrf52/system/system_nrf52840.c
 	)
 	set(OUTPUT system/src/Output.hpp system/src/nrf52/Output.cpp system/src/Debug.hpp)
-	set(QUADRATURE_DECODER system/src/QuadratureDecoder.hpp system/src/nrf52/QuadratureDecoder.cpp)
+	set(QUADRATURE_DECODER
+		system/src/QuadratureDecoder.hpp
+		system/src/QuadratureDecoder.cpp
+		system/src/nrf52/QuadratureDecoderDevice.hpp
+		system/src/nrf52/QuadratureDecoderDevice.cpp
+	)
 	set(RADIO system/src/RadioDefs.hpp system/src/Radio.hpp system/src/nrf52/Radio.cpp)
 	set(RANDOM system/src/Random.hpp system/src/nrf52/Random.cpp)
 	set(SPI_MASTER
@@ -523,14 +543,7 @@ if(${BOARD} IN_LIST SWITCH_BOARDS)
 		board/${BOARD}/boardConfig.hpp
 		${UTIL}
 		${PROTOCOL}
-		${BUS_NODE}
-		${INPUT}
-		${LOOP}
-		${OUTPUT}
-		${SPI_MASTER}
-		${STORAGE}
-		${TIMER}
-		${TERMINAL}
+		${SYSTEM}
 	)
 	target_include_directories(switch
 		PRIVATE

@@ -1,10 +1,11 @@
 #pragma once
 
 #include "Interface.hpp"
+#include <BusMaster.hpp>
+#include <Storage.hpp>
 #include <MessageReader.hpp>
 #include <MessageWriter.hpp>
-#include <Storage.hpp>
-#include <appConfig.hpp>
+//#include <appConfig.hpp>
 
 
 /**
@@ -28,7 +29,7 @@ public:
 	 * @param storage persistent storage for device configuration
 	 * @param counters persistent storage for security counters
 	 */
-	BusInterface(uint8_t interfaceId, Storage &storage, Storage &counters);
+	BusInterface(uint8_t interfaceId, BusMaster &busMaster, Storage &storage, Storage &counters);
 
 	~BusInterface() override;
 
@@ -139,12 +140,12 @@ private:
 	uint8_t allocateDeviceId();
 	Device *getOrLoadDevice(uint8_t deviceId);
 
-	// start the interface
-	//Coroutine start();
-
 
 	// listeners that listen on all messages of the interface (as opposed to subscribers that subscribe to one plug)
 	ListenerList listeners;
+
+	// bus master
+	BusMaster &busMaster;
 
 	// persistent storage
 	Storage &storage;

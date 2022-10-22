@@ -5,7 +5,9 @@
 #include "tahoma_8pt.hpp" // font
 
 
-Menu::Menu(SwapChain &swapChain) : swapChain(swapChain), bitmap(swapChain.get()) {}
+Menu::Menu(QuadratureDecoder &decoder, SwapChain &swapChain)
+	: decoder(decoder), swapChain(swapChain), bitmap(swapChain.get())
+{}
 
 void Menu::line() {
 	int x = 10;
@@ -122,7 +124,7 @@ AwaitableCoroutine Menu::show() {
 		// wait for event, may be interrupted e.g. by a timeout
 		int index;
 		co_await select(
-			QuadratureDecoder::change(0, this->delta),
+			this->decoder.change(this->delta),
 			Input::trigger(1 << INPUT_WHEEL_BUTTON, 0, index, this->activated));
 
 		// update selected entry according to delta motion of poti when not in edit mode

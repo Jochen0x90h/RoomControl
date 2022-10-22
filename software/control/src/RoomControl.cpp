@@ -105,11 +105,11 @@ static RoomControl::Plug const heatingControlPlugs[] = {
 // -----------
 
 RoomControl::RoomControl(Drivers &drivers)
-	: storage(drivers.storage)
+	: decoder(drivers.quadratureDecoder), storage(drivers.storage)
 	//, stateManager()
 	//, houseTopicId(), roomTopicId()
 	, localInterface(LOCAL_INTERFACE, drivers.airSensor)
-	, busInterface(BUS_INTERFACE, drivers.storage, drivers.counters)
+	, busInterface(BUS_INTERFACE, drivers.busMaster, drivers.storage, drivers.counters)
 	, radioInterface(RADIO_INTERFACE, drivers.storage, drivers.counters)
 	, alarmInterface(ALARM_INTERFACE, drivers.storage)
 	, functionInterface(FUNCTION_INTERFACE, drivers.storage)
@@ -1182,7 +1182,7 @@ Coroutine RoomControl::idleMenu() {
 		int index;
 		bool value;
 		int s = co_await select(
-			QuadratureDecoder::change(0, delta),
+			this->decoder.change(delta),
 			Input::trigger(1 << INPUT_WHEEL_BUTTON, 0, index, value),
 			Calendar::secondTick(),
 			this->displayMessageBarrier.wait(info, &message));
@@ -1221,7 +1221,7 @@ Coroutine RoomControl::idleMenu() {
 }
 
 AwaitableCoroutine RoomControl::mainMenu() {
-	Menu menu(this->swapChain);
+	Menu menu(this->decoder, this->swapChain);
 	while (true) {
 		if (menu.entry("Local Devices"))
 			co_await devicesMenu(LOCAL_INTERFACE);
@@ -1244,7 +1244,7 @@ AwaitableCoroutine RoomControl::mainMenu() {
 AwaitableCoroutine RoomControl::devicesMenu(int interfaceIndex) {
 	auto &interface = *this->interfaces[interfaceIndex];
 	interface.setCommissioning(true);
-	Menu menu(this->swapChain);
+	Menu menu(this->decoder, this->swapChain);
 	while (true) {
 		// list devices
 		auto deviceIds = interface.getElementIds();
@@ -1282,7 +1282,7 @@ AwaitableCoroutine RoomControl::deviceMenu(int interfaceIndex, uint8_t id) {
 	TempDisplaySources tempDisplaySources(this->displaySourcesList[interfaceIndex]);
 
 	// menu loop
-	Menu menu(this->swapChain);
+	Menu menu(this->decoder, this->swapChain);
 	while (true) {
 		if (interfaceIndex == LOCAL_INTERFACE && id == LocalInterface::WHEEL_ID) {
 			bool edit = menu.getEdit(1) == 1;
@@ -1331,7 +1331,7 @@ AwaitableCoroutine RoomControl::deviceMenu(int interfaceIndex, uint8_t id) {
 }
 
 AwaitableCoroutine RoomControl::alarmsMenu() {
-	Menu menu(this->swapChain);
+	Menu menu(this->decoder, this->swapChain);
 	auto &alarms = this->alarmInterface;
 	while (true) {
 		// list alarms
@@ -1369,7 +1369,7 @@ AwaitableCoroutine RoomControl::alarmsMenu() {
 }
 
 AwaitableCoroutine RoomControl::alarmMenu(AlarmInterface::Data &data) {
-	Menu menu(this->swapChain);
+	Menu menu(this->decoder, this->swapChain);
 	auto &alarms = this->alarmInterface;
 	auto id = data.id;
 	while (true) {
@@ -1409,7 +1409,7 @@ AwaitableCoroutine RoomControl::alarmMenu(AlarmInterface::Data &data) {
 }
 
 AwaitableCoroutine RoomControl::alarmTimeMenu(AlarmTime &time) {
-	Menu menu(this->swapChain);
+	Menu menu(this->decoder, this->swapChain);
 	while (true) {
 		int edit = menu.getEdit(9);
 		bool editHours = edit == 1;
@@ -1445,7 +1445,7 @@ AwaitableCoroutine RoomControl::alarmTimeMenu(AlarmTime &time) {
 
 AwaitableCoroutine RoomControl::functionsMenu() {
 	// menu loop
-	Menu menu(this->swapChain);
+	Menu menu(this->decoder, this->swapChain);
 	auto &functions = this->functionInterface;
 	while (true) {
 		// list functions
@@ -1592,7 +1592,7 @@ AwaitableCoroutine RoomControl::functionMenu(FunctionInterface::DataUnion &data)
 	TempDisplaySources tempDisplaySources(this->displaySourcesList[FUNCTION_INTERFACE]);
 
 	// menu loop
-	Menu menu(this->swapChain);
+	Menu menu(this->decoder, this->swapChain);
 	while (true) {
 		int delta = menu.getDelta();
 
@@ -1784,7 +1784,7 @@ AwaitableCoroutine RoomControl::measureRunTime(uint8_t deviceId, uint8_t plugInd
 	SystemTime startTime;
 
 	// menu loop
-	Menu menu(this->swapChain);
+	Menu menu(this->decoder, this->swapChain);
 	while (true) {
 		// duration
 		auto d = unpackHourDuration100(duration);
@@ -1827,7 +1827,7 @@ AwaitableCoroutine RoomControl::measureRunTime(uint8_t deviceId, uint8_t plugInd
 }
 
 AwaitableCoroutine RoomControl::connectionsMenu(Array<MessageType const> plugs, TempConnections &tc) {
-	Menu menu(this->swapChain);
+	Menu menu(this->decoder, this->swapChain);
 	while (true) {
 		// list all input plugs and their connections
 		int connectionIndex = 0;
@@ -1903,7 +1903,7 @@ AwaitableCoroutine RoomControl::connectionsMenu(Array<MessageType const> plugs, 
 AwaitableCoroutine RoomControl::editConnection(Connection &connection, MessageType dstType, Result &result)
 {
 	// menu loop
-	Menu menu(this->swapChain);
+	Menu menu(this->decoder, this->swapChain);
 	while (true) {
 		int delta = menu.getDelta();
 
@@ -2020,7 +2020,7 @@ AwaitableCoroutine RoomControl::editConnection(TempConnections &tc, int index, C
 */
 AwaitableCoroutine RoomControl::selectDevice(Connection &connection, MessageType dstType) {
 	// menu loop
-	Menu menu(this->swapChain);
+	Menu menu(this->decoder, this->swapChain);
 	while (true) {
 		int delta = menu.getDelta();
 
@@ -2069,7 +2069,7 @@ AwaitableCoroutine RoomControl::detectSource(Source &source, MessageType dstType
 	Queue<ListenerInfo, 16> queue;
 
 	// menu loop
-	Menu menu(this->swapChain);
+	Menu menu(this->decoder, this->swapChain);
 	while (true) {
 		int delta = menu.getDelta();
 
@@ -2143,7 +2143,7 @@ AwaitableCoroutine RoomControl::selectPlug(Interface &interface, uint8_t deviceI
 	MessageType dstType)
 {
 	// menu loop
-	Menu menu(this->swapChain);
+	Menu menu(this->decoder, this->swapChain);
 	while (true) {
 		int delta = menu.getDelta();
 
@@ -2176,7 +2176,7 @@ AwaitableCoroutine RoomControl::selectPlug(Interface &interface, uint8_t deviceI
 AwaitableCoroutine RoomControl::plugsMenu(Interface &interface, uint8_t deviceId,
 	TempDisplaySources &tempDisplaySources)
 {
-	Menu menu(this->swapChain);
+	Menu menu(this->decoder, this->swapChain);
 	while (true) {
 		auto plugs = interface.getPlugs(deviceId);
 		for (int plugIndex = 0; plugIndex < plugs.count(); ++plugIndex) {
@@ -2235,7 +2235,7 @@ AwaitableCoroutine RoomControl::messageLogger(Interface &interface, uint8_t devi
 	queue.addBack();
 
 	// menu loop
-	Menu menu(this->swapChain);
+	Menu menu(this->decoder, this->swapChain);
 	while (true) {
 		// display events
 		for (int i = queue.count() - 2; i >= 0; --i) {
@@ -2274,7 +2274,7 @@ AwaitableCoroutine RoomControl::messageGenerator(Interface &interface, uint8_t d
 	Message message = {};
 
 	// menu loop
-	Menu menu(this->swapChain);
+	Menu menu(this->decoder, this->swapChain);
 	while (true) {
 		auto plugs = interface.getPlugs(deviceId);
 		if (plugs.count() > 0) {

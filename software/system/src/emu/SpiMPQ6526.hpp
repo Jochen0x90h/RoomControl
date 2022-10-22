@@ -9,7 +9,6 @@
  */
 class SpiMPQ6526 : public SpiMaster, public Loop::Handler2 {
 public:
-
 	/**
 	 * Constructor
 	 */

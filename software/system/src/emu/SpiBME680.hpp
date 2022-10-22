@@ -6,7 +6,6 @@
 
 class SpiBME680 : public SpiMaster, public Loop::Handler2 {
 public:
-
 	/**
 	 * Constructor
 	 */

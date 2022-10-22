@@ -1,5 +1,7 @@
 #pragma once
 
+#include <emu/BusMasterEmu.hpp>
+#include <emu/QuadratureDecoderEmu.hpp>
 #include <emu/SpiBME680.hpp>
 #include <emu/SpiSSD1309.hpp>
 #include <emu/SpiMPQ6526.hpp>
@@ -61,6 +63,8 @@ constexpr int DISPLAY_HEIGHT = 64;
 struct Drivers {
 	SpiBME680 airSensor;
 	SpiSSD1309 display{DISPLAY_WIDTH, DISPLAY_HEIGHT};
+	QuadratureDecoderEmu quadratureDecoder;
+	BusMasterEmu busMaster;
 	SpiMPQ6526 relayDriver;
 	FileStorage storage{"storage.bin", 65536, 1024};
 	FileStorage counters{"counters.bin", 65536, 4};

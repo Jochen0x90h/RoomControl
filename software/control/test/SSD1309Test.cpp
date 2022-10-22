@@ -31,7 +31,6 @@ Coroutine draw(SpiMaster &spi) {
 int main(void) {
 	Loop::init();
 	Timer::init();
-	QuadratureDecoder::init();
 	Output::init();
 	Drivers drivers;
 

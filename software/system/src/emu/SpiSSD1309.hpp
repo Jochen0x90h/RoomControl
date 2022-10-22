@@ -9,14 +9,13 @@
  */
 class SpiSSD1309 : public SpiMaster, public Loop::Handler2 {
 public:
-
 	/**
 	 * Constructor
 	 * @param width width of display
 	 * @param height height of display
 	 */
 	SpiSSD1309(int width, int height);
-	~SpiSSD1309();
+	~SpiSSD1309() override;
 
 	Awaitable <Parameters> transfer(int writeCount, void const *writeData, int readCount, void *readData) override;
 	void transferBlocking(int writeCount, void const *writeData, int readCount, void *readData) override;

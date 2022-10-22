@@ -27,7 +27,6 @@ public:
 
 	virtual ~SpiMaster();
 
-
 	/**
 	 * Transfer data to/from SPI device
 	 * @param writeCount number of 8/16/32 bit values to write

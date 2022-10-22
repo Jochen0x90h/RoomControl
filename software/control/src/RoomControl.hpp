@@ -35,12 +35,12 @@ public:
 
 
 
-// Storage
+// Drivers
 // -------
 
+	QuadratureDecoder &decoder;
 	Storage &storage;
-	//PersistentStateManager stateManager;
-	
+
 
 // Configuration
 // -------------

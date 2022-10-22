@@ -22,8 +22,8 @@ constexpr int MAX_RETRY = 2;
 
 // BusInterface
 
-BusInterface::BusInterface(uint8_t interfaceId, Storage &storage, Storage &counters)
-	: listeners(interfaceId), storage(storage), counters(counters)
+BusInterface::BusInterface(uint8_t interfaceId, BusMaster &busMaster, Storage &storage, Storage &counters)
+	: listeners(interfaceId), busMaster(busMaster), storage(storage), counters(counters)
 {
 	// load list of element ids
 	int elementCount = sizeof(this->elementIds);
@@ -303,17 +303,6 @@ BusInterface::Device *BusInterface::getOrLoadDevice(uint8_t deviceId) {
 	return new Device(this, data);
 }
 
-/*
-Coroutine BusInterface::start() {
-	// restore security counter
-	co_await this->securityCounter.restore();
-
-	// start coroutines
-	for (int i = 0; i < RECEIVE_COUNT; ++i)
-		receive();
-	for (int i = 0; i < PUBLISH_COUNT; ++i)
-		publish();
-}*/
 
 /*
 static bool readMessage(MessageType dstType, void *dstMessage, MessageType srcType, MessageReader r,
@@ -385,7 +374,7 @@ Coroutine BusInterface::receive() {
 
 	while (true) {
 		int receiveLength = MESSAGE_LENGTH;
-		co_await BusMaster::receive(receiveLength, receiveMessage);
+		co_await this->busMaster.receive(receiveLength, receiveMessage);
 
 		// debug print received message
 		//for (int i = 0; i < receiveLength; ++i)
@@ -632,7 +621,7 @@ AwaitableCoroutine BusInterface::handleCommission(uint32_t busDeviceId, uint8_t 
 
 		length = w.getLength();
 	}
-	co_await BusMaster::send(length, message);
+	co_await this->busMaster.send(length, message);
 
 
 	// configure endpoints
@@ -781,7 +770,7 @@ AwaitableCoroutine BusInterface::readAttribute(int &length, uint8_t (&message)[M
 		co_await this->counters.write(COUNTERS_ID_BUS, 4, &this->securityCounter, status);
 
 		// send
-		co_await BusMaster::send(length, message);
+		co_await this->busMaster.send(length, message);
 
 		// wait for a response from the device
 		int r = co_await select(
@@ -927,7 +916,7 @@ Coroutine BusInterface::publish() {
 					co_await this->counters.write(COUNTERS_ID_BUS, 4, &this->securityCounter, status);
 
 					// send
-					co_await BusMaster::send(length, sendMessage);
+					co_await this->busMaster.send(length, sendMessage);
 				}
 
 				/*

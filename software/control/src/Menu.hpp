@@ -10,7 +10,7 @@
 class Menu {
 public:
 	
-	Menu(SwapChain &swapChain);
+	Menu(QuadratureDecoder &decoder, SwapChain &swapChain);
 
 	/**
 	 * Add a divider line to the menu
@@ -147,6 +147,7 @@ protected:
 		}
 	};
 
+	QuadratureDecoder &decoder;
 	SwapChain &swapChain;
 	Bitmap<DISPLAY_WIDTH, DISPLAY_HEIGHT> *bitmap;
 

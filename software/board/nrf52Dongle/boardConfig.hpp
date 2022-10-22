@@ -1,6 +1,8 @@
 #pragma once
 
 #include <nrf52/gpio.hpp>
+#include <nrf52/BusMasterDevice.hpp>
+#include <nrf52/QuadratureDecoderDevice.hpp>
 #include <nrf52/SpiMasterDevice.hpp>
 #include <util.hpp>
 
@@ -33,8 +35,8 @@ constexpr int OUTPUT_COUNT = array::count(OUTPUTS);
 // poti
 // ----
 
-constexpr int POTI_A_PIN = gpio::P0(4);
-constexpr int POTI_B_PIN = gpio::P0(5);
+//constexpr int POTI_A_PIN = gpio::P0(4);
+//constexpr int POTI_B_PIN = gpio::P0(5);
 
 
 // spi
@@ -72,8 +74,8 @@ constexpr int I2S_SDOUT_PIN = gpio::P0(21);
 // bus
 // ---
 
-constexpr int BUS_TX_PIN = gpio::P0(3);
-constexpr int BUS_RX_PIN = gpio::P0(2);
+//constexpr int BUS_TX_PIN = gpio::P0(3);
+//constexpr int BUS_RX_PIN = gpio::P0(2);
 
 
 // radio
@@ -107,6 +109,7 @@ constexpr int USB_ENDPOINT_COUNT = 3;
 // -------
 
 struct Drivers {
+	BusMasterDevice busMaster{gpio::P0(2), gpio::P0(3)};
 	SpiMasterDevice spi{3,
 		gpio::P0(19),
 		gpio::P0(20),
@@ -114,5 +117,6 @@ struct Drivers {
 		gpio::P0(21)}; // data/command for write-only display, can be same as MISO
 	SpiMasterDevice::Channel airSensor{spi, gpio::P0(2)};
 	SpiMasterDevice::Channel display{spi, gpio::P0(3), true};
+	QuadratureDecoderDevice quadratureDecoder{gpio::P0(4), gpio::P0(5)};
 	SpiMasterDevice::Channel feRam{spi, gpio::P0(3)};
 };

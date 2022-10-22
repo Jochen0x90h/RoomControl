@@ -14,19 +14,7 @@ using Handler = void (*)(Gui &);
  */
 Handler addHandler(Handler handler);
 
-/*
-class Handler2 {
-public:
-	virtual void handle(Gui &);
-};
 
-/ **
- * Set a handler to the event loop
- * @param handler handler to add
- * @return previous handler, needs to be called next
- * /
-Handler2 *setHandler(Handler2 *handler);
-*/
 
 /**
  * Event handler that handles activity of the emulated peripherals on the gui

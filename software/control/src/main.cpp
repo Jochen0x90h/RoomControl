@@ -1,13 +1,11 @@
 #include "RoomControl.hpp"
 #include <Calendar.hpp>
-#include <BusMaster.hpp>
 #include <Radio.hpp>
 #include <QuadratureDecoder.hpp>
 #include <Input.hpp>
 #include <Timer.hpp>
 #include <Debug.hpp>
 #include <Loop.hpp>
-#include <Storage.hpp>
 #include <Sound.hpp>
 
 
@@ -17,17 +15,12 @@
 int main(int argc, const char **argv) {
 	// init drivers
 	Loop::init();
-	//Flash::init();
 	Timer::init();
 	Calendar::init();
-	//Spi::init();
-	QuadratureDecoder::init();
-	BusMaster::init();
 	Radio::init();
 	Network::init();
 	Output::init();
 	Input::init();
-	//Storage::init();
 	Sound::init();
 	Drivers drivers;
 
