@@ -63,7 +63,7 @@ class Project(ConanFile):
             self.requires("gtest/1.12.1")
         if "emu" in p:
             # platform is an emulator, e.g. Linux;emu
-            self.requires("glfw/3.3.7")
+            self.requires("glfw/3.3.8")
 
     keep_imports = True
     def imports(self):
