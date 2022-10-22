@@ -75,7 +75,7 @@ uint32_t securityCounter = 0;
 class Switch {
 public:
 
-	Switch(Drivers &drivers) : relayDriver(drivers.relayDriver) {
+	Switch() {
 		// start coroutines
 		checkButtons();
 		send();
@@ -305,7 +305,7 @@ public:
 			}
 			this->sendQueue.removeFront();
 
-			co_await BusNode::send(w.getLength(), sendData);
+			co_await this->drivers.busNode.send(w.getLength(), sendData);
 		}
 	}
 
@@ -314,7 +314,7 @@ public:
 		while (true) {
             // receive from bus
 			int length = array::count(receiveData);
-			co_await BusNode::receive(length, receiveData);
+			co_await this->drivers.busNode.receive(length, receiveData);
 
 			// decode received message
 			bus::MessageReader r(length, receiveData);
@@ -488,7 +488,7 @@ public:
 					| (by << (MPQ6526_MAPPING[4] * 2 + 1))
 					| (bz << (MPQ6526_MAPPING[5] * 2 + 1));
 				//Terminal::out << "spi " << hex(word) << "\n";
-				co_await relayDriver.transfer(1, &word, 0, nullptr);
+				co_await this->drivers.relayDriver.transfer(1, &word, 0, nullptr);
 
 				// wait some time until relay contacts react
 				co_await Timer::sleep(RELAY_TIME);
@@ -496,12 +496,11 @@ public:
 
 			// switch off all half bridges
 			uint16_t word = 0;
-			co_await relayDriver.transfer(1, &word, 0, nullptr);
+			co_await this->drivers.relayDriver.transfer(1, &word, 0, nullptr);
 		}
 	}
 
-
-	SpiMaster &relayDriver;
+	SwitchDrivers drivers;
 
 	// commissioning and configuration
 	uint8_t buttons = 0;
@@ -525,10 +524,8 @@ int main(void) {
 	Output::init(); // for debug signals on pins
 	Input::init();
 	Timer::init();
-	BusNode::init();
-	Drivers drivers;
 
-	Switch s(drivers);
+	Switch s;
 
 	Loop::run();
 }

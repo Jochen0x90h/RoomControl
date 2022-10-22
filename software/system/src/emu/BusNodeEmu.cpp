@@ -1,44 +1,27 @@
-#include "../BusNode.hpp"
+#include "BusNodeEmu.hpp"
 #include <bus.hpp>
 #include <util.hpp>
-#include <emu/Gui.hpp>
-#include <emu/Loop.hpp>
-#include <iostream>
-#include <fstream>
-
-
-// emulator implementation of bus uses virtual devices on user interface
-namespace BusNode {
-
-Waitlist<ReceiveParameters> receiveWaitlist;
-Waitlist<SendParameters> sendWaitlist;
 
 
 constexpr int micLength = 4;
-uint32_t deviceId;
-int plugCount;
-bus::PlugType plugs[32];
-int states[32];
-uint32_t securityCounter = 0;
 
+BusNodeEmu::BusNodeEmu() {
 
-void sendToNode(bus::MessageWriter &w) {
-	int length = w.getLength();
-	auto data = w.begin;
-	BusNode::receiveWaitlist.resumeFirst([length, data](ReceiveParameters &p) {
-		int len = min(length, *p.receiveLength);
-		array::copy(len, p.receiveData, data);
-		*p.receiveLength = len;
-		return true;
-	});
+	// add to list of handlers
+	Loop::handlers.add(*this);
 }
 
+Awaitable<BusNode::ReceiveParameters> BusNodeEmu::receive(int &length, uint8_t *data) {
+	return {this->receiveWaitlist, &length, data};
+}
 
-// event loop handler chain
-Loop::Handler nextHandler;
-void handle(Gui &gui) {
+Awaitable<BusNode::SendParameters> BusNodeEmu::send(int length, uint8_t const *data) {
+	return {this->sendWaitlist, length, data};
+}
+
+void BusNodeEmu::handle(Gui &gui) {
 	// handle pending send operations
-	BusNode::sendWaitlist.resumeFirst([](SendParameters &p) {
+	this->sendWaitlist.resumeFirst([this](SendParameters &p) {
 		if (p.sendLength == 0)
 			return true;
 
@@ -56,7 +39,7 @@ void handle(Gui &gui) {
 
 			// get encoded device id
 			uint32_t deviceId = r.id();
-			BusNode::deviceId = deviceId;
+			this->deviceId = deviceId;
 
 			// check message integrity code (mic)
 			r.setMessageFromEnd(micLength);
@@ -151,8 +134,8 @@ void handle(Gui &gui) {
 				endpointIndex = r.u8();
 				auto attribute = r.e8<bus::Attribute>();
 				if (attribute == bus::Attribute::PLUG_LIST) {
-					BusNode::plugCount = r.getRemaining() / 2;
-					r.data16L(BusNode::plugCount, BusNode::plugs);
+					this->plugCount = r.getRemaining() / 2;
+					r.data16L(this->plugCount, this->plugs);
 				}
 			} else {
 				// plug
@@ -160,17 +143,17 @@ void handle(Gui &gui) {
 
 				// handle pug/state
 				uint8_t nextPlugIndex = plugIndex + 1;
-				auto plugType = BusNode::plugs[nextPlugIndex];
+				auto plugType = this->plugs[nextPlugIndex];
 				uint8_t state = r.u8();
 				switch (plugType) {
 				case bus::PlugType::BINARY_POWER_LIGHT_IN:
 					if (state <= 1)
-						BusNode::states[nextPlugIndex] = state;
+						this->states[nextPlugIndex] = state;
 					else
-						BusNode::states[nextPlugIndex] ^= 1;
+						this->states[nextPlugIndex] ^= 1;
 					break;
 				case bus::PlugType::TERNARY_OPENING_BLIND_IN:
-					BusNode::states[nextPlugIndex] = state;
+					this->states[nextPlugIndex] = state;
 					break;
 				default:;
 				}
@@ -185,7 +168,7 @@ void handle(Gui &gui) {
 				w.address(address);
 
 				// security counter
-				w.u32L(BusNode::securityCounter);
+				w.u32L(this->securityCounter);
 
 				// set start of message
 				w.setMessage();
@@ -197,43 +180,29 @@ void handle(Gui &gui) {
 				w.u8(nextPlugIndex);
 
 				// message data
-				w.u8(BusNode::states[nextPlugIndex]);
+				w.u8(this->states[nextPlugIndex]);
 
 				// encrypt
-				Nonce nonce2(address, BusNode::securityCounter);
+				Nonce nonce2(address, this->securityCounter);
 				w.encrypt(micLength, nonce2, bus::defaultAesKey);
 
 				// increment security counter
-				++BusNode::securityCounter;
+				++this->securityCounter;
 
 				sendToNode(w);
 			}
 		}
 		return true;
 	});
-
-
-	// call next handler in chain
-	BusNode::nextHandler(gui);
 }
 
-void init() {
-	// check if already initialized
-	if (BusNode::nextHandler != nullptr)
-		return;
-
-	// add to event loop handler chain
-	BusNode::nextHandler = Loop::addHandler(handle);
+void BusNodeEmu::sendToNode(bus::MessageWriter &w) {
+	int length = w.getLength();
+	auto data = w.begin;
+	this->receiveWaitlist.resumeFirst([length, data](ReceiveParameters &p) {
+		int len = min(length, *p.receiveLength);
+		array::copy(len, p.receiveData, data);
+		*p.receiveLength = len;
+		return true;
+	});
 }
-
-Awaitable<ReceiveParameters> receive(int &length, uint8_t *data) {
-	assert(BusNode::nextHandler != nullptr);
-	return {BusNode::receiveWaitlist, &length, data};
-}
-
-Awaitable<SendParameters> send(int length, uint8_t const *data) {
-	assert(BusNode::nextHandler != nullptr);
-	return {BusNode::sendWaitlist, length, data};
-}
-
-} // namespace BusNode

@@ -6,7 +6,7 @@
 
 
 /**
- * Implementation of SPI hardware interface for nrf52 platform
+ * Implementation of SPI hardware interface for nrf52 platform with multiple virtual channels
  */
 class SpiMasterDevice : public Loop::Handler2 {
 public:
@@ -21,17 +21,11 @@ public:
 
 	void handle() override;
 
-	void startTransfer(SpiMaster::Parameters const &p);
-
-
-	int csPin;
-	Waitlist<SpiMaster::Parameters> waitlist;
-
-
 	/**
 	 * Virtual channel to a slave device using a dedicated CS pin
 	 */
 	class Channel : public SpiMaster {
+		friend class SpiMasterDevice;
 	public:
 		/**
 		 * Constructor
@@ -43,8 +37,15 @@ public:
 		Awaitable<Parameters> transfer(int writeCount, void const *writeData, int readCount, void *readData) override;
 		void transferBlocking(int writeCount, void const *writeData, int readCount, void *readData) override;
 
-
+	protected:
 		SpiMasterDevice &device;
 		int csPin;
 	};
+
+protected:
+	void startTransfer(SpiMaster::Parameters const &p);
+
+
+	int csPin;
+	Waitlist<SpiMaster::Parameters> waitlist;
 };

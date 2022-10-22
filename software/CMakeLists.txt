@@ -262,7 +262,12 @@ if(LINUX)
 	endif()
 endif()
 if(EMU)
-	set(BUS_NODE system/src/BusNode.hpp system/src/emu/BusNode.cpp)
+	set(BUS_NODE
+		system/src/BusNode.hpp
+		system/src/BusNode.cpp
+		system/src/emu/BusNodeEmu.hpp
+		system/src/emu/BusNodeEmu.cpp
+	)
 	set(BUS_MASTER
 		system/src/BusMaster.hpp
 		system/src/BusMaster.cpp
@@ -342,7 +347,12 @@ if("nrf52" IN_LIST PLATFORM)
 	set(USB_DEVICE system/src/UsbDevice.hpp system/src/nrf52/UsbDevice.cpp)
 endif()
 if("stm32f0" IN_LIST PLATFORM)
-	set(BUS_NODE system/src/BusNode.hpp system/src/stm32f0/BusNode.cpp)
+	set(BUS_NODE
+		system/src/BusNode.hpp
+		system/src/BusNode.cpp
+		system/src/stm32f0/BusNodeDevice.hpp
+		system/src/stm32f0/BusNodeDevice.cpp
+	)
 	set(INPUT system/src/Input.hpp system/src/stm32f0/gpio.hpp system/src/stm32f0/Input.cpp)
 	set(LOOP
 		system/src/Loop.hpp

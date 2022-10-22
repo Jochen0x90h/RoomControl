@@ -1,6 +1,7 @@
 #pragma once
 
 #include <emu/BusMasterEmu.hpp>
+#include <emu/BusNodeEmu.hpp>
 #include <emu/QuadratureDecoderEmu.hpp>
 #include <emu/SpiBME680.hpp>
 #include <emu/SpiSSD1309.hpp>
@@ -65,6 +66,13 @@ struct Drivers {
 	SpiSSD1309 display{DISPLAY_WIDTH, DISPLAY_HEIGHT};
 	QuadratureDecoderEmu quadratureDecoder;
 	BusMasterEmu busMaster;
+	BusNodeEmu busNode;
+	FileStorage storage{"storage.bin", 65536, 1024};
+	FileStorage counters{"counters.bin", 65536, 4};
+};
+
+struct SwitchDrivers {
+	BusNodeEmu busNode;
 	SpiMPQ6526 relayDriver;
 	FileStorage storage{"storage.bin", 65536, 1024};
 	FileStorage counters{"counters.bin", 65536, 4};
