@@ -36,9 +36,7 @@ Coroutine handleDecoder(QuadratureDecoder &decoder) {
 #endif
 			if (index == 0) {
 				Debug::toggleRedLed();
-				Debug::setGreenLed(false);
 			} else {
-				Debug::setRedLed(false);
 				Debug::toggleGreenLed();
 			}
 			Debug::setBlueLed(false);

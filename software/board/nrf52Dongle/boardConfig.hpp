@@ -117,6 +117,6 @@ struct Drivers {
 		gpio::P0(21)}; // data/command for write-only display, can be same as MISO
 	SpiMasterDevice::Channel airSensor{spi, gpio::P0(2)};
 	SpiMasterDevice::Channel display{spi, gpio::P0(3), true};
-	QuadratureDecoderDevice quadratureDecoder{gpio::P0(4), gpio::P0(5)};
 	SpiMasterDevice::Channel feRam{spi, gpio::P0(3)};
+	QuadratureDecoderDevice quadratureDecoder{gpio::P0(4), gpio::P0(5)};
 };

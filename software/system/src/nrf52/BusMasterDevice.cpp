@@ -30,7 +30,7 @@ BusMasterDevice *busMaster[1];
 
 BusMasterDevice::BusMasterDevice(int rxPin, int txPin) : txPin(txPin) {
 	this->uart = NRF_UART0;
-	this->timer =  NRF_TIMER1;
+	this->timer = NRF_TIMER1;
 	busMaster[0] = this;
 	initSignal();
 
@@ -53,7 +53,7 @@ BusMasterDevice::BusMasterDevice(int rxPin, int txPin) : txPin(txPin) {
 	enableInterrupt(TIMER1_IRQn);
 
 	// add to list of handlers
-	Loop::handlers.add(*this);
+//	Loop::handlers.add(*this);
 }
 
 Awaitable<BusMaster::ReceiveParameters> BusMasterDevice::receive(int &length, uint8_t *data) {

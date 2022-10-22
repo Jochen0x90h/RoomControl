@@ -1,6 +1,7 @@
 #include <Input.hpp>
 #include <Debug.hpp>
 #include <Loop.hpp>
+#include <boardConfig.hpp>
 
 
 Coroutine handleInput() {
@@ -13,13 +14,9 @@ Coroutine handleInput() {
 		if (index == 0) {
 			// rising edge on poti button detected
 			Debug::toggleRedLed();
-			Debug::setGreenLed(false);
-			Debug::toggleBlueLed();
 		} else {
 			// falling edge on pcb button detected
-			Debug::setRedLed(false);
 			Debug::toggleGreenLed();
-			Debug::setBlueLed(false);
 		}
 	}
 }
@@ -28,6 +25,7 @@ int main(void) {
 	Loop::init();
 	Output::init(); // for debug signals on pins
 	Input::init();
+	Drivers drivers;
 
 	handleInput();
 

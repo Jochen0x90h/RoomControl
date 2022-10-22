@@ -4,6 +4,7 @@
 #include "gpio.hpp"
 #include <util.hpp>
 #include <boardConfig.hpp>
+#include <Debug.hpp>
 
 
 /*
@@ -28,11 +29,11 @@ static_assert(TRIGGER_COUNT <= INPUT_COUNT);
 static_assert(TRIGGER_COUNT <= 8);
 
 // next timeout of an input
-SystemTime next;
+int next;
 
 // states for debounce filter
 struct State {	
-	SystemTime timeout;
+	int timeout;
 	bool value;
 };
 State states[TRIGGER_COUNT];
@@ -44,8 +45,8 @@ Waitlist<Parameters> waitlist;
 Loop::Handler nextHandler = nullptr;
 void handle() {	
 	if (isInterruptPending(GPIOTE_IRQn)) {
-		// debounce timeout
-		auto timeout = Timer::now() + 50ms;
+		// debounce timeout after about 50ms
+		int timeout = NRF_RTC0->COUNTER + 50 * 16;
 		for (int index = 0; index < TRIGGER_COUNT; ++index) {
 			if (NRF_GPIOTE->EVENTS_IN[index]) {
 				// clear pending interrupt flags at peripheral
@@ -57,9 +58,9 @@ void handle() {
 				state.timeout = timeout;
 				
 				// check if this is the next timeout
-				if (timeout < Input::next) {
+				if (((timeout - Input::next) << 8) < 0) {
 					Input::next = timeout;
-					NRF_RTC0->CC[1] = timeout.value << 4;
+					NRF_RTC0->CC[1] = timeout;
 				}
 			}		
 		}
@@ -74,10 +75,10 @@ void handle() {
 			clearInterrupt(RTC0_IRQn);
 
 			// get current time
-			auto time = Input::next;
+			int time = Input::next;
 			
-			// add RTC interval (is 24 - 4 bit)
-			Input::next.value += 0xfffff;
+			// add RTC interval (is 24 bit)
+			Input::next += 0x7fffff;
 			
 			for (int index = 0; index < TRIGGER_COUNT; ++index) {
 				auto &input = INPUTS[index];
@@ -85,7 +86,7 @@ void handle() {
 				
 				// check if debounce timeout for this input elapsed
 				if (state.timeout == time) {
-					state.timeout.value += 0x7fffffff;
+					state.timeout += 0x7fffff;
 
 					// read input value
 					bool value = gpio::readInput(input.pin) != input.invert;
@@ -109,10 +110,10 @@ void handle() {
 					Input::next = state.timeout;
 				}
 			}
-			NRF_RTC0->CC[1] = Input::next.value << 4;
+			NRF_RTC0->CC[1] = Input::next;
 		
 			// repeat until next timeout is in the future
-		} while (Timer::now() >= Input::next);
+		} while (((int(NRF_RTC0->COUNTER) - Input::next) << 8) >= 0);
 	}
 	
 	// call next handler in chain
@@ -140,7 +141,7 @@ void init() {
 			auto &input = INPUTS[index];
 			auto &state = states[index];
 	
-			state.timeout.value = 0x7fffffff;
+			state.timeout = 0x7fffff;
 
 			// configure event
 			NRF_GPIOTE->CONFIG[index] = N(GPIOTE_CONFIG_MODE, Event)
@@ -158,8 +159,8 @@ void init() {
 		NRF_GPIOTE->INTENSET = ~(0xffffffff << TRIGGER_COUNT);
 
 		// use channel 1 of RTC0 (on top of Timer::init())
-		Input::next.value = 0xfffff;
-		NRF_RTC0->CC[1] = Input::next.value << 4;
+		Input::next = 0x7fffff;
+		NRF_RTC0->CC[1] = Input::next;
 		NRF_RTC0->INTENSET = N(RTC_INTENSET_COMPARE1, Set);
 	}
 }
