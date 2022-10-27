@@ -5,7 +5,7 @@
 #include <Loop.hpp>
 #include <Debug.hpp>
 #include <StringOperators.hpp>
-#ifdef EMU
+#ifdef PLATFORM_POSIX
 #include <string>
 #endif
 
@@ -78,7 +78,7 @@ struct Test {
 };
 
 
-#ifdef EMU
+#ifdef PLATFORM_POSIX
 int main(int argc, char const **argv) {
 	name = "Client";
 	if (argc >= 3) {

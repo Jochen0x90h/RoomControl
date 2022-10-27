@@ -104,19 +104,22 @@ static RoomControl::Plug const heatingControlPlugs[] = {
 // RoomControl
 // -----------
 
-RoomControl::RoomControl()
-	: //storage(0, FLASH_PAGE_COUNT, functions),
-	stateManager()
+RoomControl::RoomControl(Drivers &drivers)
+	: decoder(drivers.quadratureDecoder), storage(drivers.storage)
+	//, stateManager()
 	//, houseTopicId(), roomTopicId()
-	, localInterface(LOCAL_INTERFACE)
-	, busInterface(BUS_INTERFACE, stateManager)
-	, radioInterface(RADIO_INTERFACE, stateManager)
-	, alarmInterface(ALARM_INTERFACE)
-	, functionInterface(FUNCTION_INTERFACE)
+	, localInterface(LOCAL_INTERFACE, drivers.airSensor)
+	, busInterface(BUS_INTERFACE, drivers.busMaster, drivers.storage, drivers.counters)
+	, radioInterface(RADIO_INTERFACE, drivers.storage, drivers.counters)
+	, alarmInterface(ALARM_INTERFACE, drivers.storage)
+	, functionInterface(FUNCTION_INTERFACE, drivers.storage)
 	, interfaces{&localInterface, &busInterface, &radioInterface, &alarmInterface, &functionInterface}
+	, swapChain(drivers.display)
 {
 	// load configuration
-	if (Storage::read(STORAGE_CONFIG, 0, sizeof(Configuration), &this->configuration) != sizeof(Configuration)) {
+	int configurationSize = sizeof(Configuration);
+	drivers.storage.readBlocking(STORAGE_ID_CONFIG, configurationSize, &this->configuration);
+	if (configurationSize != sizeof(Configuration)) {
 		auto &configuration = this->configuration;
 
 		// name
@@ -141,7 +144,7 @@ RoomControl::RoomControl()
 
 		
 		// write to flash
-		Storage::write(STORAGE_CONFIG, STORAGE_ID_CONFIG, sizeof(Configuration), &configuration);
+		drivers.storage.writeBlocking(STORAGE_ID_CONFIG, sizeof(Configuration), &configuration);
 	}
 
 	applyConfiguration();
@@ -150,20 +153,20 @@ RoomControl::RoomControl()
 	for (uint8_t interfaceIndex = 0; interfaceIndex < INTERFACE_COUNT; ++interfaceIndex) {
 		// iterate over all devices in the interface
 		auto &interface = *this->interfaces[interfaceIndex];
-		auto deviceIds = interface.getDeviceIds();
+		auto deviceIds = interface.getElementIds();
 		for (auto deviceId: deviceIds) {
 			// storage id is generated from interface index and device id
 			int const storageId = STORAGE_ID_CONNECTION | (interfaceIndex << 8) | deviceId;
 
 			// determine size
-			int size = Storage::size(STORAGE_CONFIG, storageId);
+			int size = drivers.storage.getSizeBlocking(storageId);
 			uint8_t count = size / sizeof(Connection);
 			if (count == 0)
 				continue;
 
 			// allocate and read connection data
 			auto connectionData = reinterpret_cast<Connection *>(malloc(size));
-			Storage::read(STORAGE_CONFIG, storageId, size, connectionData);
+			drivers.storage.readBlocking(storageId, size, connectionData);
 
 			// allocate subscribers
 			auto subscribers = new Subscriber[count];
@@ -185,14 +188,14 @@ RoomControl::RoomControl()
 		int const storageId = STORAGE_ID_DISPLAY_LISTENER | interfaceIndex;
 
 		// determine size
-		int size = Storage::size(STORAGE_CONFIG, storageId);
+		int size = drivers.storage.getSizeBlocking(storageId);
 		uint8_t count = size / sizeof(DisplaySource);
 		if (count == 0)
 			continue;
 
 		// allocate and read display listener data
 		auto displaySources = reinterpret_cast<DisplaySource *>(malloc(size));
-		Storage::read(STORAGE_CONFIG, storageId, size, displaySources);
+		drivers.storage.readBlocking(storageId, size, displaySources);
 
 		displayListeners.count = count;
 		displayListeners.sources = displaySources;
@@ -215,7 +218,7 @@ void RoomControl::applyConfiguration() {
 }
 
 void RoomControl::saveConfiguration() {
-	Storage::write(STORAGE_CONFIG, STORAGE_ID_CONFIG, sizeof(Configuration), &configuration);
+	this->storage.writeBlocking(STORAGE_ID_CONFIG, sizeof(Configuration), &configuration);
 }
 
 
@@ -257,9 +260,9 @@ void RoomControl::connect(Connections *connections) {
 
 		// initialize subscriber
 		subscriber.data = data;
-		subscriber.deviceId = connections->deviceId;
+		subscriber.elementId = connections->elementId;
 		subscriber.connectionIndex = connectionIndex;
-		subscriber.target = interface.getSubscriberTarget(connections->deviceId, data->destination.plugIndex);
+		subscriber.target = interface.getSubscriberTarget(connections->elementId, data->destination.plugIndex);
 
 		// subscribe
 		if (data->source.interfaceId < INTERFACE_COUNT) {
@@ -274,7 +277,7 @@ RoomControl::TempConnections RoomControl::getConnections(uint8_t interfaceIndex,
 	auto p = &this->connectionsList;
 	while (*p != nullptr) {
 		auto connections = *p;
-		if (connections->interfaceIndex == interfaceIndex && connections->deviceId == deviceId) {
+		if (connections->interfaceIndex == interfaceIndex && connections->elementId == deviceId) {
 			tc.p = p;
 			tc.count = min(connections->count, TempConnections::MAX_CONNECTIONS);
 
@@ -332,7 +335,7 @@ void RoomControl::writeConnections(uint8_t interfaceIndex, uint8_t deviceId, Tem
 
 	// write to flash
 	int const storageId = STORAGE_ID_CONNECTION | (interfaceIndex << 8) | deviceId;
-	Storage::write(STORAGE_CONFIG, storageId, size, connections->data);
+	this->storage.writeBlocking(storageId, size, connections->data);
 }
 
 void RoomControl::eraseConnections(uint8_t interfaceIndex, uint8_t deviceId, TempConnections &tc) {
@@ -349,17 +352,17 @@ void RoomControl::eraseConnections(uint8_t interfaceIndex, uint8_t deviceId, Tem
 
 	// erase from flash
 	int const storageId = STORAGE_ID_CONNECTION | (interfaceIndex << 8) | deviceId;
-	Storage::erase(STORAGE_CONFIG, storageId);
+	this->storage.eraseBlocking(storageId);
 }
 
-void RoomControl::printConnection(Menu::Stream &stream, Connection const &connection) {
-	if (connection.source.interfaceId < array::count(this->interfaces)) {
-		auto &interface = *this->interfaces[connection.source.interfaceId];
-		auto plugs = interface.getPlugs(connection.source.deviceId);
-		if (connection.source.plugIndex < plugs.count()) {
-			String deviceName = interface.getName(connection.source.deviceId);
-			stream << deviceName << ':' << dec(connection.source.plugIndex);
-			String plugName = getTypeLabel(plugs[connection.source.plugIndex]);
+void RoomControl::printSource(Menu::Stream &stream, Source const &source) {
+	if (source.interfaceId < array::count(this->interfaces)) {
+		auto &interface = *this->interfaces[source.interfaceId];
+		auto plugs = interface.getPlugs(source.elementId);
+		if (source.plugIndex < plugs.count()) {
+			String deviceName = interface.getName(source.elementId);
+			stream << deviceName << ':' << dec(source.plugIndex);
+			String plugName = getTypeLabel(plugs[source.plugIndex]);
 			stream << " (" << plugName << ')';
 			return;
 		}
@@ -371,14 +374,14 @@ void RoomControl::printConnection(Menu::Stream &stream, Connection const &connec
 // Listeners
 // ---------
 
-bool RoomControl::DisplaySources::contains(uint8_t deviceId, uint8_t plugIndex) const {
+bool RoomControl::DisplaySources::contains(uint8_t elementId, uint8_t plugIndex) const {
 	if (this->count == 0)
 		return false;
-	int i = array::binaryLowerBound(this->count, this->sources, [deviceId, plugIndex](DisplaySource const &a) {
-		return a.deviceId < deviceId || (a.deviceId == deviceId && a.plugIndex < plugIndex);
+	int i = array::binaryLowerBound(this->count, this->sources, [elementId, plugIndex](DisplaySource const &a) {
+		return a.elementId < elementId || (a.elementId == elementId && a.plugIndex < plugIndex);
 	});
 	auto &a = this->sources[i];
-	return a.deviceId == deviceId && a.plugIndex == plugIndex;
+	return a.elementId == elementId && a.plugIndex == plugIndex;
 }
 
 RoomControl::TempDisplaySources::TempDisplaySources(DisplaySources const &displaySources)
@@ -387,31 +390,31 @@ RoomControl::TempDisplaySources::TempDisplaySources(DisplaySources const &displa
 	array::copy(displaySources.count, this->sources, displaySources.sources);
 }
 
-void RoomControl::TempDisplaySources::insert(uint8_t deviceId, uint8_t plugIndex) {
-	int i = array::binaryLowerBound(this->count, this->sources, [deviceId, plugIndex](DisplaySource const &a) {
-		return a.deviceId < deviceId || (a.deviceId == deviceId && a.plugIndex < plugIndex);
+void RoomControl::TempDisplaySources::insert(uint8_t elementId, uint8_t plugIndex) {
+	int i = array::binaryLowerBound(this->count, this->sources, [elementId, plugIndex](DisplaySource const &a) {
+		return a.elementId < elementId || (a.elementId == elementId && a.plugIndex < plugIndex);
 	});
 	array::insert(MAX_SOURCES - i, this->sources + i);
-	this->sources[i] = {deviceId, plugIndex};
+	this->sources[i] = {elementId, plugIndex};
 	++this->count;
 }
 
-void RoomControl::TempDisplaySources::erase(uint8_t deviceId, uint8_t plugIndex) {
-	int i = array::binaryLowerBound(this->count, this->sources, [deviceId, plugIndex](DisplaySource const &a) {
-		return a.deviceId < deviceId || (a.deviceId == deviceId && a.plugIndex < plugIndex);
+void RoomControl::TempDisplaySources::erase(uint8_t elementId, uint8_t plugIndex) {
+	int i = array::binaryLowerBound(this->count, this->sources, [elementId, plugIndex](DisplaySource const &a) {
+		return a.elementId < elementId || (a.elementId == elementId && a.plugIndex < plugIndex);
 	});
 	array::erase(MAX_SOURCES - i, this->sources + i);
 	--this->count;
 }
 
-bool RoomControl::TempDisplaySources::contains(uint8_t deviceId, uint8_t plugIndex) const {
+bool RoomControl::TempDisplaySources::contains(uint8_t elementId, uint8_t plugIndex) const {
 	if (this->count == 0)
 		return false;
-	int i = array::binaryLowerBound(this->count, this->sources, [deviceId, plugIndex](DisplaySource const &a) {
-		return a.deviceId < deviceId || (a.deviceId == deviceId && a.plugIndex < plugIndex);
+	int i = array::binaryLowerBound(this->count, this->sources, [elementId, plugIndex](DisplaySource const &a) {
+		return a.elementId < elementId || (a.elementId == elementId && a.plugIndex < plugIndex);
 	});
 	auto &a = this->sources[i];
-	return a.deviceId == deviceId && a.plugIndex == plugIndex;
+	return a.elementId == elementId && a.plugIndex == plugIndex;
 }
 
 void RoomControl::listen(ListenerBarrier &barrier, Listener *listeners/*,
@@ -435,7 +438,7 @@ void RoomControl::writeDisplaySources(int interfaceIndex, TempDisplaySources &te
 
 	// store in flash
 	int const storageId = STORAGE_ID_DISPLAY_LISTENER | interfaceIndex;
-	Storage::write(STORAGE_CONFIG, storageId, size, displaySources.sources);
+	this->storage.writeBlocking(storageId, size, displaySources.sources);
 }
 
 Coroutine RoomControl::displayMessageFilter() {
@@ -451,7 +454,7 @@ Coroutine RoomControl::displayMessageFilter() {
 		co_await barrier.wait(info, &message);
 
 		// check if the message passes the filter
-		if (!this->displaySourcesList[info.interfaceId].contains(info.deviceId, info.plugIndex))
+		if (!this->displaySourcesList[info.source.interfaceId].contains(info.source.elementId, info.source.plugIndex))
 			continue;
 
 		// wait for more messages and force resume from event loop in case the message originates from the idle menu
@@ -461,7 +464,7 @@ Coroutine RoomControl::displayMessageFilter() {
 			Message message2;
 			int s = co_await select(barrier.wait(info2, &message2), Timer::sleep(timeout));
 			if (s == 1) {
-				if (this->displaySourcesList[info2.interfaceId].contains(info2.deviceId, info2.plugIndex)) {
+				if (this->displaySourcesList[info2.source.interfaceId].contains(info2.source.elementId, info2.source.plugIndex)) {
 					info = info2;
 					message = message2;
 				}
@@ -486,7 +489,7 @@ Coroutine RoomControl::displayMessageFilter() {
 
 // print all devices in an interface
 static void printDevices(Interface &interface) {
-	auto deviceIds = interface.getDeviceIds();
+	auto deviceIds = interface.getElementIds();
 	for (auto id : deviceIds) {
 		Terminal::out << dec(id) + '\n';
 		auto plugs = interface.getPlugs(id);
@@ -1152,10 +1155,10 @@ Coroutine RoomControl::idleMenu() {
 		}
 
 		if (toast > 0) {
-			auto interface = this->interfaces[info.interfaceId];
-			auto plugs = interface->getPlugs(info.deviceId);
-			auto type = plugs[info.plugIndex];
-			String deviceName = interface->getName(info.deviceId);
+			auto interface = this->interfaces[info.source.interfaceId];
+			auto plugs = interface->getPlugs(info.source.elementId);
+			auto type = plugs[info.source.plugIndex];
+			String deviceName = interface->getName(info.source.elementId);
 			String plugName = getTypeLabel(type);
 
 			{
@@ -1179,7 +1182,7 @@ Coroutine RoomControl::idleMenu() {
 		int index;
 		bool value;
 		int s = co_await select(
-			QuadratureDecoder::change(0, delta),
+			this->decoder.change(delta),
 			Input::trigger(1 << INPUT_WHEEL_BUTTON, 0, index, value),
 			Calendar::secondTick(),
 			this->displayMessageBarrier.wait(info, &message));
@@ -1218,7 +1221,7 @@ Coroutine RoomControl::idleMenu() {
 }
 
 AwaitableCoroutine RoomControl::mainMenu() {
-	Menu menu(this->swapChain);
+	Menu menu(this->decoder, this->swapChain);
 	while (true) {
 		if (menu.entry("Local Devices"))
 			co_await devicesMenu(LOCAL_INTERFACE);
@@ -1241,10 +1244,10 @@ AwaitableCoroutine RoomControl::mainMenu() {
 AwaitableCoroutine RoomControl::devicesMenu(int interfaceIndex) {
 	auto &interface = *this->interfaces[interfaceIndex];
 	interface.setCommissioning(true);
-	Menu menu(this->swapChain);
+	Menu menu(this->decoder, this->swapChain);
 	while (true) {
 		// list devices
-		auto deviceIds = interface.getDeviceIds();
+		auto deviceIds = interface.getElementIds();
 		for (auto id : deviceIds) {
 			auto stream = menu.stream();
 			stream << interface.getName(id);
@@ -1279,7 +1282,7 @@ AwaitableCoroutine RoomControl::deviceMenu(int interfaceIndex, uint8_t id) {
 	TempDisplaySources tempDisplaySources(this->displaySourcesList[interfaceIndex]);
 
 	// menu loop
-	Menu menu(this->swapChain);
+	Menu menu(this->decoder, this->swapChain);
 	while (true) {
 		if (interfaceIndex == LOCAL_INTERFACE && id == LocalInterface::WHEEL_ID) {
 			bool edit = menu.getEdit(1) == 1;
@@ -1328,11 +1331,11 @@ AwaitableCoroutine RoomControl::deviceMenu(int interfaceIndex, uint8_t id) {
 }
 
 AwaitableCoroutine RoomControl::alarmsMenu() {
-	Menu menu(this->swapChain);
+	Menu menu(this->decoder, this->swapChain);
 	auto &alarms = this->alarmInterface;
 	while (true) {
 		// list alarms
-		auto ids = alarms.getDeviceIds();
+		auto ids = alarms.getElementIds();
 		for (auto id : ids) {
 			auto const &data = *alarms.get(id);
 			auto stream = menu.stream();
@@ -1366,7 +1369,7 @@ AwaitableCoroutine RoomControl::alarmsMenu() {
 }
 
 AwaitableCoroutine RoomControl::alarmMenu(AlarmInterface::Data &data) {
-	Menu menu(this->swapChain);
+	Menu menu(this->decoder, this->swapChain);
 	auto &alarms = this->alarmInterface;
 	auto id = data.id;
 	while (true) {
@@ -1406,7 +1409,7 @@ AwaitableCoroutine RoomControl::alarmMenu(AlarmInterface::Data &data) {
 }
 
 AwaitableCoroutine RoomControl::alarmTimeMenu(AlarmTime &time) {
-	Menu menu(this->swapChain);
+	Menu menu(this->decoder, this->swapChain);
 	while (true) {
 		int edit = menu.getEdit(9);
 		bool editHours = edit == 1;
@@ -1442,11 +1445,11 @@ AwaitableCoroutine RoomControl::alarmTimeMenu(AlarmTime &time) {
 
 AwaitableCoroutine RoomControl::functionsMenu() {
 	// menu loop
-	Menu menu(this->swapChain);
+	Menu menu(this->decoder, this->swapChain);
 	auto &functions = this->functionInterface;
 	while (true) {
 		// list functions
-		auto deviceIds = functions.getDeviceIds();
+		auto deviceIds = functions.getElementIds();
 		for (auto id : deviceIds) {
 			auto stream = menu.stream();
 			stream << functions.getName(id);
@@ -1589,7 +1592,7 @@ AwaitableCoroutine RoomControl::functionMenu(FunctionInterface::DataUnion &data)
 	TempDisplaySources tempDisplaySources(this->displaySourcesList[FUNCTION_INTERFACE]);
 
 	// menu loop
-	Menu menu(this->swapChain);
+	Menu menu(this->decoder, this->swapChain);
 	while (true) {
 		int delta = menu.getDelta();
 
@@ -1626,6 +1629,7 @@ AwaitableCoroutine RoomControl::functionMenu(FunctionInterface::DataUnion &data)
 			// brightness
 			// todo: one per input
 			for (int i = 0; i < 4; ++i) {
+				menu.beginSection();
 				auto &setting = d.settings[i];
 
 				stream = menu.stream();
@@ -1640,6 +1644,8 @@ AwaitableCoroutine RoomControl::functionMenu(FunctionInterface::DataUnion &data)
 				stream = menu.stream();
 				stream << "On Fade: ";
 				editDuration(menu, stream, setting.fade, 10);
+
+				menu.endSection();
 			}
 
 			// off and timeout fade times
@@ -1647,10 +1653,13 @@ AwaitableCoroutine RoomControl::functionMenu(FunctionInterface::DataUnion &data)
 			stream << "Off Fade: ";
 			editDuration(menu, stream, d.offFade, 10);
 
-			stream = menu.stream();
-			stream << "Timeout Fade: ";
-			editDuration(menu, stream, d.timeoutFade, 10);
+			if (d.timeout > 0) {
+				stream = menu.stream();
+				stream << "Timeout Fade: ";
+				editDuration(menu, stream, d.timeoutFade, 10);
+			}
 
+			menu.line();
 			break;
 		}
 		case FunctionInterface::Type::COLOR_LIGHT: {
@@ -1669,10 +1678,13 @@ AwaitableCoroutine RoomControl::functionMenu(FunctionInterface::DataUnion &data)
 			stream << "Off Fade: ";
 			editDuration(menu, stream, d.offFade, 10);
 
-			stream = menu.stream();
-			stream << "Timeout Fade: ";
-			editDuration(menu, stream, d.timeoutFade, 10);
+			if (d.timeout > 0) {
+				stream = menu.stream();
+				stream << "Timeout Fade: ";
+				editDuration(menu, stream, d.timeoutFade, 10);
+			}
 
+			menu.line();
 			break;
 		}
 		case FunctionInterface::Type::ANIMATED_LIGHT: {
@@ -1687,8 +1699,20 @@ AwaitableCoroutine RoomControl::functionMenu(FunctionInterface::DataUnion &data)
 			stream = menu.stream();
 			stream << "Step Count: ";
 			int editStepCount = menu.getEdit(1);
-			if (editStepCount)
-				d.stepCount = clamp(d.stepCount + delta, 0, 15);
+			if (editStepCount) {
+				auto stepCount = clamp(d.stepCount + delta, 0, array::count(d.steps) - 1);
+
+				// initialize new animation steps
+				for (int i = d.stepCount; i < stepCount; ++i) {
+					auto &step = d.steps[i];
+					step.hue = (i * 6) % 72;
+					step.brightness = 100; // 100%
+					step.saturation = 100; // 100%
+					step.fade = 10; // 1s
+					//Terminal::out << dec(i) << ' ' << dec(step.hue) << '\n';
+				}
+				d.stepCount = stepCount;
+			}
 			stream << underline(dec(d.stepCount), editStepCount);
 			menu.entry();
 
@@ -1704,10 +1728,13 @@ AwaitableCoroutine RoomControl::functionMenu(FunctionInterface::DataUnion &data)
 			stream << "Off Fade: ";
 			editDuration(menu, stream, d.offFade, 10);
 
-			stream = menu.stream();
-			stream << "Timeout Fade: ";
-			editDuration(menu, stream, d.timeoutFade, 10);
+			if (d.timeout > 0) {
+				stream = menu.stream();
+				stream << "Timeout Fade: ";
+				editDuration(menu, stream, d.timeoutFade, 10);
+			}
 
+			menu.line();
 			break;
 		}
 		case FunctionInterface::Type::TIMED_BLIND: {
@@ -1756,8 +1783,8 @@ AwaitableCoroutine RoomControl::functionMenu(FunctionInterface::DataUnion &data)
 		if (menu.entry("Cancel"))
 			break;
 		if (menu.entry("Save")) {
-			// save function
-			functions.set(data);
+			// save function (returns new id if function was new)
+			id = functions.set(data);
 
 			// save connections
 			writeConnections(FUNCTION_INTERFACE, id, tempConnections);
@@ -1781,7 +1808,7 @@ AwaitableCoroutine RoomControl::measureRunTime(uint8_t deviceId, uint8_t plugInd
 	SystemTime startTime;
 
 	// menu loop
-	Menu menu(this->swapChain);
+	Menu menu(this->decoder, this->swapChain);
 	while (true) {
 		// duration
 		auto d = unpackHourDuration100(duration);
@@ -1824,7 +1851,7 @@ AwaitableCoroutine RoomControl::measureRunTime(uint8_t deviceId, uint8_t plugInd
 }
 
 AwaitableCoroutine RoomControl::connectionsMenu(Array<MessageType const> plugs, TempConnections &tc) {
-	Menu menu(this->swapChain);
+	Menu menu(this->decoder, this->swapChain);
 	while (true) {
 		// list all input plugs and their connections
 		int connectionIndex = 0;
@@ -1843,7 +1870,7 @@ AwaitableCoroutine RoomControl::connectionsMenu(Array<MessageType const> plugs, 
 					break;
 
 				auto stream = menu.stream();
-				printConnection(stream, connection);
+				printSource(stream, connection.source);
 				if (menu.entry()) {
 					Result result;
 					auto c = connection;
@@ -1861,7 +1888,7 @@ AwaitableCoroutine RoomControl::connectionsMenu(Array<MessageType const> plugs, 
 				++connectionIndex;
 			}
 
-			// add new connection if maximum connection count not reached
+			// entry for adding a new connection if maximum connection count not reached
 			if (connectionIndex < TempConnections::MAX_CONNECTIONS && menu.entry("Connect...")) {
 				// select new connection
 				Connection connection = {
@@ -1870,8 +1897,15 @@ AwaitableCoroutine RoomControl::connectionsMenu(Array<MessageType const> plugs, 
 					{}};
 				co_await selectDevice(connection, dstType);
 
-				// now edit convert options of new connection if a device was selected
-				if (connection.source.deviceId != 0) {
+				// now edit convert options of new connection
+				if (connection.source.elementId != 0) {
+					// get source message type
+					auto srcType = getSrcType(connection.source);
+
+					// get default convert options for converting a message from srcType to dstType
+					connection.convertOptions = getDefaultConvertOptions(dstType, srcType);
+
+					// edit the connection
 					Result result;
 					co_await editConnection(connection, dstType, result);
 
@@ -1893,29 +1927,25 @@ AwaitableCoroutine RoomControl::connectionsMenu(Array<MessageType const> plugs, 
 AwaitableCoroutine RoomControl::editConnection(Connection &connection, MessageType dstType, Result &result)
 {
 	// menu loop
-	Menu menu(this->swapChain);
+	Menu menu(this->decoder, this->swapChain);
 	while (true) {
 		int delta = menu.getDelta();
 
 		// edit connection
 		{
 			auto stream = menu.stream();
-			printConnection(stream, connection);
-			if (menu.entry())
+			printSource(stream, connection.source);
+			if (menu.entry()) {
 				co_await selectDevice(connection, dstType);
+			}
 		}
 
 		// edit convert options
 		{
-			auto &interface = *this->interfaces[connection.source.interfaceId];
-			auto plugs = interface.getPlugs(connection.source.deviceId);
-			if (connection.source.plugIndex < plugs.count()) {
-				auto messageType = plugs[connection.source.plugIndex];
-
-				menu.beginSection();
-				editConvertOptions(menu, connection.convertOptions, dstType, messageType);
-				menu.endSection();
-			}
+			auto srcType = getSrcType(connection.source);
+			menu.beginSection();
+			editConvertOptions(menu, connection.convertOptions, dstType, srcType);
+			menu.endSection();
 		}
 
 		if (menu.entry("Delete")) {
@@ -2014,12 +2044,12 @@ AwaitableCoroutine RoomControl::editConnection(TempConnections &tc, int index, C
 */
 AwaitableCoroutine RoomControl::selectDevice(Connection &connection, MessageType dstType) {
 	// menu loop
-	Menu menu(this->swapChain);
+	Menu menu(this->decoder, this->swapChain);
 	while (true) {
 		int delta = menu.getDelta();
 
 		if (menu.entry("Detect...")) {
-			co_await detectConnection(connection, dstType);
+			co_await detectSource(connection.source, dstType);
 			break;
 		}
 
@@ -2027,7 +2057,7 @@ AwaitableCoroutine RoomControl::selectDevice(Connection &connection, MessageType
 		for (int i = 0; i < INTERFACE_COUNT; ++i) {
 			auto &interface = *this->interfaces[i];
 			menu.beginSection();
-			auto deviceIds = interface.getDeviceIds();
+			auto deviceIds = interface.getElementIds();
 			for (auto id: deviceIds) {
 				// check if the device has at least one compatible endpoint
 				auto plugs = interface.getPlugs(id);
@@ -2053,29 +2083,31 @@ AwaitableCoroutine RoomControl::selectDevice(Connection &connection, MessageType
 	}
 }
 
-AwaitableCoroutine RoomControl::detectConnection(Connection &connection, MessageType dstType) {
+AwaitableCoroutine RoomControl::detectSource(Source &source, MessageType dstType) {
 	// listen to messages on all interfaces
 	ListenerBarrier barrier;
 	Listener listeners[INTERFACE_COUNT];
 	listen(barrier, listeners);
 
-	// queue of detected connections
-	Queue<Connection, 16> queue;
+	// queue of detected sources
+	Queue<ListenerInfo, 16> queue;
 
 	// menu loop
-	Menu menu(this->swapChain);
+	Menu menu(this->decoder, this->swapChain);
 	while (true) {
 		int delta = menu.getDelta();
 
+		// wait for messages when this entry is selected
 		menu.entry("Wait...");
 
-		// print list of connections
+		// list of connections
 		for (int i = queue.count() - 1; i >= 0; --i) {
 			auto stream = menu.stream();
-			auto &c = queue[i];
-			printConnection(stream, c);
+			auto &info = queue[i];
+			printSource(stream, info.source);
 			if (menu.entry()) {
-				connection = c;
+				// sources was selected
+				source = info.source;
 				co_return;
 			}
 		}
@@ -2087,11 +2119,13 @@ AwaitableCoroutine RoomControl::detectConnection(Connection &connection, Message
 		ListenerInfo info;
 		Message message;
 		int s = co_await select(menu.show(), barrier.wait(info, &message));
+
+		// check if "Wait..." entry is selected and a new message has arrived
 		if (menu.getSelected() == 0 && s == 2) {
-			auto srcType = this->interfaces[info.interfaceId]->getPlugs(info.deviceId)[info.plugIndex];
+			auto srcType = getSrcType(info.source);
 			if (isCompatible(dstType, srcType)) {
-				// add detected connection
-				queue.addBack({info.interfaceId, info.deviceId, info.plugIndex});
+				// add message source as new detected connection
+				queue.addBack(info);
 			}
 		}
 	}
@@ -2133,7 +2167,7 @@ AwaitableCoroutine RoomControl::selectPlug(Interface &interface, uint8_t deviceI
 	MessageType dstType)
 {
 	// menu loop
-	Menu menu(this->swapChain);
+	Menu menu(this->decoder, this->swapChain);
 	while (true) {
 		int delta = menu.getDelta();
 
@@ -2147,7 +2181,7 @@ AwaitableCoroutine RoomControl::selectPlug(Interface &interface, uint8_t deviceI
 				menu.stream() << dec(plugIndex) << " (" << typeName << ')';
 				if (menu.entry()) {
 					// endpoint selected
-					connection.source.deviceId = deviceId;
+					connection.source.elementId = deviceId;
 					connection.source.plugIndex = plugIndex;
 					connection.convertOptions = getDefaultConvertOptions(dstType, srcType);
 					co_return;
@@ -2166,7 +2200,7 @@ AwaitableCoroutine RoomControl::selectPlug(Interface &interface, uint8_t deviceI
 AwaitableCoroutine RoomControl::plugsMenu(Interface &interface, uint8_t deviceId,
 	TempDisplaySources &tempDisplaySources)
 {
-	Menu menu(this->swapChain);
+	Menu menu(this->decoder, this->swapChain);
 	while (true) {
 		auto plugs = interface.getPlugs(deviceId);
 		for (int plugIndex = 0; plugIndex < plugs.count(); ++plugIndex) {
@@ -2225,35 +2259,14 @@ AwaitableCoroutine RoomControl::messageLogger(Interface &interface, uint8_t devi
 	queue.addBack();
 
 	// menu loop
-	Menu menu(this->swapChain);
+	Menu menu(this->decoder, this->swapChain);
 	while (true) {
 		// display events
 		for (int i = queue.count() - 2; i >= 0; --i) {
 			Event &event = queue[i];
 			auto stream = menu.stream();
-			stream << dec(event.info.plugIndex) << ": ";
+			stream << dec(event.info.source.plugIndex) << ": ";
 			printMessage(stream, event.type, event.message);
-/*
-			auto usage = getUsage(event.type);
-			switch (event.type & MessageType::CATEGORY) {
-			case MessageType::BINARY:
-			case MessageType::TERNARY:
-				stream << getSwitchStates(usage)[event.message.value.u8];
-				break;
-			case MessageType::LEVEL:
-			case MessageType::PHYSICAL:
-			case MessageType::CONCENTRATION:
-			case MessageType::LIGHTING: {
-				bool relative = (event.type & MessageType::CMD) != 0 && event.message.command != 0;
-				stream << getDisplayValue(usage, relative, event.message.value.f32) << getDisplayUnit(usage);
-				break;
-			}
-			case MessageType::METERING:
-				//stream << getDisplayValue(usage, event.message.value.u32) << getDisplayUnit(usage);
-				break;
-			default:;
-			}
-*/
 			menu.entry();
 		}
 
@@ -2265,9 +2278,9 @@ AwaitableCoroutine RoomControl::messageLogger(Interface &interface, uint8_t devi
 
 		// show menu or receive event (event gets filled in)
 		int selected = co_await select(menu.show(), barrier.wait(event.info, &event.message), Timer::sleep(250ms));
-		if (selected == 2 && event.info.deviceId == deviceId) {
+		if (selected == 2 && event.info.source.elementId == deviceId) {
 			// received an event: add new empty event at the back of the queue
-			event.type = interface.getPlugs(deviceId)[event.info.plugIndex];
+			event.type = interface.getPlugs(deviceId)[event.info.source.plugIndex];
 			queue.addBack();
 		}
 	}
@@ -2281,11 +2294,11 @@ AwaitableCoroutine RoomControl::messageGenerator(Interface &interface, uint8_t d
 	//! skip "in" endpoints -> or forward to subscriptions
 
 	uint8_t plugIndex = 0;
-	MessageType lastMessageType = MessageType::UNKNOWN;
+	MessageType lastMessageType = MessageType::INVALID;
 	Message message = {};
 
 	// menu loop
-	Menu menu(this->swapChain);
+	Menu menu(this->decoder, this->swapChain);
 	while (true) {
 		auto plugs = interface.getPlugs(deviceId);
 		if (plugs.count() > 0) {
@@ -2340,7 +2353,7 @@ AwaitableCoroutine RoomControl::messageGenerator(Interface &interface, uint8_t d
 			if (menu.entry("Send")) {
 				auto target = interface.getSubscriberTarget(deviceId, plugIndex);
 				target.barrier->resumeFirst([deviceId, plugIndex, messageType, &message] (SubscriberParameters &p) {
-					p.info.deviceId = deviceId;
+					p.info.elementId = deviceId;
 					p.info.plugIndex = plugIndex;
 					p.info.connectionIndex = 0;
 

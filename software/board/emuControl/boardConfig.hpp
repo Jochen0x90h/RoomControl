@@ -1,14 +1,14 @@
 #pragma once
 
+#include <emu/BusMasterEmu.hpp>
+#include <emu/QuadratureDecoderEmu.hpp>
+#include <emu/SpiBME680.hpp>
+#include <emu/SpiSSD1309.hpp>
+#include <emu/SpiMR45Vxxx.hpp>
+#include <posix/FileStorage.hpp>
+#include <FeRamCounters.hpp>
 #include <util.hpp>
 
-
-// flash
-// -----
-
-constexpr int FLASH_PAGE_SIZE = 4096;
-constexpr int FLASH_PAGE_COUNT = 32;
-constexpr int FLASH_WRITE_ALIGN = 4;
 
 
 // inputs
@@ -32,11 +32,12 @@ constexpr int OUTPUT_COUNT = array::count(OUTPUTS);
 
 // spi
 // ---
-
+/*
 constexpr int SPI_CONTEXT_COUNT = 3;
 #define SPI_EMU_BME680 0
 #define SPI_EMU_SSD1309 1
 #define SPI_EMU_MR45V064B 2
+*/
 
 
 // radio
@@ -58,7 +59,20 @@ constexpr int BLUETOOTH_CONTEXT_COUNT = 2;
 constexpr int NETWORK_CONTEXT_COUNT = 2;
 
 
-// storage
+// drivers
 // -------
 
-constexpr int STORAGE_CONTEXT_COUNT = 1;
+constexpr int FERAM_SIZE = 8192;
+constexpr int DISPLAY_WIDTH = 128;
+constexpr int DISPLAY_HEIGHT = 64;
+
+struct Drivers {
+	SpiBME680 airSensor;
+	SpiSSD1309 display{DISPLAY_WIDTH, DISPLAY_HEIGHT};
+	QuadratureDecoderEmu quadratureDecoder;
+	BusMasterEmu busMaster;
+	FileStorage storage{"storage.bin", 65536, 1024};
+	//FileStorage counters{"counters.bin", FERAM_SIZE / 10, 4};
+	SpiMR45Vxxx feRam{"feram.bin", FERAM_SIZE};
+	FeRamCounters<FERAM_SIZE> counters{feRam};
+};

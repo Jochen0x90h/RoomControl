@@ -115,7 +115,7 @@ String toString(Array<char, 11> buffer, int32_t value, int digitCount) {
 		value = -value;
 	
 	// convert into buffer
-	char *end = buffer.data() + 10;
+	char *end = buffer.end();
 	char *it = end;
 	while (value > 0 || digitCount > 0) {
 		--it;

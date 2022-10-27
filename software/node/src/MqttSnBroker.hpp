@@ -116,7 +116,7 @@ public:
 		 */
 		template <int N>
 		PacketWriter(uint8_t (&message)[N]) : MessageWriter(message + 1)
-#ifdef EMU
+#ifdef DEBUG
 			, end(message + N)
 #endif
 		{}
@@ -125,7 +125,7 @@ public:
 		 * Set length of packet and return as array
 		 */
 		Array<uint8_t const> finish() {
-#ifdef EMU
+#ifdef DEBUG
 			assert(this->current < this->end);
 #endif
 			auto begin = this->begin - 1;
@@ -134,7 +134,7 @@ public:
 			return {length, begin};
 		}
 
-#ifdef EMU
+#ifdef DEBUG
 		uint8_t *end;
 #endif
 	};

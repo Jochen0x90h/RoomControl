@@ -9,16 +9,14 @@
 
 namespace gpio {
 
-// ports
+// port pins
 constexpr int PA(int index) { return index; }
-
 constexpr int PB(int index) { return 16 + index; }
-
 constexpr int PC(int index) { return 32 + index; }
-
 constexpr int PF(int index) { return 80 + index; }
 
-constexpr GPIO_TypeDef *getPort(int pin) { return (GPIO_TypeDef *) (GPIOA_BASE + (pin >> 4) * 0x00000400UL); }
+// get pointer to GPIO port for a given pin (e.g. GPIOA)
+inline GPIO_TypeDef *getPort(int pin) { return (GPIO_TypeDef *)(GPIOA_BASE + (pin >> 4) * 0x00000400UL); }
 
 
 enum class Mode {
@@ -159,39 +157,6 @@ struct PinFunction {
 	int function;
 };
 
-// see STM32F042x4 STM32F042x6 datasheet
-template<int PIN>
-auto SPI_CS() {
-	if constexpr (PIN == PA(4) || PIN == PA(15))
-		return PinFunction{PIN, 0};
-	else
-		return nullptr;
-}
-
-template<int PIN>
-auto SPI_SCK() {
-	if constexpr (PIN == PA(5) || PIN == PB(3))
-		return PinFunction{PIN, 0};
-	else
-		return nullptr;
-}
-
-template<int PIN>
-auto SPI_MOSI() {
-	if constexpr (PIN == PA(7) || PIN == PB(5))
-		return PinFunction{PIN, 0};
-	else
-		return nullptr;
-}
-
-template<int PIN>
-auto SPI_MISO() {
-	if constexpr (PIN == PA(6) || PIN == PB(4))
-		return PinFunction{PIN, 0};
-	else
-		return nullptr;
-}
-
 inline void configureAlternateInput(PinFunction pf, Pull pull = Pull::DISABLED) {
 	auto port = getPort(pf.pin);
 	int pos2 = (pf.pin & 15) << 1;
@@ -209,7 +174,8 @@ inline void configureAlternateInput(PinFunction pf, Pull pull = Pull::DISABLED) 
 }
 
 inline void configureAlternateOutput(PinFunction pf, Pull pull = Pull::DISABLED, Speed speed = Speed::HIGH,
-									 Drive drive = Drive::PUSH_PULL) {
+	Drive drive = Drive::PUSH_PULL)
+{
 	auto port = getPort(pf.pin);
 	int pos = pf.pin & 15;
 	int pos2 = (pf.pin & 15) << 1;

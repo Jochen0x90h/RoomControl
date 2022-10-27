@@ -29,8 +29,9 @@
 	Message:
 	The message starts with the encoded device address for bus arbitration (always loses against commands as it never
 	starts with zero) and contains either an attribute read request, attribute data or a plug message
-	<encoded address> <security counter> <255> <endpoint index> <attribute index> <data> <mic(key)>
-	<encoded address> <security counter> <endpoint index> <plug index> <message> <mic(key)>
+	attribute read: <encoded address> <security counter> <255> <endpoint index> <attribute index> <mic(key)>
+	attribute data: <encoded address> <security counter> <255> <endpoint index> <attribute index> <data> <mic(key)>
+	plug message: <encoded address> <security counter> <endpoint index> <plug index> <message> <mic(key)>
 
 	Ack:
 	CRC-8 sent in response as acknowledgement
@@ -51,37 +52,34 @@
 	<mic>
 	Message integrity code using the default key or a configured network key	
 */
-namespace BusMaster {
+class BusMaster {
+public:
+	struct ReceiveParameters {
+		int *length;
+		uint8_t *data;
+	};
 
-struct ReceiveParameters {
-	int *length;
-	uint8_t *data;
+	struct SendParameters {
+		int length;
+		uint8_t const *data;
+	};
+
+
+	virtual ~BusMaster();
+
+	/**
+	 * Receive data from a bus node
+	 * @param length in: maximum length of data to receive, out: actual length of data received
+	 * @param data data to receive
+	 * @return use co_await on return value to await received data
+	 */
+	[[nodiscard]] virtual Awaitable<ReceiveParameters> receive(int &length, uint8_t *data) = 0;
+
+	/**
+	 * Send data to a bus node
+	 * @param length length of data to send
+	 * @param data data to send
+	 * @return use co_await on return value to await completion
+	 */
+	[[nodiscard]] virtual Awaitable<SendParameters> send(int length, uint8_t const *data) = 0;
 };
-
-struct SendParameters {
-	int length;
-	uint8_t const *data;
-};
-
-/**
- * Initialize the bus master
- */
-void init();
-
-/**
- * Receive data from a bus node
- * @param length in: maximum length of data to receive, out: actual length of data received
- * @param data data to receive
- * @return use co_await on return value to await received data
- */
-[[nodiscard]] Awaitable<ReceiveParameters> receive(int &length, uint8_t *data);
-
-/**
- * Send data to a bus node
- * @param length length of data to send
- * @param data data to send
- * @return use co_await on return value to await completion
- */
-[[nodiscard]] Awaitable<SendParameters> send(int length, uint8_t const *data);
-
-} // namespace BusMaster

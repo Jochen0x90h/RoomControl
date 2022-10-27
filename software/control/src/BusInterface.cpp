@@ -22,25 +22,26 @@ constexpr int MAX_RETRY = 2;
 
 // BusInterface
 
-BusInterface::BusInterface(uint8_t interfaceId, PersistentStateManager &stateManager)
-	: listeners(interfaceId), securityCounter(stateManager)
+BusInterface::BusInterface(uint8_t interfaceId, BusMaster &busMaster, Storage &storage, Storage &counters)
+	: listeners(interfaceId), busMaster(busMaster), storage(storage), counters(counters)
 {
-	// load list of device ids
-	int deviceCount = Storage::read(STORAGE_CONFIG, STORAGE_ID_BUS1, sizeof(this->deviceIds), this->deviceIds);
+	// load list of element ids
+	int elementCount = sizeof(this->elementIds);
+	storage.readBlocking(STORAGE_ID_BUS1, elementCount, this->elementIds);
 
 	// load devices
 	int j = 0;
-	for (int i = 0; i < deviceCount; ++i) {
-		uint8_t id = this->deviceIds[i];
+	for (int i = 0; i < sizeof(this->elementIds) && i < elementCount; ++i) {
+		uint8_t id = this->elementIds[i];
 
 		// get size of stored data
-		int size = Storage::size(STORAGE_CONFIG, STORAGE_ID_BUS1 | id);
-		if (size < sizeof(DeviceData))
+		int size = storage.getSizeBlocking(STORAGE_ID_BUS1 | id);
+		if (size < offsetOf(EndpointData, plugs))
 			continue;
 
 		// allocate memory and read data
 		auto endpointData = reinterpret_cast<EndpointData *>(malloc(size));
-		Storage::read(STORAGE_CONFIG, STORAGE_ID_BUS1 | id, size, endpointData);
+		storage.readBlocking(STORAGE_ID_BUS1 | id, size, endpointData);
 
 		// check id
 		if (endpointData->id != id) {
@@ -68,21 +69,33 @@ BusInterface::BusInterface(uint8_t interfaceId, PersistentStateManager &stateMan
 		new Endpoint(this, device, endpointData);
 
 		// device was correctly loaded
-		this->deviceIds[j] = id;
+		this->elementIds[j] = id;
 		++j;
 	}
-	this->deviceCount = j;
+	this->elementCount = j;
+
+	// load security counter
+	int counterSize = 4;
+	counters.readBlocking(COUNTERS_ID_BUS, counterSize, &this->securityCounter);
+	if (counterSize != 4)
+		this->securityCounter = 0;
+
+	// start coroutines
+	for (int i = 0; i < RECEIVE_COUNT; ++i)
+		receive();
+	for (int i = 0; i < PUBLISH_COUNT; ++i)
+		publish();
 }
 
 BusInterface::~BusInterface() {
 }
 
 void BusInterface::setConfiguration(DataBuffer<16> const &key, AesKey const &aesKey) {
-	bool first = this->key == nullptr;
+	//bool first = this->key == nullptr;
 	this->key = &key;
 	this->aesKey = &aesKey;
-	if (first)
-		start();
+	//if (first)
+	//	start();
 }
 
 String BusInterface::getName() {
@@ -90,7 +103,7 @@ String BusInterface::getName() {
 }
 
 void BusInterface::setCommissioning(bool enabled) {
-	this->commissioning = enabled && this->deviceCount < MAX_DEVICE_COUNT;
+	this->commissioning = enabled && this->elementCount < MAX_ELEMENT_COUNT;
 	if (this->commissioning) {
 	} else {
 		// cancel current association coroutine if it is still running
@@ -98,45 +111,46 @@ void BusInterface::setCommissioning(bool enabled) {
 	}
 }
 
-Array<uint8_t const> BusInterface::getDeviceIds() {
-	return {this->deviceCount, this->deviceIds};
+Array<uint8_t const> BusInterface::getElementIds() {
+	return {this->elementCount, this->elementIds};
 }
 
-String BusInterface::getName(uint8_t deviceId) const {
-	auto endpoint = getEndpoint(deviceId);
+String BusInterface::getName(uint8_t id) const {
+	auto endpoint = getEndpoint(id);
 	if (endpoint != nullptr)
 		return String(endpoint->data->name);
 	return {};
 }
 
-void BusInterface::setName(uint8_t deviceId, String name) {
-	auto endpoint = getEndpoint(deviceId);
+void BusInterface::setName(uint8_t id, String name) {
+	auto endpoint = getEndpoint(id);
 	if (endpoint != nullptr) {
 		assign(endpoint->data->name, name);
 
 		// write to flash
-		Storage::write(STORAGE_CONFIG, STORAGE_ID_BUS1 | endpoint->data->id, endpoint->data->size(), endpoint->data);
+		this->storage.writeBlocking(STORAGE_ID_BUS1 | endpoint->data->id, endpoint->data->size(), endpoint->data);
 	}
 }
 
-Array<MessageType const> BusInterface::getPlugs(uint8_t deviceId) const {
-	auto endpoint = getEndpoint(deviceId);
+Array<MessageType const> BusInterface::getPlugs(uint8_t id) const {
+	auto endpoint = getEndpoint(id);
 	if (endpoint != nullptr)
 		return {endpoint->data->plugCount, endpoint->data->plugs};
 	return {};
 }
 
-SubscriberTarget BusInterface::getSubscriberTarget(uint8_t deviceId, uint8_t plugIndex) {
-	auto endpoint = getEndpoint(deviceId);
+SubscriberTarget BusInterface::getSubscriberTarget(uint8_t id, uint8_t plugIndex) {
+	auto endpoint = getEndpoint(id);
 	if (endpoint != nullptr && plugIndex < endpoint->data->plugCount)
 		return {endpoint->data->plugs[plugIndex], &this->publishBarrier};
 	return {};
 }
 
 void BusInterface::subscribe(Subscriber &subscriber) {
-	assert(subscriber.target.barrier != nullptr);
 	subscriber.remove();
-	auto id = subscriber.data->source.deviceId;
+	if (subscriber.target.barrier == nullptr)
+		return;
+	auto id = subscriber.data->source.elementId;
 	auto endpoint = getEndpoint(id);
 	if (endpoint != nullptr)
 		endpoint->subscribers.add(subscriber);
@@ -148,7 +162,7 @@ void BusInterface::listen(Listener &listener) {
 	this->listeners.add(listener);
 }
 
-void BusInterface::erase(uint8_t deviceId) {
+void BusInterface::erase(uint8_t id) {
 	auto d = &this->devices;
 	while (*d != nullptr) {
 		auto device = *d;
@@ -157,7 +171,7 @@ void BusInterface::erase(uint8_t deviceId) {
 		auto e = &device->endpoints;
 		while (*e != nullptr) {
 			auto endpoint = *e;
-			if (endpoint->data->id == deviceId) {
+			if (endpoint->data->id == id) {
 				// remove endpoint from linked list
 				*e = endpoint->next;
 
@@ -167,14 +181,14 @@ void BusInterface::erase(uint8_t deviceId) {
 					*d = device->next;
 
 					// erase device from flash
-					Storage::erase(STORAGE_CONFIG, STORAGE_ID_BUS2 | device->data.id);
+					this->storage.eraseBlocking(STORAGE_ID_BUS2 | device->data.id);
 
 					// delete device
 					delete device;
 				}
 
 				// erase endpoint from flash
-				Storage::erase(STORAGE_CONFIG, STORAGE_ID_BUS1 | deviceId);
+				this->storage.eraseBlocking(STORAGE_ID_BUS1 | id);
 
 				// delete endpoint
 				delete endpoint;
@@ -188,14 +202,26 @@ void BusInterface::erase(uint8_t deviceId) {
 list:
 
 	// erase from list of device id's
-	this->deviceCount = eraseDevice(this->deviceCount, this->deviceIds, deviceId);
-	Storage::write(STORAGE_CONFIG, STORAGE_ID_BUS1, this->deviceCount, this->deviceIds);
+	this->elementCount = eraseElement(this->elementCount, this->elementIds, id);
+	this->storage.writeBlocking(STORAGE_ID_BUS1, this->elementCount, this->elementIds);
 }
 
 // private:
 
-// BusDevice
-BusInterface::BusDevice::~BusDevice() {
+// Device
+BusInterface::Device::Device(BusInterface *interface, DeviceData const &data)
+	: next(interface->devices), data(data)
+{
+	interface->devices = this;
+
+	// load security counter
+	int counterSize = 4;
+	interface->counters.readBlocking(COUNTERS_ID_BUS + data.id, counterSize, &this->securityCounter);
+	if (counterSize != 4)
+		this->securityCounter = 0;
+}
+
+BusInterface::Device::~Device() {
 	// delete endpoints
 	auto endpoint = this->endpoints;
 	while (endpoint != nullptr) {
@@ -210,12 +236,12 @@ BusInterface::Endpoint::~Endpoint() {
 	free(this->data);
 }
 
-BusInterface::Endpoint *BusInterface::getEndpoint(uint8_t deviceId) const {
+BusInterface::Endpoint *BusInterface::getEndpoint(uint8_t id) const {
 	auto device = this->devices;
 	while (device != nullptr) {
 		auto endpoint = device->endpoints;
 		while (endpoint != nullptr) {
-			if (endpoint->data->id == deviceId)
+			if (endpoint->data->id == id)
 				return endpoint;
 			endpoint = endpoint->next;
 		}
@@ -224,12 +250,12 @@ BusInterface::Endpoint *BusInterface::getEndpoint(uint8_t deviceId) const {
 	return nullptr;
 }
 
-uint8_t BusInterface::allocateId(int deviceCount) {
+uint8_t BusInterface::allocateId(int elementCount) {
 	// find a free id
 	int id;
 	for (id = 1; id < 256; ++id) {
-		for (int j = 0; j < deviceCount; ++j) {
-			if (this->deviceIds[j] == id)
+		for (int j = 0; j < elementCount; ++j) {
+			if (this->elementIds[j] == id)
 				goto found;
 		}
 		break;
@@ -241,7 +267,7 @@ uint8_t BusInterface::allocateId(int deviceCount) {
 uint8_t BusInterface::allocateDeviceId() {
 	// find a free id
 	int id;
-	for (id = 0; id < 256; ++id) {
+	for (id = 1; id < 256; ++id) {
 		auto device = this->devices;
 		while (device != nullptr) {
 			if (device->data.id == id)
@@ -254,7 +280,7 @@ uint8_t BusInterface::allocateDeviceId() {
 	return id;
 }
 
-BusInterface::BusDevice *BusInterface::getOrLoadDevice(uint8_t deviceId) {
+BusInterface::Device *BusInterface::getOrLoadDevice(uint8_t deviceId) {
 	auto device = this->devices;
 	while (device != nullptr) {
 		if (device->data.id == deviceId)
@@ -264,7 +290,9 @@ BusInterface::BusDevice *BusInterface::getOrLoadDevice(uint8_t deviceId) {
 
 	// load data
 	DeviceData data;
-	if (Storage::read(STORAGE_CONFIG, STORAGE_ID_BUS2 | deviceId, sizeof(data), &data) != sizeof(data))
+	int size = sizeof(data);
+	this->storage.readBlocking(STORAGE_ID_BUS2 | deviceId, size, &data);
+	if (size != sizeof(data))
 		return nullptr;
 
 	// check id
@@ -272,20 +300,10 @@ BusInterface::BusDevice *BusInterface::getOrLoadDevice(uint8_t deviceId) {
 		return nullptr;
 
 	// create device
-	return new BusDevice(this, data);
+	return new Device(this, data);
 }
 
 
-Coroutine BusInterface::start() {
-	// restore security counter
-	co_await this->securityCounter.restore();
-
-	// start coroutines
-	for (int i = 0; i < RECEIVE_COUNT; ++i)
-		receive();
-	for (int i = 0; i < PUBLISH_COUNT; ++i)
-		publish();
-}
 /*
 static bool readMessage(MessageType dstType, void *dstMessage, MessageType srcType, MessageReader r,
 	ConvertOptions const &convertOptions)
@@ -356,7 +374,7 @@ Coroutine BusInterface::receive() {
 
 	while (true) {
 		int receiveLength = MESSAGE_LENGTH;
-		co_await BusMaster::receive(receiveLength, receiveMessage);
+		co_await this->busMaster.receive(receiveLength, receiveMessage);
 
 		// debug print received message
 		//for (int i = 0; i < receiveLength; ++i)
@@ -396,11 +414,11 @@ Coroutine BusInterface::receive() {
 			this->commissionCoroutine.cancel();
 
 			// restrict maximum number of devices (each endpoint counts as one device)
-			endpointCount = min(endpointCount, MAX_DEVICE_COUNT - this->deviceCount);
+			//endpointCount = min(endpointCount, MAX_ELEMENT_COUNT - this->elementCount);
 
 			// handle commissioning
-			if (endpointCount > 0)
-				this->commissionCoroutine = handleCommission(busDeviceId, endpointCount);
+			//if (endpointCount > 0)
+			this->commissionCoroutine = handleCommission(busDeviceId, endpointCount);
 		} else {
 			// data message
 
@@ -418,21 +436,32 @@ Coroutine BusInterface::receive() {
 			Nonce nonce(address, securityCounter);
 			if (!r.decrypt(micLength, nonce, *this->aesKey)) {
 				Terminal::out << "bus: decrypt failed!\n";
-				break;
+				continue;
 			}
 
 			// get endpoint index
 			uint8_t endpointIndex = r.u8();
 			if (endpointIndex == 255) {
+				// attribute data
 				endpointIndex = r.u8();
 
 				// check if there is a device in the commissioning process
-				if (this->commissionCoroutine.isAlive() && this->tempDevice->data.id == address) {
+				if (this->commissionCoroutine.isAlive() && this->tempDevice->data.address == address) {
+					// check security counter
+					if (securityCounter <= this->tempDevice->securityCounter) {
+						Terminal::out << "B security counter error " << dec(securityCounter) << " <= " << dec(this->tempDevice->securityCounter) << '\n';
+						//continue;
+					} else {
+						//Terminal::out << "B security counter ok " << dec(securityCounter) << " > " << dec(this->tempDevice->securityCounter) << '\n';
+					}
+					this->tempDevice->securityCounter = securityCounter;
+
+					// resume commissioning coroutine via responseBarrier
 					auto attribute = r.e8<bus::Attribute>();
 					int length = min(r.getRemaining(), MESSAGE_LENGTH);
 					uint8_t *response = r.current;
 					this->responseBarrier.resumeFirst(
-						[length, response, address, endpointIndex, attribute](Response &r) {
+						[address, endpointIndex, attribute, length, response](Response &r) {
 							if (r.address == address && r.endpointIndex == endpointIndex && r.attribute == attribute) {
 								r.length = length;
 								array::copy(length, r.response, response);
@@ -445,10 +474,24 @@ Coroutine BusInterface::receive() {
 				// search device with address
 				auto device = this->devices;
 				while (device != nullptr) {
-					if (device->data.id != address) {
+					if (device->data.address != address) {
 						device = device->next;
 						continue;
 					}
+
+					// check security counter
+					if (securityCounter <= device->securityCounter) {
+						Terminal::out << 'B' << dec(device->data.busDeviceId) << ": security counter error " << dec(securityCounter) << " <= " << dec(device->securityCounter) << '\n';
+						//break;
+					} else {
+						//Terminal::out << 'B' << dec(device->data.busDeviceId) << ": security counter ok " << dec(securityCounter) << " > " << dec(device->securityCounter) << '\n';
+					}
+					device->securityCounter = securityCounter;
+
+					// store security counter
+					Storage::Status status;
+					co_await this->counters.write(COUNTERS_ID_BUS + device->data.id, 4, &securityCounter, status);
+					//this->counters.writeBlocking(COUNTERS_ID_BUS + device->data.id, 4, &securityCounter);
 
 					// search endpoint with index
 					auto endpoint = device->endpoints;
@@ -502,8 +545,12 @@ Coroutine BusInterface::receive() {
 							break;
 						default:;
 						}
+
+						// finished with endpoint
 						break;
 					}
+
+					// finished with device
 					break;
 				}
 			}
@@ -516,14 +563,14 @@ AwaitableCoroutine BusInterface::handleCommission(uint32_t busDeviceId, uint8_t 
 	auto od = &this->devices;
 	while (*od != nullptr) {
 		auto device = *od;
-		if (device->data.deviceId == busDeviceId)
+		if (device->data.busDeviceId == busDeviceId)
 			break;
 		od = &device->next;
 	}
 	auto oldDevice = *od;
 
 	// check if we are out of space for new devices
-	bool outOfDevices = oldDevice == nullptr && this->deviceCount >= MAX_DEVICE_COUNT;
+	bool outOfDevices = oldDevice == nullptr && this->elementCount >= MAX_ELEMENT_COUNT;
 
 	// variables
 	int length;
@@ -532,15 +579,15 @@ AwaitableCoroutine BusInterface::handleCommission(uint32_t busDeviceId, uint8_t 
 	// create new bus device
 	DeviceData deviceData;
 	deviceData.id = oldDevice != nullptr ? oldDevice->data.id : allocateDeviceId();
-	deviceData.deviceId = busDeviceId;
+	deviceData.address = deviceData.id - 1;
+	deviceData.busDeviceId = busDeviceId;
 
-	// create address for the bus device from storage id which starts at 0
-	uint8_t address = deviceData.id;
-	if (address > LAST_ADDRESS || outOfDevices)
+	// check if out of addresses
+	if (deviceData.address > LAST_ADDRESS || outOfDevices)
 		co_return; // todo: maybe send a commissioning message with failed status (e.g. no address and key)
 
 	// use Pointer in case the coroutine gets cancelled
-	Pointer<BusDevice> device = new BusDevice(deviceData);
+	Pointer<Device> device = new Device(deviceData);
 
 	// set pointer so that we can forward responses
 	this->tempDevice = device.ptr;
@@ -562,7 +609,7 @@ AwaitableCoroutine BusInterface::handleCommission(uint32_t busDeviceId, uint8_t 
 		w.u32L(busDeviceId);
 
 		// address that gets assigned to the device (use storage id)
-		w.u8(address);
+		w.u8(deviceData.address);
 
 		// key
 		w.data8(*this->key);
@@ -574,15 +621,15 @@ AwaitableCoroutine BusInterface::handleCommission(uint32_t busDeviceId, uint8_t 
 
 		length = w.getLength();
 	}
-	co_await BusMaster::send(length, message);
+	co_await this->busMaster.send(length, message);
 
 
 	// configure endpoints
 	Endpoint *oldEndpoint = oldDevice != nullptr ? oldDevice->endpoints : nullptr;
-	int deviceCount = this->deviceCount;
+	int elementCount = this->elementCount;
 	for (uint8_t endpointIndex = 0; endpointIndex < endpointCount; ++endpointIndex) {
-		// check if we have space for a new device (an endpoint is treated as a device)
-		if (oldEndpoint == nullptr && deviceCount >= MAX_DEVICE_COUNT)
+		// check if we have space for a new element (each endpoint is an element)
+		if (oldEndpoint == nullptr && elementCount >= MAX_ELEMENT_COUNT)
 			continue;
 
 		// get plug list
@@ -604,16 +651,18 @@ AwaitableCoroutine BusInterface::handleCommission(uint32_t busDeviceId, uint8_t 
 
 		// set id
 		if (oldEndpoint != nullptr) {
+			// reuse id from old endpoint
 			data->id = oldEndpoint->data->id;
 		} else {
-			data->id = allocateId(deviceCount);
-			this->deviceIds[deviceCount++] = data->id;
+			// allocate new id
+			data->id = allocateId(elementCount);
+			this->elementIds[elementCount++] = data->id;
 		}
 
 		// set device id
 		data->deviceId = device->data.id;
 
-		// set name
+		// get name
 		co_await readAttribute(length, message, *device, endpointIndex, bus::Attribute::MODEL_IDENTIFIER);
 		if (length > 0)
 			assign(data->name, String(length, message));
@@ -629,7 +678,7 @@ AwaitableCoroutine BusInterface::handleCommission(uint32_t busDeviceId, uint8_t 
 
 	// remove remaining old endpoints from device list
 	while (oldEndpoint != nullptr) {
-		deviceCount = eraseDevice(deviceCount, this->deviceIds, oldEndpoint->data->id);
+		elementCount = eraseElement(elementCount, this->elementIds, oldEndpoint->data->id);
 		oldEndpoint = oldEndpoint->next;
 	}
 
@@ -653,22 +702,25 @@ AwaitableCoroutine BusInterface::handleCommission(uint32_t busDeviceId, uint8_t 
 	}
 
 	// store list of device id's (each endpoint is treated as a device)
-	this->deviceCount = deviceCount;
-	Storage::write(STORAGE_CONFIG, STORAGE_ID_BUS1, deviceCount, this->deviceIds);
+	this->elementCount = elementCount;
+	this->storage.writeBlocking(STORAGE_ID_BUS1, elementCount, this->elementIds);
 
 	// check if device has any endpoints
 	if (device->endpoints == nullptr)
 		co_return;
 
+	// store security counter
+	this->counters.writeBlocking(COUNTERS_ID_BUS + device->data.id, 4, &device->securityCounter);
+
 	// store endpoints
 	auto endpoint = device->endpoints;
 	while (endpoint != nullptr) {
-		Storage::write(STORAGE_CONFIG, STORAGE_ID_BUS1 | endpoint->data->id, endpoint->data->size(), endpoint->data);
+		this->storage.writeBlocking(STORAGE_ID_BUS1 | endpoint->data->id, endpoint->data->size(), endpoint->data);
 		endpoint = endpoint->next;
 	}
 
 	// store device
-	Storage::write(STORAGE_CONFIG, STORAGE_ID_BUS2 | device->data.id, sizeof(device->data), &device->data);
+	this->storage.writeBlocking(STORAGE_ID_BUS2 | device->data.id, sizeof(device->data), &device->data);
 
 	// transfer ownership of device to devices list
 	device->next = this->devices;
@@ -676,7 +728,7 @@ AwaitableCoroutine BusInterface::handleCommission(uint32_t busDeviceId, uint8_t 
 	device.ptr = nullptr;
 }
 
-AwaitableCoroutine BusInterface::readAttribute(int &length, uint8_t (&message)[MESSAGE_LENGTH], BusDevice &device,
+AwaitableCoroutine BusInterface::readAttribute(int &length, uint8_t (&message)[MESSAGE_LENGTH], Device &device,
 	uint8_t endpointIndex, bus::Attribute attribute)
 {
 	for (int retry = 0; ; ++retry) {
@@ -688,7 +740,7 @@ AwaitableCoroutine BusInterface::readAttribute(int &length, uint8_t (&message)[M
 			w.setHeader();
 
 			// encoded address
-			w.address(device.data.id);
+			w.address(device.data.address);
 
 			// security counter
 			w.u32L(this->securityCounter);
@@ -706,20 +758,23 @@ AwaitableCoroutine BusInterface::readAttribute(int &length, uint8_t (&message)[M
 			// no message data to indicate that we want to read the attribute
 
 			// encrypt
-			Nonce nonce(device.data.id, this->securityCounter);
+			Nonce nonce(device.data.address, this->securityCounter);
 			w.encrypt(micLength, nonce, *this->aesKey);
 
-			// increment security counter
-			++this->securityCounter;
-
 			length = w.getLength();
-
 		}
-		co_await BusMaster::send(length, message);
+
+		// increment and store security counter
+		++this->securityCounter;
+		Storage::Status status;
+		co_await this->counters.write(COUNTERS_ID_BUS, 4, &this->securityCounter, status);
+
+		// send
+		co_await this->busMaster.send(length, message);
 
 		// wait for a response from the device
 		int r = co_await select(
-			this->responseBarrier.wait(length, message, device.data.id, endpointIndex, attribute),
+			this->responseBarrier.wait(length, message, device.data.address, endpointIndex, attribute),
 			Timer::sleep(TIMEOUT));
 
 		// check if response was received
@@ -808,7 +863,7 @@ Coroutine BusInterface::publish() {
 			auto endpoint = device->endpoints;
 			int endpointIndex = 0;
 			while (endpoint != nullptr) {
-				if (endpoint->data->id != info.deviceId) {
+				if (endpoint->data->id != info.elementId) {
 					endpoint = endpoint->next;
 					++endpointIndex;
 					continue;
@@ -831,7 +886,7 @@ Coroutine BusInterface::publish() {
 						w.setHeader();
 
 						// encoded device address
-						w.address(device->data.id);
+						w.address(device->data.address);
 
 						// security counter
 						w.u32L(this->securityCounter);
@@ -850,14 +905,18 @@ Coroutine BusInterface::publish() {
 							break;
 
 						// encrypt
-						Nonce nonce(device->data.id, this->securityCounter);
+						Nonce nonce(device->data.address, this->securityCounter++);
 						w.encrypt(micLength, nonce, *this->aesKey);
 
-						// increment security counter
-						++this->securityCounter;
 						length = w.getLength();
 					}
-					co_await BusMaster::send(length, sendMessage);
+
+					// store security counter
+					Storage::Status status;
+					co_await this->counters.write(COUNTERS_ID_BUS, 4, &this->securityCounter, status);
+
+					// send
+					co_await this->busMaster.send(length, sendMessage);
 				}
 
 				/*

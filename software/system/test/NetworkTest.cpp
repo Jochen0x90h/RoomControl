@@ -3,7 +3,7 @@
 #include <Loop.hpp>
 #include <Debug.hpp>
 #include <Coroutine.hpp>
-#ifdef EMU
+#ifdef PLATFORM_POSIX
 #include <string>
 #endif
 
@@ -39,7 +39,7 @@ Coroutine receiver() {
 uint16_t localPort = 1337;
 uint16_t remotePort = 1337;
 
-#ifdef EMU
+#ifdef PLATFORM_POSIX
 int main(int argc, char const **argv) {
 	if (argc >= 3) {
 		localPort = std::stoi(argv[1]);

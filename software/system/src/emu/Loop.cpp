@@ -17,6 +17,21 @@ Handler addHandler(Handler handler) {
 	Loop::nextHandler = handler;
 	return h;
 }
+/*
+// handler
+void Handler2::handle(Gui &) {}
+
+// handler chain
+Handler2 nopHandler;
+Handler2 *firstHandler = &nopHandler;
+Handler2 *setHandler(Handler2 *handler) {
+	auto h = firstHandler;
+	Loop::firstHandler = handler;
+	return h;
+}*/
+
+HandlerList handlers;
+
 
 static void errorCallback(int error, const char* description) {
     fprintf(stderr, "Error: %s\n", description);
@@ -112,6 +127,13 @@ void run() {
 		glClear(GL_COLOR_BUFFER_BIT);
 
 		// handle gui
+		auto it = Loop::handlers.begin();
+		while (it != Loop::handlers.end()) {
+			// increment iterator beforehand because a handler can remove() itself
+			auto current = it;
+			++it;
+			current->handle(gui);
+		}
 		Loop::nextHandler(gui);
 
 		// swap render buffer to screen

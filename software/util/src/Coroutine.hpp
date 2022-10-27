@@ -200,6 +200,16 @@ public:
 	}
 
 	/**
+	 * Get first element. List must not be empty
+	 * @return first element
+	 */
+	auto &getFirst() {
+		assert(!isEmpty());
+		auto first = this->head.next;
+		return Selector::get(static_cast<Element*>(first));
+	}
+
+	/**
 	 * Visit the first element
 	 * @tparam V visitor type, e.g. a lambda function
 	 * @param visitor visitor
@@ -207,10 +217,10 @@ public:
 	 */
 	template <typename V>
 	bool visitFirst(V const &visitor) {
-		auto current = this->head.next;
+		auto first = this->head.next;
 		auto end = &this->head;
-		if (current != end) {
-			visitor(Selector::get(static_cast<Element*>(current)));
+		if (first != end) {
+			visitor(Selector::get(static_cast<Element*>(first)));
 			return true;
 		}
 		return false;
@@ -225,12 +235,12 @@ public:
 	 */
 	template <typename V>
 	bool visitSecond(V const &visitor) {
-		auto current = this->head.next;
+		auto first = this->head.next;
 		auto end = &this->head;
-		if (current != end) {
-			current = current->next;
-			if (current != end) {
-				visitor(Selector::get(static_cast<Element*>(current)));
+		if (first != end) {
+			auto second = first->next;
+			if (second != end) {
+				visitor(Selector::get(static_cast<Element*>(second)));
 				return true;
 			}
 		}
@@ -242,15 +252,15 @@ public:
 	 * @return true when a coroutine was resumed, false when the list was empty
 	 */
 	bool resumeFirst() {
-		auto current = static_cast<Element*>(this->head.next);
+		auto first = static_cast<Element*>(this->head.next);
 		auto end = &this->head;
-		if (current != end) {
+		if (first != end) {
 			// remove element from list (special implementation of remove() may lock interrupts to avoid race condition)
-			current->remove();
+			first->remove();
 
 			// resume coroutine if it is waiting
-			if (current->handle)
-				current->handle.resume();
+			if (first->handle)
+				first->handle.resume();
 			return true;
 		}
 		return false;
@@ -287,16 +297,16 @@ public:
 	 */
 	template <typename P>
 	void resumeFirst(P const &predicate) {
-		auto current = static_cast<Element*>(this->head.next);
+		auto first = static_cast<Element*>(this->head.next);
 		auto end = &this->head;
-		if (current != end) {
-			if (predicate(Selector::get(current))) {
+		if (first != end) {
+			if (predicate(Selector::get(first))) {
 				// remove element from list (special implementation of remove() may lock interrupts to avoid race condition)
-				current->remove();
+				first->remove();
 
 				// resume coroutine if it is waiting
-				if (current->handle)
-					current->handle.resume();
+				if (first->handle)
+					first->handle.resume();
 			}
 		}
 	}

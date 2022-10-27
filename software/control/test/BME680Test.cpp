@@ -1,11 +1,11 @@
 #include <BME680.hpp>
 #include <Timer.hpp>
-#include <Spi.hpp>
 #include <UsbDevice.hpp>
 #include <Debug.hpp>
 #include <Loop.hpp>
 #include <StringBuffer.hpp>
 #include <StringOperators.hpp>
+#include <boardConfig.hpp>
 
 
 // device descriptor
@@ -77,11 +77,11 @@ constexpr int CHIP_ID = 0x61;
 uint8_t buffer[129] __attribute__((aligned(4)));
 
 // get chip id and output result on debug led's
-Coroutine getId() {
+Coroutine getId(SpiMaster &spi) {
 	while (true) {
 		// read chip id
 		buffer[0] = READ(0xD0);
-		co_await Spi::transfer(SPI_AIR_SENSOR, 1, buffer, 2, buffer);
+		co_await spi.transfer(1, buffer, 2, buffer);
 		
 		// check chip id
 		if (buffer[1] == CHIP_ID)
@@ -95,11 +95,11 @@ Coroutine getId() {
 }
 
 // read all registers and send to usb host
-Coroutine getRegisters() {
+Coroutine getRegisters(SpiMaster &spi) {
 	while (true) {
 		// read upper page
 		buffer[0] = READ(0);
-		co_await Spi::transfer(SPI_AIR_SENSOR, 1, buffer, 129, buffer);
+		co_await spi.transfer(1, buffer, 129, buffer);
 		
 		// send to usb host
 		co_await UsbDevice::send(1, 128, buffer + 1);
@@ -111,8 +111,8 @@ Coroutine getRegisters() {
 }
 
 // measure and send values to usb host
-Coroutine measure() {
-	BME680 sensor;
+Coroutine measure(SpiMaster &spi) {
+	BME680 sensor(spi);
 
 	co_await sensor.init();
 	co_await sensor.setParameters(
@@ -140,7 +140,6 @@ Coroutine measure() {
 int main(void) {
 	Loop::init();
 	Timer::init();
-	Spi::init();
 	Output::init();
 	UsbDevice::init(
 		[](usb::DescriptorType descriptorType) {
@@ -162,11 +161,12 @@ int main(void) {
 		[](uint8_t bRequest, uint16_t wValue, uint16_t wIndex) {
 			return false;
 		});
-	
+	Drivers drivers;
+
 	// test raw values
-	//getId();
+	//getId(drivers.airSensor);
 	
-	measure();
+	measure(drivers.airSensor);
 	
 	Loop::run();
 }

@@ -2,13 +2,14 @@
 #include <Input.hpp>
 #include <Debug.hpp>
 #include <Loop.hpp>
-#ifdef EMU
+#ifdef DEBUG
 #include <Terminal.hpp>
 #include <StringOperators.hpp>
 #endif
+#include <boardConfig.hpp>
 
 
-Coroutine handlePoti() {
+Coroutine handleDecoder(QuadratureDecoder &decoder) {
 	while (true) {
 		int8_t delta;
 		int index;
@@ -16,12 +17,12 @@ Coroutine handlePoti() {
 
 		// wait until poti has changed or trigger detected on input
 		int s = co_await select(
-			QuadratureDecoder::change(0, delta),
+			decoder.change(delta),
 			Input::trigger(1 << INPUT_POTI_BUTTON, 1 << INPUT_PCB_BUTTON, index, value));
 		switch (s) {
 		case 1:
 			// poti changed
-#ifdef EMU
+#ifdef DEBUG
 			Terminal::out << "delta " << dec(delta) << '\n';
 #endif
 			Debug::setRedLed(delta & 1);
@@ -30,14 +31,12 @@ Coroutine handlePoti() {
 			break;
 		case 2:
 			// button activated
-#ifdef EMU
+#ifdef DEBUG
 			Terminal::out << "activated " << dec(index) << '\n';
 #endif
 			if (index == 0) {
 				Debug::toggleRedLed();
-				Debug::setGreenLed(false);
 			} else {
-				Debug::setRedLed(false);
 				Debug::toggleGreenLed();
 			}
 			Debug::setBlueLed(false);
@@ -48,11 +47,11 @@ Coroutine handlePoti() {
 
 int main(void) {
 	Loop::init();
-	QuadratureDecoder::init();
 	Output::init(); // for debug signals on pins
 	Input::init();
+	Drivers drivers;
 
-	handlePoti();
+	handleDecoder(drivers.quadratureDecoder);
 
 	Loop::run();
 }

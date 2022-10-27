@@ -1,19 +1,13 @@
 #pragma once
 
 #include <nrf52/gpio.hpp>
+#include <nrf52/BusMasterDevice.hpp>
+#include <nrf52/QuadratureDecoderDevice.hpp>
+#include <nrf52/SpiMasterDevice.hpp>
 #include <util.hpp>
 
 
 // note: pins defined in this file are for nRF52840 MDK USB Dongle, https://wiki.makerdiary.com/nrf52840-mdk-usb-dongle/
-
-
-// flash
-// -----
-
-// https://infocenter.nordicsemi.com/index.jsp?topic=%2Fps_nrf52840%2Fnvmc.html&cp=4_0_0_3_2
-constexpr int FLASH_PAGE_SIZE = 4096;
-constexpr int FLASH_PAGE_COUNT = 16;
-constexpr int FLASH_WRITE_ALIGN = 4;
 
 
 // inputs
@@ -41,13 +35,13 @@ constexpr int OUTPUT_COUNT = array::count(OUTPUTS);
 // poti
 // ----
 
-constexpr int POTI_A_PIN = gpio::P0(4);
-constexpr int POTI_B_PIN = gpio::P0(5);
+//constexpr int POTI_A_PIN = gpio::P0(4);
+//constexpr int POTI_B_PIN = gpio::P0(5);
 
 
 // spi
 // ---
-
+/*
 struct SpiConfig {
 	enum Type {MASTER, WRITE_ONLY_MASTER};
 
@@ -65,6 +59,7 @@ constexpr int SPI_SCK_PIN = gpio::P0(19);
 constexpr int SPI_MOSI_PIN = gpio::P0(20);
 constexpr int SPI_MISO_PIN = gpio::P0(21);
 constexpr int SPI_DC_PIN = gpio::P0(21); // data/command for write-only display, can be same as MISO
+*/
 
 
 // audio
@@ -79,8 +74,8 @@ constexpr int I2S_SDOUT_PIN = gpio::P0(21);
 // bus
 // ---
 
-constexpr int BUS_TX_PIN = gpio::P0(3);
-constexpr int BUS_RX_PIN = gpio::P0(2);
+//constexpr int BUS_TX_PIN = gpio::P0(3);
+//constexpr int BUS_RX_PIN = gpio::P0(2);
 
 
 // radio
@@ -108,3 +103,20 @@ constexpr int MOTION_DETECTOR_TRACKER_INPUT = 1;
 // ---
 
 constexpr int USB_ENDPOINT_COUNT = 3;
+
+
+// drivers
+// -------
+
+struct Drivers {
+	BusMasterDevice busMaster{gpio::P0(2), gpio::P0(3)};
+	SpiMasterDevice spi{3,
+		gpio::P0(19),
+		gpio::P0(20),
+		gpio::P0(21),
+		gpio::P0(21)}; // data/command for write-only display, can be same as MISO
+	SpiMasterDevice::Channel airSensor{spi, gpio::P0(2)};
+	SpiMasterDevice::Channel display{spi, gpio::P0(3), true};
+	SpiMasterDevice::Channel feRam{spi, gpio::P0(3)};
+	QuadratureDecoderDevice quadratureDecoder{gpio::P0(4), gpio::P0(5)};
+};

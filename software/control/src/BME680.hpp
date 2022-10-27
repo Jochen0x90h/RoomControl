@@ -1,5 +1,6 @@
 #pragma once
 
+#include <SpiMaster.hpp>
 #include <Coroutine.hpp>
 #include <appConfig.hpp>
 #include <cstdint>
@@ -17,9 +18,7 @@ public:
 		PARAMETERIZED
 	};
 	
-	BME680() {}
-
-	~BME680() {}
+	explicit BME680(SpiMaster &spi) : spi(spi) {}
 
 	/**
 	 * Suspend execution using co_await until initialization is done
@@ -115,6 +114,8 @@ protected:
 		
 		uint16_t h1; // 0xE2<3:0> / 0xE3
 	};
+
+	SpiMaster &spi;
 
 	State state = CREATED;
 	

@@ -1,3 +1,6 @@
+#pragma once
+
+#include <Coroutine.hpp>
 #include <cstdint>
 
 
@@ -6,54 +9,119 @@
  * ESP-32: https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/storage/nvs_flash.html
  * Zephyr: https://docs.zephyrproject.org/latest/services/storage/nvs/nvs.html
  */
-namespace Storage {
+class Storage {
+public:
+	enum class Status {
+		// operation completed successfully, also for partial read where the element is larger than the provided buffer
+		OK,
 
-/**
- * Initialize and "mount" the storage
- */
-void init();
+		// element was read as zero length because of checksum error
+		CHECKSUM_ERROR,
 
-/**
- * Get size of an element
- * @param index context index
- * @param id id of entry
- * @return size of the element in bytes
- */
-int size(int index, uint16_t id);
+		// element was not read or written because the maximum element count was exceeded
+		ELEMENT_COUNT_EXCEEDED,
 
-/**
- * Read an entry from the non-volatile storage into a given data buffer
- * @param index context index
- * @param id id of entry
- * @param size size of provided data buffer in bytes
- * @param data data to read into
- * @return number of true on success, false on error
- */
-int read(int index, uint16_t id, int size, void *data);
+		// element was not written because the maximum element size was exceeded
+		ELEMENT_SIZE_EXCEEDED,
 
-/**
- * Write an entry to the non-volatile storage
- * @param index context index
- * @param id id of entry
- * @param size size of data to write in bytes
- * @param data data to write
- * @return true on success, false on error
- */
-bool write(int index, uint16_t id, int size, void const *data);
+		// element was not written because storage is full
+		OVERFLOW_ERROR,
 
-/**
- * Erase an entry in the non-volatile storage
- * @param index context index
- * @param id id of entry
- * @return true on success, false on error
- */
-bool erase(int index, uint16_t id);
+		// memory is not usable, e.g. not connected or end of life of flash memory
+		FATAL_ERROR
+	};
 
-/**
- * Clear all entries in the non-volatile storage
- * @param index context index
- * @return true on success, false on error
- */
-bool clear(int index);
+	struct ReadParameters {
+		int index;
+		int *size;
+		void *data;
+		Status *status;
+	};
 
-} // namespace Storage
+	struct WriteParameters {
+		int index;
+		int size;
+		void const *data;
+		Status *status;
+	};
+
+	struct ClearParameters {
+		Status *status;
+	};
+
+
+	virtual ~Storage();
+
+
+	/**
+	 * Read an entry from the non-volatile storage into a given data buffer
+	 * @param index index of element
+	 * @param size in: size of provided data buffer in bytes, out: size of entry EVEN IF LARGER THAN BUFFER
+	 * @param data data to read into
+	 * @param status status of operation
+	 * @return use co_await on return value to await completion
+	 */
+	[[nodiscard]] virtual Awaitable<ReadParameters> read(int index, int &size, void *data, Status &status) = 0;
+
+	/**
+	 * Write an entry to the non-volatile storage
+	 * @param index index of element
+	 * @param size size of data to write in bytes
+	 * @param data data to write
+	 * @param status status of operation
+	 * @return use co_await on return value to await completion
+	 */
+	[[nodiscard]] virtual Awaitable<WriteParameters> write(int index, int size, void const *data, Status &status) = 0;
+
+	/**
+	 * Clear all entries in the non-volatile storage
+	 * @param status status of operation
+	 * @return use co_await on return value to await completion
+	 */
+	[[nodiscard]] virtual Awaitable<ClearParameters> clear(Status &status) = 0;
+
+
+	/**
+	 * Read an entry from the non-volatile storage into a given data buffer
+	 * @param index index of element
+	 * @param size in: size of provided data buffer in bytes, out: size of entry EVEN IF LARGER THAN BUFFER
+	 * @param data data to read into
+	 * @return status of operation
+	 */
+	virtual Status readBlocking(int index, int &size, void *data) = 0;
+
+	/**
+	 * Write an entry to the non-volatile storage
+	 * @param index index of element
+	 * @param size size of data to write in bytes
+	 * @param data data to write
+	 * @return status of operation
+	 */
+	virtual Status writeBlocking(int index, int size, void const *data) = 0;
+
+	/**
+	 * Clear all entries in the non-volatile storage
+	 * @return status of operation
+	 */
+	virtual Status clearBlocking() = 0;
+
+
+	/**
+	 * Get size of an element
+	 * @param index index of element
+	 * @return size of the element in bytes
+	 */
+	int getSizeBlocking(int index) {
+		int size = 0;
+		readBlocking(index, size, nullptr);
+		return size;
+	}
+
+	/**
+	 * Erase an element
+	 * @param index index of element
+	 */
+	void eraseBlocking(int index) {
+		writeBlocking(index, 0, nullptr);
+	}
+};

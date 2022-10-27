@@ -15,6 +15,7 @@ inline SystemTime now() {
 	return {uint32_t(time.tv_sec * 1000 + time.tv_nsec / 1000000)};
 }
 
+
 // list of file descriptors to observe readable/writable events (used in Network.cpp)
 class FileDescriptor : public LinkedListNode {
 public:
@@ -27,6 +28,7 @@ public:
 using FileDescriptorList = LinkedList<FileDescriptor>;
 extern FileDescriptorList fileDescriptors;
 
+
 // timeouts for Timer and Calendar
 class Timeout : public LinkedListNode {
 public:
@@ -38,8 +40,10 @@ public:
 using TimeoutList = LinkedList<Timeout>;
 extern TimeoutList timeouts;
 
+
 /**
  * Run the event loop only once
+ * @param wait wait for an event or timeout. Set to false when using a rendering loop, e.g. using GLFW
  */
 void runOnce(bool wait = true);
 

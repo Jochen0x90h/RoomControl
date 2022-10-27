@@ -3,10 +3,11 @@
 #include <QuadratureDecoder.hpp>
 #include <Debug.hpp>
 #include <Loop.hpp>
+#include <boardConfig.hpp>
 
 
-Coroutine draw() {
-	SSD1309 display;
+Coroutine draw(SpiMaster &spi) {
+	SSD1309 display(spi);
 	co_await display.init();
 	co_await display.enable();
 	
@@ -23,18 +24,17 @@ Coroutine draw() {
 		co_await Timer::sleep(200ms);
 		
 		Debug::toggleRedLed();
-	};
+	}
 }
 
 
 int main(void) {
 	Loop::init();
 	Timer::init();
-	Spi::init();
-	QuadratureDecoder::init();
 	Output::init();
-	
-	draw();
+	Drivers drivers;
+
+	draw(drivers.display);
 	
 	Loop::run();
 }

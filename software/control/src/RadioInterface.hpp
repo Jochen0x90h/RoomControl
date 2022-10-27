@@ -3,7 +3,6 @@
 #include "Interface.hpp"
 #include "SystemTime.hpp"
 #include <Configuration.hpp>
-#include <State.hpp>
 #include <Radio.hpp>
 #include <crypt.hpp>
 #include <zcl.hpp>
@@ -18,7 +17,7 @@
 class RadioInterface : public Interface {
 public:
 	// maximum number of devices that can be commissioned (each endpoint counts as one device)
-	static constexpr int MAX_DEVICE_COUNT = 128;
+	static constexpr int MAX_ELEMENT_COUNT = 128;
 
 	// number of coroutines for receiving and publishing
 	static constexpr int RECEIVE_COUNT = 4;
@@ -30,7 +29,7 @@ public:
 	 * @param configuration global configuration
 	 * @param stateManager persistent state manager for counters
 	 */
-	RadioInterface(uint8_t interfaceId, PersistentStateManager &stateManager);
+	RadioInterface(uint8_t interfaceId, Storage &storage, Storage &counters);
 
 	~RadioInterface() override;
 
@@ -45,14 +44,14 @@ public:
 	String getName() override;
 	void setCommissioning(bool enabled) override;
 
-	Array<uint8_t const> getDeviceIds() override;
-	String getName(uint8_t deviceId) const override;
-	void setName(uint8_t deviceId, String name) override;
-	Array<MessageType const> getPlugs(uint8_t deviceId) const override;
-	SubscriberTarget getSubscriberTarget(uint8_t deviceId, uint8_t plugIndex) override;
+	Array<uint8_t const> getElementIds() override;
+	String getName(uint8_t id) const override;
+	void setName(uint8_t id, String name) override;
+	Array<MessageType const> getPlugs(uint8_t id) const override;
+	SubscriberTarget getSubscriberTarget(uint8_t id, uint8_t plugIndex) override;
 	void subscribe(Subscriber &subscriber) override;
 	void listen(Listener &listener) override;
-	void erase(uint8_t deviceId) override;
+	void erase(uint8_t id) override;
 
 private:
 	static constexpr int MAX_CLUSTER_COUNT = 32;
@@ -80,6 +79,8 @@ private:
 	};
 
 	struct GpDeviceData : public DeviceData {
+		uint8_t counterId;
+
 		// 32 bit green power id
 		uint32_t deviceId;
 
@@ -92,11 +93,11 @@ private:
 		int size() {return offsetOf(GpDeviceData, plugs[this->plugCount]);}
 	};
 
-	class GpDevice : public Device {
+	class GpDevice : public Element {
 	public:
 		// takes ownership of the data
 		GpDevice(RadioInterface *interface, GpDeviceData *data)
-			: Device(data->id, interface->listeners), next(interface->gpDevices), data(data)
+			: Element(data->id, interface->listeners), next(interface->gpDevices), data(data)
 		{
 			interface->gpDevices = this;
 		}
@@ -114,7 +115,6 @@ private:
 		uint8_t state = 0;
 
 		// last security counter value of device
-		// todo: make persistent
 		uint32_t securityCounter = 0;
 	};
 
@@ -135,14 +135,14 @@ private:
 	class ZbEndpoint;
 	class ZbDevice {
 	public:
+		// constructor for loading devices on startup, loads the security counter
+		ZbDevice(RadioInterface *interface, ZbDeviceData const &data);
+
+		// constructor for commissioning new devices
 		ZbDevice(ZbDeviceData const &data)
 			: data(data), sendFlags(data.sendFlags)
 		{}
-		ZbDevice(RadioInterface *interface, ZbDeviceData const &data)
-			: next(interface->zbDevices), data(data), sendFlags(data.sendFlags)
-		{
-			interface->zbDevices = this;
-		}
+
 		~ZbDevice();
 
 
@@ -202,8 +202,8 @@ private:
 		uint32_t buffer[BUFFER_SIZE / 4];
 
 		int size() {
-			int s1 = (this->plugCount * sizeof(MessageType) + 3) / 4;
-			int s2 = ((this->serverClusterCount + this->clientClusterCount) * sizeof(ClusterInfo) + 3) / 4;
+			auto s1 = (this->plugCount * sizeof(MessageType) + 3) / 4;
+			auto s2 = ((this->serverClusterCount + this->clientClusterCount) * sizeof(ClusterInfo) + 3) / 4;
 			return offsetOf(ZbEndpointData, buffer[s1 + s2]);
 		}
 	};
@@ -243,11 +243,11 @@ private:
 		ClusterInfo clusterInfos[MAX_CLUSTER_COUNT];
 	};
 
-	class ZbEndpoint : public Device {
+	class ZbEndpoint : public Element {
 	public:
 		// adds to linked list and takes ownership of the data
 		ZbEndpoint(RadioInterface *interface, ZbDevice *device, ZbEndpointData *data)
-			: Device(data->id, interface->listeners), next(device->endpoints), data(data)
+			: Element(data->id, interface->listeners), next(device->endpoints), data(data)
 		{
 			device->endpoints = this;
 		}
@@ -266,9 +266,6 @@ private:
 		// endpoint data that is stored in flash
 		ZbEndpointData *data;
 
-		// list of subscribers
-		//SubscriberList subscribers;
-
 		//
 		SystemTime time;
 		uint8_t index;
@@ -277,28 +274,36 @@ private:
 
 	GpDevice *getGpDevice(uint8_t id) const;
 	ZbEndpoint *getZbEndpoint(uint8_t id) const;
-	uint8_t allocateId(int deviceCount);
-	uint8_t allocateZbDeviceId();
-	ZbDevice *getOrLoadZbDevice(uint8_t id);
-	void eraseZbDevice(uint8_t id);
+	uint8_t allocateId(int elementCount);
+	uint8_t allocateDeviceId();
+	ZbDevice *getOrLoadZbDevice(uint8_t deviceId);
+	//void eraseZbDevice(uint8_t deviceId);
 
-	int deviceCount = 0;
-	uint8_t deviceIds[MAX_DEVICE_COUNT];
+	int elementCount = 0;
+	uint8_t elementIds[MAX_ELEMENT_COUNT];
 	GpDevice *gpDevices = nullptr;
 	ZbDevice *zbDevices = nullptr;
 
 
-
 	// start the interface
-	Coroutine start();
+	//Coroutine start();
 
-	// counters
+	// listeners that listen on all messages of the interface (as opposed to subscribers that subscribe to one plug)
+	ListenerList listeners;
+
+	// persistent storage
+	Storage &storage;
+
+	// persistent counters
+	Storage &counters;
+	uint32_t securityCounter;
+
+	// volatile counters
 	uint8_t macCounter = 0;
 	uint8_t nwkCounter = 0;
 	uint8_t apsCounter = 0;
 	uint8_t zdpCounter = 0;
 	uint8_t zclCounter = 0;
-	PersistentState<uint32_t> securityCounter;
 	uint8_t routeCounter = 0;
 
 	// configuration
@@ -349,7 +354,7 @@ public:
 		 */
 		template <int N>
 		PacketWriter(uint8_t (&packet)[N]) : EncryptWriter(packet + 1)
-#ifdef EMU
+#ifdef DEBUG
 			, end(packet + N)
 #endif
 		{}
@@ -388,7 +393,7 @@ public:
 		 * Set send flags behind packet and length of packet to first byte (including 2 byte for crc)
 		 */
 		void finish(Radio::SendFlags sendFlags) {
-#ifdef EMU
+#ifdef DEBUG
 			assert(this->current < this->end - 1);
 #endif
 			*this->current = uint8_t(sendFlags);
@@ -396,7 +401,7 @@ public:
 		}
 
 	protected:
-#ifdef EMU
+#ifdef DEBUG
 		uint8_t *end;
 #endif
 		uint8_t *securityControl = nullptr;
@@ -433,7 +438,6 @@ private:
 			| zb::NwkFrameControl::DISCOVER_ROUTE_ENABLE;
 		writeNwk(w, nwkFrameControl, 30, device);
 	}
-	void writeNwkSecurity(PacketWriter &w);
 
 	void writeApsCommand(PacketWriter &w, zb::SecurityControl keyType, zb::ApsCommand command);
 	void writeApsAck(PacketWriter &w, uint8_t apsCounter);
@@ -467,7 +471,8 @@ private:
 	// receive coroutine, calls handle... methods
 	Coroutine receive();
 
-	void handleGp(uint8_t const *mac, PacketReader &r);
+	//void handleGp(uint8_t const *mac, PacketReader &r);
+	void handleGp(PacketReader &r, GpDevice &device);
 	void handleGpCommission(uint32_t deviceId, PacketReader& r);
 
 	//void handleAps(PacketReader &r, ZbDevice &device, uint8_t const *extendedSource);
@@ -506,7 +511,4 @@ private:
 	Barrier<Response> responseBarrier;
 
 	SubscriberBarrier publishBarrier;
-
-	// listeners that listen on all messages of the interface (as opposed to subscribers that subscribe to one plug)
-	ListenerList listeners;
 };

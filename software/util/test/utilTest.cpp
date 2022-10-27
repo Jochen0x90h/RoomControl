@@ -694,8 +694,6 @@ TEST(utilTest, Return) {
 }
 
 
-
-
 // Coroutine
 // ---------
 
@@ -973,6 +971,39 @@ TEST(utilTest, BarrierWithParameters) {
 		EXPECT_EQ(p.i, 1);
 		return true;
 	});
+}
+
+
+struct Resumer {
+	Resumer(Barrier<> &barrier) : barrier(barrier) {}
+	~Resumer() {
+		std::cout << "Resumer::~Resumer()" << std::endl;
+		this->barrier.resumeFirst();
+	}
+	Barrier<> &barrier;
+};
+
+Barrier<> resumeAfterReturnBarrier;
+Waitlist<int> resumeAfterReturnList;
+
+Coroutine resumedAfterReturn() {
+	co_await resumeAfterReturnBarrier.wait();
+	resumeAfterReturnList.resumeFirst([](int i) {
+		std::cout << "resumed after return " << i << std::endl;
+		return true;
+	});
+}
+
+Awaitable<int> resumeAfterReturn(int i) {
+	Resumer r(resumeAfterReturnBarrier);
+	return {resumeAfterReturnList, i};
+	// destructor of Resumer resumes the barrier here
+}
+
+TEST(utilTest, ResumeBarrierAfterReturn) {
+	resumedAfterReturn();
+	auto awaitable = resumeAfterReturn(50);
+	EXPECT_TRUE(awaitable.hasFinished());
 }
 
 

@@ -1,53 +1,21 @@
-#include "../BusMaster.hpp"
+#include "BusMasterEmu.hpp"
 #include "StringBuffer.hpp"
 #include "StringOperators.hpp"
-#include <bus.hpp>
 #include <crypt.hpp>
 #include <util.hpp>
 #include <emu/Gui.hpp>
 #include <emu/Loop.hpp>
-#include <iostream>
-#include <fstream>
-#include <chrono>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 
-// emulator implementation of bus uses virtual devices on user interface
-namespace BusMaster {
+namespace {
 
 using PlugType = bus::PlugType;
 
 constexpr int micLength = 4;
 
-
-struct Endpoint {
-	Array<PlugType const> plugs;
-};
-
-struct Device {
-	struct Flash {
-		uint8_t commissioning;
-		uint8_t address;
-		AesKey aesKey;
-	};
-
-	// device id
-	uint32_t id;
-
-	// two endpoint lists to test reconfiguration of device
-	Array<Endpoint const> endpoints[2];
-
-	Flash flash;
-	uint8_t commissioning;
-	uint32_t securityCounter;
-
-	// attribute reading
-	bool readAttribute;
-	uint8_t endpointIndex;
-	bus::Attribute attribute;
-
-	// state
-	int states[16];
-};
 
 constexpr auto SWITCH = PlugType::BINARY_SWITCH_WALL_OUT;
 constexpr auto BUTTON = PlugType::BINARY_BUTTON_OUT;
@@ -64,70 +32,74 @@ const PlugType blindPlugs[] = {BLIND, BLIND};
 const PlugType temperaturePlugs[] = {PlugType::PHYSICAL_TEMPERATURE_MEASURED_ROOM_OUT};
 
 // device 1
-const Endpoint endpoint1a[] = {rockerPlugs, lightPlugs};
-const Endpoint endpoint1b[] = {device1Plugs};//, blindPlugs};
+const BusMasterEmu::Endpoint endpoint1a[] = {rockerPlugs, lightPlugs};
+const BusMasterEmu::Endpoint endpoint1b[] = {device1Plugs};//, blindPlugs};
 
 // device 2
-const Endpoint endpoint2[] = {buttonPlugs, rockerPlugs, blindPlugs, lightPlugs};
+const BusMasterEmu::Endpoint endpoint2[] = {buttonPlugs, rockerPlugs, blindPlugs, lightPlugs};
 
 // device 3
-const Endpoint endpoint3a[] = {temperaturePlugs};
+const BusMasterEmu::Endpoint endpoint3a[] = {temperaturePlugs};
 
 
-Device devices[] = {
+BusMasterEmu::Device devices[] = {
 	{0x00000001, {endpoint1a, endpoint1b}},
-	{0x00000002, {endpoint2, endpoint2}},
-	{0x00000003, {endpoint3a, Array<Endpoint>()}},
+	{0x00000002, {endpoint2,  endpoint2}},
+	{0x00000003, {endpoint3a, Array<BusMasterEmu::Endpoint>()}},
 };
 
 
-std::fstream file;
-
-
-std::chrono::steady_clock::time_point time;
-
-Waitlist<ReceiveParameters> receiveWaitlist;
-Waitlist<SendParameters> sendWaitlist;
-
-
-void setHeader(bus::MessageWriter &w, Device &device) {
-	w.setHeader();
-
-	// encoded address
-	w.address(device.flash.address);
-
-	// security counter
-	w.u32L(device.securityCounter);
-
-	// set start of message
-	w.setMessage();
+inline int fsize(int fd) {
+	struct stat stat;
+	fstat(fd, &stat);
+	return stat.st_size;
 }
 
-void sendToMaster(bus::MessageWriter &w, Device &device) {
-	// encrypt
-	Nonce nonce(device.flash.address, device.securityCounter);
-	w.encrypt(4, nonce, device.flash.aesKey);
+} // namespace
 
-	// increment security counter
-	++device.securityCounter;
+BusMasterEmu::BusMasterEmu() {
+	// load permanent configuration of devices
+	char const *filename = "bus.bin";
+	this->file = open(filename, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH);
 
-	// send to bus master (resume coroutine waiting to receive from device)
-	int length = w.getLength();
-	auto data = w.begin;
-	BusMaster::receiveWaitlist.resumeFirst([length, data](ReceiveParameters &p) {
-		int len = min(*p.length, length);
-		array::copy(len, p.data, data);
-		*p.length = len;
-		return true;
-	});
+	int deviceCount = array::count(devices);
+	int persistentStateSize = sizeof(PersistentState);
+
+	// check file size
+	int fileSize = fsize(this->file);
+	if (fileSize != deviceCount * persistentStateSize) {
+		// size mismatch: initialize file
+		ftruncate(this->file, deviceCount * persistentStateSize);
+		for (int i = 0; i < deviceCount; ++i) {
+			auto &device = devices[i];
+			device.offset = i * persistentStateSize;
+			device.persistentState.address = -1;
+			pwrite(this->file, &device.persistentState, persistentStateSize, device.offset);
+		}
+	} else {
+		// size ok: read devices
+		for (int i = 0; i < deviceCount; ++i) {
+			auto &device = devices[i];
+			device.offset = i * persistentStateSize;
+			pread(this->file, &device.persistentState, persistentStateSize, device.offset);
+		}
+	}
+
+	// add to list of handlers
+	Loop::handlers.add(*this);
 }
 
+Awaitable<BusMaster::ReceiveParameters> BusMasterEmu::receive(int &length, uint8_t *data) {
+	return {this->receiveWaitlist, &length, data};
+}
 
-// event loop handler chain
-Loop::Handler nextHandler;
-void handle(Gui &gui) {
+Awaitable<BusMaster::SendParameters> BusMasterEmu::send(int length, uint8_t const *data) {
+	return {this->sendWaitlist, length, data};
+}
+
+void BusMasterEmu::handle(Gui &gui) {
 	// handle pending send operations
-	BusMaster::sendWaitlist.resumeFirst([](SendParameters &p) {
+	this->sendWaitlist.resumeFirst([this](SendParameters &p) {
 		if (p.length < 2)
 			return true;
 
@@ -145,35 +117,43 @@ void handle(Gui &gui) {
 			if (r.u8() == 0) {
 				// 0 0: master has sent a commissioning message
 
-				// search device with given device id
+				// get bus device id
 				uint32_t deviceId = r.u32L();
-				int offset = 0;
-				for (Device &device: BusMaster::devices) {
-					if (device.id == deviceId) {
-						// check message integrity code (mic)
-						r.setMessageFromEnd(micLength);
-						Nonce nonce(deviceId, 0);
-						if (!r.decrypt(micLength, nonce, bus::defaultAesKey))
-							break;
 
+				// check message integrity code (mic)
+				r.setMessageFromEnd(micLength);
+				Nonce nonce(deviceId, 0);
+				if (!r.decrypt(micLength, nonce, bus::defaultAesKey))
+					return true;
+
+				// get address
+				auto address = r.u8();
+
+				// search device with given bus device id
+				for (Device &device : devices) {
+					if (device.id == deviceId) {
 						// set address
-						device.flash.address = r.u8();
+						device.persistentState.address = address;
 
 						// set key
-						setKey(device.flash.aesKey, r.data8<16>());
+						setKey(device.persistentState.aesKey, r.data8<16>());
 
 						// reset security counter
-						device.securityCounter = 0;
+						device.persistentState.securityCounter = 0;
 
-						// write to file
-						device.flash.commissioning = device.commissioning;
-						BusMaster::file.seekg(offset);
-						BusMaster::file.write(reinterpret_cast<char *>(&device.flash), sizeof(Device::Flash));
-						BusMaster::file.flush();
+						// set index
+						device.persistentState.index = device.nextIndex;
 
-						break;
+						// write commissioned device to file
+						pwrite(this->file, &device.persistentState, sizeof(PersistentState), device.offset);
+					} else {
+						if (device.persistentState.address == address) {
+							// other device still has the address: decommission
+							// todo: also do in switch
+							device.persistentState.address = -1;
+							pwrite(this->file, &device.persistentState, sizeof(PersistentState), device.offset);
+						}
 					}
-					offset += sizeof(Device::Flash);
 				}
 			}
 		} else {
@@ -181,8 +161,8 @@ void handle(Gui &gui) {
 			int address = r.address();
 
 			// search device
-			for (Device &device : BusMaster::devices) {
-				if (device.flash.address == address) {
+			for (Device &device : devices) {
+				if (device.persistentState.address == address) {
 					// security counter
 					uint32_t securityCounter = r.u32L();
 
@@ -191,7 +171,7 @@ void handle(Gui &gui) {
 					// decrypt
 					r.setMessage();
 					Nonce nonce(address, securityCounter);
-					if (!r.decrypt(4, nonce, device.flash.aesKey))
+					if (!r.decrypt(4, nonce, device.persistentState.aesKey))
 						break;
 
 					// get endpoint index
@@ -204,7 +184,7 @@ void handle(Gui &gui) {
 					} else {
 						// plug
 						uint8_t plugIndex = r.u8();
-						auto plugs = device.endpoints[device.flash.commissioning - 1][endpointIndex].plugs;
+						auto plugs = device.endpoints[device.persistentState.index][endpointIndex].plugs;
 						if (plugIndex < plugs.count()) {
 							auto plugType = plugs[plugIndex];
 							int &state = device.states[endpointIndex * 4 + plugIndex];
@@ -239,19 +219,17 @@ void handle(Gui &gui) {
 		return true;
 	});
 
-	// call next handler in chain
-	BusMaster::nextHandler(gui);
 
-	// time difference for blinds
+	// time difference to update blind positions
 	auto now = std::chrono::steady_clock::now();
-	int us = int(std::chrono::duration_cast<std::chrono::microseconds>(now - BusMaster::time).count());
-	BusMaster::time = now;
+	int us = int(std::chrono::duration_cast<std::chrono::microseconds>(now - this->time).count());
+	this->time = now;
 
 	// first id for gui
 	uint32_t guiId = 0x81729a00;
 
-	// iterate over devices
-	for (Device &device : BusMaster::devices) {
+	// draw devices on gui
+	for (Device &device : devices) {
 		gui.newLine();
 		auto id = guiId;
 		guiId += 100;
@@ -282,7 +260,7 @@ void handle(Gui &gui) {
 			}
 			case bus::Attribute::PLUG_LIST:
 				// list of plugs
-				w.data16L(device.endpoints[device.commissioning - 1][device.endpointIndex].plugs);
+				w.data16L(device.endpoints[device.persistentState.index][device.endpointIndex].plugs);
 				break;
 			default:;
 			}
@@ -294,7 +272,7 @@ void handle(Gui &gui) {
 		auto value = gui.button(id++, 0.2f);
 		if (value && *value == 1) {
 			// commission device
-			device.commissioning = device.flash.commissioning == 1 ? 2 : 1;
+			device.nextIndex = device.persistentState.address != -1 && device.persistentState.index == 0 ? 1 : 0;
 
 			// send enumerate message
 			bus::MessageWriter w(sendData);
@@ -310,7 +288,7 @@ void handle(Gui &gui) {
 			w.u8(0);
 
 			// number of endpoints
-			w.u8(device.endpoints[device.commissioning - 1].count());
+			w.u8(device.endpoints[device.nextIndex].count());
 
 			// add message integrity code (mic) using default key, message stays unencrypted
 			w.setMessage();
@@ -319,7 +297,7 @@ void handle(Gui &gui) {
 
 			// send to bus master (resume coroutine waiting to receive from device)
 			int sendLength = w.getLength();
-			BusMaster::receiveWaitlist.resumeFirst([sendLength, sendData](ReceiveParameters &p) {
+			this->receiveWaitlist.resumeFirst([sendLength, sendData](ReceiveParameters &p) {
 				int length = min(*p.length, sendLength);
 				array::copy(length, p.data, sendData);
 				*p.length = length;
@@ -328,8 +306,8 @@ void handle(Gui &gui) {
 		}
 
 		// add device endpoints to gui if device is commissioned
- 		if (device.flash.commissioning != 0) {
-			auto endpoints = device.endpoints[device.flash.commissioning - 1];
+		if (device.persistentState.address != -1) {
+			auto endpoints = device.endpoints[device.persistentState.index];
 			for (int endpointIndex = 0; endpointIndex < endpoints.count(); ++endpointIndex) {
 				auto plugs = endpoints[endpointIndex].plugs;
 				for (int plugIndex = 0; plugIndex < plugs.count(); ++plugIndex) {
@@ -419,50 +397,35 @@ void handle(Gui &gui) {
 	}
 }
 
-void init() {
-	// check if already initialized
-	if (BusMaster::nextHandler != nullptr)
-		return;
+void BusMasterEmu::setHeader(bus::MessageWriter &w, Device &device) {
+	w.setHeader();
 
-	// add to event loop handler chain
-	BusMaster::nextHandler = Loop::addHandler(handle);
+	// encoded address
+	w.address(device.persistentState.address);
 
-	// load permanent configuration of devices
-	char const *fileName = "bus.bin";
-	BusMaster::file.open(fileName, std::fstream::in | std::fstream::binary);
-	for (Device &device : BusMaster::devices) {
-		BusMaster::file.read(reinterpret_cast<char *>(&device.flash), sizeof(Device::Flash));
-	}
+	// security counter
+	w.u32L(device.persistentState.securityCounter);
 
-	// read additional dummy byte to detect if the file is too large
-	char dummy;
-	BusMaster::file.read(&dummy, 1);
-	BusMaster::file.clear();
-	size_t size = BusMaster::file.tellg();
-	BusMaster::file.close();
-
-	// check if size is ok
-	if (size != array::count(BusMaster::devices) * sizeof(Device::Flash)) {
-		// no: create new file
-		BusMaster::file.open(fileName, std::fstream::trunc | std::fstream::in | std::fstream::out | std::fstream::binary);
-		for (Device &device : BusMaster::devices) {
-			device.flash.commissioning = 0;
-			BusMaster::file.write(reinterpret_cast<char *>(&device.flash), sizeof(Device::Flash));
-		}
-	} else {
-		// yes: open file again in in/out mode
-		BusMaster::file.open(fileName, std::fstream::in | std::fstream::out | std::fstream::binary);
-	}
+	// set start of message
+	w.setMessage();
 }
 
-Awaitable<ReceiveParameters> receive(int &length, uint8_t *data) {
-	assert(BusMaster::nextHandler != nullptr);
-	return {BusMaster::receiveWaitlist, &length, data};
-}
+void BusMasterEmu::sendToMaster(bus::MessageWriter &w, Device &device) {
+	// encrypt
+	Nonce nonce(device.persistentState.address, device.persistentState.securityCounter);
+	w.encrypt(4, nonce, device.persistentState.aesKey);
 
-Awaitable<SendParameters> send(int length, uint8_t const *data) {
-	assert(BusMaster::nextHandler != nullptr);
-	return {BusMaster::sendWaitlist, length, data};
-}
+	// increment security counter
+	++device.persistentState.securityCounter;
+	pwrite(this->file, &device.persistentState.securityCounter, 4, device.offset + offsetOf(PersistentState, securityCounter));
 
-} // namespace BusMaster
+	// send to bus master (resume coroutine waiting to receive from device)
+	int length = w.getLength();
+	auto data = w.begin;
+	this->receiveWaitlist.resumeFirst([length, data](ReceiveParameters &p) {
+		int len = min(*p.length, length);
+		array::copy(len, p.data, data);
+		*p.length = len;
+		return true;
+	});
+}

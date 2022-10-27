@@ -1,7 +1,7 @@
 #pragma once
 
 #include "Interface.hpp"
-#include <Coroutine.hpp>
+#include <Storage.hpp>
 #include <Data.hpp>
 
 
@@ -10,20 +10,20 @@ public:
 	// maximum number of functions
 	static constexpr int MAX_FUNCTION_COUNT = 128;
 
-	FunctionInterface(uint8_t interfaceId);
+	FunctionInterface(uint8_t interfaceId, Storage &storage);
 	~FunctionInterface() override;
 
 	String getName() override;
 	void setCommissioning(bool enabled) override;
 
-	Array<uint8_t const> getDeviceIds() override;
-	String getName(uint8_t deviceId) const override;
-	void setName(uint8_t deviceId, String name) override;
-	Array<MessageType const> getPlugs(uint8_t deviceId) const override;
-	SubscriberTarget getSubscriberTarget(uint8_t deviceId, uint8_t plugIndex) override;
+	Array<uint8_t const> getElementIds() override;
+	String getName(uint8_t id) const override;
+	void setName(uint8_t id, String name) override;
+	Array<MessageType const> getPlugs(uint8_t id) const override;
+	SubscriberTarget getSubscriberTarget(uint8_t id, uint8_t plugIndex) override;
 	void subscribe(Subscriber &subscriber) override;
 	void listen(Listener &listener) override;
-	void erase(uint8_t deviceId) override;
+	void erase(uint8_t id) override;
 
 
 	enum class Type : uint8_t {
@@ -84,10 +84,17 @@ public:
 	};
 
 	struct ColorSetting {
+		// brightness in percent
 		uint8_t brightness;
+
+		// hue 0 - 71
 		uint8_t hue;
+
+		// saturation in percent
 		uint8_t saturation;
-		uint16_t fade; // 1/10s
+
+		// fade time in 1/10s
+		uint16_t fade;
 	};
 
 	struct ColorLightData : public Data {
@@ -138,22 +145,22 @@ public:
 	};
 
 	// edit helpers
-	void getData(uint8_t deviceId, DataUnion &data) const;
-	void set(DataUnion &data);
+	void getData(uint8_t id, DataUnion &data) const;
+	uint8_t set(DataUnion &data);
 	static String getName(Type type);
 	static Type getNextType(Type type, int delta);
 	static void setType(DataUnion &data, Type type);
 	static Array<MessageType const> getPlugs(Type type);
 
 	// publish switch message on given plug, used e.g. for measuring blind runtime
-	void publishSwitch(uint8_t deviceId, uint8_t plugIndex, uint8_t value);
+	void publishSwitch(uint8_t id, uint8_t plugIndex, uint8_t value);
 
 
-	class Function : public Device {
+	class Function : public Element {
 	public:
 		// adds to linked list and takes ownership of the data
 		Function(FunctionInterface *interface, Data *data)
-			: Device(data->id, interface->listeners), next(interface->functions), data(data)
+			: Element(data->id, interface->listeners), next(interface->functions), data(data)
 		{
 			interface->functions = this;
 		}
@@ -174,15 +181,20 @@ public:
 		SubscriberBarrier barrier;
 	};
 
-	int functionCount = 0;
-	uint8_t functionIds[MAX_FUNCTION_COUNT];
-	Function *functions = nullptr;
-
 	// find function by id
-	Function *findFunction(uint8_t deviceId) const;
+	Function *findFunction(uint8_t id) const;
 
 	uint8_t allocateId();
 
+
 	// listeners that listen on all messages of the interface (as opposed to subscribers that subscribe to one plug)
 	ListenerList listeners;
+
+	// persistent storage
+	Storage &storage;
+
+	// functions
+	Function *functions = nullptr;
+	int functionCount = 0;
+	uint8_t functionIds[MAX_FUNCTION_COUNT];
 };

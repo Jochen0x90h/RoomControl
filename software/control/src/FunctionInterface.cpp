@@ -471,8 +471,6 @@ static const TypeInfo typeInfos[] = {
 			// timeout
 			SystemTime offTime;
 
-			//SystemTime brightnessTime = Timer::now();
-
 			// no references to flash allowed beyond this point as flash may be reallocated
 			while (true) {
 				// wait for message
@@ -631,14 +629,11 @@ static const TypeInfo typeInfos[] = {
 						}
 					}
 				}
-				/*
-						auto n = Timer::now();
-						Terminal::out << "brightness " << flt(brightness, 5) << " t " << dec((n - brightnessTime).value / 100)
-							<< " transition " << dec(transition) << '\n';
-						brightnessTime = n;
-						if (setColor)
-							Terminal::out << "color " << dec(stepIndex) << '\n';
-				*/
+
+				//if (changed)
+				//	Terminal::out << "power " << dec(on.state) << '\n';
+				//Terminal::out << "brightness " << flt(brightness, 5) << " t " << dec(brightnessFade) << '\n';
+
 				// publish on/off
 				if (changed)
 					function->publishSwitch(1, on.state);
@@ -905,23 +900,26 @@ static TypeInfo const &findInfo(FunctionInterface::Type type) {
 }
 
 
-FunctionInterface::FunctionInterface(uint8_t interfaceId) : listeners(interfaceId) {
-	// load list of device ids
-	int deviceCount = Storage::read(STORAGE_CONFIG, STORAGE_ID_FUNCTION, sizeof(this->functionIds), this->functionIds);
+FunctionInterface::FunctionInterface(uint8_t interfaceId, Storage &storage)
+	: listeners(interfaceId), storage(storage)
+{
+	// load list of function ids
+	int elementCount = sizeof(this->functionIds);
+	storage.readBlocking(STORAGE_ID_FUNCTION, elementCount, this->functionIds);
 
 	// load devices
 	int j = 0;
-	for (int i = 0; i < deviceCount; ++i) {
+	for (int i = 0; i < sizeof(this->functionIds) && i < elementCount; ++i) {
 		uint8_t id = this->functionIds[i];
 
 		// get size of stored data
-		int size = Storage::size(STORAGE_CONFIG, STORAGE_ID_FUNCTION | id);
+		int size = storage.getSizeBlocking(STORAGE_ID_FUNCTION | id);
 		if (size < sizeof(Data))
 			continue;
 
 		// allocate memory and read data
 		auto data = reinterpret_cast<Data *>(malloc(size));
-		Storage::read(STORAGE_CONFIG, STORAGE_ID_FUNCTION | id, size, data);
+		storage.readBlocking(STORAGE_ID_FUNCTION | id, size, data);
 
 		// check id
 		if (data->id != id) {
@@ -932,6 +930,7 @@ FunctionInterface::FunctionInterface(uint8_t interfaceId) : listeners(interfaceI
 		// find type and check type and size
 		auto &typeInfo = findInfo(data->type);
 		if (typeInfo.type != data->type || typeInfo.size(data) != size) {
+			// type or size is inconsistent, delete device
 			free(data);
 			continue;
 		}
@@ -959,30 +958,30 @@ String FunctionInterface::getName() {
 void FunctionInterface::setCommissioning(bool enabled) {
 }
 
-Array<uint8_t const> FunctionInterface::getDeviceIds() {
+Array<uint8_t const> FunctionInterface::getElementIds() {
 	return {this->functionCount, this->functionIds};
 }
 
-String FunctionInterface::getName(uint8_t deviceId) const {
-	auto function = findFunction(deviceId);
+String FunctionInterface::getName(uint8_t id) const {
+	auto function = findFunction(id);
 	if (function != nullptr)
 		return String(function->data->name);
 	return {};
 }
 
-void FunctionInterface::setName(uint8_t deviceId, String name) {
-	auto function = findFunction(deviceId);
+void FunctionInterface::setName(uint8_t id, String name) {
+	auto function = findFunction(id);
 	if (function != nullptr) {
 		assign(function->data->name, name);
 
 		// write to flash
 		auto &typeInfo = findInfo(function->data->type);
-		Storage::write(STORAGE_CONFIG, STORAGE_ID_FUNCTION | function->data->id, typeInfo.size(function->data), function->data);
+		this->storage.writeBlocking(STORAGE_ID_FUNCTION | function->data->id, typeInfo.size(function->data), function->data);
 	}
 }
 
-Array<MessageType const> FunctionInterface::getPlugs(uint8_t deviceId) const {
-	auto function = findFunction(deviceId);
+Array<MessageType const> FunctionInterface::getPlugs(uint8_t id) const {
+	auto function = findFunction(id);
 	if (function != nullptr) {
 		auto &typeInfo = findInfo(function->data->type);
 		return {int(typeInfo.plugs.size()), typeInfo.plugs.begin()};
@@ -990,8 +989,8 @@ Array<MessageType const> FunctionInterface::getPlugs(uint8_t deviceId) const {
 	return {};
 }
 
-SubscriberTarget FunctionInterface::getSubscriberTarget(uint8_t deviceId, uint8_t plugIndex) {
-	auto function = findFunction(deviceId);
+SubscriberTarget FunctionInterface::getSubscriberTarget(uint8_t id, uint8_t plugIndex) {
+	auto function = findFunction(id);
 	if (function != nullptr) {
 		auto &typeInfo = findInfo(function->data->type);
 		if (plugIndex < typeInfo.plugs.size())
@@ -1001,9 +1000,10 @@ SubscriberTarget FunctionInterface::getSubscriberTarget(uint8_t deviceId, uint8_
 }
 
 void FunctionInterface::subscribe(Subscriber &subscriber) {
-	assert(subscriber.target.barrier != nullptr);
 	subscriber.remove();
-	auto id = subscriber.data->source.deviceId;
+	if (subscriber.target.barrier == nullptr)
+		return;
+	auto id = subscriber.data->source.elementId;
 	auto function = findFunction(id);
 	if (function != nullptr)
 		function->subscribers.add(subscriber);
@@ -1015,16 +1015,16 @@ void FunctionInterface::listen(Listener &listener) {
 	this->listeners.add(listener);
 }
 
-void FunctionInterface::erase(uint8_t deviceId) {
+void FunctionInterface::erase(uint8_t id) {
 	auto p = &this->functions;
 	while (*p != nullptr) {
 		auto function = *p;
-		if (function->data->id == deviceId) {
+		if (function->data->id == id) {
 			// remove function from linked list
 			*p = function->next;
 
 			// erase from flash
-			Storage::erase(STORAGE_CONFIG, STORAGE_ID_FUNCTION | deviceId);
+			this->storage.eraseBlocking(STORAGE_ID_FUNCTION | id);
 
 			// delete function
 			delete function;
@@ -1037,8 +1037,8 @@ void FunctionInterface::erase(uint8_t deviceId) {
 list:
 
 	// erase from list of device id's
-	this->functionCount = eraseDevice(this->functionCount, this->functionIds, deviceId);
-	Storage::write(STORAGE_CONFIG, STORAGE_ID_FUNCTION, this->functionCount, this->functionIds);
+	this->functionCount = eraseElement(this->functionCount, this->functionIds, id);
+	this->storage.writeBlocking(STORAGE_ID_FUNCTION, this->functionCount, this->functionIds);
 }
 
 
@@ -1050,7 +1050,7 @@ void FunctionInterface::getData(uint8_t id, DataUnion &data) const {
 	}
 }
 
-void FunctionInterface::set(DataUnion &data) {
+uint8_t FunctionInterface::set(DataUnion &data) {
 	auto id = data.data.id;
 
 	// get type info (type must be valid)
@@ -1069,7 +1069,7 @@ void FunctionInterface::set(DataUnion &data) {
 
 		// add to list of functions
 		this->functionIds[this->functionCount++] = newData->id;
-		Storage::write(STORAGE_CONFIG, STORAGE_ID_FUNCTION, this->functionCount, this->functionIds);
+		this->storage.writeBlocking(STORAGE_ID_FUNCTION, this->functionCount, this->functionIds);
 
 		function = new Function(this, newData);
 	} else {
@@ -1082,10 +1082,12 @@ void FunctionInterface::set(DataUnion &data) {
 	}
 
 	// store data to flash
-	Storage::write(STORAGE_CONFIG, STORAGE_ID_FUNCTION | newData->id, size, newData);
+	this->storage.writeBlocking(STORAGE_ID_FUNCTION | newData->id, size, newData);
 
 	// start coroutine
 	function->coroutine = typeInfo.start(function);
+
+	return newData->id;
 }
 
 String FunctionInterface::getName(Type type) {
@@ -1141,8 +1143,8 @@ Array<MessageType const> FunctionInterface::getPlugs(Type type) {
 	return {int(typeInfo.plugs.size()), typeInfo.plugs.begin()};
 }
 
-void FunctionInterface::publishSwitch(uint8_t deviceId, uint8_t plugIndex, uint8_t value) {
-	auto function = findFunction(deviceId);
+void FunctionInterface::publishSwitch(uint8_t id, uint8_t plugIndex, uint8_t value) {
+	auto function = findFunction(id);
 	if (function != nullptr)
 		function->subscribers.publishSwitch(plugIndex, value);
 }
@@ -1154,10 +1156,10 @@ FunctionInterface::Function::~Function() {
 	free(this->data);
 }
 
-FunctionInterface::Function *FunctionInterface::findFunction(uint8_t deviceId) const {
+FunctionInterface::Function *FunctionInterface::findFunction(uint8_t id) const {
 	auto function = this->functions;
 	while (function != nullptr) {
-		if (function->data->id == deviceId)
+		if (function->data->id == id)
 			return function;
 		function = function->next;
 	}
