@@ -135,14 +135,14 @@ private:
 	class ZbEndpoint;
 	class ZbDevice {
 	public:
+		// constructor for loading devices on startup, loads the security counter
+		ZbDevice(RadioInterface *interface, ZbDeviceData const &data);
+
+		// constructor for commissioning new devices
 		ZbDevice(ZbDeviceData const &data)
 			: data(data), sendFlags(data.sendFlags)
 		{}
-		ZbDevice(RadioInterface *interface, ZbDeviceData const &data)
-			: next(interface->zbDevices), data(data), sendFlags(data.sendFlags)
-		{
-			interface->zbDevices = this;
-		}
+
 		~ZbDevice();
 
 
@@ -265,9 +265,6 @@ private:
 
 		// endpoint data that is stored in flash
 		ZbEndpointData *data;
-
-		// list of subscribers
-		//SubscriberList subscribers;
 
 		//
 		SystemTime time;
@@ -441,7 +438,6 @@ private:
 			| zb::NwkFrameControl::DISCOVER_ROUTE_ENABLE;
 		writeNwk(w, nwkFrameControl, 30, device);
 	}
-	void writeNwkSecurity(PacketWriter &w);
 
 	void writeApsCommand(PacketWriter &w, zb::SecurityControl keyType, zb::ApsCommand command);
 	void writeApsAck(PacketWriter &w, uint8_t apsCounter);

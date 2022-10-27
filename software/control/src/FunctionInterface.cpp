@@ -471,8 +471,6 @@ static const TypeInfo typeInfos[] = {
 			// timeout
 			SystemTime offTime;
 
-			//SystemTime brightnessTime = Timer::now();
-
 			// no references to flash allowed beyond this point as flash may be reallocated
 			while (true) {
 				// wait for message
@@ -631,14 +629,11 @@ static const TypeInfo typeInfos[] = {
 						}
 					}
 				}
-				/*
-						auto n = Timer::now();
-						Terminal::out << "brightness " << flt(brightness, 5) << " t " << dec((n - brightnessTime).value / 100)
-							<< " transition " << dec(transition) << '\n';
-						brightnessTime = n;
-						if (setColor)
-							Terminal::out << "color " << dec(stepIndex) << '\n';
-				*/
+
+				//if (changed)
+				//	Terminal::out << "power " << dec(on.state) << '\n';
+				//Terminal::out << "brightness " << flt(brightness, 5) << " t " << dec(brightnessFade) << '\n';
+
 				// publish on/off
 				if (changed)
 					function->publishSwitch(1, on.state);

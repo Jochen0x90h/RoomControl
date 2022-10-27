@@ -449,10 +449,10 @@ Coroutine BusInterface::receive() {
 				if (this->commissionCoroutine.isAlive() && this->tempDevice->data.address == address) {
 					// check security counter
 					if (securityCounter <= this->tempDevice->securityCounter) {
-						Terminal::out << "security counter error " << dec(securityCounter) << " <= " << dec(this->tempDevice->securityCounter) << '\n';
+						Terminal::out << "B security counter error " << dec(securityCounter) << " <= " << dec(this->tempDevice->securityCounter) << '\n';
 						//continue;
 					} else {
-						Terminal::out << "security counter ok " << dec(securityCounter) << " > " << dec(this->tempDevice->securityCounter) << '\n';
+						//Terminal::out << "B security counter ok " << dec(securityCounter) << " > " << dec(this->tempDevice->securityCounter) << '\n';
 					}
 					this->tempDevice->securityCounter = securityCounter;
 
@@ -481,10 +481,10 @@ Coroutine BusInterface::receive() {
 
 					// check security counter
 					if (securityCounter <= device->securityCounter) {
-						Terminal::out << dec(device->data.busDeviceId) << ": security counter error " << dec(securityCounter) << " <= " << dec(device->securityCounter) << '\n';
+						Terminal::out << 'B' << dec(device->data.busDeviceId) << ": security counter error " << dec(securityCounter) << " <= " << dec(device->securityCounter) << '\n';
 						//break;
 					} else {
-						Terminal::out << dec(device->data.busDeviceId) << ": security counter ok " << dec(securityCounter) << " > " << dec(device->securityCounter) << '\n';
+						//Terminal::out << 'B' << dec(device->data.busDeviceId) << ": security counter ok " << dec(securityCounter) << " > " << dec(device->securityCounter) << '\n';
 					}
 					device->securityCounter = securityCounter;
 

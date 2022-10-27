@@ -72,9 +72,7 @@ private:
 	class Endpoint;
 	class Device {
 	public:
-		static constexpr int MESSAGE_LENGTH = 80;
-
-		// constructor for loading devices on startup
+		// constructor for loading devices on startup, loads the security counter
 		Device(BusInterface *interface, DeviceData const &data);
 
 		// constructor for commissioning new devices

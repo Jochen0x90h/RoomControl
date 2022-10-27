@@ -1629,6 +1629,7 @@ AwaitableCoroutine RoomControl::functionMenu(FunctionInterface::DataUnion &data)
 			// brightness
 			// todo: one per input
 			for (int i = 0; i < 4; ++i) {
+				menu.beginSection();
 				auto &setting = d.settings[i];
 
 				stream = menu.stream();
@@ -1643,6 +1644,8 @@ AwaitableCoroutine RoomControl::functionMenu(FunctionInterface::DataUnion &data)
 				stream = menu.stream();
 				stream << "On Fade: ";
 				editDuration(menu, stream, setting.fade, 10);
+
+				menu.endSection();
 			}
 
 			// off and timeout fade times
@@ -1650,10 +1653,13 @@ AwaitableCoroutine RoomControl::functionMenu(FunctionInterface::DataUnion &data)
 			stream << "Off Fade: ";
 			editDuration(menu, stream, d.offFade, 10);
 
-			stream = menu.stream();
-			stream << "Timeout Fade: ";
-			editDuration(menu, stream, d.timeoutFade, 10);
+			if (d.timeout > 0) {
+				stream = menu.stream();
+				stream << "Timeout Fade: ";
+				editDuration(menu, stream, d.timeoutFade, 10);
+			}
 
+			menu.line();
 			break;
 		}
 		case FunctionInterface::Type::COLOR_LIGHT: {
@@ -1672,10 +1678,13 @@ AwaitableCoroutine RoomControl::functionMenu(FunctionInterface::DataUnion &data)
 			stream << "Off Fade: ";
 			editDuration(menu, stream, d.offFade, 10);
 
-			stream = menu.stream();
-			stream << "Timeout Fade: ";
-			editDuration(menu, stream, d.timeoutFade, 10);
+			if (d.timeout > 0) {
+				stream = menu.stream();
+				stream << "Timeout Fade: ";
+				editDuration(menu, stream, d.timeoutFade, 10);
+			}
 
+			menu.line();
 			break;
 		}
 		case FunctionInterface::Type::ANIMATED_LIGHT: {
@@ -1690,8 +1699,20 @@ AwaitableCoroutine RoomControl::functionMenu(FunctionInterface::DataUnion &data)
 			stream = menu.stream();
 			stream << "Step Count: ";
 			int editStepCount = menu.getEdit(1);
-			if (editStepCount)
-				d.stepCount = clamp(d.stepCount + delta, 0, 15);
+			if (editStepCount) {
+				auto stepCount = clamp(d.stepCount + delta, 0, array::count(d.steps) - 1);
+
+				// initialize new animation steps
+				for (int i = d.stepCount; i < stepCount; ++i) {
+					auto &step = d.steps[i];
+					step.hue = (i * 6) % 72;
+					step.brightness = 100; // 100%
+					step.saturation = 100; // 100%
+					step.fade = 10; // 1s
+					//Terminal::out << dec(i) << ' ' << dec(step.hue) << '\n';
+				}
+				d.stepCount = stepCount;
+			}
 			stream << underline(dec(d.stepCount), editStepCount);
 			menu.entry();
 
@@ -1707,10 +1728,13 @@ AwaitableCoroutine RoomControl::functionMenu(FunctionInterface::DataUnion &data)
 			stream << "Off Fade: ";
 			editDuration(menu, stream, d.offFade, 10);
 
-			stream = menu.stream();
-			stream << "Timeout Fade: ";
-			editDuration(menu, stream, d.timeoutFade, 10);
+			if (d.timeout > 0) {
+				stream = menu.stream();
+				stream << "Timeout Fade: ";
+				editDuration(menu, stream, d.timeoutFade, 10);
+			}
 
+			menu.line();
 			break;
 		}
 		case FunctionInterface::Type::TIMED_BLIND: {

@@ -84,10 +84,17 @@ public:
 	};
 
 	struct ColorSetting {
+		// brightness in percent
 		uint8_t brightness;
+
+		// hue 0 - 71
 		uint8_t hue;
+
+		// saturation in percent
 		uint8_t saturation;
-		uint16_t fade; // 1/10s
+
+		// fade time in 1/10s
+		uint16_t fade;
 	};
 
 	struct ColorLightData : public Data {

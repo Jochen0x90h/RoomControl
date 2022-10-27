@@ -97,9 +97,10 @@ RadioInterface::RadioInterface(uint8_t interfaceId, Storage &storage, Storage &c
 
 	// load security counter
 	int counterSize = 4;
-	counters.readBlocking(COUNTERS_ID_BUS, counterSize, &this->securityCounter);
+	counters.readBlocking(COUNTERS_ID_RADIO, counterSize, &this->securityCounter);
 	if (counterSize != 4)
 		this->securityCounter = 0;
+	//Terminal::out << "ZB load security counter " << dec(this->securityCounter) << '\n';
 
 	// start coroutines
 	broadcast();
@@ -114,7 +115,6 @@ RadioInterface::~RadioInterface() {
 }
 
 void RadioInterface::setConfiguration(uint16_t panId, DataBuffer<16> const &key, AesKey const &aesKey) {
-	//bool first = this->key == nullptr;
 	this->panId = panId;
 	this->key = &key;
 	this->aesKey = &aesKey;
@@ -128,9 +128,6 @@ void RadioInterface::setConfiguration(uint16_t panId, DataBuffer<16> const &key,
 	// filter packets with the coordinator as destination (and broadcast pan/address)
 	Radio::setFlags(RADIO_ZBEE, Radio::ContextFlags::PASS_DEST_SHORT | Radio::ContextFlags::PASS_DEST_LONG
 		| Radio::ContextFlags::HANDLE_ACK);
-
-	//if (first)
-	//	start();
 }
 
 String RadioInterface::getName() {
@@ -327,6 +324,18 @@ RadioInterface::GpDevice::~GpDevice() {
 }
 
 // ZbDevice
+RadioInterface::ZbDevice::ZbDevice(RadioInterface *interface, ZbDeviceData const &data)
+	: next(interface->zbDevices), data(data), sendFlags(data.sendFlags)
+{
+	interface->zbDevices = this;
+
+	// load security counter
+	int counterSize = 4;
+	interface->counters.readBlocking(COUNTERS_ID_RADIO + data.id, counterSize, &this->securityCounter);
+	if (counterSize != 4)
+		this->securityCounter = 0;
+}
+
 RadioInterface::ZbDevice::~ZbDevice() {
 	// delete endpoints
 	auto endpoint = this->endpoints;
@@ -526,26 +535,6 @@ void RadioInterface::eraseZbDevice(uint8_t deviceId) {
 		}
 	}
 }*/
-/*
-Coroutine RadioInterface::start() {
-	// restore security counter
-	co_await this->securityCounter.restore();
-
-	// set short address of coordinator
-	Radio::setShortAddress(RADIO_ZBEE, 0x0000);
-
-	// filter packets with the coordinator as destination (and broadcast pan/address)
-	Radio::setFlags(RADIO_ZBEE, Radio::ContextFlags::PASS_DEST_SHORT | Radio::ContextFlags::PASS_DEST_LONG
-		| Radio::ContextFlags::HANDLE_ACK);
-
-	// start coroutines
-	broadcast();
-	sendBeacon();
-	for (int i = 0; i < PUBLISH_COUNT; ++i)
-		publish();
-	for (int i = 0; i < RECEIVE_COUNT; ++i)
-		receive();
-}*/
 
 RadioInterface::ZbDevice *RadioInterface::findZbDevice(uint16_t address) {
 	auto device = this->zbDevices;
@@ -711,6 +700,7 @@ void RadioInterface::writeNwk(PacketWriter &w, zb::NwkFrameControl nwkFrameContr
 	// security header
 	if ((nwkFrameControl & zb::NwkFrameControl::SECURITY) != 0) {
 		// security control and counter
+		//Terminal::out << "ZB send security counter " << dec(this->securityCounter) << '\n';
 		w.security(zb::SecurityControl::LEVEL_ENC_MIC32
 			| zb::SecurityControl::KEY_NETWORK
 			| zb::SecurityControl::EXTENDED_NONCE,
@@ -1352,7 +1342,7 @@ Coroutine RadioInterface::receive() {
 				auto command = r.e8<ieee::Command>();
 				if (command == ieee::Command::BEACON_REQUEST) {
 					// handle beacon request by sending a beacon
-Terminal::out << ("Beacon Request\n");
+Terminal::out << "Beacon Request\n";
 					this->beaconBarrier.resumeAll();
 				}
 			} else if (ieeeFrameType == ieee::FrameControl::TYPE_DATA) {
@@ -1440,8 +1430,12 @@ Terminal::out << ("Beacon Request\n");
 						}
 
 						// check security counter
-						if (securityCounter <= device->securityCounter)
-							break; // -> receive
+						if (securityCounter <= device->securityCounter) {
+							Terminal::out << "GP: security counter error " << dec(securityCounter) << " <= " << dec(device->securityCounter) << '\n';
+							//break; // -> receive
+						} else {
+							//Terminal::out << "GP: security counter ok " << dec(securityCounter) << " > " << dec(device->securityCounter) << '\n';
+						}
 						device->securityCounter = securityCounter;
 
 						// store security counter
@@ -1610,8 +1604,12 @@ Terminal::out << ("Beacon Request\n");
 				uint32_t securityCounter = r.u32L();
 
 				// check security counter
-				if (securityCounter <= device.securityCounter)
-					continue;
+				if (securityCounter <= device.securityCounter) {
+					Terminal::out << "ZB" << hex(device.data.shortAddress) << ": security counter error " << dec(securityCounter) << " <= " << dec(device.securityCounter) << '\n';
+					//continue;
+				} else {
+					//Terminal::out << "ZB" << hex(device.data.shortAddress) << ": security counter ok " << dec(securityCounter) << " > " << dec(device.securityCounter) << '\n';
+				}
 				device.securityCounter = securityCounter;
 
 				// store security counter
@@ -3192,6 +3190,7 @@ Coroutine RadioInterface::publish() {
 						// store security counter
 						Storage::Status status;
 						co_await this->counters.write(COUNTERS_ID_RADIO, 4, &this->securityCounter, status);
+						//Terminal::out << "ZB store security counter " << dec(this->securityCounter) << '\n';
 
 						// send packet
 						uint8_t sendResult;
