@@ -4,14 +4,13 @@
 
 
 /**
- * Implementation of flash interface for nrf52
- * https://infocenter.nordicsemi.com/index.jsp?topic=%2Fps_nrf52840%2Fmemory.html&cp=4_0_0_3_1_1&anchor=flash
- * https://infocenter.nordicsemi.com/index.jsp?topic=%2Fps_nrf52840%2Fnvmc.html&cp=4_0_0_3_2
+ * Implementation of flash interface for stm32f0
+ * See section 3 in reference manual: https://www.st.com/resource/en/reference_manual/dm00031936-stm32f0x1stm32f0x2stm32f0x8-advanced-armbased-32bit-mcus-stmicroelectronics.pdf
  */
 class FlashImpl : public Flash {
 public:
-	static constexpr int PAGE_SIZE = 4096;
-	static constexpr int BLOCK_SIZE = 4;
+	static constexpr int PAGE_SIZE = 1024;
+	static constexpr int BLOCK_SIZE = 2;
 
 	/**
 	 * Constructor

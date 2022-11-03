@@ -2,8 +2,6 @@
 #include "defs.hpp"
 
 
-// https://infocenter.nordicsemi.com/index.jsp?topic=%2Fps_nrf52840%2Fmemory.html&cp=4_0_0_3_1_1&anchor=flash
-// https://infocenter.nordicsemi.com/index.jsp?topic=%2Fps_nrf52840%2Fnvmc.html&cp=4_0_0_3_2
 
 FlashImpl::FlashImpl(uint32_t baseAddress, int sectorCount, int sectorSize)
 	: baseAddress(baseAddress), sectorCount(sectorCount), sectorSize(sectorSize & ~(PAGE_SIZE - 1))
@@ -19,6 +17,8 @@ void FlashImpl::eraseSectorBlocking(int sectorIndex) {
 
 	// set flash erase mode
 	NRF_NVMC->CONFIG = N(NVMC_CONFIG_WEN, Een);
+
+	// erase pages
 	for (int i = 0; i < this->sectorSize; i += PAGE_SIZE) {
 		NRF_NVMC->ERASEPAGE = address + i;
 
@@ -33,7 +33,6 @@ void FlashImpl::eraseSectorBlocking(int sectorIndex) {
 void FlashImpl::readBlocking(int address, int size, void *data) {
 	auto dst = (uint32_t *)data;
 	auto src = (const uint32_t *)(this->baseAddress + address);
-
 	while (size >= 4) {
 		// read 4 bytes
 		*dst = *src;
@@ -56,12 +55,11 @@ void FlashImpl::readBlocking(int address, int size, void *data) {
 }
 
 void FlashImpl::writeBlocking(int address, int size, void const *data) {
-	auto dst = (volatile uint32_t *)(this->baseAddress + address);
-	auto src = (const uint32_t *)data;
-
 	// set flash write mode
 	NRF_NVMC->CONFIG = N(NVMC_CONFIG_WEN, Wen);
 
+	auto dst = (volatile uint32_t *)(this->baseAddress + address);
+	auto src = (const uint32_t *)data;
 	while (size >= 4) {
 		// write 4 bytes
 		*dst = *src;

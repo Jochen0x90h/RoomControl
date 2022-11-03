@@ -329,13 +329,13 @@ if("nrf52" IN_LIST PLATFORM)
 		system/src/nrf52/BusMasterImpl.cpp
 	)
 	set(CALENDAR system/src/ClockTime.hpp system/src/Calendar.hpp system/src/nrf52/Calendar.cpp)
-	set(INPUT system/src/Input.hpp system/src/nrf52/Input.cpp)
 	set(FLASH
 		system/src/Flash.hpp
 		system/src/Flash.cpp
 		system/src/nrf52/FlashImpl.hpp
 		system/src/nrf52/FlashImpl.cpp
 	)
+	set(INPUT system/src/Input.hpp system/src/nrf52/Input.cpp)
 	set(LOOP
 		system/src/Loop.hpp system/src/nrf52/Loop.hpp
 		system/src/nrf52/Loop.cpp
@@ -372,8 +372,13 @@ if("stm32f0" IN_LIST PLATFORM)
 		system/src/stm32f0/BusNodeImpl.hpp
 		system/src/stm32f0/BusNodeImpl.cpp
 	)
+	set(FLASH
+		system/src/Flash.hpp
+		system/src/Flash.cpp
+		system/src/stm32f0/FlashImpl.hpp
+		system/src/stm32f0/FlashImpl.cpp
+	)
 	set(INPUT system/src/Input.hpp system/src/stm32f0/gpio.hpp system/src/stm32f0/Input.cpp)
-
 	set(LOOP
 		system/src/Loop.hpp
 		system/src/stm32f0/defs.hpp
