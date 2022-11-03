@@ -2,6 +2,7 @@
 
 #include "../SpiMaster.hpp"
 #include "Loop.hpp"
+#include "../posix/File.hpp"
 #include <string>
 
 
@@ -14,7 +15,6 @@ public:
 	 * Constructor
 	 */
 	SpiMR45Vxxx(std::string const &filename, int size);
-	~SpiMR45Vxxx();
 
 	Awaitable <Parameters> transfer(int writeCount, void const *writeData, int readCount, void *readData) override;
 	void transferBlocking(int writeCount, void const *writeData, int readCount, void *readData) override;
@@ -22,7 +22,7 @@ public:
 	void handle(Gui &gui) override;
 
 
-	int file;
+	File file;
 	int size;
 	Waitlist<SpiMaster::Parameters> waitlist;
 };

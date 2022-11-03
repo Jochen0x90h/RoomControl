@@ -6,12 +6,12 @@
 #include <chrono>
 
 
-class BusMasterEmu : public BusMaster, public Loop::Handler2 {
+class BusMasterImpl : public BusMaster, public Loop::Handler2 {
 public:
 	/**
 	 * Constructor
 	 */
-	BusMasterEmu();
+	BusMasterImpl();
 
 	Awaitable<ReceiveParameters> receive(int &length, uint8_t *data) override;
 	Awaitable<SendParameters> send(int length, uint8_t const *data) override;

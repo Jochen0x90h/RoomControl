@@ -8,7 +8,7 @@ namespace Terminal {
 inline void init() {}
 
 /**
- * Write a string to a terminal (blocking)
+ * WRITE a string to a terminal (blocking)
  * @param index of channel
  * @param str string to write
  */

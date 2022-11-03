@@ -9,7 +9,7 @@
   *          This file contains:
   *           - Data structures and the address mapping for all peripherals
   *           - Peripheral's registers declarations and bits definition
-  *           - Macros to access peripheral’s registers hardware
+  *           - Macros to access peripheralï¿½s registers hardware
   *  
   ******************************************************************************
   * @attention
@@ -308,7 +308,7 @@ typedef struct
   */
 typedef struct
 {
-  __IO uint16_t RDP;          /*!< FLASH option byte Read protection,             Address offset: 0x00 */
+  __IO uint16_t RDP;          /*!< FLASH option byte READ protection,             Address offset: 0x00 */
   __IO uint16_t USER;         /*!< FLASH option byte user options,                Address offset: 0x02 */
   __IO uint16_t DATA0;        /*!< User data byte 0 (stored in FLASH_OBR[23:16]), Address offset: 0x04 */
   __IO uint16_t DATA1;        /*!< User data byte 1 (stored in FLASH_OBR[31:24]), Address offset: 0x06 */
@@ -5907,11 +5907,11 @@ typedef struct
 #define FLASH_SR_PGERR                    FLASH_SR_PGERR_Msk                   /*!< Programming Error */
 #define FLASH_SR_WRPRTERR_Pos             (4U)                                 
 #define FLASH_SR_WRPRTERR_Msk             (0x1UL << FLASH_SR_WRPRTERR_Pos)      /*!< 0x00000010 */
-#define FLASH_SR_WRPRTERR                 FLASH_SR_WRPRTERR_Msk                /*!< Write Protection Error */
+#define FLASH_SR_WRPRTERR                 FLASH_SR_WRPRTERR_Msk                /*!< WRITE Protection Error */
 #define FLASH_SR_EOP_Pos                  (5U)                                 
 #define FLASH_SR_EOP_Msk                  (0x1UL << FLASH_SR_EOP_Pos)           /*!< 0x00000020 */
 #define FLASH_SR_EOP                      FLASH_SR_EOP_Msk                     /*!< End of operation */
-#define  FLASH_SR_WRPERR                     FLASH_SR_WRPRTERR             /*!< Legacy of Write Protection Error */
+#define  FLASH_SR_WRPERR                     FLASH_SR_WRPRTERR             /*!< Legacy of WRITE Protection Error */
 
 /*******************  Bit definition for FLASH_CR register  *******************/
 #define FLASH_CR_PG_Pos                   (0U)                                 
@@ -5937,7 +5937,7 @@ typedef struct
 #define FLASH_CR_LOCK                     FLASH_CR_LOCK_Msk                    /*!< Lock */
 #define FLASH_CR_OPTWRE_Pos               (9U)                                 
 #define FLASH_CR_OPTWRE_Msk               (0x1UL << FLASH_CR_OPTWRE_Pos)        /*!< 0x00000200 */
-#define FLASH_CR_OPTWRE                   FLASH_CR_OPTWRE_Msk                  /*!< Option Bytes Write Enable */
+#define FLASH_CR_OPTWRE                   FLASH_CR_OPTWRE_Msk                  /*!< Option Bytes WRITE Enable */
 #define FLASH_CR_ERRIE_Pos                (10U)                                
 #define FLASH_CR_ERRIE_Msk                (0x1UL << FLASH_CR_ERRIE_Pos)         /*!< 0x00000400 */
 #define FLASH_CR_ERRIE                    FLASH_CR_ERRIE_Msk                   /*!< Error Interrupt Enable */
@@ -5959,10 +5959,10 @@ typedef struct
 #define FLASH_OBR_OPTERR                  FLASH_OBR_OPTERR_Msk                 /*!< Option Byte Error */
 #define FLASH_OBR_RDPRT1_Pos              (1U)                                 
 #define FLASH_OBR_RDPRT1_Msk              (0x1UL << FLASH_OBR_RDPRT1_Pos)       /*!< 0x00000002 */
-#define FLASH_OBR_RDPRT1                  FLASH_OBR_RDPRT1_Msk                 /*!< Read protection Level 1 */
+#define FLASH_OBR_RDPRT1                  FLASH_OBR_RDPRT1_Msk                 /*!< READ protection Level 1 */
 #define FLASH_OBR_RDPRT2_Pos              (2U)                                 
 #define FLASH_OBR_RDPRT2_Msk              (0x1UL << FLASH_OBR_RDPRT2_Pos)       /*!< 0x00000004 */
-#define FLASH_OBR_RDPRT2                  FLASH_OBR_RDPRT2_Msk                 /*!< Read protection Level 2 */
+#define FLASH_OBR_RDPRT2                  FLASH_OBR_RDPRT2_Msk                 /*!< READ protection Level 2 */
 
 #define FLASH_OBR_USER_Pos                (8U)                                 
 #define FLASH_OBR_USER_Msk                (0xFFUL << FLASH_OBR_USER_Pos)        /*!< 0x0000FF00 */
@@ -6007,17 +6007,17 @@ typedef struct
 /******************  Bit definition for FLASH_WRPR register  ******************/
 #define FLASH_WRPR_WRP_Pos                (0U)                                 
 #define FLASH_WRPR_WRP_Msk                (0xFFFFUL << FLASH_WRPR_WRP_Pos)      /*!< 0x0000FFFF */
-#define FLASH_WRPR_WRP                    FLASH_WRPR_WRP_Msk                   /*!< Write Protect */
+#define FLASH_WRPR_WRP                    FLASH_WRPR_WRP_Msk                   /*!< WRITE Protect */
 
 /*----------------------------------------------------------------------------*/
 
 /******************  Bit definition for OB_RDP register  **********************/
 #define OB_RDP_RDP_Pos       (0U)                                              
 #define OB_RDP_RDP_Msk       (0xFFUL << OB_RDP_RDP_Pos)                         /*!< 0x000000FF */
-#define OB_RDP_RDP           OB_RDP_RDP_Msk                                    /*!< Read protection option byte */
+#define OB_RDP_RDP           OB_RDP_RDP_Msk                                    /*!< READ protection option byte */
 #define OB_RDP_nRDP_Pos      (8U)                                              
 #define OB_RDP_nRDP_Msk      (0xFFUL << OB_RDP_nRDP_Pos)                        /*!< 0x0000FF00 */
-#define OB_RDP_nRDP          OB_RDP_nRDP_Msk                                   /*!< Read protection complemented option byte */
+#define OB_RDP_nRDP          OB_RDP_nRDP_Msk                                   /*!< READ protection complemented option byte */
 
 /******************  Bit definition for OB_USER register  *********************/
 #define OB_USER_USER_Pos     (16U)                                             
@@ -9999,7 +9999,7 @@ typedef struct
 #define USART_ISR_IDLE                USART_ISR_IDLE_Msk                       /*!< IDLE line detected */
 #define USART_ISR_RXNE_Pos            (5U)                                     
 #define USART_ISR_RXNE_Msk            (0x1UL << USART_ISR_RXNE_Pos)             /*!< 0x00000020 */
-#define USART_ISR_RXNE                USART_ISR_RXNE_Msk                       /*!< Read Data Register Not Empty */
+#define USART_ISR_RXNE                USART_ISR_RXNE_Msk                       /*!< READ Data Register Not Empty */
 #define USART_ISR_TC_Pos              (6U)                                     
 #define USART_ISR_TC_Msk              (0x1UL << USART_ISR_TC_Pos)               /*!< 0x00000040 */
 #define USART_ISR_TC                  USART_ISR_TC_Msk                         /*!< Transmission Complete */

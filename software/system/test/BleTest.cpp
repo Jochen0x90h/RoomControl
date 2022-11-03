@@ -54,14 +54,14 @@ bool isHue(Ble::Uuid const &uuid) {
 }
 
 void printProperties(gatt::CharacteristicProperties properties) {
-	Terminal::out << ((properties & gatt::CharacteristicProperties::Braodcast) != 0 ? 'B' : '-');
-	Terminal::out << ((properties & gatt::CharacteristicProperties::Read) != 0 ? 'R' : '-');
-	Terminal::out << ((properties & gatt::CharacteristicProperties::WriteWithoutResponse) != 0 ? 'w' : '-');
-	Terminal::out << ((properties & gatt::CharacteristicProperties::Write) != 0 ? 'W' : '-');
-	Terminal::out << ((properties & gatt::CharacteristicProperties::Notify) != 0 ? 'N' : '-');
-	Terminal::out << ((properties & gatt::CharacteristicProperties::Indicate) != 0 ? 'I' : '-');
-	Terminal::out << ((properties & gatt::CharacteristicProperties::AuthenticatedSignedWrites) != 0 ? 'A' : '-');
-	Terminal::out << ((properties & gatt::CharacteristicProperties::ExtendedProperties) != 0 ? 'E' : '-');
+	Terminal::out << ((properties & gatt::CharacteristicProperties::BROADCAST) != 0 ? 'B' : '-');
+	Terminal::out << ((properties & gatt::CharacteristicProperties::READ) != 0 ? 'R' : '-');
+	Terminal::out << ((properties & gatt::CharacteristicProperties::WRITE_WITHOUT_RESPONSE) != 0 ? 'w' : '-');
+	Terminal::out << ((properties & gatt::CharacteristicProperties::WRITE) != 0 ? 'W' : '-');
+	Terminal::out << ((properties & gatt::CharacteristicProperties::NOTIFY) != 0 ? 'N' : '-');
+	Terminal::out << ((properties & gatt::CharacteristicProperties::INDICATE) != 0 ? 'I' : '-');
+	Terminal::out << ((properties & gatt::CharacteristicProperties::AUTHENTHICATED_SIGNED_WRITES) != 0 ? 'A' : '-');
+	Terminal::out << ((properties & gatt::CharacteristicProperties::EXTENDED_PROPERTIES) != 0 ? 'E' : '-');
 }
 
 Coroutine scan() {
@@ -83,7 +83,7 @@ Coroutine scan() {
 		// exchange MTU
 		{
 			MessageWriter w(buffer);
-			w.e8(att::Op::ExchangeMtuReq);
+			w.e8(att::Op::EXCHANGE_MTU_REQ);
 			w.u16L(515); // https://stackoverflow.com/questions/63590616/what-is-the-maximum-att-mtu-allowed-by-bluetooth-le
 			co_await Ble::send(0, w.getLength(), buffer);
 
@@ -93,13 +93,13 @@ Coroutine scan() {
 				if (length >= 3) {
 					MessageReader r(length, buffer);
 					auto op = r.e8<att::Op>();
-					if (op == att::Op::ExchangeMtuRsp) {
+					if (op == att::Op::EXCHANGE_MTU_RSP) {
 						int mtu = r.u16L();
 						Terminal::out << "server mtu: " << dec(mtu) << '\n';
 						break;
-					} else if (op == att::Op::ExchangeMtuReq) {
+					} else if (op == att::Op::EXCHANGE_MTU_REQ) {
 						MessageWriter w(buffer);
-						w.e8(att::Op::ExchangeMtuRsp);
+						w.e8(att::Op::EXCHANGE_MTU_RSP);
 						w.u16L(515); // https://stackoverflow.com/questions/63590616/what-is-the-maximum-att-mtu-allowed-by-bluetooth-le
 						co_await Ble::send(0, w.getLength(), buffer);
 					}
@@ -111,10 +111,10 @@ Coroutine scan() {
 		uint16_t nextHandle = 1;
 		while (true) {
 			MessageWriter w(buffer);
-			w.e8(att::Op::ReadByGroupTypeReq);
+			w.e8(att::Op::READ_BY_GROUP_TYPE_REQ);
 			w.u16L(nextHandle);
 			w.u16L(0xffff);
-			w.e16L(gatt::Type::PrimaryService);
+			w.e16L(gatt::Type::PRIMARY_SERVICE);
 			co_await Ble::send(0, w.getLength(), buffer);
 
 			int length = array::count(buffer);
@@ -122,9 +122,9 @@ Coroutine scan() {
 			if (length >= 1) {
 				MessageReader r(length, buffer);
 				auto op = r.e8<att::Op>();
-				if (op == att::Op::ErrorRsp) {
+				if (op == att::Op::ERROR_RSP) {
 					break;
-				} else if (op == att::Op::ReadByGroupTypeRsp && length >= 2) {
+				} else if (op == att::Op::READ_BY_GROUP_TYPE_RSP && length >= 2) {
 					int elementSize = r.u8();
 					int elementCount = r.getRemaining() / elementSize;
 					for (int i = 0; i < elementCount; ++i) {
@@ -160,10 +160,10 @@ Coroutine scan() {
 
 			while (true) {
 				MessageWriter w(buffer);
-				w.e8(att::Op::ReadByTypeReq);
+				w.e8(att::Op::READ_BY_TYPE_REQ);
 				w.u16L(nextHandle);
 				w.u16L(service.end);
-				w.e16L(gatt::Type::Characteristic);
+				w.e16L(gatt::Type::CHARACTERISTIC);
 				co_await Ble::send(0, w.getLength(), buffer);
 
 				int length = array::count(buffer);
@@ -171,9 +171,9 @@ Coroutine scan() {
 				if (length >= 1) {
 					MessageReader r(length, buffer);
 					auto op = r.e8<att::Op>();
-					if (op == att::Op::ErrorRsp) {
+					if (op == att::Op::ERROR_RSP) {
 						break;
-					} else if (op == att::Op::ReadByTypeRsp && length >= 2) {
+					} else if (op == att::Op::READ_BY_TYPE_RSP && length >= 2) {
 						int elementSize = r.u8();
 						int elementCount = r.getRemaining() / elementSize;
 						for (int i = 0; i < elementCount; ++i) {
@@ -197,7 +197,7 @@ Coroutine scan() {
 
 							if (isHue(characteristic.uuid) && characteristic.uuid.u16[5] == u16L(0x0002)) {
 								MessageWriter w(buffer);
-								w.e8(att::Op::WriteReq);
+								w.e8(att::Op::WRITE_REQ);
 								w.u16L(characteristic.valueHandle);
 								w.u8(0);
 								co_await Ble::send(0, w.getLength(), buffer);
@@ -208,7 +208,7 @@ Coroutine scan() {
 									MessageReader r(length, buffer);
 									auto op = r.e8<att::Op>();
 									Terminal::out << dec(int(op)) << '\n';
-									if (op == att::Op::ErrorRsp) {
+									if (op == att::Op::ERROR_RSP) {
 										auto requestOp = r.e8<att::Op>();
 										auto requestHandle = r.u16L();
 

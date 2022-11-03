@@ -126,6 +126,7 @@ endif()
 
 if("nrf52" IN_LIST PLATFORM)
 	# Nordic nRF52
+	# https://interrupt.memfault.com/blog/how-to-write-linker-scripts-for-firmware
 	set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -L${CMAKE_SOURCE_DIR}/system/src/nrf52/system -T${CMAKE_SOURCE_DIR}/board/${BOARD}/link.ld")
 
 	# define platform
@@ -207,6 +208,8 @@ set(PROTOCOL
 	protocol/src/bt.hpp
 	protocol/src/bus.cpp
 	protocol/src/bus.hpp
+	protocol/src/crc.cpp
+	protocol/src/crc.hpp
 	protocol/src/crypt.cpp
 	protocol/src/crypt.hpp
 	protocol/src/DataBuffer.hpp
@@ -237,6 +240,12 @@ list(APPEND PROTOCOL ${TINYCRYPT})
 # drivers
 if(POSIX)
 	set(CALENDAR system/src/ClockTime.hpp system/src/Calendar.hpp system/src/posix/Calendar.cpp)
+	set(FLASH
+		system/src/Flash.hpp
+		system/src/Flash.cpp
+		system/src/posix/FlashImpl.hpp
+		system/src/posix/FlashImpl.cpp
+	)
 	set(LOOP system/src/Loop.hpp system/src/posix/Loop.cpp system/src/posix/Loop2.cpp)
 	set(NETWORK system/src/Network.hpp system/src/posix/Network.cpp)
 	set(OUTPUT system/src/Output.hpp system/src/posix/Output.cpp system/src/Debug.hpp)
@@ -244,14 +253,14 @@ if(POSIX)
 	set(SPI_MASTER
 		system/src/SpiMaster.hpp
 		system/src/SpiMaster.cpp
-		system/src/posix/PrintSpiMaster.hpp
-		system/src/posix/PrintSpiMaster.cpp
+		system/src/posix/SpiMasterImpl.hpp
+		system/src/posix/SpiMasterImpl.cpp
 	)
 	set(STORAGE
 		system/src/Storage.hpp
 		system/src/Storage.cpp
-		system/src/posix/FileStorage.hpp
-		system/src/posix/FileStorage.cpp
+		system/src/posix/StorageImpl.hpp
+		system/src/posix/StorageImpl.cpp
 	)
 	set(TERMINAL system/src/Terminal.hpp system/src/posix/Terminal.cpp)
 	set(TIMER system/src/SystemTime.hpp system/src/Timer.hpp system/src/posix/Timer.cpp)
@@ -265,14 +274,14 @@ if(EMU)
 	set(BUS_NODE
 		system/src/BusNode.hpp
 		system/src/BusNode.cpp
-		system/src/emu/BusNodeEmu.hpp
-		system/src/emu/BusNodeEmu.cpp
+		system/src/emu/BusNodeImpl.hpp
+		system/src/emu/BusNodeImpl.cpp
 	)
 	set(BUS_MASTER
 		system/src/BusMaster.hpp
 		system/src/BusMaster.cpp
-		system/src/emu/BusMasterEmu.hpp
-		system/src/emu/BusMasterEmu.cpp
+		system/src/emu/BusMasterImpl.hpp
+		system/src/emu/BusMasterImpl.cpp
 	)
 	set(INPUT system/src/Input.hpp system/src/emu/Input.hpp system/src/emu/Input.cpp)
 	set(LOOP
@@ -293,8 +302,8 @@ if(EMU)
 	set(QUADRATURE_DECODER
 		system/src/QuadratureDecoder.hpp
 		system/src/QuadratureDecoder.cpp
-		system/src/emu/QuadratureDecoderEmu.hpp
-		system/src/emu/QuadratureDecoderEmu.cpp
+		system/src/emu/QuadratureDecoderImpl.hpp
+		system/src/emu/QuadratureDecoderImpl.cpp
 	)
 	set(RADIO system/src/RadioDefs.hpp system/src/Radio.hpp system/src/emu/Radio.cpp)
 	set(RANDOM system/src/Random.hpp system/src/emu/Random.cpp)
@@ -316,11 +325,17 @@ if("nrf52" IN_LIST PLATFORM)
 	set(BUS_MASTER
 		system/src/BusMaster.hpp
 		system/src/BusMaster.cpp
-		system/src/nrf52/BusMasterDevice.hpp
-		system/src/nrf52/BusMasterDevice.cpp
+		system/src/nrf52/BusMasterImpl.hpp
+		system/src/nrf52/BusMasterImpl.cpp
 	)
 	set(CALENDAR system/src/ClockTime.hpp system/src/Calendar.hpp system/src/nrf52/Calendar.cpp)
 	set(INPUT system/src/Input.hpp system/src/nrf52/Input.cpp)
+	set(FLASH
+		system/src/Flash.hpp
+		system/src/Flash.cpp
+		system/src/nrf52/FlashImpl.hpp
+		system/src/nrf52/FlashImpl.cpp
+	)
 	set(LOOP
 		system/src/Loop.hpp system/src/nrf52/Loop.hpp
 		system/src/nrf52/Loop.cpp
@@ -331,16 +346,20 @@ if("nrf52" IN_LIST PLATFORM)
 	set(QUADRATURE_DECODER
 		system/src/QuadratureDecoder.hpp
 		system/src/QuadratureDecoder.cpp
-		system/src/nrf52/QuadratureDecoderDevice.hpp
-		system/src/nrf52/QuadratureDecoderDevice.cpp
+		system/src/nrf52/QuadratureDecoderImpl.hpp
+		system/src/nrf52/QuadratureDecoderImpl.cpp
 	)
 	set(RADIO system/src/RadioDefs.hpp system/src/Radio.hpp system/src/nrf52/Radio.cpp)
 	set(RANDOM system/src/Random.hpp system/src/nrf52/Random.cpp)
 	set(SPI_MASTER
 		system/src/SpiMaster.hpp
 		system/src/SpiMaster.cpp
-		system/src/nrf52/SpiMasterDevice.hpp
-		system/src/nrf52/SpiMasterDevice.cpp
+		system/src/nrf52/SpiMasterImpl.hpp
+		system/src/nrf52/SpiMasterImpl.cpp
+	)
+	set(STORAGE
+		system/src/Storage.hpp
+		system/src/Storage.cpp
 	)
 	set(TERMINAL system/src/Terminal.hpp system/src/nrf52/Terminal.cpp)
 	set(TIMER system/src/SystemTime.hpp system/src/Timer.hpp system/src/nrf52/Timer.cpp)
@@ -350,10 +369,11 @@ if("stm32f0" IN_LIST PLATFORM)
 	set(BUS_NODE
 		system/src/BusNode.hpp
 		system/src/BusNode.cpp
-		system/src/stm32f0/BusNodeDevice.hpp
-		system/src/stm32f0/BusNodeDevice.cpp
+		system/src/stm32f0/BusNodeImpl.hpp
+		system/src/stm32f0/BusNodeImpl.cpp
 	)
 	set(INPUT system/src/Input.hpp system/src/stm32f0/gpio.hpp system/src/stm32f0/Input.cpp)
+
 	set(LOOP
 		system/src/Loop.hpp
 		system/src/stm32f0/defs.hpp
@@ -365,8 +385,12 @@ if("stm32f0" IN_LIST PLATFORM)
 	set(SPI_MASTER
 		system/src/SpiMaster.hpp
 		system/src/SpiMaster.cpp
-		system/src/stm32f0/SpiMasterDevice.hpp
-		system/src/stm32f0/SpiMasterDevice.cpp
+		system/src/stm32f0/SpiMasterImpl.hpp
+		system/src/stm32f0/SpiMasterImpl.cpp
+	)
+	set(STORAGE
+		system/src/Storage.hpp
+		system/src/Storage.cpp
 	)
 	set(TERMINAL system/src/Terminal.hpp system/src/stm32f0/Terminal.cpp)
 	set(TIMER system/src/SystemTime.hpp system/src/Timer.hpp system/src/stm32f0/Timer.cpp)
@@ -377,6 +401,7 @@ set(SYSTEM
 	${BUS_NODE}
 	${BUS_MASTER}
 	${CALENDAR}
+	${FLASH}
 	${INPUT}
 	${LOOP}
 	${NETWORK}
@@ -390,8 +415,10 @@ set(SYSTEM
 	${TERMINAL}
 	${TIMER}
 	${USB_DEVICE}
-	system/src/FeRamCounters.cpp
-	system/src/FeRamCounters.hpp
+	system/src/FeRamStorage4.cpp
+	system/src/FeRamStorage4.hpp
+	system/src/FlashStorage.cpp
+	system/src/FlashStorage.hpp
 )
 source_group(system FILES ${SYSTEM})
 
@@ -633,6 +660,7 @@ endfunction()
 add_system_test_executable(Ble)
 add_system_test_executable(BusMaster)
 add_system_test_executable(Calendar)
+add_system_test_executable(Flash)
 add_system_test_executable(Input)
 add_system_test_executable(Network)
 add_system_test_executable(QuadratureDecoder)

@@ -1,12 +1,14 @@
 #pragma once
 
-#include <emu/BusMasterEmu.hpp>
-#include <emu/QuadratureDecoderEmu.hpp>
+#include <emu/BusMasterImpl.hpp>
+#include <emu/QuadratureDecoderImpl.hpp>
 #include <emu/SpiBME680.hpp>
 #include <emu/SpiSSD1309.hpp>
 #include <emu/SpiMR45Vxxx.hpp>
-#include <posix/FileStorage.hpp>
-#include <FeRamCounters.hpp>
+#include <posix/StorageImpl.hpp>
+#include <posix/FlashImpl.hpp>
+#include <FeRamStorage4.hpp>
+#include <FlashStorage.hpp>
 #include <util.hpp>
 
 
@@ -69,10 +71,15 @@ constexpr int DISPLAY_HEIGHT = 64;
 struct Drivers {
 	SpiBME680 airSensor;
 	SpiSSD1309 display{DISPLAY_WIDTH, DISPLAY_HEIGHT};
-	QuadratureDecoderEmu quadratureDecoder;
-	BusMasterEmu busMaster;
-	FileStorage storage{"storage.bin", 65536, 1024};
-	//FileStorage counters{"counters.bin", FERAM_SIZE / 10, 4};
+	QuadratureDecoderImpl quadratureDecoder;
+
+	BusMasterImpl busMaster;
+
+	//StorageImpl storage{"storage.bin", 0xffff, 1024};
+	FlashImpl flash{"flash.bin", 2, 4096, 4};
+	FlashStorage storage{flash};
+
+	//StorageImpl counters{"counters.bin", FERAM_SIZE / 10, 4};
 	SpiMR45Vxxx feRam{"feram.bin", FERAM_SIZE};
-	FeRamCounters<FERAM_SIZE> counters{feRam};
+	FeRamStorage4<FERAM_SIZE> counters{feRam};
 };

@@ -1,4 +1,4 @@
-#include "SpiMasterDevice.hpp"
+#include "SpiMasterImpl.hpp"
 #include "defs.hpp"
 #include <util.hpp>
 
@@ -85,9 +85,9 @@ constexpr int SPI_CR2 = SPI_CR2_DATA_SIZE(16)
 }
 
 
-// SpiMasterDevice
+// SpiMasterImpl
 
-SpiMasterDevice::SpiMasterDevice(int index, int sckPin, int mosiPin, int misoPin) {
+SpiMasterImpl::SpiMasterImpl(int index, int sckPin, int mosiPin, int misoPin) {
 	// configure SPI pins (driven low when SPI is disabled)
 	configureAlternateOutput(sckFunction(sckPin));
 	configureAlternateOutput(mosiFunction(mosiPin));
@@ -101,7 +101,7 @@ SpiMasterDevice::SpiMasterDevice(int index, int sckPin, int mosiPin, int misoPin
 	Loop::handlers.add(*this);
 }
 
-void SpiMasterDevice::handle() {
+void SpiMasterImpl::handle() {
 	if (TIM14->SR & TIM_SR_CC1IF) {
 	//if (SPI1->SR & SPI_SR_TXE) {
 		// set CS pin high
@@ -131,8 +131,8 @@ void SpiMasterDevice::handle() {
 	}
 }
 
-void SpiMasterDevice::startTransfer(const SpiMaster::Parameters &p) {
-	auto &channel = *reinterpret_cast<const SpiMasterDevice::Channel *>(p.config);
+void SpiMasterImpl::startTransfer(const SpiMaster::Parameters &p) {
+	auto &channel = *reinterpret_cast<const Channel *>(p.config);
 
 	// initialize SPI
 	RCC->APB2ENR = RCC->APB2ENR | RCC_APB2ENR_SPI1EN;
@@ -157,29 +157,29 @@ void SpiMasterDevice::startTransfer(const SpiMaster::Parameters &p) {
 }
 
 
-// SpiMasterDevice::Channel
+// SpiMasterImpl::Channel
 
-SpiMasterDevice::Channel::Channel(SpiMasterDevice &device, int csPin)
-	: device(device), csPin(csPin)
+SpiMasterImpl::Channel::Channel(SpiMasterImpl &master, int csPin)
+	: master(master), csPin(csPin)
 {
 	// configure CS pin: output, high on idle
 	gpio::setOutput(csPin, true);
 	gpio::configureOutput(csPin);
 }
 
-Awaitable<SpiMaster::Parameters> SpiMasterDevice::Channel::transfer(int writeCount, void const *writeData, int readCount,
+Awaitable<SpiMaster::Parameters> SpiMasterImpl::Channel::transfer(int writeCount, void const *writeData, int readCount,
 	void *readData)
 {
 	// start transfer immediately if SPI is idle
 	if ((TIM14->CR1 & TIM_CR1_CEN) == 0) {
 		Parameters parameters{this, writeCount, writeData, readCount, readData};
-		this->device.startTransfer(parameters);
+		this->master.startTransfer(parameters);
 	}
 
-	return {device.waitlist, this, writeCount, writeData, readCount, readData};
+	return {master.waitlist, this, writeCount, writeData, readCount, readData};
 }
 
-void SpiMasterDevice::Channel::transferBlocking(int writeCount, void const *writeData, int readCount, void *readData) {
+void SpiMasterImpl::Channel::transferBlocking(int writeCount, void const *writeData, int readCount, void *readData) {
 	// check if a transfer is running
 	bool running = (TIM14->CR1 & TIM_CR1_CEN) != 0;
 
@@ -190,7 +190,7 @@ void SpiMasterDevice::Channel::transferBlocking(int writeCount, void const *writ
 	}
 
 	Parameters parameters{this, writeCount, writeData, readCount, readData};
-	this->device.startTransfer(parameters);
+	this->master.startTransfer(parameters);
 
 	// wait for end of transfer
 	while (!(TIM14->SR & TIM_SR_CC1IF))

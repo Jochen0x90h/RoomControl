@@ -25,7 +25,7 @@ struct Parameters {
 void init();
 
 /**
- * Read an input directly without debounce filter
+ * READ an input directly without debounce filter
  * @param index index of input
  */
 bool read(int index);

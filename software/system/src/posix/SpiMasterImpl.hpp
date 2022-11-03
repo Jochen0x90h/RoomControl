@@ -4,11 +4,15 @@
 
 
 /**
- * Virtual channel to a slave device using a dedicated CS pin
+ * Implementation of an SPI master that simply writes info about the transfer operations to Terminal::out
  */
-class PrintSpiMaster : public SpiMaster, public Loop::Timeout {
+class SpiMasterImpl : public SpiMaster, public Loop::Timeout {
 public:
-	explicit PrintSpiMaster(std::string name) : name(std::move(name)) {
+	/**
+	 * Constructor
+	 * @param name name of the SPI master that appears in the printed messages
+	 */
+	explicit SpiMasterImpl(std::string name) : name(std::move(name)) {
 	}
 
 	Awaitable<Parameters> transfer(int writeCount, void const *writeData, int readCount, void *readData) override;

@@ -7,7 +7,7 @@
 /**
  * Implementation of SPI hardware interface for nrf52 platform
  */
-class SpiMasterDevice : public Loop::Handler2 {
+class SpiMasterImpl : public Loop::Handler2 {
 public:
 	/**
 	 * Constructor
@@ -17,7 +17,7 @@ public:
 	 * @param misoPin master in slave out pin
 	 * @param dcPin data/command pin e.g. for displays
 	 */
-	SpiMasterDevice(int index, int sckPin, int mosiPin, int misoPin, int dcPin = gpio::DISCONNECTED);
+	SpiMasterImpl(int index, int sckPin, int mosiPin, int misoPin, int dcPin = gpio::DISCONNECTED);
 
 	void handle() override;
 
@@ -40,13 +40,13 @@ public:
 		 * @param csPin chip select pin of the slave
 		 * @param writeOnly ture if we only write data and can use MISO as DC (data/command) signal (e.g. for a display)
 		 */
-		Channel(SpiMasterDevice &device, int csPin, bool writeOnly = false);
+		Channel(SpiMasterImpl &master, int csPin, bool writeOnly = false);
 
 		Awaitable<Parameters> transfer(int writeCount, const void *writeData, int readCount, void *readData) override;
 		void transferBlocking(int writeCount, const void *writeData, int readCount, void *readData) override;
 
 
-		SpiMasterDevice &device;
+		SpiMasterImpl &master;
 		int csPin;
 		bool writeOnly;
 	};

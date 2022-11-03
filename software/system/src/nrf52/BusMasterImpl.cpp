@@ -1,4 +1,4 @@
-#include "BusMasterDevice.hpp"
+#include "BusMasterImpl.hpp"
 #include "Loop.hpp"
 #include "defs.hpp"
 #include "gpio.hpp"
@@ -25,10 +25,10 @@
 		NRF_TIMER1
 */
 namespace {
-BusMasterDevice *busMaster[1];
+BusMasterImpl *busMaster[1];
 }
 
-BusMasterDevice::BusMasterDevice(int rxPin, int txPin) : txPin(txPin) {
+BusMasterImpl::BusMasterImpl(int rxPin, int txPin) : txPin(txPin) {
 	this->uart = NRF_UART0;
 	this->timer = NRF_TIMER1;
 	busMaster[0] = this;
@@ -56,15 +56,15 @@ BusMasterDevice::BusMasterDevice(int rxPin, int txPin) : txPin(txPin) {
 //	Loop::handlers.add(*this);
 }
 
-Awaitable<BusMaster::ReceiveParameters> BusMasterDevice::receive(int &length, uint8_t *data) {
+Awaitable<BusMaster::ReceiveParameters> BusMasterImpl::receive(int &length, uint8_t *data) {
 	return {this->receiveWaitlist, &length, data};
 }
 
-Awaitable<BusMaster::SendParameters> BusMasterDevice::send(int length, uint8_t const *data) {
+Awaitable<BusMaster::SendParameters> BusMasterImpl::send(int length, uint8_t const *data) {
 	return {this->sendWaitlist, length, data};
 }
 
-void BusMasterDevice::handle() {
+void BusMasterImpl::handle() {
 	if (rxReady) {
 		rxReady = false;
 		this->onTransferred(this->rxIndex);
@@ -78,7 +78,7 @@ void BusMasterDevice::handle() {
 	}
 }
 
-void BusMasterDevice::uartIrqHandler() {
+void BusMasterImpl::uartIrqHandler() {
 	if (this->uart->EVENTS_TXDRDY) {
 		this->uart->EVENTS_TXDRDY = 0;
 
@@ -151,7 +151,7 @@ void BusMasterDevice::uartIrqHandler() {
 	}
 }
 
-void BusMasterDevice::timerIrqHandler() {
+void BusMasterImpl::timerIrqHandler() {
 	if (this->timer->EVENTS_COMPARE[0]) {
 		this->timer->EVENTS_COMPARE[0] = 0;
 

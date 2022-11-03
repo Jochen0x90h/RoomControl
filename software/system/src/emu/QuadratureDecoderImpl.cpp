@@ -1,18 +1,18 @@
-#include "QuadratureDecoderEmu.hpp"
+#include "QuadratureDecoderImpl.hpp"
 #include "Input.hpp"
 #include <boardConfig.hpp>
 
 
-QuadratureDecoderEmu::QuadratureDecoderEmu() {
+QuadratureDecoderImpl::QuadratureDecoderImpl() {
 	// add to list of handlers
 	Loop::handlers.add(*this);
 }
 
-Awaitable<QuadratureDecoder::Parameters> QuadratureDecoderEmu::change(int8_t& delta) {
+Awaitable<QuadratureDecoder::Parameters> QuadratureDecoderImpl::change(int8_t& delta) {
 	return {this->waitlist, delta};
 }
 
-void QuadratureDecoderEmu::handle(Gui &gui) {
+void QuadratureDecoderImpl::handle(Gui &gui) {
 	// draw poti on gui using random id
 	auto poti = gui.poti(0xadead869);
 

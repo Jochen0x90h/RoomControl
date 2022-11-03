@@ -1,4 +1,4 @@
-#include "SpiMasterDevice.hpp"
+#include "SpiMasterImpl.hpp"
 #include "defs.hpp"
 #include <util.hpp>
 
@@ -17,7 +17,7 @@
 
 // SpiMasterDevice
 
-SpiMasterDevice::SpiMasterDevice(int index, int sckPin, int mosiPin, int misoPin, int dcPin)
+SpiMasterImpl::SpiMasterImpl(int index, int sckPin, int mosiPin, int misoPin, int dcPin)
 	: misoPin(misoPin), sharedPin(misoPin == dcPin)
 {
 	// configure SCK pin: output, low on idle
@@ -54,7 +54,7 @@ SpiMasterDevice::SpiMasterDevice(int index, int sckPin, int mosiPin, int misoPin
 	Loop::handlers.add(*this);
 }
 
-void SpiMasterDevice::handle() {
+void SpiMasterImpl::handle() {
 	if (NRF_SPIM3->EVENTS_END) {
 		// clear pending interrupt flags at peripheral and NVIC
 		NRF_SPIM3->EVENTS_END = 0;
@@ -75,8 +75,8 @@ void SpiMasterDevice::handle() {
 	}
 }
 
-void SpiMasterDevice::startTransfer(const SpiMaster::Parameters &p) {
-	auto &channel = *reinterpret_cast<const SpiMasterDevice::Channel *>(p.config);
+void SpiMasterImpl::startTransfer(const SpiMaster::Parameters &p) {
+	auto &channel = *reinterpret_cast<const Channel *>(p.config);
 
 	// set CS pin
 	NRF_SPIM3->PSEL.CSN = channel.csPin;
@@ -112,29 +112,29 @@ void SpiMasterDevice::startTransfer(const SpiMaster::Parameters &p) {
 }
 
 
-// SpiMasterDevice::Channel
+// SpiMasterImpl::Channel
 
-SpiMasterDevice::Channel::Channel(SpiMasterDevice &device, int csPin, bool writeOnly)
-	: device(device), csPin(csPin), writeOnly(writeOnly)
+SpiMasterImpl::Channel::Channel(SpiMasterImpl &master, int csPin, bool writeOnly)
+	: master(master), csPin(csPin), writeOnly(writeOnly)
 {
 	// configure CS pin: output, high on idle
 	gpio::setOutput(csPin, true);
 	gpio::configureOutput(csPin);
 }
 
-Awaitable<SpiMaster::Parameters> SpiMasterDevice::Channel::transfer(int writeCount, const void *writeData, int readCount,
+Awaitable<SpiMaster::Parameters> SpiMasterImpl::Channel::transfer(int writeCount, const void *writeData, int readCount,
 	void *readData)
 {
 	// start transfer immediately if SPI is idle
 	if (!NRF_SPIM3->ENABLE) {
 		Parameters parameters{this, writeCount, writeData, readCount, readData};
-		this->device.startTransfer(parameters);
+		this->master.startTransfer(parameters);
 	}
 
-	return {device.waitlist, this, writeCount, writeData, readCount, readData};
+	return {master.waitlist, this, writeCount, writeData, readCount, readData};
 }
 
-void SpiMasterDevice::Channel::transferBlocking(int writeCount, const void *writeData, int readCount, void *readData) {
+void SpiMasterImpl::Channel::transferBlocking(int writeCount, const void *writeData, int readCount, void *readData) {
 	// check if a transfer is running
 	bool running = NRF_SPIM3->ENABLE;
 
@@ -145,7 +145,7 @@ void SpiMasterDevice::Channel::transferBlocking(int writeCount, const void *writ
 	}
 
 	Parameters parameters{this, writeCount, writeData, readCount, readData};
-	this->device.startTransfer(parameters);
+	this->master.startTransfer(parameters);
 
 	// wait for end of transfer
 	while (!NRF_SPIM3->EVENTS_END)

@@ -610,7 +610,7 @@ typedef struct {
   __IOM uint32_t  ADDR;                         /*!< (@ 0x00000000) Description cluster: Configure the word-aligned
                                                                     start address of region n to protect                       */
   __IOM uint32_t  SIZE;                         /*!< (@ 0x00000004) Description cluster: Size of region to protect
-                                                                    counting from address ACL[n].ADDR. Write
+                                                                    counting from address ACL[n].ADDR. WRITE
                                                                     '0' as no effect.                                          */
   __IOM uint32_t  PERM;                         /*!< (@ 0x00000008) Description cluster: Access permissions for region
                                                                     n as defined by start address ACL[n].ADDR
@@ -649,9 +649,9 @@ typedef struct {
   * @brief MWU_EVENTS_REGION [EVENTS_REGION] (Peripheral events.)
   */
 typedef struct {
-  __IOM uint32_t  WA;                           /*!< (@ 0x00000000) Description cluster: Write access to region n
+  __IOM uint32_t  WA;                           /*!< (@ 0x00000000) Description cluster: WRITE access to region n
                                                                     detected                                                   */
-  __IOM uint32_t  RA;                           /*!< (@ 0x00000004) Description cluster: Read access to region n
+  __IOM uint32_t  RA;                           /*!< (@ 0x00000004) Description cluster: READ access to region n
                                                                     detected                                                   */
 } MWU_EVENTS_REGION_Type;                       /*!< Size = 8 (0x8)                                                            */
 
@@ -660,9 +660,9 @@ typedef struct {
   * @brief MWU_EVENTS_PREGION [EVENTS_PREGION] (Peripheral events.)
   */
 typedef struct {
-  __IOM uint32_t  WA;                           /*!< (@ 0x00000000) Description cluster: Write access to peripheral
+  __IOM uint32_t  WA;                           /*!< (@ 0x00000000) Description cluster: WRITE access to peripheral
                                                                     region n detected                                          */
-  __IOM uint32_t  RA;                           /*!< (@ 0x00000004) Description cluster: Read access to peripheral
+  __IOM uint32_t  RA;                           /*!< (@ 0x00000004) Description cluster: READ access to peripheral
                                                                     region n detected                                          */
 } MWU_EVENTS_PREGION_Type;                      /*!< Size = 8 (0x8)                                                            */
 
@@ -834,7 +834,7 @@ typedef struct {
 typedef struct {
   __IOM uint32_t  SRC;                          /*!< (@ 0x00000000) Flash memory source address                                */
   __IOM uint32_t  DST;                          /*!< (@ 0x00000004) RAM destination address                                    */
-  __IOM uint32_t  CNT;                          /*!< (@ 0x00000008) Read transfer length                                       */
+  __IOM uint32_t  CNT;                          /*!< (@ 0x00000008) READ transfer length                                       */
 } QSPI_READ_Type;                               /*!< Size = 12 (0xc)                                                           */
 
 
@@ -844,7 +844,7 @@ typedef struct {
 typedef struct {
   __IOM uint32_t  DST;                          /*!< (@ 0x00000000) Flash destination address                                  */
   __IOM uint32_t  SRC;                          /*!< (@ 0x00000004) RAM source address                                         */
-  __IOM uint32_t  CNT;                          /*!< (@ 0x00000008) Write transfer length                                      */
+  __IOM uint32_t  CNT;                          /*!< (@ 0x00000008) WRITE transfer length                                      */
 } QSPI_WRITE_Type;                              /*!< Size = 12 (0xc)                                                           */
 
 
@@ -1070,10 +1070,10 @@ typedef struct {                                /*!< (@ 0x40000000) POWER Struct
 
 typedef struct {                                /*!< (@ 0x50000000) P0 Structure                                               */
   __IM  uint32_t  RESERVED[321];
-  __IOM uint32_t  OUT;                          /*!< (@ 0x00000504) Write GPIO port                                            */
+  __IOM uint32_t  OUT;                          /*!< (@ 0x00000504) WRITE GPIO port                                            */
   __IOM uint32_t  OUTSET;                       /*!< (@ 0x00000508) Set individual bits in GPIO port                           */
   __IOM uint32_t  OUTCLR;                       /*!< (@ 0x0000050C) Clear individual bits in GPIO port                         */
-  __IM  uint32_t  IN;                           /*!< (@ 0x00000510) Read GPIO port                                             */
+  __IM  uint32_t  IN;                           /*!< (@ 0x00000510) READ GPIO port                                             */
   __IOM uint32_t  DIR;                          /*!< (@ 0x00000514) Direction of GPIO pins                                     */
   __IOM uint32_t  DIRSET;                       /*!< (@ 0x00000518) DIR set register                                           */
   __IOM uint32_t  DIRCLR;                       /*!< (@ 0x0000051C) DIR clear register                                         */
@@ -1588,8 +1588,8 @@ typedef struct {                                /*!< (@ 0x40003000) TWIS0 Struct
   __IOM uint32_t  EVENTS_RXSTARTED;             /*!< (@ 0x0000014C) Receive sequence started                                   */
   __IOM uint32_t  EVENTS_TXSTARTED;             /*!< (@ 0x00000150) Transmit sequence started                                  */
   __IM  uint32_t  RESERVED6[4];
-  __IOM uint32_t  EVENTS_WRITE;                 /*!< (@ 0x00000164) Write command received                                     */
-  __IOM uint32_t  EVENTS_READ;                  /*!< (@ 0x00000168) Read command received                                      */
+  __IOM uint32_t  EVENTS_WRITE;                 /*!< (@ 0x00000164) WRITE command received                                     */
+  __IOM uint32_t  EVENTS_READ;                  /*!< (@ 0x00000168) READ command received                                      */
   __IM  uint32_t  RESERVED7[37];
   __IOM uint32_t  SHORTS;                       /*!< (@ 0x00000200) Shortcuts between local events and tasks                   */
   __IM  uint32_t  RESERVED8[63];
@@ -2084,9 +2084,9 @@ typedef struct {                                /*!< (@ 0x40010000) WDT Structur
 typedef struct {                                /*!< (@ 0x40012000) QDEC Structure                                             */
   __OM  uint32_t  TASKS_START;                  /*!< (@ 0x00000000) Task starting the quadrature decoder                       */
   __OM  uint32_t  TASKS_STOP;                   /*!< (@ 0x00000004) Task stopping the quadrature decoder                       */
-  __OM  uint32_t  TASKS_READCLRACC;             /*!< (@ 0x00000008) Read and clear ACC and ACCDBL                              */
-  __OM  uint32_t  TASKS_RDCLRACC;               /*!< (@ 0x0000000C) Read and clear ACC                                         */
-  __OM  uint32_t  TASKS_RDCLRDBL;               /*!< (@ 0x00000010) Read and clear ACCDBL                                      */
+  __OM  uint32_t  TASKS_READCLRACC;             /*!< (@ 0x00000008) READ and clear ACC and ACCDBL                              */
+  __OM  uint32_t  TASKS_RDCLRACC;               /*!< (@ 0x0000000C) READ and clear ACC                                         */
+  __OM  uint32_t  TASKS_RDCLRDBL;               /*!< (@ 0x00000010) READ and clear ACCDBL                                      */
   __IM  uint32_t  RESERVED[59];
   __IOM uint32_t  EVENTS_SAMPLERDY;             /*!< (@ 0x00000100) Event being generated for every new sample value
                                                                     written to the SAMPLE register                             */

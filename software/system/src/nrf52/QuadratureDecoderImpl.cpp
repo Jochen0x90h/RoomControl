@@ -1,4 +1,4 @@
-#include "QuadratureDecoderDevice.hpp"
+#include "QuadratureDecoderImpl.hpp"
 #include "defs.hpp"
 #include "gpio.hpp"
 
@@ -11,7 +11,7 @@
 	Resources:
 		NRF_QDEC
 */
-QuadratureDecoderDevice::QuadratureDecoderDevice(int aPin, int bPin) {
+QuadratureDecoderImpl::QuadratureDecoderImpl(int aPin, int bPin) {
 	configureInput(aPin, gpio::Pull::UP);
 	configureInput(bPin, gpio::Pull::UP);
 
@@ -30,11 +30,11 @@ QuadratureDecoderDevice::QuadratureDecoderDevice(int aPin, int bPin) {
 	Loop::handlers.add(*this);
 }
 
-Awaitable<QuadratureDecoder::Parameters> QuadratureDecoderDevice::change(int8_t& delta) {
+Awaitable<QuadratureDecoder::Parameters> QuadratureDecoderImpl::change(int8_t& delta) {
 	return {this->waitlist, delta};
 }
 
-void QuadratureDecoderDevice::handle() {
+void QuadratureDecoderImpl::handle() {
 	if (NRF_QDEC->EVENTS_REPORTRDY) {
 		// clear pending interrupt flags at peripheral and NVIC
 		NRF_QDEC->EVENTS_REPORTRDY = 0;

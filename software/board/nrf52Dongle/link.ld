@@ -5,7 +5,7 @@ GROUP(-lgcc -lc -lnosys)
 
 MEMORY
 {
-  FLASH (rx) : ORIGIN = 0x1000, LENGTH = 0xdf000
+  FLASH (rx) : ORIGIN = 0x1000, LENGTH = 0xdf000 - 0x20000
   RAM (rwx) :  ORIGIN = 0x20000008, LENGTH = 0x3fff8
 }
 
@@ -51,7 +51,7 @@ SECTIONS
     KEEP(*(SORT(.log_backends*)))
     PROVIDE(__stop_log_backends = .);
   } > FLASH
-    .nrf_balloc :
+  .nrf_balloc :
   {
     PROVIDE(__start_nrf_balloc = .);
     KEEP(*(.nrf_balloc))

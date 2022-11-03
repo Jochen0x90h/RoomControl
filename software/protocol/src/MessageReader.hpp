@@ -104,7 +104,7 @@ public:
 	}
 
 	/**
-	 * Read a buffer with given length
+	 * READ a buffer with given length
 	 * @tparam N length of buffer
 	 * @return buffer
 	 */
@@ -134,7 +134,7 @@ public:
 	}
 
 	/**
-	 * Read string until end of data
+	 * READ string until end of data
 	 * @return string
 	 */
 	String string() {
@@ -144,7 +144,7 @@ public:
 	}
 
 	/**
-	 * Read string with 8 bit length
+	 * READ string with 8 bit length
 	 * @return string
 	 */
 	String string8() {
@@ -155,7 +155,7 @@ public:
 	}
 
 	/**
-	 * Read string with given length
+	 * READ string with given length
 	 * @param length length of string
 	 * @return string
 	 */
@@ -166,7 +166,7 @@ public:
 	}
 
 	/**
-	 * Read a string that represents a floating point number (e.g. 1.3, no exponential notation)
+	 * READ a string that represents a floating point number (e.g. 1.3, no exponential notation)
 	 * @return string containing a floating point number
 	 */
 	String floatString() {

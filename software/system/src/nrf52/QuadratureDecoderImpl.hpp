@@ -4,14 +4,14 @@
 #include "Loop.hpp"
 
 
-class QuadratureDecoderDevice : public QuadratureDecoder, public Loop::Handler2 {
+class QuadratureDecoderImpl : public QuadratureDecoder, public Loop::Handler2 {
 public:
 	/**
 	 * Constructor
 	 * @param aPin pin of input A of quadrature decoder
 	 * @param bPin pin of input A of quadrature decoder
 	 */
-	QuadratureDecoderDevice(int aPin, int bPin);
+	QuadratureDecoderImpl(int aPin, int bPin);
 
 	Awaitable<Parameters> change(int8_t& delta) override;
 

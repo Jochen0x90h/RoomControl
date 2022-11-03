@@ -1,7 +1,4 @@
 #include "SpiMR45Vxxx.hpp"
-#include <fcntl.h>
-#include <sys/stat.h>
-#include <unistd.h>
 
 
 constexpr uint8_t FERAM_WREN = 6; // write enable
@@ -13,28 +10,15 @@ constexpr uint8_t FERAM_WRITE = 2; // write to memory array
 constexpr uint8_t FERAM_FSTRD = 11; // fast read from memory array
 constexpr uint8_t FERAM_RDID = 0x9f; // read device id
 
-inline int fsize(int fd) {
-	struct stat stat;
-	fstat(fd, &stat);
-	return stat.st_size;
-}
 
-SpiMR45Vxxx::SpiMR45Vxxx(std::string const &filename, int size) : size(size) {
-	this->file = open(filename.c_str(), O_RDWR | O_CREAT, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH);
-
-	// fill with 0xff
-	int fileSize = fsize(this->file);
-	uint8_t buffer[16] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
-	for (int i = fileSize; i < size; i += 16) {
-		pwrite(this->file, buffer, 16, i);
-	}
+SpiMR45Vxxx::SpiMR45Vxxx(std::string const &filename, int size)
+	: file(filename, File::Mode::READ_WRITE), size(size)
+{
+	// set size of emulated FeRam and initialize to 0xff if necessary
+	this->file.resize(size, 0xff);
 
 	// add to list of handlers
 	Loop::handlers.add(*this);
-}
-
-SpiMR45Vxxx::~SpiMR45Vxxx() {
-	close(this->file);
 }
 
 Awaitable <SpiMaster::Parameters> SpiMR45Vxxx::transfer(int writeCount, void const *writeData, int readCount, void *readData) {
@@ -52,14 +36,14 @@ void SpiMR45Vxxx::transferBlocking(int writeCount, void const *writeData, int re
 		int addr = (w[1] << 8) | w[2];
 		int count = readCount - 3;
 		assert(addr + count <= this->size);
-		pread(this->file, r + 3, count, addr);
+		file.read(addr, count, r + 3);
 		break;
 	}
 	case FERAM_WRITE: {
 		int addr = (w[1] << 8) | w[2];
 		int count = writeCount - 3;
 		assert(addr + count <= this->size);
-		pwrite(this->file, w + 3, count, addr);
+		file.write(addr, count, w + 3);
 		break;
 	}
 	}

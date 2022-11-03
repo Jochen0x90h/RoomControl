@@ -6,6 +6,7 @@
 #include <util.hpp>
 #include <nrf52/system/nrf52840.h>
 #include "nrf52/defs.hpp"
+#include "nrf52/FlashImpl.hpp"
 
 
 // Test for USB device.
@@ -88,6 +89,9 @@ static const UsbConfiguration configurationDescriptor = {
 constexpr int bufferSize = 128;
 uint8_t buffer[bufferSize] __attribute__((aligned(4)));
 
+//FlashImpl flash{0xe0000 - 0x20000, 2, 4096};
+//uint8_t writeData[] = {0x12, 0x34, 0x56, 0x78, 0x9a};
+
 // echo data from host
 Coroutine echo() {
 	while (true) {
@@ -125,6 +129,19 @@ Coroutine echo() {
 		buffer[2] = getInterruptPriority(TIMER0_IRQn);
 		buffer[3] = getInterruptPriority(RNG_IRQn);
 		co_await UsbDevice::send(1, 4, buffer);
+
+		// debug: send nrf5252840 UICR.NRFFW[0]
+		uint32_t offset = NRF_UICR->NRFFW[0];
+		buffer[0] = offset;
+		buffer[1] = offset >> 8;
+		buffer[2] = offset >> 16;
+		buffer[3] = offset >> 24;
+		co_await UsbDevice::send(1, 4, buffer);
+
+		// debug: read from flash
+		flash.readBlocking(0, 4, buffer);
+		buffer[4] = array::equal(4, writeData, buffer);
+		co_await UsbDevice::send(1, 5, buffer);
 		*/
 
 		// clear green led and toggle blue led to indicate activity
@@ -156,6 +173,8 @@ int main(void) {
 			switch (Request(bRequest)) {
 			case Request::RED:
 				Debug::setRedLed(wValue != 0);
+				//flash.eraseSectorBlocking(0);
+				//flash.writeBlocking(0, 4, writeData + 1);
 				break;
 			case Request::GREEN:
 				Debug::setGreenLed(wIndex != 0);

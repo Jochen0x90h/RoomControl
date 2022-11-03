@@ -1,4 +1,4 @@
-#include "BusMasterEmu.hpp"
+#include "BusMasterImpl.hpp"
 #include "StringBuffer.hpp"
 #include "StringOperators.hpp"
 #include <crypt.hpp>
@@ -32,20 +32,20 @@ const PlugType blindPlugs[] = {BLIND, BLIND};
 const PlugType temperaturePlugs[] = {PlugType::PHYSICAL_TEMPERATURE_MEASURED_ROOM_OUT};
 
 // device 1
-const BusMasterEmu::Endpoint endpoint1a[] = {rockerPlugs, lightPlugs};
-const BusMasterEmu::Endpoint endpoint1b[] = {device1Plugs};//, blindPlugs};
+const BusMasterImpl::Endpoint endpoint1a[] = {rockerPlugs, lightPlugs};
+const BusMasterImpl::Endpoint endpoint1b[] = {device1Plugs};//, blindPlugs};
 
 // device 2
-const BusMasterEmu::Endpoint endpoint2[] = {buttonPlugs, rockerPlugs, blindPlugs, lightPlugs};
+const BusMasterImpl::Endpoint endpoint2[] = {buttonPlugs, rockerPlugs, blindPlugs, lightPlugs};
 
 // device 3
-const BusMasterEmu::Endpoint endpoint3a[] = {temperaturePlugs};
+const BusMasterImpl::Endpoint endpoint3a[] = {temperaturePlugs};
 
 
-BusMasterEmu::Device devices[] = {
+BusMasterImpl::Device devices[] = {
 	{0x00000001, {endpoint1a, endpoint1b}},
 	{0x00000002, {endpoint2,  endpoint2}},
-	{0x00000003, {endpoint3a, Array<BusMasterEmu::Endpoint>()}},
+	{0x00000003, {endpoint3a, Array<BusMasterImpl::Endpoint>()}},
 };
 
 
@@ -57,7 +57,7 @@ inline int fsize(int fd) {
 
 } // namespace
 
-BusMasterEmu::BusMasterEmu() {
+BusMasterImpl::BusMasterImpl() {
 	// load permanent configuration of devices
 	char const *filename = "bus.bin";
 	this->file = open(filename, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH);
@@ -89,15 +89,15 @@ BusMasterEmu::BusMasterEmu() {
 	Loop::handlers.add(*this);
 }
 
-Awaitable<BusMaster::ReceiveParameters> BusMasterEmu::receive(int &length, uint8_t *data) {
+Awaitable<BusMaster::ReceiveParameters> BusMasterImpl::receive(int &length, uint8_t *data) {
 	return {this->receiveWaitlist, &length, data};
 }
 
-Awaitable<BusMaster::SendParameters> BusMasterEmu::send(int length, uint8_t const *data) {
+Awaitable<BusMaster::SendParameters> BusMasterImpl::send(int length, uint8_t const *data) {
 	return {this->sendWaitlist, length, data};
 }
 
-void BusMasterEmu::handle(Gui &gui) {
+void BusMasterImpl::handle(Gui &gui) {
 	// handle pending send operations
 	this->sendWaitlist.resumeFirst([this](SendParameters &p) {
 		if (p.length < 2)
@@ -397,7 +397,7 @@ void BusMasterEmu::handle(Gui &gui) {
 	}
 }
 
-void BusMasterEmu::setHeader(bus::MessageWriter &w, Device &device) {
+void BusMasterImpl::setHeader(bus::MessageWriter &w, Device &device) {
 	w.setHeader();
 
 	// encoded address
@@ -410,7 +410,7 @@ void BusMasterEmu::setHeader(bus::MessageWriter &w, Device &device) {
 	w.setMessage();
 }
 
-void BusMasterEmu::sendToMaster(bus::MessageWriter &w, Device &device) {
+void BusMasterImpl::sendToMaster(bus::MessageWriter &w, Device &device) {
 	// encrypt
 	Nonce nonce(device.persistentState.address, device.persistentState.securityCounter);
 	w.encrypt(4, nonce, device.persistentState.aesKey);

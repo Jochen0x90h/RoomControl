@@ -1,4 +1,4 @@
-#include "FeRamCounters.hpp"
+#include "FeRamStorage4.hpp"
 #include <Terminal.hpp>
 #include <StringOperators.hpp>
 #include <util.hpp>
@@ -34,52 +34,52 @@ struct Resumer {
 	Barrier<> &barrier;
 };
 
-// FeRamCounters
+// FeRamStorage4Base
 
-FeRamCountersBase::FeRamCountersBase(SpiMaster &spi, int maxElementCount, uint8_t *sequenceCounters)
-	: spi(spi), maxElementCount(maxElementCount), sequenceCounters(sequenceCounters)
+FeRamStorage4Base::FeRamStorage4Base(SpiMaster &spi, int maxId, uint8_t *sequenceCounters)
+	: spi(spi), maxId(maxId), sequenceCounters(sequenceCounters)
 {
 	// start coroutines
 	reader();
 	writer();
 }
 
-Awaitable<Storage::ReadParameters> FeRamCountersBase::read(int index, int &size, void *data, Status &status) {
-	if (index >= this->maxElementCount) {
+Awaitable<Storage::ReadParameters> FeRamStorage4Base::read(int id, int &size, void *data, Status &status) {
+	if (id > this->maxId) {
 		assert(false);
 		size = 0;
-		status = Status::ELEMENT_COUNT_EXCEEDED;
+		status = Status::INVALID_ID;
 		return {};
 	}
 	Resumer r(this->readBarrier);
-	return {this->readWaitlist, index, &size, data, &status};
+	return {this->readWaitlist, id, &size, data, &status};
 }
 
-Awaitable<Storage::WriteParameters> FeRamCountersBase::write(int index, int size, void const *data, Status &status) {
-	if (index >= this->maxElementCount) {
+Awaitable<Storage::WriteParameters> FeRamStorage4Base::write(int id, int size, void const *data, Status &status) {
+	if (id > this->maxId) {
 		assert(false);
-		status = Status::ELEMENT_COUNT_EXCEEDED;
+		status = Status::INVALID_ID;
 		return {};
 	}
 	if (size > 4) {
 		assert(false);
-		status = Status::ELEMENT_SIZE_EXCEEDED;
+		status = Status::DATA_SIZE_EXCEEDED;
 		return {};
 	}
 	Resumer r(this->writeBarrier);
-	return {this->writeWaitlist, index, size, data, &status};
+	return {this->writeWaitlist, id, size, data, &status};
 }
 
-Awaitable<Storage::ClearParameters> FeRamCountersBase::clear(Status &status) {
+Awaitable<Storage::ClearParameters> FeRamStorage4Base::clear(Status &status) {
 	Resumer r(this->clearBarrier);
 	return {this->clearWaitlist, &status};
 }
 
-Storage::Status FeRamCountersBase::readBlocking(int index, int &size, void *data) {
-	if (index >= this->maxElementCount) {
+Storage::Status FeRamStorage4Base::readBlocking(int index, int &size, void *data) {
+	if (index > this->maxId) {
 		assert(false);
 		size = 0;
-		return Status::ELEMENT_COUNT_EXCEEDED;
+		return Status::INVALID_ID;
 	}
 
 	// read all 10 bytes for the given id into a buffer
@@ -94,14 +94,14 @@ Storage::Status FeRamCountersBase::readBlocking(int index, int &size, void *data
 	return readBuffer(size, data, index, buffer + 3);
 }
 
-Storage::Status FeRamCountersBase::writeBlocking(int index, int size, void const *data) {
-	if (index >= this->maxElementCount) {
+Storage::Status FeRamStorage4Base::writeBlocking(int index, int size, void const *data) {
+	if (index > this->maxId) {
 		assert(false);
-		return Status::ELEMENT_COUNT_EXCEEDED;
+		return Status::INVALID_ID;
 	}
 	if (size > 4) {
 		assert(false);
-		return Status::ELEMENT_SIZE_EXCEEDED;
+		return Status::DATA_SIZE_EXCEEDED;
 	}
 
 	// write value according to lsb of sequenceCounter
@@ -118,12 +118,12 @@ Storage::Status FeRamCountersBase::writeBlocking(int index, int size, void const
 	return Status::OK;
 }
 
-Storage::Status FeRamCountersBase::clearBlocking() {
+Storage::Status FeRamStorage4Base::clearBlocking() {
 
 	return Status::OK;
 }
 
-Coroutine FeRamCountersBase::reader() {
+Coroutine FeRamStorage4Base::reader() {
 	while (true) {
 		co_await this->readBarrier.wait();
 
@@ -131,7 +131,7 @@ Coroutine FeRamCountersBase::reader() {
 			ReadParameters &p = this->readWaitlist.getFirst();
 
 			// read all 10 bytes for the given id
-			int address = p.index * 10;
+			int address = p.id * 10;
 			uint8_t hi = address >> 8;
 			uint8_t lo = address;
 			uint8_t command[3] = {FERAM_READ, hi, lo};
@@ -140,14 +140,14 @@ Coroutine FeRamCountersBase::reader() {
 
 			// resume coroutine that waits for the read operation
 			this->readWaitlist.resumeFirst([this, &buffer](ReadParameters &p) {
-				*p.status = readBuffer(*p.size, p.data, p.index, buffer);
+				*p.status = readBuffer(*p.size, p.data, p.id, buffer);
 				return true;
 			});
 		}
 	}
 }
 
-Coroutine FeRamCountersBase::writer() {
+Coroutine FeRamStorage4Base::writer() {
 	while (true) {
 		co_await this->writeBarrier.wait();
 
@@ -174,7 +174,7 @@ Coroutine FeRamCountersBase::writer() {
 	}
 }
 
-Storage::Status FeRamCountersBase::readBuffer(int &size, void *data, int index, uint8_t const *buffer) {
+Storage::Status FeRamStorage4Base::readBuffer(int &size, void *data, int index, uint8_t const *buffer) {
 	// check if a value is valid
 	auto c1 = buffer[4];
 	auto c2 = buffer[9];

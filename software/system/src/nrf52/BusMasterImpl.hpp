@@ -6,12 +6,12 @@
 #include <functional>
 
 
-class BusMasterDevice : public BusMaster, public Loop::Handler2 {
+class BusMasterImpl : public BusMaster, public Loop::Handler2 {
 public:
 	/**
 	 * Constructor
 	 */
-	BusMasterDevice(int rxPin, int txPin);
+	BusMasterImpl(int rxPin, int txPin);
 
 	Awaitable<ReceiveParameters> receive(int &length, uint8_t *data) override;
 	Awaitable<SendParameters> send(int length, uint8_t const *data) override;

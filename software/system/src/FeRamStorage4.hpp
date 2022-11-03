@@ -1,21 +1,17 @@
 #include <Storage.hpp>
 #include <SpiMaster.hpp>
-#include <appConfig.hpp>
 
 
-/**
- * Storage for counters that have a size of up to 4 bytes
- */
-class FeRamCountersBase : public Storage {
+class FeRamStorage4Base : public Storage {
 public:
-	FeRamCountersBase(SpiMaster &spi, int maxElementCount, uint8_t *sequenceCounters);
+	FeRamStorage4Base(SpiMaster &spi, int maxId, uint8_t *sequenceCounters);
 
-	[[nodiscard]] Awaitable<ReadParameters> read(int index, int &size, void *data, Status &status) override;
-	[[nodiscard]] Awaitable<WriteParameters> write(int index, int size, void const *data, Status &status) override;
+	[[nodiscard]] Awaitable<ReadParameters> read(int id, int &size, void *data, Status &status) override;
+	[[nodiscard]] Awaitable<WriteParameters> write(int id, int size, void const *data, Status &status) override;
 	[[nodiscard]] Awaitable<ClearParameters> clear(Status &status) override;
 
-	Status readBlocking(int index, int &size, void *data) override;
-	Status writeBlocking(int index, int size, void const *data) override;
+	Status readBlocking(int id, int &size, void *data) override;
+	Status writeBlocking(int id, int size, void const *data) override;
 	Status clearBlocking() override;
 
 protected:
@@ -48,18 +44,21 @@ protected:
 	Waitlist<ClearParameters> clearWaitlist;
 	Barrier<> clearBarrier;
 
-	int maxElementCount;
+	int maxId;
 	uint8_t *sequenceCounters;
 };
 
-
+/**
+ * Storage working on an FeRam connected via SPI. Maximum element size is 4 bytes
+ * @tparam FERAM_SIZE size of FeRam in bytes
+ */
 template <int FERAM_SIZE>
-class FeRamCounters : public FeRamCountersBase {
+class FeRamStorage4 : public FeRamStorage4Base {
 public:
-	static constexpr int MAX_ELEMENT_COUNT = FERAM_SIZE / 10;
+	static constexpr int MAX_ID = FERAM_SIZE / 10 - 1;
 
-	FeRamCounters(SpiMaster &spi) : FeRamCountersBase(spi, MAX_ELEMENT_COUNT, sequenceCountersBuffer) {}
+	FeRamStorage4(SpiMaster &spi) : FeRamStorage4Base(spi, MAX_ID, sequenceCountersBuffer) {}
 
 protected:
-	uint8_t sequenceCountersBuffer[(MAX_ELEMENT_COUNT + 3) / 4];
+	uint8_t sequenceCountersBuffer[(MAX_ID + 1 + 3) / 4];
 };

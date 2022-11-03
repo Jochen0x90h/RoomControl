@@ -1,25 +1,25 @@
-#include "BusNodeEmu.hpp"
+#include "BusNodeImpl.hpp"
 #include <bus.hpp>
 #include <util.hpp>
 
 
 constexpr int micLength = 4;
 
-BusNodeEmu::BusNodeEmu() {
+BusNodeImpl::BusNodeImpl() {
 
 	// add to list of handlers
 	Loop::handlers.add(*this);
 }
 
-Awaitable<BusNode::ReceiveParameters> BusNodeEmu::receive(int &length, uint8_t *data) {
+Awaitable<BusNode::ReceiveParameters> BusNodeImpl::receive(int &length, uint8_t *data) {
 	return {this->receiveWaitlist, &length, data};
 }
 
-Awaitable<BusNode::SendParameters> BusNodeEmu::send(int length, uint8_t const *data) {
+Awaitable<BusNode::SendParameters> BusNodeImpl::send(int length, uint8_t const *data) {
 	return {this->sendWaitlist, length, data};
 }
 
-void BusNodeEmu::handle(Gui &gui) {
+void BusNodeImpl::handle(Gui &gui) {
 	// handle pending send operations
 	this->sendWaitlist.resumeFirst([this](SendParameters &p) {
 		if (p.sendLength == 0)
@@ -196,7 +196,7 @@ void BusNodeEmu::handle(Gui &gui) {
 	});
 }
 
-void BusNodeEmu::sendToNode(bus::MessageWriter &w) {
+void BusNodeImpl::sendToNode(bus::MessageWriter &w) {
 	int length = w.getLength();
 	auto data = w.begin;
 	this->receiveWaitlist.resumeFirst([length, data](ReceiveParameters &p) {

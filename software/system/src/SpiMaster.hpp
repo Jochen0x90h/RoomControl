@@ -38,7 +38,7 @@ public:
 	[[nodiscard]] virtual Awaitable<Parameters> transfer(int writeCount, void const *writeData, int readCount, void *readData) = 0;
 
 	/**
-	 * Write a command to an SPI device, e.g. a display, indicating a command using a separate data/command line if supported
+	 * WRITE a command to an SPI device, e.g. a display, indicating a command using a separate data/command line if supported
 	 * @param index index of spi context
 	 * @param writeCount length of data to write
 	 * @param writeData data to write

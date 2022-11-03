@@ -4,12 +4,12 @@
 #include "Loop.hpp"
 
 
-class QuadratureDecoderEmu : public QuadratureDecoder, public Loop::Handler2 {
+class QuadratureDecoderImpl : public QuadratureDecoder, public Loop::Handler2 {
 public:
 	/**
 	 * Constructor
 	 */
-	QuadratureDecoderEmu();
+	QuadratureDecoderImpl();
 
 	Awaitable<Parameters> change(int8_t& delta) override;
 

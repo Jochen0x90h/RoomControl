@@ -9,36 +9,36 @@ namespace bt {
 namespace att {
 
 enum class Op : uint8_t {
-	ErrorRsp = 0x01,
+	ERROR_RSP = 0x01,
 
-	ExchangeMtuReq = 0x02,
-	ExchangeMtuRsp = 0x03,
+	EXCHANGE_MTU_REQ = 0x02,
+	EXCHANGE_MTU_RSP = 0x03,
 
-	FindInformationReq = 0x04,
-	FindInformationRsp = 0x05,
-	FindByTypeValueReq = 0x06,
-	FindByTypeValueRsp = 0x07,
+	FIND_INFORMATION_REQ = 0X04,
+	FIND_INFORMATION_RSP = 0X05,
+	FIND_BYTYPEVALUE_REQ = 0X06,
+	FIND_BYTYPEVALUE_RSP = 0x07,
 
-	ReadByTypeReq = 0x08,
-	ReadByTypeRsp = 0x09,
-	ReadReq = 0x0a,
-	ReadRsp = 0x0b,
-	ReadBlobReq = 0x0c,
-	ReadBlobRsp = 0x0d,
-	ReadByGroupTypeReq = 0x10,
-	ReadByGroupTypeRsp = 0x11,
+	READ_BY_TYPE_REQ = 0x08,
+	READ_BY_TYPE_RSP = 0x09,
+	READ_REQ = 0X0A,
+	READ_RSP = 0X0B,
+	READ_BLOB_REQ = 0X0C,
+	READ_BLOB_RSP = 0x0d,
+	READ_BY_GROUP_TYPE_REQ = 0x10,
+	READ_BY_GROUP_TYPE_RSP = 0x11,
 
-	WriteReq = 0x12,
-	WriteRsp = 0x13,
-	WriteCmd = 0x52,
-	SignedWriteCmd = 0xc2,
+	WRITE_REQ = 0x12,
+	WRITE_RSP = 0X13,
+	WRITE_CMD = 0X52,
+	SIGNED_WRITE_CMD = 0xc2,
 
 	// notification containing handle and value
-	HandleValueNtf = 0x1B,
+	HANDLE_VALUE_NTF = 0x1B,
 	// indication containing handle and value
-	HandleValueInd = 0x1D,
+	HANDLE_VALUE_IND = 0x1D,
 	// confirmation for ATT_HANDLE_VALUE_IND
-	HandleValueCfm = 0x1E,
+	HANDLE_VALUE_CFM = 0x1E,
 };
 
 } // namespace att
@@ -47,28 +47,28 @@ namespace gatt {
 
 // attribute types
 enum class Type : uint16_t {
-	PrimaryService = 0x2800,
-	SecondarySerice = 0x2801,
-	IncludeService = 0x2802,
-	Characteristic = 0x2803,
-	SharacteristicExtendedProperties = 0x2900,
-	CharacteristicUserDescription = 0x2901,
-	ClientCharacteristicConfiguration = 0x2902,
-	ServerCharacteristicConfiguration = 0x2903,
-	CharacteristicPresentationFormat = 0x2904,
-	CharacteristicAggregateFormat = 0x2904,
+	PRIMARY_SERVICE = 0x2800,
+	SECONDARY_SERVICE = 0X2801,
+	INCLUDE_SERVICE = 0x2802,
+	CHARACTERISTIC = 0x2803,
+	CHARACTERISTIC_EXTENDED_PROPERTIES = 0X2900,
+	CHARACTERISTIC_USER_DESCRIPTION = 0X2901,
+	CLIENT_CHARACTERISTIC_CONFIGURATION = 0X2902,
+	SERVER_CHARACTERISTIC_CONFIGURATION = 0X2903,
+	CHARACTERISTIC_PRESENTATION_FORMAT = 0X2904,
+	CHARACTERISTIC_AGGREGATE_FORMAT = 0x2904,
 };
 
 // characteristic properties
 enum class CharacteristicProperties : uint8_t {
-	Braodcast = 0x01,
-	Read = 0x02,
-	WriteWithoutResponse = 0x04,
-	Write = 0x08,
-	Notify = 0x10,
-	Indicate = 0x20,
-	AuthenticatedSignedWrites = 0x40,
-	ExtendedProperties = 0x80
+	BROADCAST = 0x01,
+	READ = 0x02,
+	WRITE_WITHOUT_RESPONSE = 0x04,
+	WRITE = 0x08,
+	NOTIFY = 0x10,
+	INDICATE = 0x20,
+	AUTHENTHICATED_SIGNED_WRITES = 0x40,
+	EXTENDED_PROPERTIES = 0x80
 };
 FLAGS_ENUM(CharacteristicProperties)
 

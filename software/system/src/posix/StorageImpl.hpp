@@ -1,5 +1,5 @@
 #include "../Storage.hpp"
-#include <String.hpp>
+#include "File.hpp"
 #include <map>
 #include <vector>
 #include <string>
@@ -8,9 +8,15 @@
 /**
  * Implementation of Storage interface using files
  */
-class FileStorage : public Storage {
+class StorageImpl : public Storage {
 public:
-	FileStorage(std::string const &filename, int maxElementCount, int maxElementSize);
+	/**
+	 * Constructor
+	 * @param filename file name where the data is stored
+	 * @param maxId maximum valid id
+	 * @param maxDataSize maximum size of data of an element
+	 */
+	StorageImpl(std::string const &filename, int maxId, int maxDataSize);
 
 	[[nodiscard]] virtual Awaitable<ReadParameters> read(int id, int &size, void *data, Status &status) override;
 	[[nodiscard]] virtual Awaitable<WriteParameters> write(int id, int size, void const *data, Status &status) override;
@@ -25,7 +31,7 @@ protected:
 	void writeData();
 
 	std::string filename;
-	int maxElementCount;
-	int maxElementSize;
+	int maxId;
+	int maxDataSize;
 	std::map<uint16_t, std::vector<uint8_t>> elements;
 };

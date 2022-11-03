@@ -48,20 +48,20 @@ public:
 	MessageReader(int length, uint8_t *data) : DecryptReader(length, data) {}
 
 	/**
-	 * Read a value from 0 to 8 from bus arbitration, i.e. multiple devices can write at the same time and the
+	 * READ a value from 0 to 8 from bus arbitration, i.e. multiple devices can write at the same time and the
 	 * lowest value survives
 	 * @return value
 	 */
 	uint8_t arbiter();
 
 	/**
-	 * Read an encoded device id
+	 * READ an encoded device id
 	 * @return device id
 	 */
 	uint32_t id();
 
 	/**
-	 * Read an encoded address
+	 * READ an encoded address
 	 * @return address
 	 */
 	uint8_t address() {
@@ -87,7 +87,7 @@ public:
 	{}
 
 	/**
-	 * Write a value from 0 to 8 for bus arbitration, i.e. multiple devices can write at the same time and the
+	 * WRITE a value from 0 to 8 for bus arbitration, i.e. multiple devices can write at the same time and the
 	 * lowest value survives
 	 * @param value value in range 0 to 8 to write
 	 */
@@ -96,13 +96,13 @@ public:
 	}
 
 	/**
-	 * Write an encoded device id
+	 * WRITE an encoded device id
 	 * @param id device id to encode
 	 */
 	void id(uint32_t id);
 
 	/**
-	 * Write an ecoded address
+	 * WRITE an ecoded address
 	 * @return
 	 */
 	void address(uint8_t address) {
