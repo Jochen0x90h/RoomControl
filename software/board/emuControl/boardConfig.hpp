@@ -32,16 +32,6 @@ constexpr struct {uint32_t color; bool enabled; bool initialValue;} OUTPUTS[] = 
 constexpr int OUTPUT_COUNT = array::count(OUTPUTS);
 
 
-// spi
-// ---
-/*
-constexpr int SPI_CONTEXT_COUNT = 3;
-#define SPI_EMU_BME680 0
-#define SPI_EMU_SSD1309 1
-#define SPI_EMU_MR45V064B 2
-*/
-
-
 // radio
 // -----
 
@@ -76,10 +66,19 @@ struct Drivers {
 	BusMasterImpl busMaster;
 
 	//StorageImpl storage{"storage.bin", 0xffff, 1024};
-	FlashImpl flash{"flash.bin", 2, 4096, 4};
+	FlashImpl flash{"flash.bin", 4, 32768, 4};
 	FlashStorage storage{flash};
 
 	//StorageImpl counters{"counters.bin", FERAM_SIZE / 10, 4};
 	SpiMR45Vxxx feRam{"feram.bin", FERAM_SIZE};
 	FeRamStorage4<FERAM_SIZE> counters{feRam};
+};
+
+struct DriversFlashTest {
+	FlashImpl flash{"flashTest.bin", 2, 4096, 4};
+};
+
+struct DriversStorageTest {
+	FlashImpl flash{"storageTest.bin", 4, 32768, 4};
+	FlashStorage storage{flash};
 };

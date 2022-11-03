@@ -1,6 +1,8 @@
 #include <Loop.hpp>
 #include <Timer.hpp>
 #include <Debug.hpp>
+#include <Terminal.hpp>
+#include <StringOperators.hpp>
 #include <boardConfig.hpp>
 
 
@@ -49,6 +51,8 @@ int main(void) {
 
 	Kiss32Random random;
 
+	auto start = Timer::now();
+
 	// table of currently stored elements
 	int sizes[64];
 	array::fill(sizes, 0);
@@ -92,6 +96,10 @@ int main(void) {
 		// store
 		drivers.storage.writeBlocking(id, size, buffer);
 	}
+
+	auto end = Timer::now();
+
+	Terminal::out << dec(int((end - start) / 1s)) << "s\n";
 
 	Debug::setGreenLed();
 	while (true) {}

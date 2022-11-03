@@ -34,36 +34,6 @@ constexpr gpio::OutputConfig OUTPUTS[] = {
 constexpr int OUTPUT_COUNT = array::count(OUTPUTS);
 
 
-// poti
-// ----
-
-//constexpr int POTI_A_PIN = gpio::P0(4);
-//constexpr int POTI_B_PIN = gpio::P0(5);
-
-
-// spi
-// ---
-/*
-struct SpiConfig {
-	enum Type {MASTER, WRITE_ONLY_MASTER};
-
-	Type type;
-	int csPin;
-};
-
-constexpr SpiConfig SPI_CONTEXTS[] = {
-	{SpiConfig::MASTER, gpio::P0(2)}, // air sensor
-	{SpiConfig::MASTER, gpio::P0(3)}, // fe-ram
-	{SpiConfig::WRITE_ONLY_MASTER, gpio::P0(3)} // display
-};
-
-constexpr int SPI_SCK_PIN = gpio::P0(19);
-constexpr int SPI_MOSI_PIN = gpio::P0(20);
-constexpr int SPI_MISO_PIN = gpio::P0(21);
-constexpr int SPI_DC_PIN = gpio::P0(21); // data/command for write-only display, can be same as MISO
-*/
-
-
 // audio
 // -----
 
@@ -71,13 +41,6 @@ constexpr int I2S_MCK_PIN = gpio::DISCONNECTED;
 constexpr int I2S_SCK_PIN = gpio::P0(19);
 constexpr int I2S_LRCK_PIN = gpio::P0(20);
 constexpr int I2S_SDOUT_PIN = gpio::P0(21);
-
-
-// bus
-// ---
-
-//constexpr int BUS_TX_PIN = gpio::P0(3);
-//constexpr int BUS_RX_PIN = gpio::P0(2);
 
 
 // radio
@@ -123,15 +86,15 @@ struct Drivers {
 
 	BusMasterImpl busMaster{gpio::P0(2), gpio::P0(3)};
 
-	FlashImpl flash{0xe0000 - 0x20000, 2, 0x10000};
+	FlashImpl flash{0xe0000 - 0x20000, 4, 32768};
 	FlashStorage storage{flash};
 };
 
 struct DriversFlashTest {
-	FlashImpl flash{0xe0000 - 0x40000, 2, 0x10000};
+	FlashImpl flash{0xe0000 - 0x40000, 2, 4096};
 };
 
 struct DriversStorageTest {
-	FlashImpl flash{0xe0000 - 0x40000, 2, 0x10000};
+	FlashImpl flash{0xe0000 - 0x40000, 4, 32768};
 	FlashStorage storage{flash};
 };

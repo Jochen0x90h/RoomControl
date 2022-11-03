@@ -7,6 +7,8 @@
 #include <emu/SpiSSD1309.hpp>
 #include <emu/SpiMPQ6526.hpp>
 #include <posix/StorageImpl.hpp>
+#include <posix/FlashImpl.hpp>
+#include <FlashStorage.hpp>
 #include <util.hpp>
 
 
@@ -31,8 +33,6 @@ constexpr int OUTPUT_COUNT = array::count(OUTPUTS);
 // spi
 // ---
 
-//constexpr int SPI_CONTEXT_COUNT = 1;
-//#define SPI_EMU_MPQ6526 0
 constexpr int MPQ6526_MAPPING[] = {0, 1, 2, 3, 4, 5};
 
 
@@ -76,4 +76,13 @@ struct SwitchDrivers {
 	SpiMPQ6526 relayDriver;
 	StorageImpl storage{"storage.bin", 0xffff, 1024};
 	StorageImpl counters{"counters.bin", 0xff, 4};
+};
+
+struct DriversFlashTest {
+	FlashImpl flash{"flashTest.bin", 2, 4096, 4};
+};
+
+struct DriversStorageTest {
+	FlashImpl flash{"storageTest.bin", 4, 32768, 4};
+	FlashStorage storage{flash};
 };
