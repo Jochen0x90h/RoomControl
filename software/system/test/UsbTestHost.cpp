@@ -9,24 +9,24 @@
 
 
 // https://github.com/libusb/libusb/blob/master/examples/listdevs.c
-static void printDevices(libusb_device **devs) {
-	libusb_device *dev;
+static void printDevices(libusb_device **devices) {
+	libusb_device *device;
 	int i = 0, j = 0;
 	uint8_t path[8]; 
 
 	// iterate over devices
-	while ((dev = devs[i++]) != NULL) {
-		struct libusb_device_descriptor desc;
-		int r = libusb_get_device_descriptor(dev, &desc);
+	while ((device = devices[i++]) != nullptr) {
+		libusb_device_descriptor desc;
+		int r = libusb_get_device_descriptor(device, &desc);
 		if (r < 0) {
 			Terminal::err << "failed to get device descriptor\n";
 			return;
 		}
 
 		Terminal::out << hex(desc.idVendor) << ':' << hex(desc.idProduct)
-			<< " (bus " << dec(libusb_get_bus_number(dev)) << ", device " << dec(libusb_get_device_address(dev)) << ")";
+			<< " (bus " << dec(libusb_get_bus_number(device)) << ", device " << dec(libusb_get_device_address(device)) << ")";
 
-		r = libusb_get_port_numbers(dev, path, sizeof(path));
+		r = libusb_get_port_numbers(device, path, sizeof(path));
 		if (r > 0) {
 			Terminal::out << " path: " << dec(path[0]);
 			for (j = 1; j < r; j++)
@@ -155,28 +155,28 @@ void printStatus(String message, bool status) {
 	Terminal::out << message << ": " << (status ? "ok" : "error") << '\n';
 }
 
-int main(void) {
-	int r = libusb_init(NULL);
+int main() {
+	int r = libusb_init(nullptr);
 	if (r < 0)
 		return r;
 
 	// get device list
-	libusb_device **devs;
-	ssize_t cnt = libusb_get_device_list(NULL, &devs);
+	libusb_device **devices;
+	ssize_t cnt = libusb_get_device_list(nullptr, &devices);
 	if (cnt < 0) {
-		libusb_exit(NULL);
+		libusb_exit(nullptr);
 		return (int) cnt;
 	}
 
 	// print list of devices
 	//printDevices(devs);
-	for (int i = 0; devs[i]; ++i) {
+	for (int i = 0; devices[i]; ++i) {
 		//printDevice(devs[i]);
 	}
 
 	// iterate over devices
-	for (int i = 0; devs[i]; ++i) {
-		libusb_device *dev = devs[i];
+	for (int deviceIndex = 0; devices[deviceIndex]; ++deviceIndex) {
+		libusb_device *dev = devices[deviceIndex];
 
 		// get device descriptor
 		libusb_device_descriptor desc;
@@ -306,7 +306,7 @@ int main(void) {
 		break;
 	}
 
-	libusb_free_device_list(devs, 1);
-	libusb_exit(NULL);
+	libusb_free_device_list(devices, 1);
+	libusb_exit(nullptr);
 	return 0;
 }

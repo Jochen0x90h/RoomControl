@@ -26,7 +26,7 @@ Coroutine transferSpi1(SpiMaster &spi) {
 }
 
 
-int main(void) {
+int main() {
 	Loop::init();
 	Output::init(); // for debug led's
 	Timer::init();

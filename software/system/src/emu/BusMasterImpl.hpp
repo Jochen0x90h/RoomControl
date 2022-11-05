@@ -2,6 +2,7 @@
 
 #include "../BusMaster.hpp"
 #include "Loop.hpp"
+#include "../posix/File.hpp"
 #include <bus.hpp>
 #include <chrono>
 
@@ -58,7 +59,8 @@ protected:
 	void setHeader(bus::MessageWriter &w, Device &device);
 	void sendToMaster(bus::MessageWriter &w, Device &device);
 
-	int file;
+	File file;
+
 	std::chrono::steady_clock::time_point time;
 
 	Waitlist<ReceiveParameters> receiveWaitlist;

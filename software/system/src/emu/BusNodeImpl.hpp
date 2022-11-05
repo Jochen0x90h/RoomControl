@@ -2,6 +2,7 @@
 
 #include "../BusNode.hpp"
 #include "Loop.hpp"
+#include "../posix/File.hpp"
 #include <bus.hpp>
 
 
@@ -20,11 +21,16 @@ public:
 protected:
 	void sendToNode(bus::MessageWriter &w);
 
-	uint32_t deviceId;
-	int plugCount;
-	bus::PlugType plugs[32];
+	File file;
+
+	struct Device {
+		uint32_t deviceId;
+		int plugCount;
+		bus::PlugType plugs[32];
+		uint32_t securityCounter = 0;
+	};
+	Device device;
 	int states[32];
-	uint32_t securityCounter = 0;
 
 	Waitlist<ReceiveParameters> receiveWaitlist;
 	Waitlist<SendParameters> sendWaitlist;

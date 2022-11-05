@@ -7,11 +7,8 @@
 #include <Terminal.hpp>
 #include <SystemTime.hpp>
 #include <bus.hpp>
-#include <MessageReader.hpp>
-#include <MessageWriter.hpp>
 #include <Queue.hpp>
 #include <StringOperators.hpp>
-#include "appConfig.hpp"
 #include <boardConfig.hpp>
 
 
@@ -30,52 +27,64 @@
 		Both (B0+B1): Blind
 */
 
+// todo: set individual device id before flashing
+uint32_t deviceId = 0x12345678;
+
+// time of relay to perform state change
 constexpr SystemDuration RELAY_TIME = 10ms;
 
-
+// plug types
 constexpr auto ROCKER = bus::PlugType::TERNARY_ROCKER_OUT;
 constexpr auto LIGHT = bus::PlugType::BINARY_POWER_LIGHT_IN;
 constexpr auto BLIND = bus::PlugType::TERNARY_OPENING_BLIND_IN;
 
-enum class Mode : uint8_t {
-	LIGHT = 1,
-	DOUBLE_LIGHT = 2,
-	BLIND = 3,
-};
-Mode modeA = Mode::LIGHT;
-Mode modeB = Mode::LIGHT;
+// plug lists for the different modes
+const bus::PlugType plugsLight[] = {ROCKER, LIGHT};
+const bus::PlugType plugsDoubleLight[] = {ROCKER, LIGHT, LIGHT};
+const bus::PlugType plugsBlind[] = {ROCKER, BLIND};
+const int plugCounts[4] = {0, 2, 3, 2};
 
-bus::PlugType const plugsLight[] = {ROCKER, LIGHT};
-bus::PlugType const plugsDoubleLight[] = {ROCKER, LIGHT, LIGHT};
-bus::PlugType const plugsBlind[] = {ROCKER, BLIND};
-int const plugCounts[4] = {0, 2, 3, 2};
-
-Array<bus::PlugType const> const plugs[] = {
+const Array<bus::PlugType const> plugs[] = {
 	{},
 	plugsLight,
 	plugsDoubleLight,
 	plugsBlind
 };
 
-
-// outputs
-int outputStates[4];
-
-AesKey const busDefaultAesKey = {{0x1337c6b3, 0xf16c7cb6, 0x2dec182d, 0x3078d618, 0xaec16bb7, 0x5fad1701, 0x72410f2c, 0x4239d934, 0xbef4739b, 0xe159649a, 0x93186bb6, 0xd121b282, 0x47c360a5, 0xa69a043f, 0x35826f89, 0xe4a3dd0b, 0x45024bcc, 0xe3984ff3, 0xd61a207a, 0x32b9fd71, 0x0356e8ef, 0xe0cea71c, 0x36d48766, 0x046d7a17, 0x1f8c181d, 0xff42bf01, 0xc9963867, 0xcdfb4270, 0x50a049a0, 0xafe2f6a1, 0x6674cec6, 0xab8f8cb6, 0xa3c407c2, 0x0c26f163, 0x6a523fa5, 0xc1ddb313, 0x79a97aba, 0x758f8bd9, 0x1fddb47c, 0xde00076f, 0x2c6cd2a7, 0x59e3597e, 0x463eed02, 0x983eea6d}};
-
+// encryption
 constexpr int micLength = 4;
-
-
-uint32_t deviceId = 0x12345678;
-int address = -1;
-AesKey aesKey;
-uint32_t securityCounter = 0;
 
 
 class Switch {
 public:
 
 	Switch() {
+		int size;
+
+		// load mode of channels A and B
+		size = sizeof(Modes);
+		this->drivers.storage.readBlocking(ID_MODES, size, &this->modes);
+		if (size != sizeof(Modes) || this->modes.a < Mode::LIGHT || this->modes.a > Mode::BLIND)
+			this->modes.a = Mode::LIGHT;
+		if (size != sizeof(Modes) || this->modes.b < Mode::LIGHT || this->modes.b > Mode::BLIND)
+			this->modes.b = Mode::LIGHT;
+
+		// load commissioning
+		size = sizeof(Commissioning);
+		this->drivers.storage.readBlocking(ID_COMMISSIONING, size, &this->commissioning);
+		if (size != sizeof(Commissioning))
+			this->commissioning.address = -1;
+
+		// load security counters
+		size = 4;
+		this->drivers.counters.readBlocking(ID_NODE_SECURITY_COUNTER, size, &this->nodeSecurityCounter);
+		if (size != 4)
+			this->nodeSecurityCounter = 0;
+		size = 4;
+		this->drivers.counters.readBlocking(ID_MASTER_SECURITY_COUNTER, size, &this->masterSecurityCounter);
+		if (size != 4)
+			this->masterSecurityCounter = 0;
+
 		// start coroutines
 		checkButtons();
 		send();
@@ -97,12 +106,15 @@ public:
 				// use button state as configuration
 				int a = this->buttons & 3;
 				if (a != 0)
-					modeA = Mode(a);
+					this->modes.a = Mode(a);
 				int b = this->buttons >> 2;
 				if (b != 0)
-					modeB = Mode(b);
+					this->modes.b = Mode(b);
 				this->configure = false;
-				Terminal::out << "config " << dec(modeA) << ' ' << dec(modeB) << '\n';
+				Terminal::out << "config " << dec(this->modes.a) << ' ' << dec(this->modes.b) << '\n';
+
+				// write modes to flash
+				this->drivers.storage.writeBlocking(ID_MODES, sizeof(Modes), &this->modes);
 			}
 
 			// update button state (only needed for configuration and commissioning)
@@ -124,19 +136,22 @@ public:
 				this->configure = false;
 
 				// switch to standalone mode
-				address = -1;
+				this->commissioning.address = -1;
 
-				// add enumerate to send queue
+				// store to flash (remove entry)
+				this->drivers.storage.eraseBlocking(ID_COMMISSIONING);
+
+				// add enumerate command to send queue
 				this->sendQueue.addBack(SendElement{255, 255});
 				this->sendBarrier.resumeFirst();
 			}
 
 
-			if (address == -1) {
+			if (this->commissioning.address == -1) {
 				// standalone mode: A and B channel each control one relay with 0 = off and 1 = on
 				if ((index & 2) == 0) {
 					// A
-					switch (modeA) {
+					switch (this->modes.a) {
 					case Mode::LIGHT:
 						if (state) {
 							this->relays &= ~0x11;
@@ -160,7 +175,7 @@ public:
 				} else {
 					// B
 					index &= 1;
-					switch (modeB) {
+					switch (this->modes.b) {
 					case Mode::LIGHT:
 						if (state) {
 							this->relays &= ~0x44;
@@ -186,14 +201,14 @@ public:
 			} else {
 				// bus mode: report state change on bus
 
-				// endpoint index
-				uint8_t endpointIndex = (index & 2) == 0 ? 0 : plugCounts[int(modeA)];//(index >> 1) & 1;
+				// plug index (plugs of channel B come after plugs of channel A)
+				uint8_t plugIndex = (index & 2) == 0 ? 0 : plugCounts[int(this->modes.a)];
 
 				// value
 				uint8_t value = int(state) << (index & 1);
 
 				// add to send queue
-				this->sendQueue.addBack(SendElement{endpointIndex, value});
+				this->sendQueue.addBack(SendElement{plugIndex, value});
 				this->sendBarrier.resumeFirst();
 			}
 		}
@@ -234,16 +249,17 @@ public:
 					Nonce nonce(deviceId, 0);
 					w.encrypt(micLength, nonce, bus::defaultAesKey);
 
-					securityCounter = 0;
+					this->nodeSecurityCounter = 0;
+					this->drivers.counters.writeBlocking(ID_NODE_SECURITY_COUNTER, 4, &this->nodeSecurityCounter);
 				} else {
 					// send attribute
 					auto attribute = bus::Attribute(element.value);
 
 					// encoded address
-					w.address(address);
+					w.address(this->commissioning.address);
 
 					// security counter
-					w.u32L(securityCounter);
+					w.u32L(this->nodeSecurityCounter);
 
 					// set start of message
 					w.setMessage();
@@ -262,27 +278,28 @@ public:
 					case bus::Attribute::PLUG_LIST:
 						// list of plugs
 						// list of plugs of part A and B
-						w.data16L(plugs[int(modeA)]);
-						w.data16L(plugs[int(modeB)]);
+						w.data16L(plugs[int(this->modes.a)]);
+						w.data16L(plugs[int(this->modes.b)]);
 						break;
 					default:;
 					}
 
 					// encrypt
-					Nonce nonce(address, securityCounter);
-					w.encrypt(micLength, nonce, aesKey);
+					Nonce nonce(this->commissioning.address, this->nodeSecurityCounter);
+					w.encrypt(micLength, nonce, this->commissioning.aesKey);
 
 					// increment security counter
-					++securityCounter;
+					++this->nodeSecurityCounter;
+					this->drivers.counters.writeBlocking(ID_NODE_SECURITY_COUNTER, 4, &this->nodeSecurityCounter);
 				}
 			} else {
 				// send plug message
 
 				// encoded address
-				w.address(address);
+				w.address(this->commissioning.address);
 
 				// security counter
-				w.u32L(securityCounter);
+				w.u32L(this->nodeSecurityCounter);
 
 				// set start of message
 				w.setMessage();
@@ -297,11 +314,12 @@ public:
 				w.u8(element.value);
 
 				// encrypt
-				Nonce nonce(address, securityCounter);
-				w.encrypt(micLength, nonce, aesKey);
+				Nonce nonce(this->commissioning.address, this->nodeSecurityCounter);
+				w.encrypt(micLength, nonce, this->commissioning.aesKey);
 
 				// increment security counter
-				++securityCounter;
+				++this->nodeSecurityCounter;
+				this->drivers.counters.writeBlocking(ID_NODE_SECURITY_COUNTER, 4, &this->nodeSecurityCounter);
 			}
 			this->sendQueue.removeFront();
 
@@ -327,39 +345,68 @@ public:
 				if (r.u8() == 0) {
 					// 0 0: commission
 
-					// check device id
+					// get device id
 					auto id = r.u32L();
-					if (id != deviceId)
-						continue;
 
 					// check message integrity code (mic)
 					r.setMessageFromEnd(micLength);
-					Nonce nonce(deviceId, 0);
-					if (!r.decrypt(micLength, nonce, busDefaultAesKey))
+					Nonce nonce(id, 0);
+					if (!r.decrypt(micLength, nonce, bus::defaultAesKey))
 						continue;
 
-					// set address
-					address = r.u8();
-					//Terminal::out << "commissioned on address " << dec(address) << '\n';
+					// get address
+					auto address = r.u8();
 
-					// set key
-					setKey(aesKey, r.data8<16>());
+					// check if device id is the device id of this node
+					if (id == deviceId) {
+						// clear master security counter
+						this->masterSecurityCounter = 0;
+						this->drivers.counters.writeBlocking(ID_MASTER_SECURITY_COUNTER, 4, &this->masterSecurityCounter);
+
+						// set address
+						this->commissioning.address = address;
+						//Terminal::out << "commissioned on address " << dec(address) << '\n';
+
+						// set key
+						setKey(this->commissioning.aesKey, r.data8<16>());
+
+						// store to flash
+						this->drivers.storage.writeBlocking(ID_COMMISSIONING, sizeof(Commissioning), &this->commissioning);
+					} else if (this->commissioning.address == address) {
+						// the address of this node now gets assigned to another node: decommission
+						// is probably a security hole
+						/*
+						// switch to standalone mode
+						this->commissioning.address = -1;
+
+						// store to flash (remove entry)
+						this->drivers.storage.eraseBlocking(ID_COMMISSIONING);
+						*/
+					}
 				}
 			} else {
 				// received data message: check address
 				int addr = r.address();
-				if (addr != address)
+				if (addr != this->commissioning.address)
 					continue;
 
 				// security counter
 				uint32_t securityCounter = r.u32L();
 
-				// todo: check security counter
+				// check security counter
+				if (securityCounter <= this->masterSecurityCounter) {
+					Terminal::out << "M security counter error " << dec(securityCounter) << " <= " << dec(this->masterSecurityCounter) << '\n';
+					//continue;
+				} else {
+					//Terminal::out << "M security counter ok " << dec(securityCounter) << " > " << dec(this->masterSecurityCounter) << '\n';
+				}
+				this->masterSecurityCounter = securityCounter;
+				this->drivers.counters.writeBlocking(ID_MASTER_SECURITY_COUNTER, 4, &this->masterSecurityCounter);
 
 				// decrypt
 				r.setMessage();
-				Nonce nonce(address, securityCounter);
-				if (!r.decrypt(micLength, nonce, aesKey))
+				Nonce nonce(this->commissioning.address, securityCounter);
+				if (!r.decrypt(micLength, nonce, this->commissioning.aesKey))
 					break;
 
 				// get endpoint index (255 for read attribute)
@@ -375,23 +422,23 @@ public:
 				} else if (endpointIndex == 0) {
 					// plug
 					uint8_t plugIndex = r.u8();
-					int plugCountA = plugCounts[int(modeA)];
-					int plugCountB = plugCounts[int(modeB)];
+					int plugCountA = plugCounts[int(this->modes.a)];
+					int plugCountB = plugCounts[int(this->modes.b)];
 					if (plugIndex >= plugCountA + plugCountB)
 						break;
 
 					bus::PlugType plugType;
 					int relayIndex;
 					if (plugIndex < plugCountA) {
-						plugType = plugs[int(modeA)][plugIndex];
+						plugType = plugs[int(this->modes.a)][plugIndex];
 						relayIndex = plugIndex == 2 ? 1 : 0;
 					} else {
 						plugIndex -= plugCountA;
-						plugType = plugs[int(modeB)][plugIndex];
+						plugType = plugs[int(this->modes.b)][plugIndex];
 						relayIndex = plugIndex == 2 ? 3 : 2;
 					}
 
-					int &state = outputStates[relayIndex];
+					int &state = this->outputStates[relayIndex];
 
 					switch (plugType) {
 					case LIGHT: {
@@ -500,13 +547,39 @@ public:
 		}
 	}
 
+	// platform dependent drivers
 	SwitchDrivers drivers;
 
+	// mode of channel A and B
+	static constexpr int ID_MODES = 1;
+	enum class Mode : uint8_t {
+		LIGHT = 1,
+		DOUBLE_LIGHT = 2,
+		BLIND = 3,
+	};
+	struct Modes {
+		Mode a;
+		Mode b;
+	};
+	Modes modes;
+
 	// commissioning and configuration
+	static constexpr int ID_COMMISSIONING = 2;
+	struct Commissioning {
+		int address;
+		AesKey aesKey;
+	};
+	Commissioning commissioning;
 	uint8_t buttons = 0;
 	SystemTime allTime;
 	bool commission = false;
 	bool configure = false;
+
+	// security counters
+	static constexpr int ID_NODE_SECURITY_COUNTER = 1;
+	static constexpr int ID_MASTER_SECURITY_COUNTER = 2;
+	uint32_t nodeSecurityCounter;
+	uint32_t masterSecurityCounter;
 
 	// sending over bus
 	struct SendElement {uint8_t plugIndex; uint8_t value;};
@@ -514,12 +587,13 @@ public:
 	Barrier<> sendBarrier;
 
 	// relays
+	int outputStates[4] = {};
 	uint8_t relays = 0xf0;
 	Barrier<> relayBarrier;
 };
 
 
-int main(void) {
+int main() {
 	Loop::init();
 	Output::init(); // for debug signals on pins
 	Input::init();

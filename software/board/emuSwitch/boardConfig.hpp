@@ -74,15 +74,15 @@ struct Drivers {
 struct SwitchDrivers {
 	BusNodeImpl busNode;
 	SpiMPQ6526 relayDriver;
-	StorageImpl storage{"storage.bin", 0xffff, 1024};
-	StorageImpl counters{"counters.bin", 0xff, 4};
+	StorageImpl storage{"switchStorage.bin", 0xffff, 512};
+	StorageImpl counters{"switchCounters.bin", 0xff, 4};
 };
 
 struct DriversFlashTest {
-	FlashImpl flash{"flashTest.bin", 2, 4096, 4};
+	FlashImpl flash{"flashTest.bin", 2, 1024, 4};
 };
 
 struct DriversStorageTest {
-	FlashImpl flash{"storageTest.bin", 4, 32768, 4};
+	FlashImpl flash{"storageTest.bin", 2, 1024, 4};
 	FlashStorage storage{flash};
 };

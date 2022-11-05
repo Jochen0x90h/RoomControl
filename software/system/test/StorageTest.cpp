@@ -13,7 +13,7 @@ struct Kiss32Random {
 	uint32_t c;
 
 	// seed must be != 0
-	Kiss32Random(uint32_t seed = 123456789) {
+	explicit Kiss32Random(uint32_t seed = 123456789) {
 		x = seed;
 		y = 362436000;
 		z = 521288629;
@@ -43,7 +43,7 @@ void fail() {
 	while (true) {}
 }
 
-int main(void) {
+int main() {
 	Loop::init();
 	Timer::init();
 	Output::init(); // for debug led's
@@ -56,13 +56,18 @@ int main(void) {
 	// table of currently stored elements
 	int sizes[64];
 	array::fill(sizes, 0);
-	uint8_t buffer[256];
+	uint8_t buffer[128];
 
+	// determine capacity
+	auto info = drivers.flash.getInfo();
+	unsigned int capacity = min(((info.sectorCount - 1) * (info.sectorSize - 8)) / (128 + 8), array::count(sizes)) - 1;
+
+	// clear storage
 	drivers.storage.clearBlocking();
 
 	for (int i = 0; i < 10000; ++i) {
 		// check if everything is correctly stored
-		for (int index = 0; index < 64; ++index) {
+		for (int index = 0; index < capacity; ++index) {
 			array::fill(buffer, 0);
 			int size = sizes[index];
 			int id = index + 5;
@@ -80,21 +85,22 @@ int main(void) {
 			}
 		}
 
-		// random size in range [0, 255]
-		int size = random.draw() & 255;
+		// random size in range [0, 128]
+		int size = random.draw() % 129;
 
 		// generate id in range [5, 68]
-		int index = random.draw() & 63;
+		int index = random.draw() % capacity;
 		int id = index + 5;
 		sizes[index] = size;
 
 		// generate data
-		for (int i = 0; i < size; ++i) {
-			buffer[i] = id + i;
+		for (int j = 0; j < size; ++j) {
+			buffer[j] = id + j;
 		}
 
 		// store
-		drivers.storage.writeBlocking(id, size, buffer);
+		if (drivers.storage.writeBlocking(id, size, buffer) != Storage::Status::OK)
+			fail();
 	}
 
 	auto end = Timer::now();

@@ -187,8 +187,14 @@ Storage::Status FlashStorage::writeBlocking(int id, int size, void const *data) 
 	// todo
 
 	// check if entry will fit
+	int gcCount = 0;
 	while (this->entryWriteOffset + this->entrySize + size > this->dataWriteOffset) {
 		// data does not fit, we need to start a new sector
+
+		// check if all sectors were already garbage collected which means we are out of memory
+		++gcCount;
+		if (gcCount >= this->info.sectorCount)
+			return Status::OUT_OF_MEMORY_ERROR;
 
 		// close current sector and go to next sector (which is erased)
 		closeSector();

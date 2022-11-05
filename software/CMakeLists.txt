@@ -577,7 +577,7 @@ endif() # POSIX AND NOT EMU
 
 
 # wall switch executable
-set(SWITCH_BOARDS emuSwitch canable)
+set(SWITCH_BOARDS emuSwitch switch)
 if(${BOARD} IN_LIST SWITCH_BOARDS)
 	add_executable(switch
 		switch/src/main.cpp

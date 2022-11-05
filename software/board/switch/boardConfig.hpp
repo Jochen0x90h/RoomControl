@@ -53,20 +53,29 @@ struct Drivers {
 	SpiMasterImpl::Channel display{spi, gpio::PA(4)};
 };
 
+constexpr int FLASH_ADDRESS = 0x8000000;
+
 struct SwitchDrivers {
 	SpiMasterImpl spi{1,
 		gpio::PA(5),
 		gpio::PA(7),
 		gpio::PA(6)};
 	SpiMasterImpl::Channel relayDriver{spi, gpio::PA(3)};
+
 	BusNodeImpl busNode;
+
+	FlashImpl storageFlash{FLASH_ADDRESS + 20 * 1024, 2, 1024};
+	FlashStorage storage{storageFlash};
+
+	FlashImpl countersFlash{FLASH_ADDRESS + 20 * 1024 + 2048, 10, 1024};
+	FlashStorage counters{countersFlash};
 };
 
 struct DriversFlashTest {
-	FlashImpl flash{0xe0000 - 0x40000, 2, 4096};
+	FlashImpl flash{FLASH_ADDRESS + 20 * 1024, 2, 1024};
 };
 
 struct DriversStorageTest {
-	FlashImpl flash{0xe0000 - 0x40000, 4, 32768};
+	FlashImpl flash{FLASH_ADDRESS + 20 * 1024, 2, 4096};
 	FlashStorage storage{flash};
 };

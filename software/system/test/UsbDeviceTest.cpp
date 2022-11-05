@@ -150,7 +150,7 @@ Coroutine echo() {
 	}
 }
 
-int main(void) {
+int main() {
 	Loop::init();
 	Timer::init();
 	UsbDevice::init(

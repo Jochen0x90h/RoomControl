@@ -22,7 +22,7 @@ Coroutine transferBus(BusMaster &busMaster) {
 	}
 }
 
-int main(void) {
+int main() {
 	Loop::init();
 	Timer::init();
 	Output::init(); // for debug led's

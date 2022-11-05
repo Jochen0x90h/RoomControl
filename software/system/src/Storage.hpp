@@ -25,7 +25,7 @@ public:
 		DATA_SIZE_EXCEEDED,
 
 		// element was not written because storage is full
-		OVERFLOW_ERROR,
+		OUT_OF_MEMORY_ERROR,
 
 		// memory is not usable, e.g. not connected or end of life of flash memory
 		FATAL_ERROR
@@ -51,7 +51,6 @@ public:
 
 
 	virtual ~Storage();
-
 
 	/**
 	 * READ an entry from the non-volatile storage into a given data buffer

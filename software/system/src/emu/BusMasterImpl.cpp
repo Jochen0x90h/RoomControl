@@ -48,40 +48,29 @@ BusMasterImpl::Device devices[] = {
 	{0x00000003, {endpoint3a, Array<BusMasterImpl::Endpoint>()}},
 };
 
-
-inline int fsize(int fd) {
-	struct stat stat;
-	fstat(fd, &stat);
-	return stat.st_size;
-}
-
 } // namespace
 
-BusMasterImpl::BusMasterImpl() {
-	// load permanent configuration of devices
-	char const *filename = "bus.bin";
-	this->file = open(filename, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH);
-
+BusMasterImpl::BusMasterImpl() : file("busMaster.bin", File::Mode::READ_WRITE) {
 	int deviceCount = array::count(devices);
 	int persistentStateSize = sizeof(PersistentState);
 
-	// check file size
-	int fileSize = fsize(this->file);
+	// check file size of configuration file
+	int fileSize = this->file.getSize();
 	if (fileSize != deviceCount * persistentStateSize) {
 		// size mismatch: initialize file
-		ftruncate(this->file, deviceCount * persistentStateSize);
+		this->file.resize(deviceCount * persistentStateSize);
 		for (int i = 0; i < deviceCount; ++i) {
 			auto &device = devices[i];
 			device.offset = i * persistentStateSize;
 			device.persistentState.address = -1;
-			pwrite(this->file, &device.persistentState, persistentStateSize, device.offset);
+			this->file.write(device.offset, persistentStateSize, &device.persistentState);
 		}
 	} else {
 		// size ok: read devices
 		for (int i = 0; i < deviceCount; ++i) {
 			auto &device = devices[i];
 			device.offset = i * persistentStateSize;
-			pread(this->file, &device.persistentState, persistentStateSize, device.offset);
+			this->file.read(device.offset, persistentStateSize, &device.persistentState);
 		}
 	}
 
@@ -145,13 +134,12 @@ void BusMasterImpl::handle(Gui &gui) {
 						device.persistentState.index = device.nextIndex;
 
 						// write commissioned device to file
-						pwrite(this->file, &device.persistentState, sizeof(PersistentState), device.offset);
+						this->file.write(device.offset, sizeof(PersistentState), &device.persistentState);
 					} else {
 						if (device.persistentState.address == address) {
 							// other device still has the address: decommission
-							// todo: also do in switch
 							device.persistentState.address = -1;
-							pwrite(this->file, &device.persistentState, sizeof(PersistentState), device.offset);
+							this->file.write(device.offset, sizeof(PersistentState), &device.persistentState);
 						}
 					}
 				}
@@ -269,8 +257,8 @@ void BusMasterImpl::handle(Gui &gui) {
 		}
 
 		// commissioning can be triggered by a small commissioning button in the user interface
-		auto value = gui.button(id++, 0.2f);
-		if (value && *value == 1) {
+		auto commission = gui.button(id++, 0.2f);
+		if (commission && *commission == 1) {
 			// commission device
 			device.nextIndex = device.persistentState.address != -1 && device.persistentState.index == 0 ? 1 : 0;
 
@@ -417,7 +405,7 @@ void BusMasterImpl::sendToMaster(bus::MessageWriter &w, Device &device) {
 
 	// increment security counter
 	++device.persistentState.securityCounter;
-	pwrite(this->file, &device.persistentState.securityCounter, 4, device.offset + offsetOf(PersistentState, securityCounter));
+	this->file.write(device.offset + offsetOf(PersistentState, securityCounter), 4, &device.persistentState.securityCounter);
 
 	// send to bus master (resume coroutine waiting to receive from device)
 	int length = w.getLength();

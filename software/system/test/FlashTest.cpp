@@ -8,7 +8,7 @@ uint8_t writeData[] = {0x12, 0x34, 0x56, 0x78};
 uint8_t readData[4];
 
 
-int main(void) {
+int main() {
 	Loop::init();
 	Timer::init();
 	Output::init(); // for debug led's

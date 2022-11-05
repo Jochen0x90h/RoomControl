@@ -234,7 +234,7 @@ Coroutine scan() {
 	}
 }
 
-int main(void) {
+int main() {
 	Loop::init();
 	Timer::init();
 	Ble::init();
