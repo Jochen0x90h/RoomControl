@@ -140,6 +140,23 @@ void copy(int length, OutputIt dst, InputIt src) {
 }
 
 /**
+ * Compare using two iterators
+ * @param length length to compare
+ * @param it1 first iterator
+ * @param it2 second iterator
+ * @return true if both inputs are equal
+ */
+template <typename OutputIt, typename InputIt>
+bool equal(int length, OutputIt it1, InputIt it2) {
+	auto end = it1 + length;
+	for (; it1 < end; ++it1, ++it2) {
+		if (*it1 != *it2)
+			return false;
+	}
+	return true;
+}
+
+/**
  * Insert elements at the beginning of the array defined by (length, begin), without initializing the new elements
  * @tparam It
  * @param length length of the array after insert

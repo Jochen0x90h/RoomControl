@@ -94,7 +94,7 @@ Coroutine reply() {
 }
 
 
-int main(void) {
+int main() {
 	Loop::init();
 	Timer::init();
 	Radio::init();

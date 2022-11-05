@@ -546,7 +546,7 @@ Array<String const> RoomControl::getSwitchStates(Usage usage) {
 }
 
 /*
-	number of different switch types for default convert options
+	Number of different switch types for default convert options
 	0: off/on
 	1: off/on1/on2
 	2: off/on/toggle
@@ -563,14 +563,13 @@ int RoomControl::getSwitchType(MessageType type) {
 	}
 	auto binaryCategory = type & MessageType::BINARY_CATEGORY;
 	if (binaryCategory == MessageType::BINARY_BUTTON
-		|| binaryCategory == MessageType::BINARY_ALARM
-		|| binaryCategory == MessageType::BINARY_SOUND)
+		|| binaryCategory == MessageType::BINARY_ALARM)
 	{
-		// release/press or stop/play
+		// release/press
 		return 3;
 	}
 
-	// off/on or off/on/toggle
+	// no toggle: off/on or stop/play, with toggle: off/on/toggle
 	return (type & MessageType::CMD) != 0 ? 2 : 0;
 }
 

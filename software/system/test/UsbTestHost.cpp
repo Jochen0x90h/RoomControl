@@ -9,24 +9,24 @@
 
 
 // https://github.com/libusb/libusb/blob/master/examples/listdevs.c
-static void printDevices(libusb_device **devs) {
-	libusb_device *dev;
+static void printDevices(libusb_device **devices) {
+	libusb_device *device;
 	int i = 0, j = 0;
 	uint8_t path[8]; 
 
 	// iterate over devices
-	while ((dev = devs[i++]) != NULL) {
-		struct libusb_device_descriptor desc;
-		int r = libusb_get_device_descriptor(dev, &desc);
+	while ((device = devices[i++]) != nullptr) {
+		libusb_device_descriptor desc;
+		int r = libusb_get_device_descriptor(device, &desc);
 		if (r < 0) {
 			Terminal::err << "failed to get device descriptor\n";
 			return;
 		}
 
 		Terminal::out << hex(desc.idVendor) << ':' << hex(desc.idProduct)
-			<< " (bus " << dec(libusb_get_bus_number(dev)) << ", device " << dec(libusb_get_device_address(dev)) << ")";
+			<< " (bus " << dec(libusb_get_bus_number(device)) << ", device " << dec(libusb_get_device_address(device)) << ")";
 
-		r = libusb_get_port_numbers(dev, path, sizeof(path));
+		r = libusb_get_port_numbers(device, path, sizeof(path));
 		if (r > 0) {
 			Terminal::out << " path: " << dec(path[0]);
 			for (j = 1; j < r; j++)
@@ -155,28 +155,28 @@ void printStatus(String message, bool status) {
 	Terminal::out << message << ": " << (status ? "ok" : "error") << '\n';
 }
 
-int main(void) {
-	int r = libusb_init(NULL);
+int main() {
+	int r = libusb_init(nullptr);
 	if (r < 0)
 		return r;
 
 	// get device list
-	libusb_device **devs;
-	ssize_t cnt = libusb_get_device_list(NULL, &devs);
+	libusb_device **devices;
+	ssize_t cnt = libusb_get_device_list(nullptr, &devices);
 	if (cnt < 0) {
-		libusb_exit(NULL);
+		libusb_exit(nullptr);
 		return (int) cnt;
 	}
 
 	// print list of devices
 	//printDevices(devs);
-	for (int i = 0; devs[i]; ++i) {
+	for (int i = 0; devices[i]; ++i) {
 		//printDevice(devs[i]);
 	}
 
 	// iterate over devices
-	for (int i = 0; devs[i]; ++i) {
-		libusb_device *dev = devs[i];
+	for (int deviceIndex = 0; devices[deviceIndex]; ++deviceIndex) {
+		libusb_device *dev = devices[deviceIndex];
 
 		// get device descriptor
 		libusb_device_descriptor desc;
@@ -231,12 +231,12 @@ int main(void) {
 		ret = controlOut(handle, Request::BLUE, 0, 256);
 
 		
-		uint8_t data[129] = {};
+		uint8_t buffer[129] = {};
 		int transferred;
 
 		// flush out data from last run
 		for (int i = 0; i < 4; ++i)
-			libusb_bulk_transfer(handle, 1 | usb::IN, data, 129, &transferred, 100);
+			libusb_bulk_transfer(handle, 1 | usb::IN, buffer, 129, &transferred, 100);
 
 		// echo loop: send data to device and check if we get back the same data
 		int sendLength = 128;
@@ -246,9 +246,9 @@ int main(void) {
 
 			// send to device
 			for (int i = 0; i < sendLength; ++i) {
-				data[i] = sendLength + i;
+				buffer[i] = sendLength + i;
 			}
-			ret = libusb_bulk_transfer(handle, 1 | usb::OUT, data, sendLength, &transferred, 10000);
+			ret = libusb_bulk_transfer(handle, 1 | usb::OUT, buffer, sendLength, &transferred, 10000);
 			if (ret == LIBUSB_ERROR_TIMEOUT)
 				Terminal::out << "send timeout!\n";
 			printStatus("sent", ret == 0 && transferred == sendLength);
@@ -256,17 +256,17 @@ int main(void) {
 			
 			// send zero length packet to indicate that transfer is complete if length is multiple of 64
 			if (sendLength > 0 && (sendLength & 63) == 0)
-				libusb_bulk_transfer(handle, 1 | usb::OUT, data, 0, &transferred, 1000);
+				libusb_bulk_transfer(handle, 1 | usb::OUT, buffer, 0, &transferred, 1000);
 
 			// debug: check if one packet of maximum 64 bytes can be written while the device is not waiting in UsbDevice::receive()
-			for (int i = 0; i < 45; ++i) data[i] = 45 + i;
-			ret = libusb_bulk_transfer(handle, 1 | usb::OUT, data, 45, &transferred, 10000);
+			for (int i = 0; i < 45; ++i) buffer[i] = 45 + i;
+			ret = libusb_bulk_transfer(handle, 1 | usb::OUT, buffer, 45, &transferred, 10000);
 			if (ret == LIBUSB_ERROR_TIMEOUT)
 				Terminal::out << "debug send timeout!\n";
 
 			// receive from device (we get back the same data that we sent)
-			// note: libusb does not wait for the zero length packet if length is a multiple of 64, therefore use 129 instead of 128
-			ret = libusb_bulk_transfer(handle, 1 | usb::IN, data, 129, &transferred, 10000);
+			// note: libusb does not wait for the zero length packet if device sends 128 bytes, therefore use 129 instead of 128
+			ret = libusb_bulk_transfer(handle, 1 | usb::IN, buffer, 129, &transferred, 10000);
 			if (ret == LIBUSB_ERROR_TIMEOUT)
 				Terminal::out << "receive timeout!\n";
 			//printStatus("received", ret == 0 && transferred == sendLength);
@@ -284,7 +284,7 @@ int main(void) {
 			// check received data
 			bool ok = true;
 			for (int i = 0; i < transferred; ++i) {
-				if (data[i] != transferred + i)
+				if (buffer[i] != transferred + i)
 					ok = false;
 			}
 			printStatus("data", ok);
@@ -293,8 +293,8 @@ int main(void) {
 			printStatus("all", allOk);
 
 			// debug: remove additional packet
-			ret = libusb_bulk_transfer(handle, 1 | usb::IN, data, 45, &transferred, 10000);
-			for (int i = 0; i < 45; ++i) allOk &= data[i] == 45 + i;
+			ret = libusb_bulk_transfer(handle, 1 | usb::IN, buffer, 45, &transferred, 10000);
+			for (int i = 0; i < 45; ++i) allOk &= buffer[i] == 45 + i;
 
 			// wait
 			//usleep(1000000);
@@ -306,7 +306,7 @@ int main(void) {
 		break;
 	}
 
-	libusb_free_device_list(devs, 1);
-	libusb_exit(NULL);
+	libusb_free_device_list(devices, 1);
+	libusb_exit(nullptr);
 	return 0;
 }

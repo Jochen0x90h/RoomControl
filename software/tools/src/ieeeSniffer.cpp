@@ -9,16 +9,13 @@
 #include <zcl.hpp>
 #include <gp.hpp>
 #include <pcap.hpp>
-#include <enum.hpp>
 #include <MessageReader.hpp>
 #include <StringBuffer.hpp>
 #include <StringOperators.hpp>
 #include <util.hpp>
-#include <array>
 #include <map>
 #include <string>
 #include <filesystem>
-#include <chrono>
 #include <libusb.h>
 
 
@@ -29,15 +26,6 @@
 namespace fs = std::filesystem;
 
 using Packet = pcap::Packet<140>;
-
-// default link key used by aps layer, prepared for aes encryption/decryption
-AesKey za09LinkAesKey;
-
-// hashed default link key used by key-transport, prepared for aes encryption/decryption
-AesKey za09KeyTransportAesKey;
-
-// hashed default link key used by key-load, prepared for aes encryption/decryption
-AesKey za09KeyLoadAesKey;
 
 // security level to use, encrypted + 32 bit message integrity code
 constexpr zb::SecurityControl securityLevel = zb::SecurityControl::LEVEL_ENC_MIC32;
@@ -363,7 +351,7 @@ void handleGpCommission(uint32_t deviceId, PacketReader &r) {
 				header.setU32L(0, deviceId);
 
 				// in-place decrypt
-				if (!decrypt(key, header.data, 4, key, 16, 4, nonce, za09LinkAesKey)) {
+				if (!decrypt(key, header.data, 4, key, 16, 4, nonce, zb::za09LinkAesKey)) {
 					Terminal::out << ("Error while decrypting key!\n");
 					return;
 				}
@@ -610,13 +598,13 @@ void handleAps(PacketReader &r, uint8_t const *extendedSource) {
 			AesKey const *key;
 			switch (keyType) {
 			case zb::SecurityControl::KEY_LINK:
-				key = &linkAesKey;//za09LinkAesKey;
+				key = &linkAesKey;
 				break;
 			case zb::SecurityControl::KEY_KEY_TRANSPORT:
-				key = &za09KeyTransportAesKey;
+				key = &zb::za09KeyTransportAesKey;
 				break;
 			case zb::SecurityControl::KEY_KEY_LOAD:
-				key = &za09KeyLoadAesKey;
+				key = &zb::za09KeyLoadAesKey;
 				break;
 			default:
 				Terminal::out << "Error: Unsupported key type in APS security header!\n";
@@ -769,7 +757,7 @@ void handleZcl(PacketReader &r, uint8_t destinationEndpoint) {
 			Terminal::out << ("Configure Reporting Response\n");
 			break;
 		case zcl::Command::READ_ATTRIBUTES:
-			Terminal::out << ("Read Attributes; ");
+			Terminal::out << ("READ Attributes; ");
 			switch (cluster) {
 			case zcl::Cluster::BASIC:
 				{
@@ -808,7 +796,7 @@ void handleZcl(PacketReader &r, uint8_t destinationEndpoint) {
 			}
 			break;
 		case zcl::Command::READ_ATTRIBUTES_RESPONSE:
-			Terminal::out << ("Read Attributes Response; ");
+			Terminal::out << ("READ Attributes Response; ");
 			switch (cluster) {
 			case zcl::Cluster::BASIC:
 				{
@@ -945,22 +933,6 @@ int controlTransfer(libusb_device_handle *handle, Radio::Request request, uint16
 }
 
 int main(int argc, char const *argv[]) {
-	AesKey busDefaultAesKey;
-	//setKey(busDefaultAesKey, bus::defaultKey);
-	//printKey("busDefaultAesKey", busDefaultAesKey);
-
-	setKey(za09LinkAesKey, zb::za09LinkKey);
-	//printKey("za09LinkAesKey", za09LinkAesKey);
-	setKey(linkAesKey, zb::za09LinkKey);
-
-	DataBuffer<16> hashedKey;
-	keyHash(hashedKey, zb::za09LinkKey, 0);
-	setKey(za09KeyTransportAesKey, hashedKey);
-	//printKey("za09KeyTransportAesKey", za09KeyTransportAesKey);
-	keyHash(hashedKey, zb::za09LinkKey, 2);
-	setKey(za09KeyLoadAesKey, hashedKey);
-	//printKey("za09KeyLoadAesKey", za09KeyLoadAesKey);
-
 	fs::path inputFile;
 	fs::path outputFile;
 	bool haveKey = false;

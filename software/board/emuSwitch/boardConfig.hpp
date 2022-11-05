@@ -1,12 +1,14 @@
 #pragma once
 
-#include <emu/BusMasterEmu.hpp>
-#include <emu/BusNodeEmu.hpp>
-#include <emu/QuadratureDecoderEmu.hpp>
+#include <emu/BusMasterImpl.hpp>
+#include <emu/BusNodeImpl.hpp>
+#include <emu/QuadratureDecoderImpl.hpp>
 #include <emu/SpiBME680.hpp>
 #include <emu/SpiSSD1309.hpp>
 #include <emu/SpiMPQ6526.hpp>
-#include <posix/FileStorage.hpp>
+#include <posix/StorageImpl.hpp>
+#include <posix/FlashImpl.hpp>
+#include <FlashStorage.hpp>
 #include <util.hpp>
 
 
@@ -31,8 +33,6 @@ constexpr int OUTPUT_COUNT = array::count(OUTPUTS);
 // spi
 // ---
 
-//constexpr int SPI_CONTEXT_COUNT = 1;
-//#define SPI_EMU_MPQ6526 0
 constexpr int MPQ6526_MAPPING[] = {0, 1, 2, 3, 4, 5};
 
 
@@ -64,16 +64,25 @@ constexpr int DISPLAY_HEIGHT = 64;
 struct Drivers {
 	SpiBME680 airSensor;
 	SpiSSD1309 display{DISPLAY_WIDTH, DISPLAY_HEIGHT};
-	QuadratureDecoderEmu quadratureDecoder;
-	BusMasterEmu busMaster;
-	BusNodeEmu busNode;
-	FileStorage storage{"storage.bin", 65536, 1024};
-	FileStorage counters{"counters.bin", 65536, 4};
+	QuadratureDecoderImpl quadratureDecoder;
+	BusMasterImpl busMaster;
+	BusNodeImpl busNode;
+	StorageImpl storage{"storage.bin", 0xffff, 1024};
+	StorageImpl counters{"counters.bin", 0xff, 4};
 };
 
 struct SwitchDrivers {
-	BusNodeEmu busNode;
+	BusNodeImpl busNode;
 	SpiMPQ6526 relayDriver;
-	FileStorage storage{"storage.bin", 65536, 1024};
-	FileStorage counters{"counters.bin", 65536, 4};
+	StorageImpl storage{"switchStorage.bin", 0xffff, 512};
+	StorageImpl counters{"switchCounters.bin", 0xff, 4};
+};
+
+struct DriversFlashTest {
+	FlashImpl flash{"flashTest.bin", 2, 1024, 4};
+};
+
+struct DriversStorageTest {
+	FlashImpl flash{"storageTest.bin", 2, 1024, 4};
+	FlashStorage storage{flash};
 };

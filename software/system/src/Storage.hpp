@@ -18,21 +18,21 @@ public:
 		// element was read as zero length because of checksum error
 		CHECKSUM_ERROR,
 
-		// element was not read or written because the maximum element count was exceeded
-		ELEMENT_COUNT_EXCEEDED,
+		// element was not read or written because the id is invalid
+		INVALID_ID,
 
-		// element was not written because the maximum element size was exceeded
-		ELEMENT_SIZE_EXCEEDED,
+		// element was not written because the maximum data size was exceeded
+		DATA_SIZE_EXCEEDED,
 
 		// element was not written because storage is full
-		OVERFLOW_ERROR,
+		OUT_OF_MEMORY_ERROR,
 
 		// memory is not usable, e.g. not connected or end of life of flash memory
 		FATAL_ERROR
 	};
 
 	struct ReadParameters {
-		int index;
+		int id;
 		int *size;
 		void *data;
 		Status *status;
@@ -52,26 +52,25 @@ public:
 
 	virtual ~Storage();
 
-
 	/**
 	 * Read an entry from the non-volatile storage into a given data buffer
-	 * @param index index of element
+	 * @param id id of element
 	 * @param size in: size of provided data buffer in bytes, out: size of entry EVEN IF LARGER THAN BUFFER
 	 * @param data data to read into
 	 * @param status status of operation
 	 * @return use co_await on return value to await completion
 	 */
-	[[nodiscard]] virtual Awaitable<ReadParameters> read(int index, int &size, void *data, Status &status) = 0;
+	[[nodiscard]] virtual Awaitable<ReadParameters> read(int id, int &size, void *data, Status &status) = 0;
 
 	/**
 	 * Write an entry to the non-volatile storage
-	 * @param index index of element
+	 * @param id id of element
 	 * @param size size of data to write in bytes
 	 * @param data data to write
 	 * @param status status of operation
 	 * @return use co_await on return value to await completion
 	 */
-	[[nodiscard]] virtual Awaitable<WriteParameters> write(int index, int size, void const *data, Status &status) = 0;
+	[[nodiscard]] virtual Awaitable<WriteParameters> write(int id, int size, void const *data, Status &status) = 0;
 
 	/**
 	 * Clear all entries in the non-volatile storage
@@ -83,21 +82,21 @@ public:
 
 	/**
 	 * Read an entry from the non-volatile storage into a given data buffer
-	 * @param index index of element
+	 * @param id id of element
 	 * @param size in: size of provided data buffer in bytes, out: size of entry EVEN IF LARGER THAN BUFFER
 	 * @param data data to read into
 	 * @return status of operation
 	 */
-	virtual Status readBlocking(int index, int &size, void *data) = 0;
+	virtual Status readBlocking(int id, int &size, void *data) = 0;
 
 	/**
 	 * Write an entry to the non-volatile storage
-	 * @param index index of element
+	 * @param id id of element
 	 * @param size size of data to write in bytes
 	 * @param data data to write
 	 * @return status of operation
 	 */
-	virtual Status writeBlocking(int index, int size, void const *data) = 0;
+	virtual Status writeBlocking(int id, int size, void const *data) = 0;
 
 	/**
 	 * Clear all entries in the non-volatile storage
@@ -108,20 +107,20 @@ public:
 
 	/**
 	 * Get size of an element
-	 * @param index index of element
+	 * @param id id of element
 	 * @return size of the element in bytes
 	 */
-	int getSizeBlocking(int index) {
+	int getSizeBlocking(int id) {
 		int size = 0;
-		readBlocking(index, size, nullptr);
+		readBlocking(id, size, nullptr);
 		return size;
 	}
 
 	/**
-	 * Erase an element
+	 * Erase an element, equivalent to writing data of length zero
 	 * @param index index of element
 	 */
-	void eraseBlocking(int index) {
-		writeBlocking(index, 0, nullptr);
+	void eraseBlocking(int id) {
+		writeBlocking(id, 0, nullptr);
 	}
 };

@@ -104,7 +104,7 @@ public:
 	}
 
 	/**
-	 * Read a buffer with given length
+	 * READ a buffer with given length
 	 * @tparam N length of buffer
 	 * @return buffer
 	 */

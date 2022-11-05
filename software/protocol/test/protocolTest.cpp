@@ -1,9 +1,10 @@
+#include "bus.hpp"
+#include "crc.hpp"
 #include "crypt.hpp"
 #include "Nonce.hpp"
 #include "hash.hpp"
-#include "util.hpp"
+#include <util.hpp>
 #include <gtest/gtest.h>
-
 
 
 
@@ -17,6 +18,13 @@ TEST(protocolTest, DataBuffer) {
 	b.setData(0, b);
 }
 
+TEST(protocolTest, crc16) {
+	// calc crc with CRC-16/CCITT-FALSE
+	uint16_t crc = crc16(12, "Hello World!");
+
+	// expected result from https://crccalc.com/
+	EXPECT_EQ(crc, 0x882a);
+}
 
 
 
@@ -149,7 +157,78 @@ TEST(protocolTest, keyHash1) {
 	}
 }
 
+
+// generators
+// ----------
+
+// print tinycrypt aes key
+void printKey(char const *name, AesKey const &key) {
+	std::cout << "AesKey const " << name << " = {{";
+	bool first = true;
+	for (auto w : key.words) {
+		if (!first)
+			std::cout << ", ";
+		first = false;
+		std::cout << "0x" << std::hex << std::setfill('0') << std::setw(8) << w;
+	}
+	std::cout << "}};\n";
+}
+
+// generate bus key for use with tinycrypt
+void generateBusKey() {
+	AesKey aesKey;
+	setKey(aesKey, bus::defaultKey);
+	printKey("defaultAesKey", aesKey);
+}
+
+// generate zbee keys for use with tinycrypt
+void generateZa09Keys() {
+	AesKey aesKey;
+
+	// link key
+	setKey(aesKey, zb::za09LinkKey);
+	printKey("za09LinkAesKey", aesKey);
+
+	// transport key
+	DataBuffer<16> hashedKey;
+	keyHash(hashedKey, zb::za09LinkKey, 0);
+	setKey(aesKey, hashedKey);
+	printKey("za09KeyTransportAesKey", aesKey);
+
+	// key load key
+	keyHash(hashedKey, zb::za09LinkKey, 2);
+	setKey(aesKey, hashedKey);
+	printKey("za09KeyLoadAesKey", aesKey);
+}
+
+// generate lookup table for crc16
+void generateCrc16Table(uint16_t polynomial) {
+	uint16_t  crc_table[256];
+	for (int b = 0; b <= 255; ++b) {
+		uint16_t v;
+		int i;
+		for (v = b << 8, i = 8; --i >= 0;) {
+			if ((v & 0x8000) != 0x0000)
+				v = ( v << 1 ) ^ polynomial;
+			else
+				v = v << 1;
+		}
+		crc_table[b] = v;
+	}
+
+	for (int j = 0; j < 16; ++j) {
+		for (int i = 0; i < 16; ++i) {
+			std::cout << "0x" << std::hex << std::setfill('0') << std::setw(4) << crc_table[j * 16 + i] << ", ";
+		}
+		std::cout << std::endl;
+	}
+}
+
 int main(int argc, char **argv) {
+	//generateBusKey();
+	//generateZa09Keys();
+	//generateCrc16Table(0x1021);
+
 	testing::InitGoogleTest(&argc, argv);
 	int success = RUN_ALL_TESTS();	
 	return success;

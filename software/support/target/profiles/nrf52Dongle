@@ -1,15 +1,13 @@
 [settings]
 os=baremetal
-os_build=Linux
 arch=armv7
-arch_build=x86_64
 compiler=gcc
-compiler.version=10
+compiler.version=11
 compiler.libcxx=libstdc++11
 build_type=Release
 [options]
+platform=nrf52
 board=nrf52Dongle
-family=nrf52
 mcu=nrf52840
 cpu=cortex-m4
 fpu=fpv4-sp-d16

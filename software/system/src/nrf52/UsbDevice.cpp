@@ -1,7 +1,7 @@
 #include "../UsbDevice.hpp"
-#include "Loop.hpp"
 #include "../Debug.hpp"
-#include "defs.hpp"
+#include "Loop.hpp"
+#include "nrf52.hpp"
 #include <util.hpp>
 #include <boardConfig.hpp>
 

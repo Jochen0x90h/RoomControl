@@ -46,7 +46,7 @@ int main(int argc, char const **argv) {
 		remotePort = std::stoi(argv[2]);
 	}
 #else
-int main(void) {
+int main() {
 #endif
 	Loop::init();
 	Timer::init();

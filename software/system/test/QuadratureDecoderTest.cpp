@@ -45,7 +45,7 @@ Coroutine handleDecoder(QuadratureDecoder &decoder) {
 	}
 }
 
-int main(void) {
+int main() {
 	Loop::init();
 	Output::init(); // for debug signals on pins
 	Input::init();

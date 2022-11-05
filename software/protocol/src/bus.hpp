@@ -25,23 +25,6 @@ enum class Attribute : uint8_t {
 #include "PlugType.generated.hpp"
 
 
-/*
-enum class LevelControlCommand : uint8_t {
-	// command
-	SET = 0,
-	INCREASE = 1,
-	DECREASE = 2,
-	COMMAND_MASK = 3,
-	
-	// time mode
-	DURATION = 0x4,
-	SPEED = 0x8,
-	MODE_MASK = 0xc,
-};
-FLAGS_ENUM(LevelControlCommand);
-*/
-
-
 
 class MessageReader : public DecryptReader {
 public:

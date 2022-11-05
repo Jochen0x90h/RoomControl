@@ -1,12 +1,14 @@
 #pragma once
 
-#include <emu/BusMasterEmu.hpp>
-#include <emu/QuadratureDecoderEmu.hpp>
+#include <emu/BusMasterImpl.hpp>
+#include <emu/QuadratureDecoderImpl.hpp>
 #include <emu/SpiBME680.hpp>
 #include <emu/SpiSSD1309.hpp>
 #include <emu/SpiMR45Vxxx.hpp>
-#include <posix/FileStorage.hpp>
-#include <FeRamCounters.hpp>
+#include <posix/StorageImpl.hpp>
+#include <posix/FlashImpl.hpp>
+#include <FeRamStorage4.hpp>
+#include <FlashStorage.hpp>
 #include <util.hpp>
 
 
@@ -28,16 +30,6 @@ constexpr struct {uint32_t color; bool enabled; bool initialValue;} OUTPUTS[] = 
 	{0xffffff, true, false}, // heating
 };
 constexpr int OUTPUT_COUNT = array::count(OUTPUTS);
-
-
-// spi
-// ---
-/*
-constexpr int SPI_CONTEXT_COUNT = 3;
-#define SPI_EMU_BME680 0
-#define SPI_EMU_SSD1309 1
-#define SPI_EMU_MR45V064B 2
-*/
 
 
 // radio
@@ -69,10 +61,24 @@ constexpr int DISPLAY_HEIGHT = 64;
 struct Drivers {
 	SpiBME680 airSensor;
 	SpiSSD1309 display{DISPLAY_WIDTH, DISPLAY_HEIGHT};
-	QuadratureDecoderEmu quadratureDecoder;
-	BusMasterEmu busMaster;
-	FileStorage storage{"storage.bin", 65536, 1024};
-	//FileStorage counters{"counters.bin", FERAM_SIZE / 10, 4};
+	QuadratureDecoderImpl quadratureDecoder;
+
+	BusMasterImpl busMaster;
+
+	//StorageImpl storage{"storage.bin", 0xffff, 1024};
+	FlashImpl flash{"flash.bin", 4, 32768, 4};
+	FlashStorage storage{flash};
+
+	//StorageImpl counters{"counters.bin", FERAM_SIZE / 10, 4};
 	SpiMR45Vxxx feRam{"feram.bin", FERAM_SIZE};
-	FeRamCounters<FERAM_SIZE> counters{feRam};
+	FeRamStorage4<FERAM_SIZE> counters{feRam};
+};
+
+struct DriversFlashTest {
+	FlashImpl flash{"flashTest.bin", 2, 4096, 4};
+};
+
+struct DriversStorageTest {
+	FlashImpl flash{"storageTest.bin", 4, 32768, 4};
+	FlashStorage storage{flash};
 };

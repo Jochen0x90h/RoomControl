@@ -1,6 +1,6 @@
 #include "../Calendar.hpp"
+#include "nrf52.hpp"
 #include "Loop.hpp"
-#include "defs.hpp"
 #include <assert.hpp>
 
 

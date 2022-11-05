@@ -14,7 +14,7 @@ Coroutine handleSecondTick() {
 	}
 }
 
-int main(void) {
+int main() {
 	Loop::init();
 	Calendar::init();
 	Output::init(); // for debug led's

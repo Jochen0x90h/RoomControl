@@ -1,0 +1,17 @@
+[settings]
+os=baremetal
+arch=armv6
+compiler=gcc
+compiler.version=11
+compiler.libcxx=libstdc++11
+build_type=Release
+[options]
+platform=stm32f0
+board=switch
+mcu=stm32f042x6
+cpu=cortex-m0
+[build_requires]
+[env]
+CC=arm-none-eabi-gcc
+CXX=arm-none-eabi-g++
+GENERATE_HEX=arm-none-eabi-objcopy -O ihex

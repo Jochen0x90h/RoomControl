@@ -1,8 +1,8 @@
 #include "../Radio.hpp"
 #include "Loop.hpp"
-#include "defs.hpp"
+#include "nrf52.hpp"
 #include "Random.hpp"
-#include <Debug.hpp>
+#include "../Debug.hpp"
 #include <ieee.hpp>
 #include <assert.hpp>
 #include <Queue.hpp>

@@ -20,7 +20,7 @@ Coroutine soundTest() {
 	}
 }
 
-int main(void) {
+int main() {
 	Loop::init();
 	Timer::init();
 	Sound::init();
