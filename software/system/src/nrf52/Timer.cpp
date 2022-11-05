@@ -1,6 +1,6 @@
 #include "../Timer.hpp"
 #include "Loop.hpp"
-#include "defs.hpp"
+#include "nrf52.hpp"
 #include <assert.hpp>
 
 

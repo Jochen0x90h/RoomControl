@@ -340,7 +340,7 @@ if("nrf52" IN_LIST PLATFORM)
 		system/src/Loop.hpp system/src/nrf52/Loop.hpp
 		system/src/nrf52/Loop.cpp
 		system/src/nrf52/system/gcc_startup_nrf52840.S
-		system/src/nrf52/system/system_nrf52840.c
+		#system/src/nrf52/system/system_nrf52840.c
 	)
 	set(OUTPUT system/src/Output.hpp system/src/nrf52/Output.cpp system/src/Debug.hpp)
 	set(QUADRATURE_DECODER

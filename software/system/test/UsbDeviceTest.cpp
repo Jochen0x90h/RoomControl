@@ -4,9 +4,8 @@
 #include <Debug.hpp>
 #include <Coroutine.hpp>
 #include <util.hpp>
-#include <nrf52/system/nrf52840.h>
-#include "nrf52/defs.hpp"
-#include "nrf52/FlashImpl.hpp"
+//#include "nrf52/nrf52.hpp"
+//#include "nrf52/FlashImpl.hpp"
 
 
 // Test for USB device.
@@ -173,6 +172,7 @@ int main() {
 			switch (Request(bRequest)) {
 			case Request::RED:
 				Debug::setRedLed(wValue != 0);
+				// debug: erase flash and write
 				//flash.eraseSectorBlocking(0);
 				//flash.writeBlocking(0, 4, writeData + 1);
 				break;

@@ -1,5 +1,4 @@
 #include "QuadratureDecoderImpl.hpp"
-#include "defs.hpp"
 #include "gpio.hpp"
 
 

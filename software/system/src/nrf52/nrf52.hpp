@@ -1,6 +1,10 @@
 #pragma once
 
-#include "system/nrf.h"
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wvolatile"
+#include "system/nrf52840.h" // comment out #include "system_nrf52840.h"
+#include "system/nrf52840_bitfields.h"
+#pragma GCC diagnostic pop
 
 // construct bitfield from value
 #define V(field, value) ((value) << field##_Pos)

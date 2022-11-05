@@ -1,6 +1,4 @@
 #include "BusMasterImpl.hpp"
-#include "Loop.hpp"
-#include "defs.hpp"
 #include "gpio.hpp"
 #include <util.hpp>
 

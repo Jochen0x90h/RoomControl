@@ -53,7 +53,7 @@ public:
 	virtual ~Storage();
 
 	/**
-	 * READ an entry from the non-volatile storage into a given data buffer
+	 * Read an entry from the non-volatile storage into a given data buffer
 	 * @param id id of element
 	 * @param size in: size of provided data buffer in bytes, out: size of entry EVEN IF LARGER THAN BUFFER
 	 * @param data data to read into
@@ -63,7 +63,7 @@ public:
 	[[nodiscard]] virtual Awaitable<ReadParameters> read(int id, int &size, void *data, Status &status) = 0;
 
 	/**
-	 * WRITE an entry to the non-volatile storage
+	 * Write an entry to the non-volatile storage
 	 * @param id id of element
 	 * @param size size of data to write in bytes
 	 * @param data data to write
@@ -81,7 +81,7 @@ public:
 
 
 	/**
-	 * READ an entry from the non-volatile storage into a given data buffer
+	 * Read an entry from the non-volatile storage into a given data buffer
 	 * @param id id of element
 	 * @param size in: size of provided data buffer in bytes, out: size of entry EVEN IF LARGER THAN BUFFER
 	 * @param data data to read into
@@ -90,7 +90,7 @@ public:
 	virtual Status readBlocking(int id, int &size, void *data) = 0;
 
 	/**
-	 * WRITE an entry to the non-volatile storage
+	 * Write an entry to the non-volatile storage
 	 * @param id id of element
 	 * @param size size of data to write in bytes
 	 * @param data data to write

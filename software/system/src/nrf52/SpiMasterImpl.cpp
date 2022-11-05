@@ -1,5 +1,5 @@
 #include "SpiMasterImpl.hpp"
-#include "defs.hpp"
+#include "nrf52.hpp"
 #include <util.hpp>
 
 

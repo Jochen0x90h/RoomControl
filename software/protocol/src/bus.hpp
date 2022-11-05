@@ -25,43 +25,26 @@ enum class Attribute : uint8_t {
 #include "PlugType.generated.hpp"
 
 
-/*
-enum class LevelControlCommand : uint8_t {
-	// command
-	SET = 0,
-	INCREASE = 1,
-	DECREASE = 2,
-	COMMAND_MASK = 3,
-	
-	// time mode
-	DURATION = 0x4,
-	SPEED = 0x8,
-	MODE_MASK = 0xc,
-};
-FLAGS_ENUM(LevelControlCommand);
-*/
-
-
 
 class MessageReader : public DecryptReader {
 public:
 	MessageReader(int length, uint8_t *data) : DecryptReader(length, data) {}
 
 	/**
-	 * READ a value from 0 to 8 from bus arbitration, i.e. multiple devices can write at the same time and the
+	 * Read a value from 0 to 8 from bus arbitration, i.e. multiple devices can write at the same time and the
 	 * lowest value survives
 	 * @return value
 	 */
 	uint8_t arbiter();
 
 	/**
-	 * READ an encoded device id
+	 * Read an encoded device id
 	 * @return device id
 	 */
 	uint32_t id();
 
 	/**
-	 * READ an encoded address
+	 * Read an encoded address
 	 * @return address
 	 */
 	uint8_t address() {
@@ -87,7 +70,7 @@ public:
 	{}
 
 	/**
-	 * WRITE a value from 0 to 8 for bus arbitration, i.e. multiple devices can write at the same time and the
+	 * Write a value from 0 to 8 for bus arbitration, i.e. multiple devices can write at the same time and the
 	 * lowest value survives
 	 * @param value value in range 0 to 8 to write
 	 */
@@ -96,13 +79,13 @@ public:
 	}
 
 	/**
-	 * WRITE an encoded device id
+	 * Write an encoded device id
 	 * @param id device id to encode
 	 */
 	void id(uint32_t id);
 
 	/**
-	 * WRITE an ecoded address
+	 * Write an ecoded address
 	 * @return
 	 */
 	void address(uint8_t address) {

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "defs.hpp"
+#include "nrf52.hpp"
 
 
 namespace gpio {

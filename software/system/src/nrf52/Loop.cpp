@@ -1,6 +1,20 @@
 #include "Loop.hpp"
-#include "defs.hpp"
+#include "nrf52.hpp"
 
+
+// called by system/gcc_startup_nrf52840.S
+extern "C" {
+void SystemInit() {
+	// enable FPU (see nRF5_SDK_*/modules/nrfx/mdk/system_nrf52.c)
+	#if (__FPU_USED == 1)
+		SCB->CPACR = SCB->CPACR | (3UL << 20) | (3UL << 22);
+		__DSB();
+		__ISB();
+	#else
+		#warning "FPU is not used"
+	#endif
+}
+}
 
 namespace Loop {
 

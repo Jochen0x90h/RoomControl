@@ -1,4 +1,4 @@
-#include "defs.hpp"
+#include "nrf52.hpp"
 #include <assert.hpp>
 #include <util.hpp>
 #include <cstdint>

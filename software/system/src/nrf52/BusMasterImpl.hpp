@@ -2,7 +2,7 @@
 
 #include "../BusMaster.hpp"
 #include "Loop.hpp"
-#include "system/nrf.h"
+#include "nrf52.hpp"
 #include <functional>
 
 
