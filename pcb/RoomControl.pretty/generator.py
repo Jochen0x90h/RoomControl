@@ -408,6 +408,12 @@ smdDilFootprint("BME680", 3.0, 3.0, 4, ROUNDRECT10, -2.40, 0.80, 0.45, 0.45,
 	description="Bosch Air sensor (https://www.bosch-sensortec.com/products/environmental-sensors/gas-sensors-bme680/)")
 footer()
 
+# Rohm MR45V064B
+smdDilFootprint("MR45V064B", 3.90, 4.90, 4, ROUNDRECT10, 6.00 - 0.45, 1.27, 0.6, 0.6,
+	description="Rohm 64k FRAM (https://www.lapis-tech.com/en/data/datasheet-file_db/Memory/FEDR45V064B-01.pdf)")
+footer()
+
+
 
 # Omron relay G6SU-2
 padWidth = 1.8
