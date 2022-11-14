@@ -73,6 +73,6 @@
   (pad 3 smd oval (at 0 30) (size 10 6) (layers F.Cu F.Mask))
   (pad 4 thru_hole oval (at 0 -30) (size 7.6 3.6) (drill oval 7 3) (layers *.Cu *.Mask))
   (pad 4 smd oval (at 0 -30) (size 10 6) (layers F.Cu F.Mask))
-  (pad "" np_thru_hole  circle (at 20.5 6.6) (size 3 3) (drill 3) (clearance 1) (layers *.Cu *.Mask))
-  (pad "" np_thru_hole  circle (at -20.5 6.6) (size 3 3) (drill 3) (clearance 1) (layers *.Cu *.Mask))
+  (pad "" np_thru_hole  circle (at 20.5 4) (size 3 3) (drill 3) (clearance 1) (layers *.Cu *.Mask))
+  (pad "" np_thru_hole  circle (at -20.5 4) (size 3 3) (drill 3) (clearance 1) (layers *.Cu *.Mask))
 )

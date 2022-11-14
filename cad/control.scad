@@ -362,26 +362,26 @@ module drills() {
 	drill(-10, -19.9, 0.5);
 	drill(-8.1, -19.9, 0.5);
 	drill(-30.5, -35.3, 0.8);
-	drill(-29, 16, 0.8);
 	drill(-28.5, -35.3, 0.8);
-	drill(-27, 16, 0.8);
 	drill(-26.5, -35.3, 0.8);
-	drill(-25, 16, 0.8);
 	drill(-24.796, -28.204, 0.8);
 	drill(-24.796, -31.796, 0.8);
 	drill(-24.5, -35.3, 0.8);
-	drill(-23, 16, 0.8);
 	drill(-21.204, -28.204, 0.8);
 	drill(-21.1, -33.8, 0.8);
 	drill(-21.1, -35.8, 0.8);
-	drill(-21, 16, 0.8);
-	drill(-19, 16, 0.8);
 	drill(-23, -12.75, 0.9);
 	drill(-23, -15.25, 0.9);
-	drill(-33.3, -14.2, 1);
-	drill(-33.3, -16.74, 1);
+	drill(-32.7, -14.2, 1);
+	drill(-32.7, -16.74, 1);
 	drill(-32.3, -23.9, 1);
 	drill(-32.3, -26.44, 1);
+	drill(-30, 16, 1);
+	drill(-27.46, 16, 1);
+	drill(-24.92, 16, 1);
+	drill(-22.38, 16, 1);
+	drill(-19.84, 16, 1);
+	drill(-17.3, 16, 1);
 	drill(11.4, 24.75, 1);
 	drill(13.6, 32.25, 1);
 	drill(19.5, -15, 1);
@@ -606,21 +606,61 @@ color([1, 0, 0]) {
 } // color
 }
 
-// cover for fabrication
+module programmer(n) {
+	l = 10;
+	difference() {
+		union() {
+			box(0, 0, n*2+1, 2.5, 0, l-2);
+			box(0, 0, n*2+3, 2.5, l-3, l+2.5);
+		}
+		
+		for (i = [0 : n-1]) {
+			x = i - (n - 1) / 2;
+
+			// subtract holes
+			barrel(x*2, 0, 1.1, -1, l);
+			barrel(x*2.5, 0, 1, l, l+3.5);
+			
+			// subtract connection boxes for soldering
+			translate([x*2.25, 0, l])
+			rotate([0, x*10, 0]) 
+				box(0, 0, 1, 1, -1, 1);
+		}
+		
+		// cutaway for soldering
+		box(0, 2.4, n*2+2, 4, l-1, l+1);
+	}	
+}
+
+// cover for production including wheel and programmer
 module coverForProduction() {
 	cover();
+	
+	// attached wheel
 	box(0, -29.5, 1.5, 20, coverZ1, coverZ1+1.5);
 	translate([-potiX, 6, coverZ1-wheelZ1]) {
 		wheel();
 	}
+	
+	// attached programmers
+	box(32, -36, 1, 3, coverZ1, coverZ1+2.5);
+	translate([20, -29, coverZ1+1.25])
+	rotate([90, 0, 90])
+	programmer(5);
+
+	box(-32, -36, 1, 3, coverZ1, coverZ1+2.5);
+	translate([-20, -30, coverZ1+1.25])
+	rotate([90, 0, -90])
+	programmer(4);
 }
 
 
 	
 // casing parts that need to be printed
-//base();
-cover();
+base();
+//cover();
 //wheel();
+//programmer(4);
 //coverForProduction();
 
 // reference parts
