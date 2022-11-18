@@ -12,7 +12,7 @@ CMakeLists.txt.user
 *.gbr
 *.drl
 *.kicad_prl
-control-backups
+*-backups/
 fp-info-cache
 
 # data files
