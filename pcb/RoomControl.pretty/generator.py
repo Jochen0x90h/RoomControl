@@ -408,9 +408,14 @@ smdDilFootprint("BME680", 3.0, 3.0, 4, ROUNDRECT10, -2.40, 0.80, 0.45, 0.45,
 	description="Bosch Air sensor (https://www.bosch-sensortec.com/products/environmental-sensors/gas-sensors-bme680/)")
 footer()
 
-# Rohm MR45V064B
-smdDilFootprint("MR45V064B", 3.90, 4.90, 4, ROUNDRECT10, 6.00 - 0.45, 1.27, 0.6, 0.6,
-	description="Rohm 64k FRAM (https://www.lapis-tech.com/en/data/datasheet-file_db/Memory/FEDR45V064B-01.pdf)")
+# Rohm MR45V064B FeRam
+#smdDilFootprint("MR45V064B", 3.90, 4.90, 4, ROUNDRECT10, 6.00 - 0.45, 1.27, 0.6, 0.6,
+#	description="Rohm 64k FRAM (https://www.lapis-tech.com/en/data/datasheet-file_db/Memory/FEDR45V064B-01.pdf)")
+#footer()
+
+# Infineon FM25CL64B FeRam SOIC
+smdDilFootprint("FM25CL64B", 3.90, 4.90, 4, ROUNDRECT10, 6.00 - 0.40*2, 1.27, 1.0, 0.6,
+	description="Infineon 64k FRAM (https://www.infineon.com/dgdl/Infineon-FM25CL64B_64-Kbit_(8_K_8)_Serial_(SPI)_F-RAM-DataSheet-v11_00-EN.pdf?fileId=8ac78c8c7d0d8da4017d0ebdfcd83119)")
 footer()
 
 
