@@ -11,8 +11,8 @@ CMakeLists.txt.user
 # KiCad
 *.gbr
 *.drl
-*-bak
-*-cache.lib
+*.kicad_prl
+*-backups/
 fp-info-cache
 
 # data files

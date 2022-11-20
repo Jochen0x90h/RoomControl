@@ -408,6 +408,12 @@ smdDilFootprint("BME680", 3.0, 3.0, 4, ROUNDRECT10, -2.40, 0.80, 0.45, 0.45,
 	description="Bosch Air sensor (https://www.bosch-sensortec.com/products/environmental-sensors/gas-sensors-bme680/)")
 footer()
 
+# Infineon FM25CL64B FeRam SOIC
+smdDilFootprint("FM25CL64B", 3.90, 4.90, 4, ROUNDRECT10, 6.00 - 0.40*2, 1.27, 1.0, 0.6,
+	description="Infineon 64k FRAM (https://www.infineon.com/dgdl/Infineon-FM25CL64B_64-Kbit_(8_K_8)_Serial_(SPI)_F-RAM-DataSheet-v11_00-EN.pdf?fileId=8ac78c8c7d0d8da4017d0ebdfcd83119)")
+footer()
+
+
 
 # Omron relay G6SU-2
 padWidth = 1.8
@@ -455,11 +461,10 @@ footer()
 
 
 # LED/photo diode holes
-def diodeHoles(name, angle):
-	padWidth = 1.5
+def diodeHoles(name, pitch, angle):
+	padWidth = 1.3
 	padHeight = 1.5
 	drill = 0.9
-	pitch = 2.5
 	packageRight = pitch / 2 + padWidth / 2
 	packageLeft = -packageRight
 	packageBottom = padHeight / 2
@@ -475,11 +480,11 @@ def diodeHoles(name, angle):
 	x = pitch/2 * cos(angle);
 	y = pitch/2 * sin(angle);
 	thruHolePad(1, ROUNDRECT5, -x, -y, padWidth, padHeight, drill)
-	thruHolePad(2, CIRCLE, x, y, padWidth, padHeight, drill)
+	thruHolePad(2, ROUNDRECT, x, y, padWidth, padHeight, drill)
 	footer()
 
-diodeHoles("DiodeHoles", 0)
-diodeHoles("DiodeHolesR", 0.15)
+diodeHoles("DiodeHoles", 2.5, 0)
+diodeHoles("DiodeHolesSwitch", 1.8, 0)
 
 
 # switch mount
@@ -549,6 +554,6 @@ thruHolePad(4, CIRCLE, 0, -30, height+backClearance*2, width+backClearance*2, (h
 smdPad(4, CIRCLE, 0, -30, height+frontClearance*2, width+frontClearance*2, layers="F.Cu F.Mask")
 #npthPad(20.5, 6.6, 5, 3, clearance=1)
 #npthPad(-20.5, 6.6, 5, 3, clearance=1)
-npthPad(20.5, 6.6, 3, 3, clearance=1)
-npthPad(-20.5, 6.6, 3, 3, clearance=1)
+npthPad(20.5, 4, 3, 3, clearance=1)
+npthPad(-20.5, 4, 3, 3, clearance=1)
 footer()

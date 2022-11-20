@@ -6,7 +6,7 @@ $fn = 128;
 // variables
 
 // pcb
-pcbWidth = 68;
+pcbWidth = 70;
 pcbHeight = 76;
 pcbX = 0; // center of pcb
 pcbY = 0;
@@ -65,22 +65,30 @@ photoD = 5.1 + 0.1; // tolerance
 photoZ2 = coverZ2;
 photoZ1 = photoZ2 - 3.85;
 
-// speaker
+// rectangular speaker
+//speakerX = 0;
+//speakerY = -25;
+//speakerWidth = 25 + 0.2; // tolerance
+//speakerHeight = 14 + 0.2; // tolerance
+//speakerZ2 = wheelZ2 - 2;
+//speakerZ1 = speakerZ2 - 4.5; // thickness of speaker
+
+// round speaker
 speakerX = 0;
 speakerY = -25;
-speakerWidth = 25 + 0.2; // tolerance
-speakerHeight = 14 + 0.2; // tolerance
+speakerDiameter = 28;
 speakerZ2 = wheelZ2 - 2;
-speakerZ1 = speakerZ2 - 4.5; // thickness of speaker
+speakerZ1 = speakerZ2 - 5.2; // thickness of speaker
 
-// micro usb
+
+// micro usb connector
 usbX = 22;
 usbWidth = 8;
 usbZ2 = pcbZ2 + 3; // thickness of usb connector
 usbPlugWidth = 12;
 usbPlugThickness = 8; // thickness of plug of usb cable
 
-// e73 module
+// ebyte e73 module
 e73X = -13;
 e73Width = 18.5;
 e73Z2 = pcbZ2 + 2;
@@ -121,15 +129,15 @@ panelZ3 = coverZ2 - 1;
 //echo(100+panelX2);
 //echo(100-panelY2);
 
-// power 
-powerX1 = -12.3 - 0.4;
-powerX2 = 21.7 + 0.4;
-powerY1 = 17.5 - 0.3;
-powerY2 = 37.5 + 0.3;
-powerZ2 = pcbZ2 + 15 + 0.2;
+// power supply (34x20x15 https://www.hlktech.com/en/Goods-12.html)
+powerX1 = 15.4;
+powerX2 = 35.6;
+powerY1 = 3.7;
+powerY2 = 37.9;
+powerZ2 = pcbZ2 + 15 + 0.2; // tolerance
 assert(powerZ2 <= panelZ1, "power supply intersects display");
 
-// clamps
+// cable clamps
 clampsX1 = -16.3;
 clampsX2 = 16.3;
 clampsY1 = -10.5;
@@ -189,6 +197,74 @@ module frustum(x, y, w1, h1, w2, h2, z1, z2) {
 		[7,4,0,3]]; // left  
 	polyhedron(points, faces);
 }
+
+
+// reference parts
+// ---------------
+
+module usb() {
+	color([0.5, 0.5, 0.5])
+	box(x=usbX, y=pcbY1+1, w=usbWidth, h=10, z1=pcbZ2-0.1, z2=usbZ2);		
+}
+
+module usbPlug() {
+	usbPlugZ1 = (usbZ1+usbZ2)/2-usbPlugThickness/2;
+	color([0, 0, 0])
+	box(x=usbX, y=pcbY1-10, w=usbPlugWidth, h=14,
+		z1=usbPlugZ1, z2=usbPlugZ1+usbPlugThickness);		
+}
+
+// ebyte e73 module
+module e73() {
+	color([0.0, 0.6, 0.0])
+	box(x=e73X, y=pcbY1+1, w=e73Width, h=10, z1=pcbZ2-0.1, z2=e73Z2);			
+}
+
+// printed circuit board
+module pcb() {
+	color([0, 0.6, 0, 0.3])
+	box(x=pcbX, y=pcbY, w=pcbWidth, h=pcbHeight,
+		z1=pcbZ1, z2=pcbZ2);
+}
+
+// digital potentiometer
+module poti() {
+	x = potiX;
+	y = potiY;
+	color([0.5, 0.5, 0.5]) {
+		box(x, y, 13.4, 12.4, pcbZ2, potiZ1);
+		box(x, y, 15, 6, pcbZ2, potiZ1);
+		barrel(x, y, potiD1, pcbZ2, potiZ2);
+		difference() {
+			barrel(x, y, potiD2, pcbZ2, potiZ4);
+			box(x, y+potiD2/2, 10, 3, potiZ3, potiZ4+0.5);
+		}
+	}
+}
+
+//module relays() {
+//	color([1, 1, 1]) {
+//		cuboid(-23.2, 22.8, 37.5, 37.5, pcbZ2, pcbZ2+9.2);
+//	}
+//}
+
+// transformer for power supply
+module power() {
+	color([0, 0, 0]) {
+		cuboid(powerX1, powerY1, powerX2, powerY2, pcbZ2-0.1, powerZ2);
+	}	
+}
+
+// cable clamps
+module clamps() {
+	color([0.8, 0.8, 0.8]) {
+		cuboid(clampsX1, clampsY1, clampsX2, clampsY2,
+			pcbZ1 - clampsHeight, pcbZ1);
+	}		
+}
+
+
+// 
 
 module wheel() {
 	x = potiX;
@@ -271,23 +347,6 @@ module snap(x, l) {
 			cuboid(x1=-0.65, x2=0.65, y1=-l/2, y2=l/2, z1=-0.65, z2=0.65);
 }
 
-module usb() {
-	color([0.5, 0.5, 0.5])
-	box(x=usbX, y=pcbY1+1, w=usbWidth, h=10, z1=pcbZ2-0.1, z2=usbZ2);		
-}
-
-module usbPlug() {
-	usbPlugZ1 = (usbZ1+usbZ2)/2-usbPlugThickness/2;
-	color([0, 0, 0])
-	box(x=usbX, y=pcbY1-10, w=usbPlugWidth, h=14,
-		z1=usbPlugZ1, z2=usbPlugZ1+usbPlugThickness);		
-}
-
-module e73() {
-	color([0.0, 0.6, 0.0])
-	box(x=e73X, y=pcbY1+1, w=e73Width, h=10, z1=pcbZ2-0.1, z2=e73Z2);			
-}
-
 module drill(x, y, d) {
 	h1 = d + 1;
 	w1 = h1;
@@ -298,63 +357,67 @@ module drill(x, y, d) {
 }
 
 // generated from .drl files using drill2cad.py
+// control
 module drills() {
 	drill(-10, -19.9, 0.5);
 	drill(-8.1, -19.9, 0.5);
-	drill(-22.6, 10.62, 0.8);
-	drill(-22.6, 3, 0.8);
-	drill(-20.06, 10.62, 0.8);
-	drill(-20.06, 3, 0.8);
-	drill(-17.52, 10.62, 0.8);
-	drill(-17.52, 3, 0.8);
+	drill(-30.5, -35.3, 0.8);
+	drill(-28.5, -35.3, 0.8);
+	drill(-26.5, -35.3, 0.8);
 	drill(-24.796, -28.204, 0.8);
 	drill(-24.796, -31.796, 0.8);
+	drill(-24.5, -35.3, 0.8);
 	drill(-21.204, -28.204, 0.8);
 	drill(-21.1, -33.8, 0.8);
 	drill(-21.1, -35.8, 0.8);
-	drill(-23, -12.75, 1);
-	drill(-23, -15.29, 1);
-	drill(-16.2, 22.25, 1);
-	drill(-14, 29.75, 1);
+	drill(-23, -12.75, 0.9);
+	drill(-23, -15.25, 0.9);
+	drill(-32.7, -14.2, 1);
+	drill(-32.7, -16.74, 1);
+	drill(-32.3, -23.9, 1);
+	drill(-32.3, -26.44, 1);
+	drill(-30, 16, 1);
+	drill(-27.46, 16, 1);
+	drill(-24.92, 16, 1);
+	drill(-22.38, 16, 1);
+	drill(-19.84, 16, 1);
+	drill(-17.3, 16, 1);
+	drill(11.4, 24.75, 1);
+	drill(13.6, 32.25, 1);
 	drill(19.5, -15, 1);
 	drill(19.5, -29.5, 1);
 	drill(22, -29.5, 1);
 	drill(24.5, -15, 1);
 	drill(24.5, -29.5, 1);
-	drill(-32.3, -23.9, 1);
-	drill(-32.3, -26.44, 1);
-	drill(-32.02, -35.15, 1);
-	drill(-29.48, -35.15, 1);
-	drill(-26.94, -35.15, 1);
-	drill(-24.4, -35.15, 1);
-	drill(-12.5, -1.5, 1.1);
-	drill(-12.5, -6.5, 1.1);
-	drill(-7.5, -1.5, 1.1);
-	drill(-7.5, -6.5, 1.1);
-	drill(-2.5, -1.5, 1.1);
-	drill(-2.5, -6.5, 1.1);
-	drill(2.5, -1.5, 1.1);
-	drill(2.5, -6.5, 1.1);
-	drill(7.5, -1.5, 1.1);
-	drill(7.5, -6.5, 1.1);
-	drill(12.5, -1.5, 1.1);
-	drill(12.5, -6.5, 1.1);
-	drill(19.1, -36.5, 1.1);
-	drill(24.9, -36.5, 1.1);
-	drill(-10, 30, 1.1);
-	drill(-10, 25, 1.1);
-	drill(19.4, 35.2, 1.1);
-	drill(19.4, 19.8, 1.1);
+	drill(31.5, -34, 1);
+	drill(-12, -1.5, 1.1);
+	drill(-12, -6.5, 1.1);
 	drill(-10, 15, 1.1);
 	drill(-10, 10, 1.1);
+	drill(-7, -1.5, 1.1);
+	drill(-7, -6.5, 1.1);
 	drill(-5, 15, 1.1);
 	drill(-5, 10, 1.1);
+	drill(-2, -1.5, 1.1);
+	drill(-2, -6.5, 1.1);
 	drill(0, 15, 1.1);
 	drill(0, 10, 1.1);
+	drill(3, -1.5, 1.1);
+	drill(3, -6.5, 1.1);
 	drill(5, 15, 1.1);
 	drill(5, 10, 1.1);
+	drill(8, -1.5, 1.1);
+	drill(8, -6.5, 1.1);
 	drill(10, 15, 1.1);
 	drill(10, 10, 1.1);
+	drill(13, -1.5, 1.1);
+	drill(13, -6.5, 1.1);
+	drill(17.8, 6.1, 1.1);
+	drill(19.1, -36.5, 1.1);
+	drill(23, 35.5, 1.1);
+	drill(24.9, -36.5, 1.1);
+	drill(28, 35.5, 1.1);
+	drill(33.2, 6.1, 1.1);
 	drill(15.9, -22, 2.2);
 	drill(28.1, -22, 2.2);
 }
@@ -435,10 +498,10 @@ color([1, 0, 0]) {
 			box(x=panelX, y=panelY1, w=panelWidth+2, h=2,
 				z1=panelZ2-2, z2=panelZ2);
 		
-			// upper display holder (not needed bacause of power supply)
-			//box(panelX, panelY2-0.5,
-			//	10, 1,
-			//	pcbZ2, panelZ1);
+			// upper display holder
+			box(panelX, panelY2-0.5,
+				10, 1,
+				pcbZ2, panelZ1);
 			
 			// lower pcb support
 			box(pcbX, pcbY1, pcbWidth, 3, pcbZ2, pcbZ2+2);
@@ -452,7 +515,7 @@ color([1, 0, 0]) {
 
 			// pir lens border
 			barrel(lensX, lensY,
-				lensD1 + 1.5,
+				lensD1 + 2,
 				lensZ1, lensZ2);
 			box(lensX - lensD2/2, lensY,
 				2, 4,
@@ -460,18 +523,21 @@ color([1, 0, 0]) {
 
 			// photo diode border
 			barrel(photoX, photoY,
-				photoD+1,
+				photoD+2,
 				photoZ1, photoZ2);
 
 			// speaker border
-			box(speakerX, speakerY,
-				speakerWidth+2, speakerHeight+2,
+			//box(speakerX, speakerY,
+			//	speakerWidth+1.5, speakerHeight+1.5,
+			//	speakerZ2-1, coverZ2);
+			barrel(speakerX, speakerY,
+				speakerDiameter+2,
 				speakerZ2-1, coverZ2);
 			
 			// speaker holder
 			box(speakerX, (-40+speakerY)/2,
 				10, speakerY--40,
-				speakerZ1-1, speakerZ1);
+				speakerZ1-1.5, speakerZ1);
 			translate([speakerX, speakerY, speakerZ1])
 				sphere(r = 1);
 		}
@@ -493,11 +559,17 @@ color([1, 0, 0]) {
 			photoZ1-1, photoZ2+1);
 
 		// subtract speaker cutout
-		box(speakerX, speakerY,
-			speakerWidth, speakerHeight,
+		//box(speakerX, speakerY,
+		//	speakerWidth, speakerHeight,
+		//	speakerZ2-2, speakerZ2);
+		//box(speakerX, speakerY,
+		//	speakerWidth-2, speakerHeight-1,
+		//	speakerZ2-2, coverZ2-2);
+		barrel(speakerX, speakerY,
+			speakerDiameter,
 			speakerZ2-2, speakerZ2);
-		box(speakerX, speakerY,
-			speakerWidth-2, speakerHeight-1,
+		barrel(speakerX, speakerY,
+			speakerDiameter-3,
 			speakerZ2-2, coverZ2-2);
 
 		// subtract display screen window
@@ -534,60 +606,61 @@ color([1, 0, 0]) {
 } // color
 }
 
-// cover for fabrication
+module programmer(n) {
+	l = 10;
+	difference() {
+		union() {
+			box(0, 0, n*2+1, 2.5, 0, l-2);
+			box(0, 0, n*2+3, 2.5, l-3, l+2.5);
+		}
+		
+		for (i = [0 : n-1]) {
+			x = i - (n - 1) / 2;
+
+			// subtract holes
+			barrel(x*2, 0, 1.1, -1, l);
+			barrel(x*2.5, 0, 1, l, l+3.5);
+			
+			// subtract connection boxes for soldering
+			translate([x*2.25, 0, l])
+			rotate([0, x*10, 0]) 
+				box(0, 0, 1, 1, -1, 1);
+		}
+		
+		// cutaway for soldering
+		box(0, 2.4, n*2+2, 4, l-1, l+1);
+	}	
+}
+
+// cover for production including wheel and programmer
 module coverForProduction() {
 	cover();
+	
+	// attached wheel
 	box(0, -29.5, 1.5, 20, coverZ1, coverZ1+1.5);
 	translate([-potiX, 6, coverZ1-wheelZ1]) {
 		wheel();
 	}
-}
-
-
-module pcb() {
-	color([0, 0.6, 0, 0.3])
-	box(x=pcbX, y=pcbY, w=pcbWidth, h=pcbHeight,
-		z1=pcbZ1, z2=pcbZ2);
-}
-
-module poti() {
-	x = potiX;
-	y = potiY;
-	color([0.5, 0.5, 0.5]) {
-		box(x, y, 13.4, 12.4, pcbZ2, potiZ1);
-		box(x, y, 15, 6, pcbZ2, potiZ1);
-		barrel(x, y, potiD1, pcbZ2, potiZ2);
-		difference() {
-			barrel(x, y, potiD2, pcbZ2, potiZ4);
-			box(x, y+potiD2/2, 10, 3, potiZ3, potiZ4+0.5);
-		}
-	}
-}
-
-module relays() {
-	color([1, 1, 1]) {
-		cuboid(-23.2, 22.8, 37.5, 37.5, pcbZ2, pcbZ2+9.2);
-	}
-}
-
-module power() {
-	color([0, 0, 0]) {
-		cuboid(powerX1, powerY1, powerX2, powerY2, pcbZ2-0.1, powerZ2);
-	}	
-}
-
-module clamps() {
-	color([0.8, 0.8, 0.8]) {
-		cuboid(clampsX1, clampsY1, clampsX2, clampsY2,
-			pcbZ1 - clampsHeight, pcbZ1);
-	}		
-}
 	
+	// attached programmers
+	box(32, -36, 1, 3, coverZ1, coverZ1+2.5);
+	translate([20, -29, coverZ1+1.25])
+	rotate([90, 0, 90])
+	programmer(5);
+
+	box(-32, -36, 1, 3, coverZ1, coverZ1+2.5);
+	translate([-20, -30, coverZ1+1.25])
+	rotate([90, 0, -90])
+	programmer(4);
+}
+
+
 	
 // casing parts that need to be printed
-//base();
-cover();
+base();
+//cover();
 //wheel();
+//programmer(4);
 //coverForProduction();
 
 // reference parts
@@ -596,7 +669,6 @@ cover();
 //usb();
 //usbPlug();
 //e73();
-//relays();
 //power();
 //clamps();
 //barrel(-9, -19.7, 3, pcbZ2, pcbZ2 + 8); // crystal
