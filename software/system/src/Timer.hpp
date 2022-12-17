@@ -13,19 +13,19 @@ namespace Timer {
 void init();
 
 /**
- * Get current time in 1/1024 seconds
+ * Get current time in milliseconds
  * @return current time
  */
 SystemTime now();
 
 /**
- * Suspend execution using co_await until a given time. Only up to TIMER_COUNT coroutines can wait simultaneously.
+ * Suspend execution using co_await until a given time.
  * @param time time point
  */
 [[nodiscard]] Awaitable<SystemTime> sleep(SystemTime time);
 
 /**
- * Suspend execution using co_await for a given duration. Only up to TIMER_COUNT coroutines can wait simultaneously.
+ * Suspend execution using co_await for a given duration.
  * @param duration duration
  */
 [[nodiscard]] inline Awaitable<SystemTime> sleep(SystemDuration duration) {return sleep(now() + duration);}

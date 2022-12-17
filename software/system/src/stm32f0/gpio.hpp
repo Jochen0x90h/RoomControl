@@ -4,8 +4,10 @@
 //#include <cstdint>
 
 
-// data sheet: https://www.st.com/resource/en/datasheet/stm32f042f6.pdf
-// refernece manual: https://www.st.com/resource/en/reference_manual/dm00031936-stm32f0x1stm32f0x2stm32f0x8-advanced-armbased-32bit-mcus-stmicroelectronics.pdf
+/*
+	Data sheet: https://www.st.com/resource/en/datasheet/stm32f042f6.pdf
+	Refernece manual section 8: https://www.st.com/resource/en/reference_manual/dm00031936-stm32f0x1stm32f0x2stm32f0x8-advanced-armbased-32bit-mcus-stmicroelectronics.pdf
+*/
 
 namespace gpio {
 
@@ -162,6 +164,9 @@ inline void configureAlternateInput(PinFunction pf, Pull pull = Pull::DISABLED) 
 	int pos2 = (pf.pin & 15) << 1;
 	int pos4 = (pf.pin & 7) << 2;
 
+	// enable peripheral clock for the port
+	RCC->AHBENR = RCC->AHBENR | (1 << (RCC_AHBENR_GPIOAEN_Pos + (pf.pin >> 4)));
+
 	// set alternate function
 	auto &AFR = port->AFR[(pf.pin >> 3) & 1];
 	AFR = (AFR & ~(15 << pos4)) | (pf.function << pos4);
@@ -178,8 +183,11 @@ inline void configureAlternateOutput(PinFunction pf, Pull pull = Pull::DISABLED,
 {
 	auto port = getPort(pf.pin);
 	int pos = pf.pin & 15;
-	int pos2 = (pf.pin & 15) << 1;
+	int pos2 = pos << 1;
 	int pos4 = (pf.pin & 7) << 2;
+
+	// enable peripheral clock for the port
+	RCC->AHBENR = RCC->AHBENR | (1 << (RCC_AHBENR_GPIOAEN_Pos + (pf.pin >> 4)));
 
 	// set alternate function
 	auto &AFR = port->AFR[(pf.pin >> 3) & 1];

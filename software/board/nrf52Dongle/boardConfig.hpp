@@ -74,20 +74,36 @@ constexpr int USB_ENDPOINT_COUNT = 3;
 // -------
 
 struct Drivers {
-	SpiMasterImpl spi{3,
+	SpiMasterImpl spiDevice{
 		gpio::P0(19),
 		gpio::P0(20),
 		gpio::P0(21),
 		gpio::P0(21)}; // data/command for write-only display, can be same as MISO
-	SpiMasterImpl::Channel airSensor{spi, gpio::P0(2)};
-	SpiMasterImpl::Channel display{spi, gpio::P0(3), true};
-	SpiMasterImpl::Channel feRam{spi, gpio::P0(3)};
+	SpiMasterImpl::Channel airSensor{spiDevice, gpio::P0(2)};
+	SpiMasterImpl::Channel displayCommand{spiDevice, gpio::P0(3), SpiMasterImpl::Channel::Mode::COMMAND};
+	SpiMasterImpl::Channel displayData{spiDevice, gpio::P0(3), SpiMasterImpl::Channel::Mode::DATA};
+	SpiMasterImpl::Channel feRam{spiDevice, gpio::P0(3)};
 	QuadratureDecoderImpl quadratureDecoder{gpio::P0(4), gpio::P0(5)};
 
-	BusMasterImpl busMaster{gpio::P0(2), gpio::P0(3)};
+	//BusMasterImpl busMaster{gpio::P0(2), gpio::P0(3)};
 
-	FlashImpl flash{0xe0000 - 0x20000, 4, 32768};
-	FlashStorage storage{flash};
+	//FlashImpl flash{0xe0000 - 0x20000, 4, 32768};
+	//FlashStorage storage{flash};
+};
+
+struct DriversSpiMasterTest {
+	SpiMasterImpl spi{
+		gpio::P0(19), // SCK
+		gpio::P0(20), // MOSI
+		gpio::P0(21), // MISO
+		gpio::P0(21)}; // DC (data/command for write-only display, can be same as MISO)
+	SpiMasterImpl::Channel transfer{spi, gpio::P0(2)};
+	SpiMasterImpl::Channel command{spi, gpio::P0(3), SpiMasterImpl::Channel::Mode::COMMAND};
+	SpiMasterImpl::Channel data{spi, gpio::P0(3), SpiMasterImpl::Channel::Mode::DATA};
+};
+
+struct DriversBusMasterTest {
+	BusMasterImpl busMaster{gpio::P0(2), gpio::P0(3)};;
 };
 
 struct DriversFlashTest {

@@ -310,6 +310,8 @@ if(EMU)
 	set(SPI_MASTER
 		system/src/SpiMaster.hpp
 		system/src/SpiMaster.cpp
+		system/src/posix/SpiMasterImpl.hpp
+		system/src/posix/SpiMasterImpl.cpp
 		system/src/emu/SpiBME680.hpp
 		system/src/emu/SpiBME680.cpp
 		system/src/emu/SpiMPQ6526.hpp
@@ -385,6 +387,7 @@ if("stm32f0" IN_LIST PLATFORM)
 		system/src/stm32f0/Loop.hpp
 		system/src/stm32f0/Loop.cpp
 		system/src/stm32f0/system/startup_stm32f042x6.s
+		#system/src/stm32f0/system/startup_stm32f051x8.s
 	)
 	set(OUTPUT system/src/Output.hpp system/src/stm32f0/Output.cpp system/src/Debug.hpp)
 	set(SPI_MASTER
@@ -392,6 +395,8 @@ if("stm32f0" IN_LIST PLATFORM)
 		system/src/SpiMaster.cpp
 		system/src/stm32f0/SpiMasterImpl.hpp
 		system/src/stm32f0/SpiMasterImpl.cpp
+		#system/src/stm32f0/SpiMasterSingle16.hpp
+		#system/src/stm32f0/SpiMasterSingle16.cpp
 	)
 	set(STORAGE
 		system/src/Storage.hpp
@@ -664,6 +669,7 @@ endfunction()
 
 add_system_test_executable(Ble)
 add_system_test_executable(BusMaster)
+add_system_test_executable(BusNode)
 add_system_test_executable(Calendar)
 add_system_test_executable(Flash)
 add_system_test_executable(Input)

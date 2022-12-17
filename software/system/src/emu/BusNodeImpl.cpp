@@ -29,14 +29,14 @@ Awaitable<BusNode::SendParameters> BusNodeImpl::send(int length, uint8_t const *
 void BusNodeImpl::handle(Gui &gui) {
 	// handle pending send operations
 	this->sendWaitlist.resumeFirst([this](SendParameters &p) {
-		if (p.sendLength == 0)
+		if (p.length == 0)
 			return true;
 
 		uint8_t data[64];
-		array::copy(p.sendLength, data, p.sendData);
+		array::copy(p.length, data, p.data);
 
 		// read message
-		bus::MessageReader r(p.sendLength, data);
+		bus::MessageReader r(p.length, data);
 		r.setHeader();
 
 		// get address
@@ -216,9 +216,9 @@ void BusNodeImpl::sendToNode(bus::MessageWriter &w) {
 	int length = w.getLength();
 	auto data = w.begin;
 	this->receiveWaitlist.resumeFirst([length, data](ReceiveParameters &p) {
-		int len = min(length, *p.receiveLength);
-		array::copy(len, p.receiveData, data);
-		*p.receiveLength = len;
+		int len = min(length, *p.length);
+		array::copy(len, p.data, data);
+		*p.length = len;
 		return true;
 	});
 }

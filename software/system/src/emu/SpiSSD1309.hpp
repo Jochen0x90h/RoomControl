@@ -22,7 +22,7 @@ public:
 
 	void handle(Gui &gui) override;
 
-	// get dipslay contents into an 8 bit grayscale image
+	// get display contents into an 8 bit grayscale image
 	void getDisplay(uint8_t *buffer);
 
 
@@ -39,8 +39,29 @@ public:
 	bool displayOn = false; // all pixels on
 	bool displayInverse = false;
 	bool displayEnabled = false;
-	uint8_t *display;
+	uint8_t *data;
 	uint8_t *displayBuffer;
 
 	Waitlist<SpiMaster::Parameters> waitlist;
+
+
+	/**
+	 * Separate data channel
+	 */
+	class Data : public SpiMaster {
+	public:
+		/**
+		 * Constructor
+		 * @param device the SPI device to operate on
+		 * @param csPin chip select pin of the slave
+		 * @param writeOnly ture if we only write data and can use MISO as DC (data/command) signal (e.g. for a display)
+		 */
+		Data(SpiSSD1309 &display) : display(display) {}
+
+		Awaitable<Parameters> transfer(int writeCount, const void *writeData, int readCount, void *readData) override;
+		void transferBlocking(int writeCount, const void *writeData, int readCount, void *readData) override;
+
+
+		SpiSSD1309 &display;
+	};
 };

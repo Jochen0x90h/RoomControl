@@ -6,6 +6,7 @@
 #include <emu/SpiBME680.hpp>
 #include <emu/SpiSSD1309.hpp>
 #include <emu/SpiMPQ6526.hpp>
+#include <posix/SpiMasterImpl.hpp>
 #include <posix/StorageImpl.hpp>
 #include <posix/FlashImpl.hpp>
 #include <FlashStorage.hpp>
@@ -76,6 +77,20 @@ struct SwitchDrivers {
 	SpiMPQ6526 relayDriver;
 	StorageImpl storage{"switchStorage.bin", 0xffff, 512};
 	StorageImpl counters{"switchCounters.bin", 0xff, 4};
+};
+
+struct DriversSpiMasterTest {
+	SpiMasterImpl transfer{"transfer"};
+	SpiMasterImpl command{"command"};
+	SpiMasterImpl data{"data"};
+};
+
+struct DriversBusMasterTest {
+	BusMasterImpl busMaster;
+};
+
+struct DriversBusNodeTest {
+	BusNodeImpl busNode;
 };
 
 struct DriversFlashTest {

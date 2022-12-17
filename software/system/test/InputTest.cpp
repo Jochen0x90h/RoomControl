@@ -25,7 +25,7 @@ int main() {
 	Loop::init();
 	Output::init(); // for debug signals on pins
 	Input::init();
-	Drivers drivers;
+	//Drivers drivers;
 
 	handleInput();
 

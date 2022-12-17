@@ -17,14 +17,14 @@
 
 // SpiMasterDevice
 
-SpiMasterImpl::SpiMasterImpl(int index, int sckPin, int mosiPin, int misoPin, int dcPin)
+SpiMasterImpl::SpiMasterImpl(int sckPin, int mosiPin, int misoPin, int dcPin)
 	: misoPin(misoPin), sharedPin(misoPin == dcPin)
 {
 	// configure SCK pin: output, low on idle
 	gpio::configureOutput(sckPin);
 	NRF_SPIM3->PSEL.SCK = sckPin;
 
-	// configure MOSI pin: output, high on ilde
+	// configure MOSI pin: output, high on idle
 	gpio::setOutput(mosiPin, true);
 	gpio::configureOutput(mosiPin);
 	NRF_SPIM3->PSEL.MOSI = mosiPin;
@@ -60,7 +60,7 @@ void SpiMasterImpl::handle() {
 		NRF_SPIM3->EVENTS_END = 0;
 		clearInterrupt(SPIM3_IRQn);
 
-		// disable SPI
+		// disable SPI (indicates idle state)
 		NRF_SPIM3->ENABLE = 0;
 
 		// check for more transfers
@@ -83,8 +83,8 @@ void SpiMasterImpl::startTransfer(const SpiMaster::Parameters &p) {
 
 	// check if MISO and DC (data/command) are on the same pin
 	if (this->sharedPin) {
-		if (channel.writeOnly) {
-			// write only: use MISO pin for DC (command/data) signal
+		if (channel.mode != Channel::Mode::NONE) {
+			// DC (data/command signal) overrides MISO, i.e. write-only mode
 			NRF_SPIM3->PSEL.MISO = gpio::DISCONNECTED;
 			NRF_SPIM3->PSELDCX = this->misoPin;
 			//configureOutput(this->dcPin); // done automatically by hardware
@@ -96,7 +96,7 @@ void SpiMasterImpl::startTransfer(const SpiMaster::Parameters &p) {
 	}
 
 	// set command/data length
-	NRF_SPIM3->DCXCNT = p.writeCount >> 31; // 0 for data and 0xf for command
+	NRF_SPIM3->DCXCNT = channel.mode == Channel::Mode::COMMAND ? 0xf : 0; // 0 for data and 0xf for command
 
 	// set write data
 	NRF_SPIM3->TXD.MAXCNT = p.writeCount;
@@ -108,14 +108,14 @@ void SpiMasterImpl::startTransfer(const SpiMaster::Parameters &p) {
 
 	// enable and start
 	NRF_SPIM3->ENABLE = N(SPIM_ENABLE_ENABLE, Enabled);
-	NRF_SPIM3->TASKS_START = TRIGGER;
+	NRF_SPIM3->TASKS_START = TRIGGER; // -> END
 }
 
 
 // SpiMasterImpl::Channel
 
-SpiMasterImpl::Channel::Channel(SpiMasterImpl &master, int csPin, bool writeOnly)
-	: master(master), csPin(csPin), writeOnly(writeOnly)
+SpiMasterImpl::Channel::Channel(SpiMasterImpl &master, int csPin, Mode mode)
+	: master(master), csPin(csPin), mode(mode)
 {
 	// configure CS pin: output, high on idle
 	gpio::setOutput(csPin, true);
@@ -127,8 +127,8 @@ Awaitable<SpiMaster::Parameters> SpiMasterImpl::Channel::transfer(int writeCount
 {
 	// start transfer immediately if SPI is idle
 	if (!NRF_SPIM3->ENABLE) {
-		Parameters parameters{this, writeCount, writeData, readCount, readData};
-		this->master.startTransfer(parameters);
+		Parameters p{this, writeCount, writeData, readCount, readData};
+		this->master.startTransfer(p);
 	}
 
 	return {master.waitlist, this, writeCount, writeData, readCount, readData};
@@ -144,6 +144,10 @@ void SpiMasterImpl::Channel::transferBlocking(int writeCount, const void *writeD
 			__NOP();
 	}
 
+	// clear pending interrupt flag and disable SPI
+	NRF_SPIM3->EVENTS_END = 0;
+	NRF_SPIM3->ENABLE = 0;
+
 	Parameters parameters{this, writeCount, writeData, readCount, readData};
 	this->master.startTransfer(parameters);
 
@@ -155,5 +159,8 @@ void SpiMasterImpl::Channel::transferBlocking(int writeCount, const void *writeD
 	if (!running) {
 		NRF_SPIM3->EVENTS_END = 0;
 		clearInterrupt(SPIM3_IRQn);
+
+		// disable SPI
+		NRF_SPIM3->ENABLE = 0;
 	}
 }

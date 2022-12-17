@@ -4,24 +4,30 @@
 #include <boardConfig.hpp>
 
 
-uint16_t spi0Data[] = {0x0a51, 0x0ff0};
+uint8_t spiWriteData[] = {0x0a, 0x55};
+uint8_t spiReadData[10];
 
-Coroutine transferSpi0(SpiMaster &spi) {
+Coroutine transferSpi(SpiMaster &spi) {
 	while (true) {
-		co_await spi.transfer(2, spi0Data, 0, nullptr);
+		co_await spi.transfer(2, spiWriteData, 10, spiReadData);
 		//co_await Timer::sleep(100ms);
 		//Debug::toggleRedLed();
 	}
 }
 
 
-uint16_t spi1Command[] = {0x00ff, 0x3355};
-uint16_t spi1Data[] = {0x3355, 0x00ff};
+uint8_t command[] = {0x00, 0xff};
+uint8_t data[] = {0x33, 0x55};
 
-Coroutine transferSpi1(SpiMaster &spi) {
+struct Spi {
+	SpiMaster &command;
+	SpiMaster &data;
+};
+
+Coroutine writeCommandData(Spi spi) {
 	while (true) {
-		co_await spi.writeCommand(2, spi1Command);
-		co_await spi.writeData(2, spi1Data);
+		co_await spi.command.write(2, command);
+		co_await spi.data.write(2, data);
 	}
 }
 
@@ -30,10 +36,10 @@ int main() {
 	Loop::init();
 	Output::init(); // for debug led's
 	Timer::init();
-	Drivers drivers;
+	DriversSpiMasterTest drivers;
 
-	transferSpi0(drivers.airSensor);
-	transferSpi1(drivers.display);
+	transferSpi(drivers.transfer);
+	writeCommandData({drivers.command, drivers.data});
 	
 	Loop::run();
 }

@@ -11,17 +11,17 @@
 class BusNode {
 public:
 	struct ReceiveParameters {
-		int *receiveLength;
-		uint8_t *receiveData;
+		int *length;
+		uint8_t *data;
 	};
 
 	struct SendParameters {
-		int sendLength;
-		uint8_t const *sendData;
+		int length;
+		const uint8_t *data;
 	};
 
 
-	~BusNode();
+	virtual ~BusNode();
 
 	/**
 	 * Receive data from bus master

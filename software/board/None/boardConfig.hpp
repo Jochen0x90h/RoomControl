@@ -33,6 +33,12 @@ struct Drivers {
 	FlashStorage storage{flash};
 };
 
+struct DriversSpiMasterTest {
+	SpiMasterImpl transfer{"transfer"};
+	SpiMasterImpl command{"command"};
+	SpiMasterImpl data{"data"};
+};
+
 struct DriversFlashTest {
 	FlashImpl flash{"flashTest.bin", 2, 4096, 4};
 };

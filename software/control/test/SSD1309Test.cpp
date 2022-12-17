@@ -6,7 +6,7 @@
 #include <boardConfig.hpp>
 
 
-Coroutine draw(SpiMaster &spi) {
+Coroutine draw(SSD1309::Spi spi) {
 	SSD1309 display(spi);
 	co_await display.init();
 	co_await display.enable();
@@ -34,7 +34,7 @@ int main(void) {
 	Output::init();
 	Drivers drivers;
 
-	draw(drivers.display);
+	draw({drivers.displayCommand, drivers.displayData});
 	
 	Loop::run();
 }

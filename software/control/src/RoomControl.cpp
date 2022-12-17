@@ -114,7 +114,7 @@ RoomControl::RoomControl(Drivers &drivers)
 	, alarmInterface(ALARM_INTERFACE, drivers.storage)
 	, functionInterface(FUNCTION_INTERFACE, drivers.storage)
 	, interfaces{&localInterface, &busInterface, &radioInterface, &alarmInterface, &functionInterface}
-	, swapChain(drivers.display)
+	, swapChain({drivers.displayCommand, drivers.displayData})
 {
 	// load configuration
 	int configurationSize = sizeof(Configuration);
