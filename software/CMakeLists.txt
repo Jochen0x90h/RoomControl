@@ -13,6 +13,7 @@ set(CMAKE_CXX_STANDARD 20)
 # debug generated makefile
 #set(CMAKE_VERBOSE_MAKEFILE TRUE)
 
+message("*** COMPILER ${CMAKE_CXX_COMPILER_ID}")
 message("*** TYPE ${CMAKE_BUILD_TYPE}")
 message("*** PLATFORM ${PLATFORM}")
 message("*** BOARD ${BOARD}")
@@ -25,8 +26,13 @@ if("Linux" IN_LIST PLATFORM)
 	set(LINUX 1)
 endif()
 
+# windows
+if("Windows" IN_LIST PLATFORM)
+	set(WINDOWS 1)
+endif()
+
 # posix compatible platforms
-if(LINUX OR "Macos" IN_LIST PLATFORM OR "FreeBSD" IN_LIST PLATFORM)
+if(LINUX OR WINDOWS OR "Macos" IN_LIST PLATFORM OR "FreeBSD" IN_LIST PLATFORM)
 	set(POSIX 1)
 endif()
 
@@ -82,13 +88,16 @@ if(POSIX)
 		Ogg::ogg
 		gtest::gtest
 	)
+	if(WINDOWS)
+		set(LIBRARIES ${LIBRARIES} wsock32 ws2_32 winmm)
+	endif()
 
 	# enable address sanitizer
-	if(CMAKE_BUILD_TYPE STREQUAL Debug)
-		message("Enable Address Sanitizer")
-		set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address")
-		set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=address")
-	endif()
+	#if(CMAKE_BUILD_TYPE STREQUAL Debug)
+	#	message("Enable Address Sanitizer")
+	#	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address")
+	#	set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=address")
+	#endif()
 
 	# set rpath so that shared libraries are searched in ../lib
 	if(APPLE)
@@ -149,6 +158,8 @@ endif()
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
 	# clang
 	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fcoroutines-ts -Wno-user-defined-literals")
+elseif(CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
+	# visual studio
 else()
 	# gcc
 	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fcoroutines -fconcepts -Wno-literal-suffix")
@@ -246,7 +257,12 @@ if(POSIX)
 		system/src/posix/FlashImpl.hpp
 		system/src/posix/FlashImpl.cpp
 	)
-	set(LOOP system/src/Loop.hpp system/src/posix/Loop.cpp system/src/posix/Loop2.cpp)
+	set(LOOP
+		system/src/Loop.hpp
+		system/src/posix/Handlers.cpp
+		system/src/posix/Handlers.hpp
+		system/src/posix/Loop.cpp
+	)
 	set(NETWORK system/src/Network.hpp system/src/posix/Network.cpp)
 	set(OUTPUT system/src/Output.hpp system/src/posix/Output.cpp system/src/Debug.hpp)
 	set(SOUND system/src/Sound.hpp system/src/posix/Sound.cpp)
@@ -264,6 +280,12 @@ if(POSIX)
 	)
 	set(TERMINAL system/src/Terminal.hpp system/src/posix/Terminal.cpp)
 	set(TIMER system/src/SystemTime.hpp system/src/Timer.hpp system/src/posix/Timer.cpp)
+	set(USB_DEVICE
+		system/src/UsbDevice.hpp
+		system/src/UsbDevice.cpp
+		system/src/posix/UsbDeviceImpl.hpp
+		system/src/posix/UsbDeviceImpl.cpp
+	)
 endif()
 if(LINUX)
 	if(TARGET PkgConfig::BlueZ)
@@ -286,8 +308,8 @@ if(EMU)
 	set(INPUT system/src/Input.hpp system/src/emu/Input.hpp system/src/emu/Input.cpp)
 	set(LOOP
 		system/src/Loop.hpp
-		system/src/posix/Loop.hpp
-		system/src/posix/Loop.cpp
+		system/src/posix/Handlers.hpp
+		system/src/posix/Handlers.cpp
 		system/src/emu/Loop.hpp
 		system/src/emu/Loop.cpp
 		system/src/emu/Gui.cpp
@@ -321,7 +343,6 @@ if(EMU)
 		system/src/emu/SpiSSD1309.hpp
 		system/src/emu/SpiSSD1309.cpp
 	)
-	set(USB_DEVICE system/src/UsbDevice.hpp system/src/emu/UsbDevice.cpp)
 endif()
 if("nrf52" IN_LIST PLATFORM)
 	set(BUS_MASTER
@@ -365,7 +386,12 @@ if("nrf52" IN_LIST PLATFORM)
 	)
 	set(TERMINAL system/src/Terminal.hpp system/src/nrf52/Terminal.cpp)
 	set(TIMER system/src/SystemTime.hpp system/src/Timer.hpp system/src/nrf52/Timer.cpp)
-	set(USB_DEVICE system/src/UsbDevice.hpp system/src/nrf52/UsbDevice.cpp)
+	set(USB_DEVICE
+		system/src/UsbDevice.hpp
+		system/src/UsbDevice.cpp
+		system/src/nrf52/UsbDeviceImpl.hpp
+		system/src/nrf52/UsbDeviceImpl.cpp
+	)
 endif()
 if("stm32f0" IN_LIST PLATFORM)
 	set(BUS_NODE
@@ -758,7 +784,7 @@ target_link_libraries(MqttSnBrokerTest ${LIBRARIES})
 endif() # POSIX AND NOT EMU
 
 
-if(${BOARD} STREQUAL "emuControl")
+if(${BOARD} STREQUAL "None")
 
 # test for BME680 air sensor
 add_executable(BME680Test
@@ -784,6 +810,9 @@ target_include_directories(BME680Test
 )
 target_link_libraries(BME680Test ${LIBRARIES})
 
+endif()
+
+if(${BOARD} STREQUAL "emuControl")
 
 # test for SSD1309 display
 add_executable(SSD1309Test

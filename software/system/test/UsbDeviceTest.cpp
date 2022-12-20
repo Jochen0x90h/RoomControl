@@ -6,6 +6,7 @@
 #include <util.hpp>
 //#include "nrf52/nrf52.hpp"
 //#include "nrf52/FlashImpl.hpp"
+#include <boardConfig.hpp>
 
 
 // Test for USB device.
@@ -42,7 +43,7 @@ struct UsbConfiguration {
 	struct usb::ConfigDescriptor config;
 	struct usb::InterfaceDescriptor interface;
 	struct usb::EndpointDescriptor endpoints[2];
-} __attribute__((packed));
+};
 
 static const UsbConfiguration configurationDescriptor = {
 	.config = {
@@ -86,17 +87,17 @@ static const UsbConfiguration configurationDescriptor = {
 
 
 constexpr int bufferSize = 128;
-uint8_t buffer[bufferSize] __attribute__((aligned(4)));
+uint8_t buffer[bufferSize];// __attribute__((aligned(4)));
 
 //FlashImpl flash{0xe0000 - 0x20000, 2, 4096};
 //uint8_t writeData[] = {0x12, 0x34, 0x56, 0x78, 0x9a};
 
 // echo data from host
-Coroutine echo() {
+Coroutine echo(UsbDevice &usb) {
 	while (true) {
 		// receive data from host
 		int length = bufferSize;
-		co_await UsbDevice::receive(1, length, buffer);
+		co_await usb.receive(1, length, buffer);
 
 		// set green led to indicate processing
 		Debug::setGreenLed();
@@ -111,7 +112,7 @@ Coroutine echo() {
 			Debug::setColor(Debug::RED);
 		
 		// send data back to host
-		co_await UsbDevice::send(1, length, buffer);
+		co_await usb.send(1, length, buffer);
 
 		/*
 		// debug: send nrf52840 chip id
@@ -152,7 +153,9 @@ Coroutine echo() {
 int main() {
 	Loop::init();
 	Timer::init();
-	UsbDevice::init(
+
+	//UsbDevice::init(
+	UsbDeviceImpl usb(
 		[](usb::DescriptorType descriptorType) {
 			switch (descriptorType) {
 			case usb::DescriptorType::DEVICE:
@@ -163,10 +166,10 @@ int main() {
 				return ConstData();
 			}
 		},
-		[](uint8_t bConfigurationValue) {
+		[](UsbDevice &usb, uint8_t bConfigurationValue) {
 			// enable bulk endpoints 1 in and 1 out (keep control endpoint 0 enabled)
 			Debug::setGreenLed(true);
-			UsbDevice::enableEndpoints(1 | (1 << 1), 1 | (1 << 1));
+			usb.enableEndpoints(1 | (1 << 1), 1 | (1 << 1));
 		},
 		[](uint8_t bRequest, uint16_t wValue, uint16_t wIndex) {
 			switch (Request(bRequest)) {
@@ -190,7 +193,7 @@ int main() {
 	Output::init(); // for debug led's
 
 	// start to receive from usb host
-	echo();
+	echo(usb);
 
 	Loop::run();
 }

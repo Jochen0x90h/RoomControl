@@ -4,41 +4,56 @@
 #include "SystemTime.hpp"
 #include <LinkedList.hpp>
 #include <ctime>
+#ifdef _WIN32
+#define NOMINMAX
+#include <winsock2.h>
+#undef interface
+#undef INTERFACE
+#undef IN
+#undef OUT
+#else
+#include <poll.h>
+using SOCKET = int;
+#endif
 
 
 namespace Loop {
 
 // current time
 inline SystemTime now() {
+#ifdef _WIN32
+	return {timeGetTime()};
+#else
 	timespec time;
 	clock_gettime(CLOCK_MONOTONIC, &time);
 	return {uint32_t(time.tv_sec * 1000 + time.tv_nsec / 1000000)};
+#endif
 }
 
 
 // list of file descriptors to observe readable/writable events (used in Network.cpp)
-class FileDescriptor : public LinkedListNode {
+class SocketHandler : public LinkedListNode {
 public:
-	virtual ~FileDescriptor();
+	virtual ~SocketHandler();
 	virtual void activate(uint16_t events) = 0;
 
-	int fd = -1;
+	SOCKET socket = -1;
 	short int events;
 };
-using FileDescriptorList = LinkedList<FileDescriptor>;
-extern FileDescriptorList fileDescriptors;
+using SocketHandlerList = LinkedList<SocketHandler>;
+extern SocketHandlerList socketHandlers;
 
 
 // timeouts for Timer and Calendar
-class Timeout : public LinkedListNode {
+class TimeHandler : public LinkedListNode {
 public:
-	virtual ~Timeout();
+	virtual ~TimeHandler();
 	virtual void activate() = 0;
 
 	SystemTime time;
 };
-using TimeoutList = LinkedList<Timeout>;
-extern TimeoutList timeouts;
+using TimeHandlerList = LinkedList<TimeHandler>;
+extern TimeHandlerList timeHandlers;
 
 
 /**

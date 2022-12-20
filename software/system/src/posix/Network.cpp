@@ -1,14 +1,18 @@
 #include "../Network.hpp"
-#include "Loop.hpp"
+#include "Handlers.hpp"
 #include <boardConfig.hpp>
 #include <cerrno>
-#include <poll.h>
+#ifdef _WIN32
+#include <ws2tcpip.h>
+#else
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <netinet/udp.h>
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <fcntl.h>
+inline void closesocket(int s) {close(s);}
+#endif
 
 
 namespace Network {
@@ -27,7 +31,7 @@ Address Address::fromString(String s) {
 }
 
 
-class Context : public Loop::FileDescriptor {
+class Context : public Loop::SocketHandler {
 public:
 	void activate(uint16_t events) override {
 		if (events & POLLIN) {
@@ -35,7 +39,7 @@ public:
 				// receive
 				struct sockaddr_in6 source = {};
 				socklen_t length = sizeof(source);
-				auto receivedCount = recvfrom(this->fd, p.data, *p.length, 0, (struct sockaddr*)&source, &length);
+				auto receivedCount = recvfrom(this->socket, (char*)p.data, *p.length, 0, (struct sockaddr*)&source, &length);
 
 				if (receivedCount >= 0) {
 					*p.length = receivedCount;
@@ -59,7 +63,7 @@ public:
 				destination.sin6_port = htons(p.destination->port);
 
 				// send
-				auto sentCount = sendto(this->fd, p.data, p.length, 0, (struct sockaddr*)&destination, sizeof(destination));
+				auto sentCount = sendto(this->socket, (const char *)p.data, p.length, 0, (struct sockaddr*)&destination, sizeof(destination));
 				return sentCount >= 0;
 			});
 			if (this->sendWaitlist.isEmpty())
@@ -84,26 +88,35 @@ bool open(int index, uint16_t port) {
 	assert(uint(index) < NETWORK_CONTEXT_COUNT);
 	auto &context = Network::contexts[index];
 
+	// assert that socket is not open already
+	assert(context.socket == -1);
+
 	// create socket
-	assert(context.fd == -1);
-	int fd = socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
-	fcntl(context.fd, F_SETFL, O_NONBLOCK);
+	int s = socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
+#ifdef _WIN32
+	u_long blocking = 0;
+    ioctlsocket(s, FIONBIO, &blocking);
+#else
+	fcntl(s, F_SETFL, O_NONBLOCK);
+#endif
 
 	// set reuse address and port
 	int reuse = 1;
-	//setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
-	setsockopt(fd, SOL_SOCKET, SO_REUSEPORT, &reuse, sizeof(reuse));
+	setsockopt(s, SOL_SOCKET, SO_REUSEADDR, (const char *)&reuse, sizeof(reuse));
+	//setsockopt(s, SOL_SOCKET, SO_REUSEPORT, &reuse, sizeof(reuse));
+	int broadcast = 1;
+	setsockopt(s, SOL_SOCKET, SO_BROADCAST, (const char *)&broadcast, sizeof(broadcast));
 
 	// bind to local port
 	struct sockaddr_in6 address = {.sin6_family = AF_INET6, .sin6_port= htons(port)};
-	if (bind(fd, (struct sockaddr*)&address, sizeof(address)) < 0) {
+	if (bind(s, (struct sockaddr*)&address, sizeof(address)) < 0) {
 		int e = errno;
-		::close(fd);
+		closesocket(s);
 		return false;
 	}
 
 	// set file descriptor
-	context.fd = fd;
+	context.socket = s;
 	context.events = 0;
 	return true;
 }
@@ -111,13 +124,13 @@ bool open(int index, uint16_t port) {
 bool join(int index, Address const &multicastGroup) {
 	assert(uint(index) < NETWORK_CONTEXT_COUNT);
 	auto &context = Network::contexts[index];
-	assert(context.fd != -1);
+	assert(context.socket != -1);
 
 	// join multicast group
 	struct ipv6_mreq group;
 	array::copy(16, group.ipv6mr_multiaddr.s6_addr, multicastGroup.u8);
 	group.ipv6mr_interface = 0;
-	int r = setsockopt(context.fd, IPPROTO_IPV6, IPV6_JOIN_GROUP, &group, sizeof(group));
+	int r = setsockopt(context.socket, IPPROTO_IPV6, IPV6_JOIN_GROUP, (const char *)&group, sizeof(group));
 	if (r < 0) {
 		int e = errno;
 		return false;
@@ -128,10 +141,10 @@ bool join(int index, Address const &multicastGroup) {
 void close(int index) {
 	assert(uint(index) < NETWORK_CONTEXT_COUNT);
 	auto &context = Network::contexts[index];
-	assert(context.fd != -1);
+	assert(context.socket != -1);
 
-	::close(context.fd);
-	context.fd = -1;
+	closesocket(context.socket);
+	context.socket = -1;
 	context.events = 0;
 
 	// resume waiting coroutines
@@ -149,13 +162,13 @@ void close(int index) {
 Awaitable<ReceiveParameters> receive(int index, Endpoint& source, int &length, void *data) {
 	assert(uint(index) < NETWORK_CONTEXT_COUNT);
 	auto &context = Network::contexts[index];
-	assert(context.fd != -1);
+	assert(context.socket != -1);
 
 	context.events |= POLLIN;
 
 	// add to event loop if necessary
 	if (!context.isInList())
-		Loop::fileDescriptors.add(context);
+		Loop::socketHandlers.add(context);
 
 	// add to wait list
 	return {context.receiveWaitlist, &source, &length, data};
@@ -164,13 +177,13 @@ Awaitable<ReceiveParameters> receive(int index, Endpoint& source, int &length, v
 Awaitable<SendParameters> send(int index, Endpoint const &destination, int length, void const *data) {
 	assert(uint(index) < NETWORK_CONTEXT_COUNT);
 	auto &context = Network::contexts[index];
-	assert(context.fd != -1);
+	assert(context.socket != -1);
 
 	context.events |= POLLOUT;
 
 	// add to event loop if necessary
 	if (!context.isInList())
-		Loop::fileDescriptors.add(context);
+		Loop::socketHandlers.add(context);
 
 	// add to wait list
 	return {context.sendWaitlist, &destination, length, data};

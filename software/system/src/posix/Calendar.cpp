@@ -1,11 +1,11 @@
 #include "../Calendar.hpp"
-#include "Loop.hpp"
+#include "Handlers.hpp"
 #include <boost/date_time.hpp>
 
 
 namespace Calendar {
 
-class Context : public Loop::Timeout {
+class Context : public Loop::TimeHandler {
 public:
 	void activate() override {
 		// next activation in 1s
@@ -30,7 +30,7 @@ void init() {
 	Calendar::inited = true;
 
 	Calendar::context.time = Loop::now() + 1s;
-	Loop::timeouts.add(Calendar::context);
+	Loop::timeHandlers.add(Calendar::context);
 }
 
 ClockTime now() {

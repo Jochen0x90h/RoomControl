@@ -3,6 +3,12 @@
 #include <enum.hpp>
 #include <cstdint>
 
+#ifdef _MSC_VER
+#define PACK( __Declaration__ ) __pragma( pack(push, 1) ) __Declaration__ __pragma( pack(pop))
+#else
+#define PACK( __Declaration__ ) __Declaration__ __attribute__((__packed__))
+#endif
+
 
 namespace usb {
 
@@ -57,7 +63,7 @@ enum class Request : uint8_t {
 FLAGS_ENUM(Request)
 
 // device descriptor
-struct DeviceDescriptor {
+PACK(struct DeviceDescriptor {
 	uint8_t  bLength;
 	DescriptorType  bDescriptorType;
 	uint16_t bcdUSB;
@@ -72,10 +78,10 @@ struct DeviceDescriptor {
 	uint8_t  iProduct;
 	uint8_t  iSerialNumber;
 	uint8_t  bNumConfigurations;
-} __attribute__((packed));
+});
 
 // configuration descriptor
-struct ConfigDescriptor {
+PACK(struct ConfigDescriptor {
 	uint8_t bLength;
 	DescriptorType bDescriptorType;
 	uint16_t wTotalLength;
@@ -84,10 +90,10 @@ struct ConfigDescriptor {
 	uint8_t iConfiguration;
 	uint8_t bmAttributes;
 	uint8_t bMaxPower;
-} __attribute__((packed));
+});
 
 // interface descriptor
-struct InterfaceDescriptor {
+PACK(struct InterfaceDescriptor {
 	uint8_t bLength;
 	DescriptorType bDescriptorType;
 	uint8_t bInterfaceNumber;
@@ -97,16 +103,16 @@ struct InterfaceDescriptor {
 	uint8_t bInterfaceSubClass;
 	uint8_t bInterfaceProtocol;
 	uint8_t iInterface;
-} __attribute__((packed));
+});
 
 // endpoint descriptor
-struct EndpointDescriptor {
+PACK(struct EndpointDescriptor {
 	uint8_t bLength;
 	DescriptorType bDescriptorType;
 	uint8_t bEndpointAddress;
 	EndpointType bmAttributes;
 	uint16_t wMaxPacketSize;
 	uint8_t bInterval;
-} __attribute__((packed));
+});
 
 } // namespace usb

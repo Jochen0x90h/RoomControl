@@ -7,7 +7,7 @@
 Awaitable<SpiMaster::Parameters> SpiMasterImpl::transfer(int writeCount, void const *writeData, int readCount, void *readData) {
 	if (!isInList()) {
 		this->time = Loop::now() + 100ms; // emulate 100ms transfer time
-		Loop::timeouts.add(*this);
+		Loop::timeHandlers.add(*this);
 	}
 	return {this->waitlist, nullptr, writeCount, writeData, readCount, readData};
 }

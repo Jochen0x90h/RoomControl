@@ -4,6 +4,7 @@
 #include <nrf52/BusMasterImpl.hpp>
 #include <nrf52/QuadratureDecoderImpl.hpp>
 #include <nrf52/SpiMasterImpl.hpp>
+#include <nrf52/UsbDeviceImpl.hpp>
 #include <nrf52/FlashImpl.hpp>
 #include <FlashStorage.hpp>
 #include <util.hpp>

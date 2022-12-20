@@ -1,10 +1,10 @@
 #include "../Timer.hpp"
-#include "Loop.hpp"
+#include "Handlers.hpp"
 
 
 namespace Timer {
 
-class Context : public Loop::Timeout {
+class Context : public Loop::TimeHandler {
 public:
 	void activate() override {
 		auto time = this->time;
@@ -36,7 +36,7 @@ void init() {
 	Timer::inited = true;
 
 	Timer::context.time = now() + SystemDuration::max();
-	Loop::timeouts.add(Timer::context);
+	Loop::timeHandlers.add(Timer::context);
 }
 
 SystemTime now() {

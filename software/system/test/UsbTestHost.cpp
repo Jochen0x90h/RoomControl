@@ -1,6 +1,8 @@
 #include <usb.hpp>
 #include <Terminal.hpp>
 #include <libusb.h>
+#undef IN
+#undef OUT
 #include "StringOperators.hpp"
 
 
@@ -169,9 +171,9 @@ int main() {
 	}
 
 	// print list of devices
-	//printDevices(devs);
+	printDevices(devices);
 	for (int i = 0; devices[i]; ++i) {
-		//printDevice(devs[i]);
+		//printDevice(devices[i]);
 	}
 
 	// iterate over devices

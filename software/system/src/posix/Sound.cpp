@@ -1,5 +1,5 @@
 #include "../Sound.hpp"
-#include "Loop.hpp"
+#include "Handlers.hpp"
 #include "assert.hpp"
 #include "util.hpp"
 #define MA_NO_DECODING
@@ -61,7 +61,7 @@ std::vector<Type> types;
 
 
 // timeout to check if audio devices need to be stopped
-class Timeout : public Loop::Timeout {
+class Timeout : public Loop::TimeHandler {
 public:
 	void activate() override {
 		// next activation in 1s
@@ -210,7 +210,7 @@ void init() {
 	Sound::inited = 2;
 
 	Sound::timeout.time = Loop::now() + 1s;
-	Loop::timeouts.add(Sound::timeout);
+	Loop::timeHandlers.add(Sound::timeout);
 }
 
 Array<Type> getTypes() {
