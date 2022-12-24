@@ -1,8 +1,6 @@
 #include <usb.hpp>
 #include <Terminal.hpp>
-#include <libusb.h>
-#undef IN
-#undef OUT
+#include <posix/libusb.hpp>
 #include "StringOperators.hpp"
 
 
@@ -39,7 +37,7 @@ static void printDevices(libusb_device **devices) {
 }
 
 // https://github.com/libusb/libusb/blob/master/examples/testlibusb.c
-/*static int printDevice(libusb_device *dev) {
+static void printDevice(libusb_device *dev, int idVendor = 0, int idProduct = 0) {
 	libusb_device_descriptor desc;
 	libusb_device_handle *handle = NULL;
 	unsigned char string[256];
@@ -48,90 +46,89 @@ static void printDevices(libusb_device **devices) {
 	ret = libusb_get_device_descriptor(dev, &desc);
 	if (ret < 0) {
 		Terminal::err << "failed to get device descriptor\n";
-		return -1;
+		return;
 	}
 
-	printf("%04x:%04x\n", desc.idVendor, desc.idProduct);
-	printf("\tBus: %d\n", libusb_get_bus_number(dev));
-	printf("\tDevice: %d\n", libusb_get_device_address(dev));
+	if ((idVendor | idProduct) != 0 && (desc.idVendor != idVendor || desc.idProduct != idProduct))
+		return;
+
+	Terminal::out << hex(desc.idVendor) << ':' << hex(desc.idProduct) << '\n';
+	Terminal::out << "\tBus: " << dec(libusb_get_bus_number(dev)) << '\n';
+	Terminal::out << "\tDevice: " << dec(libusb_get_device_address(dev)) << '\n';
 	ret = libusb_open(dev, &handle);
 	if (LIBUSB_SUCCESS == ret) {
-		printf("\tOpen\n");
+		Terminal::out << "\tOpen\n";
 
 		// manufacturer
 		if (desc.iManufacturer) {
 			ret = libusb_get_string_descriptor_ascii(handle, desc.iManufacturer, string, sizeof(string));
 			if (ret > 0)
-				printf("\t\tManufacturer: %s\n", string);
+				Terminal::out << "\t\tManufacturer: " << str(string) << '\n';
 		}
 
 		// product
 		if (desc.iProduct) {
 			ret = libusb_get_string_descriptor_ascii(handle, desc.iProduct, string, sizeof(string));
 			if (ret > 0)
-				printf("\t\tProduct: %s\n", string);
+				Terminal::out << "\t\tProduct: " << str(string) << '\n';
 		}
 		
 	
 		libusb_close(handle);
 	} else {
-		printf("\tOpen error: %d\n", ret);
+		Terminal::out << "\tOpen error: " << dec(ret) << '\n';
 	}
 
-		// configurations
-		for (int i = 0; i < desc.bNumConfigurations; i++) {
-			libusb_config_descriptor *config;
-			ret = libusb_get_config_descriptor(dev, i, &config);
-			if (LIBUSB_SUCCESS == ret) {
-				printf("\tConfiguration[%d]\n", i);
-				printf("\t\tTotalLength:         %d\n", config->wTotalLength);
-				printf("\t\tNumInterfaces:       %d\n", config->bNumInterfaces);
-				printf("\t\tConfigurationValue:  %d\n", config->bConfigurationValue);
-				printf("\t\tConfiguration:       %d\n", config->iConfiguration);
-				printf("\t\tAttributes:          %02xh\n", config->bmAttributes);
-				printf("\t\tMaxPower:            %d\n", config->MaxPower);
-
-			}
-			
-			// interfaces
-			for (int j = 0; j < config->bNumInterfaces; j++) {
-				libusb_interface const & interface = config->interface[j];
-				
-				// alternate settings
-				for (int k = 0; k < interface.num_altsetting; k++) {
-					libusb_interface_descriptor const & descriptor = interface.altsetting[k];
-
-					printf("\t\tInterface[%d][%d]\n", j, k);
-					//printf("\t\t\tInterfaceNumber:   %d\n", descriptor.bInterfaceNumber);
-					//printf("\t\t\tAlternateSetting:  %d\n", descriptor.bAlternateSetting);
-					printf("\t\t\tNumEndpoints:      %d\n", descriptor.bNumEndpoints);
-					printf("\t\t\tInterfaceClass:    %d\n", descriptor.bInterfaceClass);
-					printf("\t\t\tInterfaceSubClass: %d\n", descriptor.bInterfaceSubClass);
-					printf("\t\t\tInterfaceProtocol: %d\n", descriptor.bInterfaceProtocol);
-					printf("\t\t\tInterface:         %d\n", descriptor.iInterface);
-
-					// endpoints
-					for (int l = 0; l < descriptor.bNumEndpoints; l++) {
-						libusb_endpoint_descriptor const & endpoint = descriptor.endpoint[l];
-						
-						printf("\t\t\tEndpoint[%d]\n", l);
-						printf("\t\t\t\tEndpointAddress: %02xh\n", endpoint.bEndpointAddress);
-						printf("\t\t\t\tAttributes:      %02xh\n", endpoint.bmAttributes);
-						printf("\t\t\t\tMaxPacketSize:   %d\n", endpoint.wMaxPacketSize);
-						printf("\t\t\t\tInterval:        %d\n", endpoint.bInterval);
-						printf("\t\t\t\tRefresh:         %d\n", endpoint.bRefresh);
-						printf("\t\t\t\tSynchAddress:    %d\n", endpoint.bSynchAddress);
-					}
-				}
-			
-			}
-			
-			libusb_free_config_descriptor(config);
+	// configurations
+	for (int i = 0; i < desc.bNumConfigurations; i++) {
+		libusb_config_descriptor *config;
+		ret = libusb_get_config_descriptor(dev, i, &config);
+		if (LIBUSB_SUCCESS == ret) {
+			Terminal::out << "\tConfiguration[" << dec(i) << "]\n";
+			Terminal::out << "\t\tTotalLength:         " << dec(config->wTotalLength) << '\n';
+			Terminal::out << "\t\tNumInterfaces:       " << dec(config->bNumInterfaces) << '\n';
+			Terminal::out << "\t\tConfigurationValue:  " << dec(config->bConfigurationValue) << '\n';
+			Terminal::out << "\t\tConfiguration:       " << dec(config->iConfiguration) << '\n';
+			Terminal::out << "\t\tAttributes:          " << hex(config->bmAttributes) << '\n';
+			Terminal::out << "\t\tMaxPower:            " << dec(config->MaxPower) << '\n';
 		}
+		
+		// interfaces
+		for (int j = 0; j < config->bNumInterfaces; j++) {
+			libusb_interface const & interface = config->interface[j];
+			
+			// alternate settings
+			for (int k = 0; k < interface.num_altsetting; k++) {
+				libusb_interface_descriptor const & descriptor = interface.altsetting[k];
 
+				Terminal::out << "\t\tInterface[" << dec(j) << "][" << dec(k) << "]\n";
+				//printf("\t\t\tInterfaceNumber:   %d\n", descriptor.bInterfaceNumber);
+				//printf("\t\t\tAlternateSetting:  %d\n", descriptor.bAlternateSetting);
+				Terminal::out << "\t\t\tNumEndpoints:      " << dec(descriptor.bNumEndpoints) << '\n';
+				Terminal::out << "\t\t\tInterfaceClass:    " << dec(descriptor.bInterfaceClass) << '\n';
+				Terminal::out << "\t\t\tInterfaceSubClass: " << dec(descriptor.bInterfaceSubClass) << '\n';
+				Terminal::out << "\t\t\tInterfaceProtocol: " << dec(descriptor.bInterfaceProtocol) << '\n';
+				Terminal::out << "\t\t\tInterface:         " << dec(descriptor.iInterface) << '\n';
 
-	return 0;
-}*/
+				// endpoints
+				for (int l = 0; l < descriptor.bNumEndpoints; l++) {
+					libusb_endpoint_descriptor const & endpoint = descriptor.endpoint[l];
+					
+					Terminal::out << "\t\t\tEndpoint[" << dec(l) << "]\n";
+					Terminal::out << "\t\t\t\tEndpointAddress: " << hex(endpoint.bEndpointAddress) << '\n';
+					Terminal::out << "\t\t\t\tAttributes:      " << hex(endpoint.bmAttributes) << '\n';
+					Terminal::out << "\t\t\t\tMaxPacketSize:   " << dec(endpoint.wMaxPacketSize) << '\n';
+					Terminal::out << "\t\t\t\tInterval:        " << dec(endpoint.bInterval) << '\n';
+					Terminal::out << "\t\t\t\tRefresh:         " << dec(endpoint.bRefresh) << '\n';
+					Terminal::out << "\t\t\t\tSynchAddress:    " << dec(endpoint.bSynchAddress) << '\n';
+				}
+			}
+		
+		}
+		
+		libusb_free_config_descriptor(config);
+	}
+}
 
 // vendor specific control request
 enum class Request : uint8_t {
@@ -143,7 +140,7 @@ enum class Request : uint8_t {
 // sent vendor specific control request to usb device
 int controlOut(libusb_device_handle *handle, Request request, uint16_t wValue, uint16_t wIndex) {
 	return libusb_control_transfer(handle,
-		uint8_t(usb::Request::OUT | usb::Request::TYPE_VENDOR | usb::Request::RECIPIENT_INTERFACE),
+		uint8_t(usb::Request::VENDOR_DEVICE_OUT),
 		uint8_t(request),
 		wValue,
 		wIndex,
@@ -173,7 +170,7 @@ int main() {
 	// print list of devices
 	printDevices(devices);
 	for (int i = 0; devices[i]; ++i) {
-		//printDevice(devices[i]);
+		printDevice(devices[i], 0x1915, 0x1337);
 	}
 
 	// iterate over devices
@@ -204,6 +201,15 @@ int main() {
 		if (ret != LIBUSB_SUCCESS) {
 			Terminal::err << "open error: " << dec(ret) << '\n';
 			continue;
+		}
+
+		if (libusb_kernel_driver_active(handle, 0) == 1) {
+			Terminal::out << "detach active kernel driver\n";
+			ret = libusb_detach_kernel_driver(handle, 0);
+			if (ret != LIBUSB_SUCCESS) {
+				Terminal::out << "detach kernel driver error: " << dec(ret) << '\n';
+				continue;
+			}
 		}
 			
 		// set configuration (reset alt_setting, reset toggles)
@@ -238,7 +244,7 @@ int main() {
 
 		// flush out data from last run
 		for (int i = 0; i < 4; ++i)
-			libusb_bulk_transfer(handle, 1 | usb::IN, buffer, 129, &transferred, 100);
+			ret = libusb_bulk_transfer(handle, 1 | usb::IN, buffer, 129, &transferred, 100);
 
 		// echo loop: send data to device and check if we get back the same data
 		int sendLength = 128;

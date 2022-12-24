@@ -6,11 +6,11 @@
 Coroutine handleSecondTick() {
 	while (true) {
 		co_await Calendar::secondTick();
-		Debug::toggleBlueLed();
+		debug::toggleBlue();
 
 		ClockTime time = Calendar::now();
-		Debug::setRedLed((time.getMinutes() & 1) != 0);
-		Debug::setGreenLed((time.getHours() & 1) != 0);
+		debug::setRed((time.getMinutes() & 1) != 0);
+		debug::setGreen((time.getHours() & 1) != 0);
 	}
 }
 

@@ -1,5 +1,6 @@
 #include "../Calendar.hpp"
-#include "Handlers.hpp"
+#include "../Timer.hpp"
+#include "Loop.hpp"
 #include <boost/date_time.hpp>
 
 
@@ -29,7 +30,7 @@ void init() {
 		return;
 	Calendar::inited = true;
 
-	Calendar::context.time = Loop::now() + 1s;
+	Calendar::context.time = Timer::now() + 1s;
 	Loop::timeHandlers.add(Calendar::context);
 }
 

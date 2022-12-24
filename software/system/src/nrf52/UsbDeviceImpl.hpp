@@ -3,9 +3,6 @@
 #include "nrf52.hpp"
 
 
-#include <util.hpp>
-
-
 /**
  * Implementation of an SPI master that simply writes info about the transfer operations to Terminal::out
  */
@@ -46,7 +43,8 @@ protected:
 	void ep0Send(void const *data, int length)  {
 		auto d = reinterpret_cast<uint8_t const *>(data);
 		int l = std::min(length, 64);
-		array::copy(ep0Buffer, ep0Buffer + l, d);
+		//array::copy(ep0Buffer, ep0Buffer + l, d);
+		std::copy(d, d + l, ep0Buffer);
 		NRF_USBD->EPIN[0].PTR = intptr_t(ep0Buffer);
 		NRF_USBD->EPIN[0].MAXCNT = l;
 		ep0Data = d;

@@ -1,5 +1,5 @@
 #include "../Timer.hpp"
-#include "Handlers.hpp"
+#include "Loop.hpp"
 
 
 namespace Timer {
@@ -37,10 +37,6 @@ void init() {
 
 	Timer::context.time = now() + SystemDuration::max();
 	Loop::timeHandlers.add(Timer::context);
-}
-
-SystemTime now() {
-	return Loop::now();
 }
 
 Awaitable<SystemTime> sleep(SystemTime time) {

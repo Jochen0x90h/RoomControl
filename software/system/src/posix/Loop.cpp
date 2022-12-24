@@ -1,5 +1,4 @@
-#include "Handlers.hpp"
-#include "../Timer.hpp"
+#include "Loop.inc.hpp"
 #include <util.hpp>
 #include <assert.hpp>
 
@@ -15,7 +14,7 @@ void init() {
 void run() {
 	assert(Loop::inited);
 	while (true) {
-		runOnce();
+		handleEvents();
 	}
 }
 

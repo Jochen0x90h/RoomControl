@@ -1,25 +1,58 @@
-#include "Handlers.hpp"
+#include "Loop.hpp"
+#include "../Timer.hpp"
 #ifdef _WIN32
+#define NOMINMAX
+#include <WinSock2.h>
+#undef interface
+#undef INTERFACE
+#undef IN
+#undef OUT
 #define poll WSAPoll
+#else
+#include <ctime>
+#include <poll.h>
 #endif
 
 
+namespace Timer {
+
+// current time
+SystemTime now() {
+#ifdef _WIN32
+	return {timeGetTime()};
+#else
+	timespec time;
+	clock_gettime(CLOCK_MONOTONIC, &time);
+	return {uint32_t(time.tv_sec * 1000 + time.tv_nsec / 1000000)};
+#endif
+}
+
+}
+
 namespace Loop {
+
+// SocketHandler
 
 SocketHandler::~SocketHandler() {
 }
 SocketHandlerList socketHandlers;
 
+
+// TimeHandler
+
 TimeHandler::~TimeHandler() {
 }
 TimeHandlerList timeHandlers;
 
-void runOnce(bool wait) {
+
+// handleEvents
+
+static void handleEvents(bool wait) {
 	// activate timeouts
 	SystemTime time;
 	bool activated;
 	do {
-		time = now();
+		time = Timer::now();
 		activated = false;
 		auto it = Loop::timeHandlers.begin();
 		while (it != Loop::timeHandlers.end()) {

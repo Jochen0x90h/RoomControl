@@ -160,6 +160,7 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
 	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fcoroutines-ts -Wno-user-defined-literals")
 elseif(CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
 	# visual studio
+	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /wd4455")
 else()
 	# gcc
 	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fcoroutines -fconcepts -Wno-literal-suffix")
@@ -259,8 +260,8 @@ if(POSIX)
 	)
 	set(LOOP
 		system/src/Loop.hpp
-		system/src/posix/Handlers.cpp
-		system/src/posix/Handlers.hpp
+		system/src/posix/Loop.hpp
+		system/src/posix/Loop.inc.hpp
 		system/src/posix/Loop.cpp
 	)
 	set(NETWORK system/src/Network.hpp system/src/posix/Network.cpp)
@@ -308,8 +309,8 @@ if(EMU)
 	set(INPUT system/src/Input.hpp system/src/emu/Input.hpp system/src/emu/Input.cpp)
 	set(LOOP
 		system/src/Loop.hpp
-		system/src/posix/Handlers.hpp
-		system/src/posix/Handlers.cpp
+		system/src/posix/Loop.hpp
+		system/src/posix/Loop.inc.hpp
 		system/src/emu/Loop.hpp
 		system/src/emu/Loop.cpp
 		system/src/emu/Gui.cpp

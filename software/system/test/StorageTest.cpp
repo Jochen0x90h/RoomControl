@@ -39,14 +39,14 @@ struct Kiss32Random {
 };
 
 void fail() {
-	Debug::setRedLed();
-	Debug::setBlueLed();
+	debug::setRed();
+	debug::setBlue();
 }
 
 void test() {
-	Debug::setBlueLed();
+	debug::setBlue();
 	DriversStorageTest drivers;
-	Debug::clearBlueLed();
+	debug::clearBlue();
 
 	// random generator for random data of random length
 	Kiss32Random random;
@@ -110,7 +110,7 @@ void test() {
 	Terminal::out << dec(int((end - start) / 1s)) << "s\n";
 
 	// ok
-	Debug::setGreenLed();
+	debug::setGreen();
 }
 
 int main() {

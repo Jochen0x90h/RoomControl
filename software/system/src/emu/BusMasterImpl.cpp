@@ -5,9 +5,6 @@
 #include <util.hpp>
 #include <emu/Gui.hpp>
 #include <emu/Loop.hpp>
-#include <fcntl.h>
-#include <sys/stat.h>
-#include <unistd.h>
 
 
 namespace {

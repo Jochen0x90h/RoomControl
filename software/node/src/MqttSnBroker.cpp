@@ -785,7 +785,7 @@ Coroutine MqttSnBroker::receive() {
 			auto keepAliveDuration = r.u16B();
 			auto clientId = r.string();
 #ifdef DEBUG_PRINT
-			Terminal::out << (clientId + " connects to " + thisName + '\n');
+			Terminal::out << clientId << " connects to " << thisName << '\n';
 #endif
 			if (connectionIndex == -1) {
 				// try to find an unused connection
@@ -835,7 +835,7 @@ Coroutine MqttSnBroker::receive() {
 			auto msgId = r.u16B();
 			auto topicName = r.string();
 #ifdef DEBUG_PRINT
-			Terminal::out << (this->connections[connectionIndex].name + " registers " + topicName + " at " + thisName + '\n');
+			Terminal::out << this->connections[connectionIndex].name << " registers " << topicName << " at " << thisName << '\n';
 #endif
 			// register the topic
 			auto returnCode = mqttsn::ReturnCode::ACCEPTED;
@@ -875,7 +875,7 @@ Coroutine MqttSnBroker::receive() {
 			auto msgId = r.u16B();
 			auto topicName = r.string();
 #ifdef DEBUG_PRINT
-			Terminal::out << (this->connections[connectionIndex].name + " subscribes " + topicName + " at " + thisName + '\n');
+			Terminal::out << this->connections[connectionIndex].name << " subscribes " << topicName << " at " << thisName << '\n';
 #endif
 			// register the topic
 			int topicIndex = -1;
@@ -918,7 +918,7 @@ Coroutine MqttSnBroker::receive() {
 			auto msgId = r.u16B();
 			auto topicName = r.string();
 #ifdef DEBUG_PRINT
-			Terminal::out << (this->connections[connectionIndex].name + " subscribes " + topicName + " from " + thisName + '\n');
+			Terminal::out << this->connections[connectionIndex].name << " subscribes " << topicName << " from " << thisName << '\n';
 #endif
 			// register the topic
 			if (connectionIndex == 0) {
@@ -1008,12 +1008,12 @@ Coroutine MqttSnBroker::receive() {
 			TopicInfo &topic = this->topics[topicIndex];
 
 #ifdef DEBUG_PRINT
-			Terminal::out << (thisName + " receives " + dec(pubLength) + " bytes from ");
+			Terminal::out << thisName << " receives " << dec(pubLength) << " bytes from ";
 			if (connectionIndex == 0)
-				Terminal::out << ("gateway");
+				Terminal::out << "gateway";
 			else
-				Terminal::out << (connection.name);
-			Terminal::out << (" on topic '" + this->topics.get(topicIndex)->key + "' msgid " + dec(msgId) + '\n');
+				Terminal::out << connection.name;
+			Terminal::out << " on topic '" << this->topics.get(topicIndex)->key << "' msgid " << dec(msgId) << '\n';
 #endif
 
 			// check if message is duplicate
@@ -1104,12 +1104,12 @@ Coroutine MqttSnBroker::receive() {
 			}
 
 #ifdef DEBUG_PRINT
-			Terminal::out << (thisName + " received " + typeString + " from ");
+			Terminal::out << thisName << " received " << typeString << " from ";
 			if (connectionIndex == 0)
-				Terminal::out << ("gateway");
+				Terminal::out << "gateway";
 			else
-				Terminal::out << (this->connections[connectionIndex].name);
-			Terminal::out << (" msgid " + dec(msgId) + '\n');
+				Terminal::out << this->connections[connectionIndex].name;
+			Terminal::out << " msgid " << dec(msgId) << '\n';
 #endif
 
 			// check if we read past the end of the message
@@ -1130,6 +1130,7 @@ Coroutine MqttSnBroker::receive() {
 			});
 		}
 	}
+	co_return;
 }
 
 Coroutine MqttSnBroker::forward() {
@@ -1172,12 +1173,12 @@ Coroutine MqttSnBroker::forward() {
 				uint16_t msgId = qos <= 0 ? 0 : getNextMsgId();
 
 #ifdef DEBUG_PRINT
-				Terminal::out << (thisName + " forwards " + dec(length) + " bytes to ");
+				Terminal::out << thisName << " forwards " << dec(length) << " bytes to ";
 				if (connectionIndex == 0)
-					Terminal::out << ("gateway");
+					Terminal::out << "gateway";
 				else
-					Terminal::out << (connection.name);
-				Terminal::out << (" on topic '" + this->topics.get(topicIndex)->key + "' msgid " + dec(msgId) + '\n');
+					Terminal::out << connection.name;
+				Terminal::out << " on topic '" << this->topics.get(topicIndex)->key << "' msgid " << dec(msgId) << '\n';
 #endif
 
 				// message flags

@@ -727,13 +727,14 @@ AwaitableCoroutine BusInterface::handleCommission(uint32_t busDeviceId, uint8_t 
 	device.ptr = nullptr;
 }
 
-AwaitableCoroutine BusInterface::readAttribute(int &length, uint8_t (&message)[MESSAGE_LENGTH], Device &device,
+// uint8_t (&message)[MESSAGE_LENGTH] does not work on MSVC
+AwaitableCoroutine BusInterface::readAttribute(int &length, uint8_t *message, Device &device,
 	uint8_t endpointIndex, bus::Attribute attribute)
 {
 	for (int retry = 0; ; ++retry) {
 		// request attribute
 		{
-			bus::MessageWriter w(message);
+			bus::MessageWriter w(MESSAGE_LENGTH, message);
 
 			// set start of header
 			w.setHeader();
@@ -777,8 +778,9 @@ AwaitableCoroutine BusInterface::readAttribute(int &length, uint8_t (&message)[M
 			Timer::sleep(TIMEOUT));
 
 		// check if response was received
-		if (r == 1)
+		if (r == 1) {
 			break;
+		}
 
 		if (retry == MAX_RETRY) {
 			length = -1;

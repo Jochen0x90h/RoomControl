@@ -13,10 +13,10 @@ Coroutine handleInput() {
 		co_await Input::trigger(1 << INPUT_POTI_BUTTON, 1 << INPUT_PCB_BUTTON, index, value);
 		if (index == 0) {
 			// rising edge on poti button detected
-			Debug::toggleRedLed();
+			debug::toggleRed();
 		} else {
 			// falling edge on pcb button detected
-			Debug::toggleGreenLed();
+			debug::toggleGreen();
 		}
 	}
 }

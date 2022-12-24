@@ -1,6 +1,6 @@
 #include <usb.hpp>
 #include <stdio.h>
-#include <libusb.h>
+#include <posix/libusb.hpp>
 #include <util.hpp>
 
 

@@ -100,7 +100,8 @@ constexpr Flt flt(float value, int digitCount, int decimalCount) {
 
 
 // c-string
-constexpr String str(char const *value) {return String(value);}
+constexpr String str(const char *value) {return String(value);}
+inline String str(const unsigned char *value) {return String(reinterpret_cast<const char *>(value));}
 
 
 // underline node

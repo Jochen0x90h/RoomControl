@@ -56,8 +56,8 @@ Coroutine send() {
 		packet1[3]++;
 		
 		bool success = result != 0;
-		Debug::setRedLed(!success);
-		Debug::setGreenLed(success);
+		debug::setRed(!success);
+		debug::setGreen(success);
 			
 		// change channel
 		/*radio::stop();
@@ -81,15 +81,15 @@ Coroutine reply() {
 	sendPacket[0] = array::count(sendPacket) - 1 - 1 + 2;
 	while (true) {
 		// wait for receive packet
-		Debug::setBlueLed(true);
+		debug::setBlue(true);
 		co_await Radio::receive(0, receivePacket);
-		Debug::setBlueLed(false);
+		debug::setBlue(false);
 
 		// reply
-		Debug::setRedLed(true);
+		debug::setRed(true);
 		uint8_t result;
 		co_await Radio::send(0, sendPacket, result);
-		Debug::setRedLed(false);
+		debug::setRed(false);
 	}
 }
 

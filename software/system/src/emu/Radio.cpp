@@ -467,7 +467,7 @@ void handle(Gui &gui) {
 
 int controlTransfer(libusb_device_handle *handle, Request request, uint16_t wValue, uint16_t wIndex) {
 	return libusb_control_transfer(handle,
-		uint8_t(usb::Request::OUT | usb::Request::TYPE_VENDOR | usb::Request::RECIPIENT_INTERFACE),
+		uint8_t(usb::Request::VENDOR_DEVICE_OUT),
 		uint8_t(request), wValue, wIndex,
 		nullptr, 0, 1000);
 }

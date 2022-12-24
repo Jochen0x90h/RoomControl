@@ -241,7 +241,7 @@ Coroutine LocalInterface::readAirSensor(SpiMaster &spi) {
 		#ifdef DEBUG
 			co_await Timer::sleep(10s);
 		#else
-			co_await timer::sleep(60s);
+			co_await Timer::sleep(60s);
 		#endif
 	}
 }

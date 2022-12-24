@@ -1,9 +1,11 @@
-#include "../Network.hpp"
-#include "Handlers.hpp"
-#include <boardConfig.hpp>
-#include <cerrno>
 #ifdef _WIN32
-#include <ws2tcpip.h>
+#define NOMINMAX
+#include <WinSock2.h>
+#include <WS2tcpip.h>
+#undef interface
+#undef INTERFACE
+#undef IN
+#undef OUT
 #else
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -13,6 +15,10 @@
 #include <fcntl.h>
 inline void closesocket(int s) {close(s);}
 #endif
+#include "../Network.hpp"
+#include "Loop.hpp"
+#include <boardConfig.hpp>
+#include <cerrno>
 
 
 namespace Network {
@@ -92,7 +98,7 @@ bool open(int index, uint16_t port) {
 	assert(context.socket == -1);
 
 	// create socket
-	int s = socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
+	auto s = socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
 #ifdef _WIN32
 	u_long blocking = 0;
     ioctlsocket(s, FIONBIO, &blocking);

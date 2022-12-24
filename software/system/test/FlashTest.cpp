@@ -14,7 +14,7 @@ void test() {
 	drivers.flash.readBlocking(0, 4, readData);
 	if (array::equal(4, writeData, readData)) {
 		// blue indicates that the data is there from the last run
-		Debug::setBlueLed();
+		debug::setBlue();
 
 		// erase
 		drivers.flash.eraseSectorBlocking(0);
@@ -22,8 +22,8 @@ void test() {
 		// also switch on red and green leds in case erase did not work
 		drivers.flash.readBlocking(0, 4, readData);
 		if (array::equal(4, writeData, readData)) {
-			Debug::setRedLed();
-			Debug::setGreenLed();
+			debug::setRed();
+			debug::setGreen();
 		}
 
 		return;
@@ -39,10 +39,10 @@ void test() {
 	drivers.flash.readBlocking(0, 4, readData);
 	if (array::equal(4, writeData, readData)) {
 		// green indicates that write and read was successful
-		Debug::setGreenLed();
+		debug::setGreen();
 	} else {
 		// read indicates that write or read failed
-		Debug::setRedLed();
+		debug::setRed();
 	}
 }
 

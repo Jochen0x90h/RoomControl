@@ -2,13 +2,9 @@
 #include "../Debug.hpp"
 #include "Loop.hpp"
 #include "nrf52.hpp"
-//#include <util.hpp>
-//#include <boardConfig.hpp>
 
 
 /*
-	usb overview: https://www.beyondlogic.org/usbnutshell/usb5.shtml
-
 	Dependencies:
 
 	Config:
@@ -167,7 +163,7 @@ void UsbDeviceImpl::handle() {
 					NRF_USBD->TASKS_EP0STALL = TRIGGER;
 				}
 				break;
-			case usb::Request::VENDOR_INTERFACE_OUT:
+			case usb::Request::VENDOR_DEVICE_OUT:
 				{
 					int wValue = (NRF_USBD->WVALUEH << 8) | NRF_USBD->WVALUEL;
 					int wIndex = (NRF_USBD->WINDEXH << 8) | NRF_USBD->WINDEXL;
@@ -201,7 +197,8 @@ void UsbDeviceImpl::handle() {
 				ep0Data += sentCount;
 
 				int l = std::min(length, 64);
-				array::copy(ep0Buffer, ep0Buffer + l, ep0Data);
+				//array::copy(ep0Buffer, ep0Buffer + l, ep0Data);
+				std::copy(ep0Data, ep0Data + l, ep0Buffer);
 				NRF_USBD->EPIN[0].MAXCNT = l;
 				NRF_USBD->TASKS_STARTEPIN[0] = TRIGGER;
 			} else {

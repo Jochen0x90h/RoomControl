@@ -85,9 +85,9 @@ Coroutine getId(SpiMaster &spi) {
 		
 		// check chip id
 		if (buffer[1] == CHIP_ID)
-			Debug::toggleGreenLed();
+			debug::toggleGreen();
 		else
-			Debug::toggleRedLed();
+			debug::toggleRed();
 
 		// wait for 1s
 		co_await Timer::sleep(1s);
@@ -103,7 +103,7 @@ Coroutine getRegisters(SpiMaster &spi, UsbDevice &usb) {
 		
 		// send to usb host
 		co_await usb.send(1, 128, buffer + 1);
-		Debug::toggleBlueLed();
+		debug::toggleBlue();
 
 		// wait for 5s
 		co_await Timer::sleep(5s);
@@ -119,7 +119,7 @@ Coroutine measure(SpiMaster &spi, UsbDevice &usb) {
 		2, 5, 2, // temperature and pressure oversampling and filter
 		1, // humidity oversampling
 		300, 100); // heater temperature (celsius) and duration (ms)
-	Debug::setBlueLed(true);
+	debug::setBlue(true);
 
 	while (true) {
 		co_await sensor.measure();
@@ -130,7 +130,7 @@ Coroutine measure(SpiMaster &spi, UsbDevice &usb) {
 			+ "Gas: " + flt(sensor.getGasResistance(), 1, 1) + "Ω\n";
 
 		co_await usb.send(1, string.count(), string.data());
-		Debug::toggleRedLed();
+		debug::toggleRed();
 
 		co_await Timer::sleep(10s);
 	}

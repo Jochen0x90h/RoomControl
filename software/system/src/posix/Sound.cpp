@@ -1,5 +1,6 @@
 #include "../Sound.hpp"
-#include "Handlers.hpp"
+#include "../Timer.hpp"
+#include "Loop.hpp"
 #include "assert.hpp"
 #include "util.hpp"
 #define MA_NO_DECODING
@@ -209,7 +210,7 @@ void init() {
 
 	Sound::inited = 2;
 
-	Sound::timeout.time = Loop::now() + 1s;
+	Sound::timeout.time = Timer::now() + 1s;
 	Loop::timeHandlers.add(Sound::timeout);
 }
 
