@@ -484,7 +484,7 @@ Coroutine BusInterface::receive() {
 						Terminal::out << 'B' << dec(device->data.busDeviceId) << ": security counter error " << dec(securityCounter) << " <= " << dec(device->securityCounter) << '\n';
 						//break;
 					} else {
-						//Terminal::out << 'B' << dec(device->data.busDeviceId) << ": security counter ok " << dec(securityCounter) << " > " << dec(device->securityCounter) << '\n';
+						Terminal::out << 'B' << dec(device->data.busDeviceId) << ": security counter ok " << dec(securityCounter) << " > " << dec(device->securityCounter) << '\n';
 					}
 					device->securityCounter = securityCounter;
 
@@ -646,7 +646,7 @@ AwaitableCoroutine BusInterface::handleCommission(uint32_t busDeviceId, uint8_t 
 		MessageReader plugs(length, message);
 		for (int i = 0; i < plugCount; ++i) {
 			data->plugs[i] = plugs.e16L<MessageType>();
-			Terminal::out << dec(endpointIndex) << " " << getTypeLabel(data->plugs[i]) << "\n";
+			Terminal::out << "Ep " << dec(endpointIndex) << " Plug " << dec(i) << ' ' << getTypeLabel(data->plugs[i]) << "\n";
 		}
 
 		// set id
@@ -691,7 +691,6 @@ AwaitableCoroutine BusInterface::handleCommission(uint32_t busDeviceId, uint8_t 
 		auto oldEndpoint = oldDevice->endpoints;
 		auto endpoint = device->endpoints;
 		while (oldEndpoint != nullptr && endpoint != nullptr) {
-			//endpoint->subscribers.add(static_cast<Subscriber &>(static_cast<LinkedListNode<Subscriber> &>(oldEndpoint->subscribers)));
 			endpoint->subscribers.add(oldEndpoint->subscribers); // only works because old list removes itself from linked list
 			oldEndpoint = oldEndpoint->next;
 			endpoint = endpoint->next;
@@ -728,13 +727,14 @@ AwaitableCoroutine BusInterface::handleCommission(uint32_t busDeviceId, uint8_t 
 	device.ptr = nullptr;
 }
 
-AwaitableCoroutine BusInterface::readAttribute(int &length, uint8_t (&message)[MESSAGE_LENGTH], Device &device,
+// uint8_t (&message)[MESSAGE_LENGTH] does not work on MSVC
+AwaitableCoroutine BusInterface::readAttribute(int &length, uint8_t *message, Device &device,
 	uint8_t endpointIndex, bus::Attribute attribute)
 {
 	for (int retry = 0; ; ++retry) {
 		// request attribute
 		{
-			bus::MessageWriter w(message);
+			bus::MessageWriter w(MESSAGE_LENGTH, message);
 
 			// set start of header
 			w.setHeader();
@@ -778,8 +778,9 @@ AwaitableCoroutine BusInterface::readAttribute(int &length, uint8_t (&message)[M
 			Timer::sleep(TIMEOUT));
 
 		// check if response was received
-		if (r == 1)
+		if (r == 1) {
 			break;
+		}
 
 		if (retry == MAX_RETRY) {
 			length = -1;

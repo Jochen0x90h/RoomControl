@@ -6,10 +6,19 @@
 #include <functional>
 
 
+extern "C" {
+void UARTE0_UART0_IRQHandler();
+void TIMER1_IRQHandler();
+}
+
 class BusMasterImpl : public BusMaster, public Loop::Handler2 {
+	friend void UARTE0_UART0_IRQHandler();
+	friend void TIMER1_IRQHandler();
 public:
 	/**
 	 * Constructor
+	 * @param rxPin receive pin from LIN driver
+	 * @param txPin transmit pin to LIN driver
 	 */
 	BusMasterImpl(int rxPin, int txPin);
 
@@ -18,42 +27,64 @@ public:
 
 	void handle() override;
 
+protected:
+	void startReceive(const ReceiveParameters &p);
+	void startSend(const SendParameters &p);
+	void startBreak();
+
 	void uartIrqHandler();
 	void timerIrqHandler();
 
-protected:
-
+	int rxPin;
 	int txPin;
-	NRF_UART_Type *uart;
-	NRF_TIMER_Type *timer;
 
-	enum State {
+	// state
+	enum class State : uint8_t {
+		// idle, waiting for receive/send by application or a request from a node
+		IDLE,
+
+		// sending break signal
 		BREAK,
+		PAUSE,
+
+		// sending sync byte
 		SYNC,
-		RX,
-		REQUEST
+
+		// receive until timeout or send until last character
+		TRANSFER,
+
+		// finished, waiting for handling in event loop
+		FINISHED,
 	};
-	State volatile state;
+	volatile State state = State::IDLE;
 
-	// transmit buffer
-	uint8_t const *volatile txData;
-	int volatile txLength;
-	int volatile txIndex;
+	// rx
+	enum class RxState : uint8_t {
+		IDLE,
+		FINISHED,
+		PENDING,
+		ACTIVE
+	};
+	volatile RxState rxState = RxState::IDLE;
+	uint8_t *rxBegin;
+	uint8_t *rxEnd;
+	uint8_t *rxData;
 
-	// receive buffer
-	uint8_t *volatile rxData;
-	int volatile rxLength;
-	int volatile rxIndex;
-	bool rxReady;
-	std::function<void (int)> onTransferred;
+	// tx
+	enum class TxState : uint8_t {
+		IDLE,
+		FINISHED,
+		PENDING,
+		ACTIVE,
+		END
+	};
+	volatile TxState txState = TxState::IDLE;
+	const uint8_t *txBegin;
+	const uint8_t *txEnd;
+	const uint8_t *txData;
+	uint8_t txByte;
 
-	// request buffer
-	uint8_t requestData[1];
-	int volatile requestIndex;
-	bool requestReady;
-	std::function<void (uint8_t)> onRequest;
-
-
+	// lists for coroutines waiting for receive or send to complete
 	Waitlist<ReceiveParameters> receiveWaitlist;
 	Waitlist<SendParameters> sendWaitlist;
 };

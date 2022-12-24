@@ -15,7 +15,11 @@
 #include <Cie1931.hpp>
 #include <gtest/gtest.h>
 #include <random>
+#ifdef _WIN32
+#include <winsock.h> // htonl
+#else
 #include <netinet/in.h> // htonl
+#endif
 
 
 // test utility functions and classes

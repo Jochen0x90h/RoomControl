@@ -12,7 +12,7 @@ public:
 	/**
 	 * Constructor starts a coroutine that transfers the bitmaps to the display
 	 */
-	SwapChain(SpiMaster &spi) : freeList{&bitmaps[0], &bitmaps[1]}, display(spi) {
+	SwapChain(SSD1309::Spi spi) : freeList{&bitmaps[0], &bitmaps[1]}, display(spi) {
 		// start transfer coroutine
 		transfer();
 	}

@@ -5,9 +5,6 @@
 #include <util.hpp>
 #include <emu/Gui.hpp>
 #include <emu/Loop.hpp>
-#include <fcntl.h>
-#include <sys/stat.h>
-#include <unistd.h>
 
 
 namespace {
@@ -79,10 +76,12 @@ BusMasterImpl::BusMasterImpl() : file("busMaster.bin", File::Mode::READ_WRITE) {
 }
 
 Awaitable<BusMaster::ReceiveParameters> BusMasterImpl::receive(int &length, uint8_t *data) {
+	assert(length > 0);
 	return {this->receiveWaitlist, &length, data};
 }
 
 Awaitable<BusMaster::SendParameters> BusMasterImpl::send(int length, uint8_t const *data) {
+	assert(length > 0);
 	return {this->sendWaitlist, length, data};
 }
 
@@ -128,7 +127,7 @@ void BusMasterImpl::handle(Gui &gui) {
 						setKey(device.persistentState.aesKey, r.data8<16>());
 
 						// reset security counter
-						device.persistentState.securityCounter = 0;
+						device.persistentState.securityCounter = 1;
 
 						// set index
 						device.persistentState.index = device.nextIndex;

@@ -6,6 +6,7 @@
 #include "system/nrf52840_bitfields.h"
 #pragma GCC diagnostic pop
 
+
 // construct bitfield from value
 #define V(field, value) ((value) << field##_Pos)
 
@@ -26,9 +27,7 @@ constexpr int GENERATED = 1;
 
 
 
-
-// nvic
-// see NVIC_Type in system/core_cm4.h
+// NVIC (nested vectored interrupt controller)
 inline void enableInterrupt(int n) {
 	NVIC->ISER[n >> 5] = 1 << (n & 31);
 }

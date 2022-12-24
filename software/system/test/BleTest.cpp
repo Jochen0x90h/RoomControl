@@ -73,7 +73,7 @@ Coroutine scan() {
 			<< hex(result.address.u8[3]) << ':' << hex(result.address.u8[2]) << ':' << hex(result.address.u8[1]) << ':'
 			<< hex(result.address.u8[0]) << '\n';
 
-		Debug::toggleBlueLed();
+		debug::toggleBlue();
 
 
 		Ble::open(0, result.address);

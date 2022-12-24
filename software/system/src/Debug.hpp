@@ -5,27 +5,27 @@
 #include <appConfig.hpp>
 
 
-namespace Debug {
+namespace debug {
 
-inline void setRedLed() {Output::set(OUTPUT_DEBUG_RED);}
-inline void clearRedLed() {Output::clear(OUTPUT_DEBUG_RED);}
-inline void setRedLed(bool value) {Output::set(OUTPUT_DEBUG_RED, value);}
-inline void toggleRedLed() {Output::toggle(OUTPUT_DEBUG_RED);}
+inline void setRed() {Output::set(OUTPUT_DEBUG_RED);}
+inline void clearRed() {Output::clear(OUTPUT_DEBUG_RED);}
+inline void setRed(bool value) {Output::set(OUTPUT_DEBUG_RED, value);}
+inline void toggleRed() {Output::toggle(OUTPUT_DEBUG_RED);}
 
-inline void setGreenLed() {Output::set(OUTPUT_DEBUG_GREEN);}
-inline void clearGreenLed() {Output::clear(OUTPUT_DEBUG_GREEN);}
-inline void setGreenLed(bool value) {Output::set(OUTPUT_DEBUG_GREEN, value);}
-inline void toggleGreenLed() {Output::toggle(OUTPUT_DEBUG_GREEN);}
+inline void setGreen() {Output::set(OUTPUT_DEBUG_GREEN);}
+inline void clearGreen() {Output::clear(OUTPUT_DEBUG_GREEN);}
+inline void setGreen(bool value) {Output::set(OUTPUT_DEBUG_GREEN, value);}
+inline void toggleGreen() {Output::toggle(OUTPUT_DEBUG_GREEN);}
 
-inline void setBlueLed() {Output::set(OUTPUT_DEBUG_BLUE);}
-inline void clearBlueLed() {Output::clear(OUTPUT_DEBUG_BLUE);}
-inline void setBlueLed(bool value) {Output::set(OUTPUT_DEBUG_BLUE, value);}
-inline void toggleBlueLed() {Output::toggle(OUTPUT_DEBUG_BLUE);}
+inline void setBlue() {Output::set(OUTPUT_DEBUG_BLUE);}
+inline void clearBlue() {Output::clear(OUTPUT_DEBUG_BLUE);}
+inline void setBlue(bool value) {Output::set(OUTPUT_DEBUG_BLUE, value);}
+inline void toggleBlue() {Output::toggle(OUTPUT_DEBUG_BLUE);}
 
-inline void setLeds(int state) {
-	Debug::setRedLed(state & 1);
-	Debug::setGreenLed(state & 2);
-	Debug::setBlueLed(state & 4);
+inline void set(int state) {
+	setRed(state & 1);
+	setGreen(state & 2);
+	setBlue(state & 4);
 }
 
 enum Color {
@@ -42,11 +42,11 @@ enum Color {
 	WHITE = 7,
 };
 
-inline void setColor(Color color) {
+inline void set(Color color) {
 	int c = int(color);
-	Debug::setRedLed(c & 1);
-	Debug::setGreenLed(c & 2);
-	Debug::setBlueLed(c & 4);
+	setRed(c & 1);
+	setGreen(c & 2);
+	setBlue(c & 4);
 }
 
 class Counter {
@@ -54,17 +54,17 @@ public:
 
 	Counter &operator ++() {
 		++this->c;
-		setLeds(this->c);
+		set(this->c);
 		return *this;
 	}
 
 	Counter &operator --() {
 		--this->c;
-		setLeds(this->c);
+		set(this->c);
 		return *this;
 	}
 
 	int c = 0;
 };
 
-} // namespace Debug
+} // namespace debug

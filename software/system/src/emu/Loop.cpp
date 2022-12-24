@@ -1,5 +1,5 @@
 #include "Loop.hpp"
-#include "../posix/Loop.hpp"
+#include "../posix/Loop.inc.hpp"
 #include <cstdio>
 #include <cstdlib>
 
@@ -113,7 +113,7 @@ void run() {
 
 		// process events
 		glfwPollEvents();
-		Loop::runOnce(false);
+		Loop::handleEvents(false);
 
 		// mouse
 		gui.doMouse(window);

@@ -1,13 +1,14 @@
 #include "SpiMasterImpl.hpp"
-#include <Terminal.hpp>
+#include "../Timer.hpp"
+#include "../Terminal.hpp"
 #include <StringOperators.hpp>
 
 
 
 Awaitable<SpiMaster::Parameters> SpiMasterImpl::transfer(int writeCount, void const *writeData, int readCount, void *readData) {
 	if (!isInList()) {
-		this->time = Loop::now() + 100ms; // emulate 100ms transfer time
-		Loop::timeouts.add(*this);
+		this->time = Timer::now() + 100ms; // emulate 100ms transfer time
+		Loop::timeHandlers.add(*this);
 	}
 	return {this->waitlist, nullptr, writeCount, writeData, readCount, readData};
 }

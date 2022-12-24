@@ -166,7 +166,7 @@ private:
 
 	[[nodiscard]] AwaitableCoroutine handleCommission(uint32_t busDeviceId, uint8_t endpointCount);
 
-	[[nodiscard]] AwaitableCoroutine readAttribute(int &length, uint8_t (&message)[MESSAGE_LENGTH], Device &device,
+	[[nodiscard]] AwaitableCoroutine readAttribute(int &length, uint8_t *message, Device &device,
 		uint8_t endpointIndex, bus::Attribute attribute);
 
 	// publish messages to bus nodes

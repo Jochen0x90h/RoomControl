@@ -4,6 +4,7 @@
 #include <Debug.hpp>
 #include <Loop.hpp>
 #include <util.hpp>
+#include <boardConfig.hpp>
 
 
 // device descriptor
@@ -68,15 +69,15 @@ static const UsbConfiguration configurationDescriptor = {
 uint8_t sendData[16] __attribute__((aligned(4)));
 
 // send random numbers to host
-Coroutine send() {
+Coroutine send(UsbDevice &usb) {
 	while (true) {
 		// generate random numbers
 		for (int i = 0; i < array::count(sendData); ++i)
 			sendData[i] = Random::u8();
 		
 		// send to host	
-		co_await UsbDevice::send(1, array::count(sendData), sendData);
-		Debug::toggleBlueLed();
+		co_await usb.send(1, array::count(sendData), sendData);
+		debug::toggleBlue();
 		
 		co_await Timer::sleep(1s);
 	}
@@ -86,7 +87,7 @@ int main() {
 	Loop::init();
 	Timer::init();
 	Random::init();
-	UsbDevice::init(
+	UsbDeviceImpl usb(
 		[](usb::DescriptorType descriptorType) {
 			switch (descriptorType) {
 			case usb::DescriptorType::DEVICE:
@@ -97,12 +98,12 @@ int main() {
 				return ConstData();
 			}
 		},
-		[](uint8_t bConfigurationValue) {
+		[](UsbDevice &usb, uint8_t bConfigurationValue) {
 			// enable bulk endpoints in 1 (keep control endpoint 0 enabled)
-			UsbDevice::enableEndpoints(1 | (1 << 1), 1);
+			usb.enableEndpoints(1 | (1 << 1), 1);
 
 			// start to send random numbers to host
-			send();
+			send(usb);
 		},
 		[](uint8_t bRequest, uint16_t wValue, uint16_t wIndex) {
 			return false;

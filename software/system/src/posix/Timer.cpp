@@ -4,7 +4,7 @@
 
 namespace Timer {
 
-class Context : public Loop::Timeout {
+class Context : public Loop::TimeHandler {
 public:
 	void activate() override {
 		auto time = this->time;
@@ -36,11 +36,7 @@ void init() {
 	Timer::inited = true;
 
 	Timer::context.time = now() + SystemDuration::max();
-	Loop::timeouts.add(Timer::context);
-}
-
-SystemTime now() {
-	return Loop::now();
+	Loop::timeHandlers.add(Timer::context);
 }
 
 Awaitable<SystemTime> sleep(SystemTime time) {

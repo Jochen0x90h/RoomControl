@@ -5,11 +5,13 @@
 
 /**
  * Implementation of flash interface for stm32f0
- * See section 3 in reference manual: https://www.st.com/resource/en/reference_manual/dm00031936-stm32f0x1stm32f0x2stm32f0x8-advanced-armbased-32bit-mcus-stmicroelectronics.pdf
  */
 class FlashImpl : public Flash {
 public:
+	// size of a page that has to be erased at once
 	static constexpr int PAGE_SIZE = 1024;
+
+	// size of a block that has to be written at once
 	static constexpr int BLOCK_SIZE = 2;
 
 	/**

@@ -14,7 +14,7 @@ Coroutine soundTest() {
 		do {
 			co_await Timer::sleep(1s);
 		} while (Sound::isPlaying(index));
-		Debug::toggleBlueLed();
+		debug::toggleBlue();
 
 		index = (index + 1) % Sound::getTypes().count();
 	}

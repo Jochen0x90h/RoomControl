@@ -6,6 +6,7 @@
 #include <util.hpp>
 //#include "nrf52/nrf52.hpp"
 //#include "nrf52/FlashImpl.hpp"
+#include <boardConfig.hpp>
 
 
 // Test for USB device.
@@ -42,7 +43,7 @@ struct UsbConfiguration {
 	struct usb::ConfigDescriptor config;
 	struct usb::InterfaceDescriptor interface;
 	struct usb::EndpointDescriptor endpoints[2];
-} __attribute__((packed));
+};
 
 static const UsbConfiguration configurationDescriptor = {
 	.config = {
@@ -86,20 +87,20 @@ static const UsbConfiguration configurationDescriptor = {
 
 
 constexpr int bufferSize = 128;
-uint8_t buffer[bufferSize] __attribute__((aligned(4)));
+uint8_t buffer[bufferSize];// __attribute__((aligned(4)));
 
 //FlashImpl flash{0xe0000 - 0x20000, 2, 4096};
 //uint8_t writeData[] = {0x12, 0x34, 0x56, 0x78, 0x9a};
 
 // echo data from host
-Coroutine echo() {
+Coroutine echo(UsbDevice &usb) {
 	while (true) {
 		// receive data from host
 		int length = bufferSize;
-		co_await UsbDevice::receive(1, length, buffer);
+		co_await usb.receive(1, length, buffer);
 
 		// set green led to indicate processing
-		Debug::setGreenLed();
+		debug::setGreen();
 
 		// check received data
 		bool error = false;
@@ -108,10 +109,10 @@ Coroutine echo() {
 				error = true;
 		}
 		if (error)
-			Debug::setColor(Debug::RED);
+			debug::set(debug::RED);
 		
 		// send data back to host
-		co_await UsbDevice::send(1, length, buffer);
+		co_await usb.send(1, length, buffer);
 
 		/*
 		// debug: send nrf52840 chip id
@@ -144,15 +145,16 @@ Coroutine echo() {
 		*/
 
 		// clear green led and toggle blue led to indicate activity
-		Debug::clearGreenLed();
-		Debug::toggleBlueLed();
+		debug::clearGreen();
+		debug::toggleBlue();
 	}
 }
 
 int main() {
 	Loop::init();
 	Timer::init();
-	UsbDevice::init(
+
+	UsbDeviceImpl usb(
 		[](usb::DescriptorType descriptorType) {
 			switch (descriptorType) {
 			case usb::DescriptorType::DEVICE:
@@ -163,24 +165,28 @@ int main() {
 				return ConstData();
 			}
 		},
-		[](uint8_t bConfigurationValue) {
+		[](UsbDevice &usb, uint8_t bConfigurationValue) {
 			// enable bulk endpoints 1 in and 1 out (keep control endpoint 0 enabled)
-			Debug::setGreenLed(true);
-			UsbDevice::enableEndpoints(1 | (1 << 1), 1 | (1 << 1));
+			debug::setGreen(true);
+			usb.enableEndpoints(1 | (1 << 1), 1 | (1 << 1));
 		},
 		[](uint8_t bRequest, uint16_t wValue, uint16_t wIndex) {
 			switch (Request(bRequest)) {
 			case Request::RED:
-				Debug::setRedLed(wValue != 0);
+				debug::setRed(wValue != 0);
 				// debug: erase flash and write
 				//flash.eraseSectorBlocking(0);
 				//flash.writeBlocking(0, 4, writeData + 1);
 				break;
 			case Request::GREEN:
-				Debug::setGreenLed(wIndex != 0);
+				//Debug::setLeds(wValue);
+				//Debug::toggleGreenLed();
+				debug::setGreen(wIndex != 0);
 				break;
 			case Request::BLUE:
-				Debug::setBlueLed(wValue == wIndex);
+				//Debug::setLeds(wIndex);
+				//Debug::toggleBlueLed();
+				debug::setBlue(wValue == wIndex);
 				break;
 			default:
 				return false;
@@ -190,7 +196,7 @@ int main() {
 	Output::init(); // for debug led's
 
 	// start to receive from usb host
-	echo();
+	echo(usb);
 
 	Loop::run();
 }

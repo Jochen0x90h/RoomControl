@@ -2,11 +2,10 @@
 
 #include "../SpiMaster.hpp"
 #include "Loop.hpp"
-#include "gpio.hpp"
 
 
 /**
- * Implementation of SPI hardware interface for nrf52 platform with multiple virtual channels
+ * Implementation of SPI hardware interface for stm32f0 with multiple virtual channels
  */
 class SpiMasterImpl : public Loop::Handler2 {
 public:
@@ -45,6 +44,14 @@ public:
 protected:
 	void startTransfer(SpiMaster::Parameters const &p);
 
+	bool update();
+
+	uint32_t readAddress;
+	int readCount;
+	uint32_t writeAddress;
+	int writeCount;
+	uint8_t readDummy;
+	uint8_t writeDummy = 0;
 
 	int csPin;
 	Waitlist<SpiMaster::Parameters> waitlist;

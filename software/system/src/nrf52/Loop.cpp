@@ -76,7 +76,7 @@ void run() {
 	}
 }
 
-void busyWait(int us) {
+void sleepBlocking(int us) {
 	auto cycles = us * 8;
 	for (int i = 0; i < cycles; ++i) {
 		__NOP();

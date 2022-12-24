@@ -10,9 +10,9 @@ uint8_t send[] = {0x01, 0x00, 0x0f, 0x33, 0x55, 0xaa, 0xcc, 0xf0};
 uint8_t receive[10];
 
 
-Coroutine transferBus(BusMaster &busMaster) {
+Coroutine transferBus(BusNode &busNode) {
 	while (true) {
-		co_await busMaster.send(array::count(send), send);
+		co_await busNode.send(array::count(send), send);
 
 		//int receiveLength = array::count(receive);
 
@@ -26,9 +26,9 @@ int main() {
 	Loop::init();
 	Timer::init();
 	Output::init(); // for debug led's
-	DriversBusMasterTest drivers;
+	DriversBusNodeTest drivers;
 
-	transferBus(drivers.busMaster);
+	transferBus(drivers.busNode);
 
 	Loop::run();
 }

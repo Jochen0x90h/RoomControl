@@ -5,17 +5,17 @@
 
 Coroutine timer1() {
 	while (true) {
-		Debug::setRedLed(true);
+		debug::setRed(true);
 		co_await Timer::sleep(100ms);
 
-		Debug::setRedLed(false);
+		debug::setRed(false);
 		co_await Timer::sleep(1900ms);
 	}
 }
 
 Coroutine timer2() {
 	while (true) {
-		Debug::toggleGreenLed();
+		debug::toggleGreen();
 
 		auto timeout = Timer::now() + 3s;
 		co_await Timer::sleep(timeout);
@@ -27,7 +27,7 @@ Coroutine timer2() {
 
 Coroutine timer3() {
 	while (true) {
-		Debug::toggleBlueLed();
+		debug::toggleBlue();
 
 		// test if time overflow works on nrf52
 		auto time = Timer::now();

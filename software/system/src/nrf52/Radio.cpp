@@ -30,9 +30,9 @@
 		NRF_PPI
 			CH[27]: RADIO->EVENTS_END -> TIMER0->TASKS_CAPTURE[2]
 		NRF_EGU0
-			TRIGGER[0]: energy detection
-			TRIGGER[1]: receive queue
-			TRIGGER[2]: send queue
+			TRIGGERED[0]: energy detection
+			TRIGGERED[1]: received a packet
+			TRIGGERED[2]: send operation has finished
 
 	Glossary:
 		CCA: Clear Channel Assessment (-> ED and/or carrier detection)
@@ -565,7 +565,7 @@ void handle() {
 			}
 		}
 
-		// check receive queue
+		// check if a packet was received
 		if (NRF_EGU0->EVENTS_TRIGGERED[1]) {
 			NRF_EGU0->EVENTS_TRIGGERED[1] = 0;
 			do {

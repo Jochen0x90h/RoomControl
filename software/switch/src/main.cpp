@@ -527,15 +527,18 @@ public:
 				//Terminal::out << "ab " << dec(ax) << dec(ay) << dec(az) << " " << dec(bx) << dec(by) << dec(bz) << "\n";
 
 				// build 16 bit word for relay driver
-				uint16_t word = 0x8000 // enable
+				uint16_t w = 0x8000 // enable
 					| (ax << (MPQ6526_MAPPING[0] * 2 + 1))
 					| (ay << (MPQ6526_MAPPING[1] * 2 + 1))
 					| (az << (MPQ6526_MAPPING[2] * 2 + 1))
 					| (bx << (MPQ6526_MAPPING[3] * 2 + 1))
 					| (by << (MPQ6526_MAPPING[4] * 2 + 1))
 					| (bz << (MPQ6526_MAPPING[5] * 2 + 1));
-				//Terminal::out << "spi " << hex(word) << "\n";
-				co_await this->drivers.relayDriver.transfer(1, &word, 0, nullptr);
+				//Terminal::out << "spi " << hex(w) << "\n";
+
+				// transfer
+				uint16_t r;
+				co_await this->drivers.relayDriver.transfer(2, &w, 2, &r);
 
 				// wait some time until relay contacts react
 				co_await Timer::sleep(RELAY_TIME);

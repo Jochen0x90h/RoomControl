@@ -6,7 +6,7 @@
 /**
  * Implementation of an SPI master that simply writes info about the transfer operations to Terminal::out
  */
-class SpiMasterImpl : public SpiMaster, public Loop::Timeout {
+class SpiMasterImpl : public SpiMaster, public Loop::TimeHandler {
 public:
 	/**
 	 * Constructor
@@ -15,7 +15,7 @@ public:
 	explicit SpiMasterImpl(std::string name) : name(std::move(name)) {
 	}
 
-	Awaitable<Parameters> transfer(int writeCount, void const *writeData, int readCount, void *readData) override;
+	[[nodiscard]] Awaitable<Parameters> transfer(int writeCount, void const *writeData, int readCount, void *readData) override;
 	void transferBlocking(int writeCount, void const *writeData, int readCount, void *readData) override;
 
 	void activate() override;

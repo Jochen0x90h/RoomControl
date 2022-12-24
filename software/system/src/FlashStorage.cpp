@@ -1,4 +1,5 @@
 #include "FlashStorage.hpp"
+#include <Debug.hpp>
 #include <crc.hpp>
 #include <util.hpp>
 #include <cstddef>
@@ -72,7 +73,7 @@ FlashStorage::FlashStorage(Flash &flash)
 	switch (foundState) {
 	case SectorState::EMPTY:
 		// this happens if the flash is empty, make sure the sector is really empty
-		flash.eraseSectorBlocking(head);
+		//flash.eraseSectorBlocking(head);
 		this->sectorIndex = head;
 		this->sector = this->sectorIndex * this->info.sectorSize;
 
@@ -103,7 +104,9 @@ FlashStorage::FlashStorage(Flash &flash)
 		this->dataWriteOffset = this->info.sectorSize;
 
 		// garbage collect tail sector
+		//Debug::setGreenLed();
 		gc(next);
+		//Debug::clearGreenLed();
 
 		break;
 	}
@@ -235,17 +238,17 @@ FlashStorage::SectorState FlashStorage::detectSectorState(int sectorIndex) {
 	flash.readBlocking(sector, sizeof(entry), &entry);
 
 	if (entry.isEmpty()) {
-		// section is empty or open: read first entry
+		// sector is empty or open: read first entry
 		flash.readBlocking(sector + this->entrySize, sizeof(entry), &entry);
 		if (entry.isEmpty()) {
-			// section is empty
+			// sector is empty
 			return SectorState::EMPTY;
 		} else {
-			// section is open
+			// sector is open
 			return SectorState::OPEN;
 		}
 	} else {
-		// section is closed
+		// sector is closed
 		return SectorState::CLOSED;
 	}
 }
