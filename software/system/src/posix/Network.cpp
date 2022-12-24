@@ -13,6 +13,7 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <poll.h>
 inline void closesocket(int s) {close(s);}
 #endif
 #include "../Network.hpp"

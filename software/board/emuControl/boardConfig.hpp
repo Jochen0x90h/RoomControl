@@ -9,6 +9,7 @@
 #include <posix/SpiMasterImpl.hpp>
 #include <posix/StorageImpl.hpp>
 #include <posix/FlashImpl.hpp>
+#include <posix/UsbDeviceImpl.hpp>
 #include <FeRamStorage4.hpp>
 #include <FlashStorage.hpp>
 #include <util.hpp>

@@ -317,7 +317,7 @@ void BusNodeImpl::timerIrqHandler() {
 		break;
 	default:
 		// timeout in IDLE, SYNC or ERROR state
-		Debug::toggleGreenLed();
+		debug::toggleGreen();
 
 		// return to idle state
 		this->state = State::IDLE;

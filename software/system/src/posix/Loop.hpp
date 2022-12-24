@@ -38,10 +38,4 @@ using TimeHandlerList = LinkedList<TimeHandler>;
 extern TimeHandlerList timeHandlers;
 
 
-/**
- * Platform dependent function: Handle events
- * @param wait wait for an event or timeout. Set to false when using a rendering loop, e.g. when using GLFW
- */
-void handleEvents(bool wait = true);
-
 } // namespace Loop

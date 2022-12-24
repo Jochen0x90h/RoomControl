@@ -23,7 +23,7 @@ Coroutine draw(SSD1309::Spi spi) {
 		co_await display.set(bitmap);
 		co_await Timer::sleep(200ms);
 		
-		Debug::toggleRedLed();
+		debug::toggleRed();
 	}
 }
 

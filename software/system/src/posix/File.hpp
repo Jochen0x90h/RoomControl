@@ -149,6 +149,6 @@ inline File::File(const fs::path &path, Mode mode) {
 		FILE_ATTRIBUTE_NORMAL,
 		nullptr);
 #else
-	this->file = open(name.c_str(), O_CREAT | int(mode), S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH);
+	this->file = open(path.c_str(), O_CREAT | int(mode), S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH);
 #endif
 }

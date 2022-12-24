@@ -18,7 +18,7 @@ constexpr int attCid = 4;
 char const *results[] = {"E8:85:47:17:BF:5A"};
 
 // emulates a scanner
-class Scanner : public Loop::Timeout {
+class Scanner : public Loop::TimeHandler {
 public:
 	void activate() override {
 		auto time = this->time;
@@ -50,7 +50,7 @@ public:
 
 Scanner scanner;
 
-class Context : public Loop::FileDescriptor {
+class Context : public Loop::SocketHandler {
 public:
 
 	Waitlist<ReceiveParameters> receiveWaitlist;
@@ -61,7 +61,7 @@ public:
 		if (events & POLLIN) {
 			this->receiveWaitlist.resumeFirst([this](ReceiveParameters &p) {
 				// receive
-				auto receivedCount = read(this->fd, p.data, *p.length);
+				auto receivedCount = read(this->socket, p.data, *p.length);
 				if (receivedCount >= 0) {
 					*p.length = receivedCount;
 					return true;
@@ -74,7 +74,7 @@ public:
 		if (events & POLLOUT) {
 			this->sendWaitlist.resumeFirst([this](SendParameters &p) {
 				// send
-				auto sentCount = write(this->fd, p.data, p.length);
+				auto sentCount = write(this->socket, p.data, p.length);
 				return sentCount >= 0;
 			});
 			if (this->sendWaitlist.isEmpty())
@@ -94,7 +94,7 @@ Awaitable<ScanParameters> scan(ScanResult &result) {
 	// add to event loop if necessary
 	if (!Ble::scanner.isInList()) {
 		Ble::scanner.time = Timer::now();
-		Loop::timeouts.add(Ble::scanner);
+		Loop::timeHandlers.add(Ble::scanner);
 	}
 
 	// add to wait list
@@ -107,22 +107,22 @@ bool open(int index, Address const &address) {
 	auto &context = Ble::contexts[index];
 
 	// create socket
-	assert(context.fd == -1);
-	int fd = socket(PF_BLUETOOTH, SOCK_SEQPACKET, BTPROTO_L2CAP);
+	assert(context.socket == -1);
+	auto s = socket(PF_BLUETOOTH, SOCK_SEQPACKET, BTPROTO_L2CAP);
 
 	// bind
 	sockaddr_l2 srcaddr = {
 		.l2_family = AF_BLUETOOTH,
 		.l2_cid = htobs(attCid)};
-	if (bind(fd, (sockaddr *)&srcaddr, sizeof(srcaddr)) < 0) {
-		::close(fd);
+	if (bind(s, (sockaddr *)&srcaddr, sizeof(srcaddr)) < 0) {
+		::close(s);
 		return false;
 	}
 
 	// set security level
 	struct bt_security btsec = {.level = BT_SECURITY_LOW};
-	if (setsockopt(fd, SOL_BLUETOOTH, BT_SECURITY, &btsec, sizeof(btsec)) != 0) {
-		::close(fd);
+	if (setsockopt(s, SOL_BLUETOOTH, BT_SECURITY, &btsec, sizeof(btsec)) != 0) {
+		::close(s);
 		return false;
 	}
 
@@ -135,15 +135,15 @@ bool open(int index, Address const &address) {
 	array::copy(dstaddr.l2_bdaddr.b, address.u8);
 
 	// connect
-	if (connect(fd, (sockaddr *)&dstaddr, sizeof(dstaddr)) < 0) {
-		::close(fd);
+	if (connect(s, (sockaddr *)&dstaddr, sizeof(dstaddr)) < 0) {
+		::close(s);
 		return false;
 	}
 
-	fcntl(context.fd, F_SETFL, O_NONBLOCK);
+	fcntl(context.socket, F_SETFL, O_NONBLOCK);
 
 	// set file descriptor
-	context.fd = fd;
+	context.socket = s;
 	context.events = 0;
 	return true;
 }
@@ -151,10 +151,10 @@ bool open(int index, Address const &address) {
 void close(int index) {
 	assert(uint(index) < BLUETOOTH_CONTEXT_COUNT);
 	auto &context = Ble::contexts[index];
-	assert(context.fd != -1);
+	assert(context.socket != -1);
 
-	::close(context.fd);
-	context.fd = -1;
+	::close(context.socket);
+	context.socket = -1;
 	context.events = 0;
 
 	// resume waiting coroutines
@@ -172,13 +172,13 @@ void close(int index) {
 Awaitable<ReceiveParameters> receive(int index, int &length, uint8_t *data) {
 	assert(uint(index) < BLUETOOTH_CONTEXT_COUNT);
 	auto &context = Ble::contexts[index];
-	assert(context.fd != -1);
+	assert(context.socket != -1);
 
 	context.events |= POLLIN;
 
 	// add to event loop if necessary
 	if (!context.isInList())
-		Loop::fileDescriptors.add(context);
+		Loop::socketHandlers.add(context);
 
 	// add to wait list
 	return {context.receiveWaitlist, &length, data};
@@ -187,13 +187,13 @@ Awaitable<ReceiveParameters> receive(int index, int &length, uint8_t *data) {
 Awaitable<SendParameters> send(int index, int length, uint8_t const *data) {
 	assert(uint(index) < BLUETOOTH_CONTEXT_COUNT);
 	auto &context = Ble::contexts[index];
-	assert(context.fd != -1);
+	assert(context.socket != -1);
 
 	context.events |= POLLOUT;
 
 	// add to event loop if necessary
 	if (!context.isInList())
-		Loop::fileDescriptors.add(context);
+		Loop::socketHandlers.add(context);
 
 	// add to wait list
 	return {context.sendWaitlist, length, data};

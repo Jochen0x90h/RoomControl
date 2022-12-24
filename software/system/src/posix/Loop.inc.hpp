@@ -45,9 +45,11 @@ TimeHandler::~TimeHandler() {
 TimeHandlerList timeHandlers;
 
 
-// handleEvents
-
-static void handleEvents(bool wait) {
+/**
+ * Platform dependent function: Handle events
+ * @param wait wait for an event or timeout. Set to false when using a rendering loop, e.g. when using GLFW
+ */
+static void handleEvents(bool wait = true) {
 	// activate timeouts
 	SystemTime time;
 	bool activated;
