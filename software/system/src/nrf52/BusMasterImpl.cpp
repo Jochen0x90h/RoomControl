@@ -77,7 +77,7 @@ BusMasterImpl::BusMasterImpl(int rxPin, int txPin) : rxPin(rxPin), txPin(txPin) 
 		| N(EGU_INTENSET_TRIGGERED2, Set);
 
 	// add to list of handlers
-	Loop::handlers.add(*this);
+	loop::handlers.add(*this);
 }
 
 Awaitable<BusMaster::ReceiveParameters> BusMasterImpl::receive(int &length, uint8_t *data) {

@@ -1,5 +1,4 @@
 #include <Loop.hpp>
-#include <Timer.hpp>
 #include <Debug.hpp>
 #include <Terminal.hpp>
 #include <StringOperators.hpp>
@@ -52,7 +51,7 @@ void test() {
 	Kiss32Random random;
 
 	// measure time
-	auto start = Timer::now();
+	auto start = loop::now();
 
 	// table of currently stored elements
 	int sizes[64];
@@ -105,7 +104,7 @@ void test() {
 			return fail();
 	}
 
-	auto end = Timer::now();
+	auto end = loop::now();
 
 	Terminal::out << dec(int((end - start) / 1s)) << "s\n";
 
@@ -114,11 +113,10 @@ void test() {
 }
 
 int main() {
-	Loop::init();
-	Timer::init();
+	loop::init();
 	Output::init(); // for debug led's
 
 	test();
 
-	Loop::run();
+	loop::run();
 }

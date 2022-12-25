@@ -1,5 +1,4 @@
 #include <Loop.hpp>
-#include <Timer.hpp>
 #include <UsbDevice.hpp>
 #include <Debug.hpp>
 #include <Coroutine.hpp>
@@ -151,8 +150,7 @@ Coroutine echo(UsbDevice &usb) {
 }
 
 int main() {
-	Loop::init();
-	Timer::init();
+	loop::init();
 
 	UsbDeviceImpl usb(
 		[](usb::DescriptorType descriptorType) {
@@ -198,5 +196,5 @@ int main() {
 	// start to receive from usb host
 	echo(usb);
 
-	Loop::run();
+	loop::run();
 }

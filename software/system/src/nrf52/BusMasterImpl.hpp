@@ -11,7 +11,7 @@ void UARTE0_UART0_IRQHandler();
 void TIMER1_IRQHandler();
 }
 
-class BusMasterImpl : public BusMaster, public Loop::Handler2 {
+class BusMasterImpl : public BusMaster, public loop::Handler2 {
 	friend void UARTE0_UART0_IRQHandler();
 	friend void TIMER1_IRQHandler();
 public:

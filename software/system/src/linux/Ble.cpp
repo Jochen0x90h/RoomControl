@@ -1,6 +1,5 @@
 #include "../Ble.hpp"
 #include "../posix/Loop.hpp"
-#include "Timer.hpp"
 #include "bt.hpp"
 #include <boardConfig.hpp>
 #include <cerrno>
@@ -18,7 +17,7 @@ constexpr int attCid = 4;
 char const *results[] = {"E8:85:47:17:BF:5A"};
 
 // emulates a scanner
-class Scanner : public Loop::TimeHandler {
+class Scanner : public loop::TimeHandler {
 public:
 	void activate() override {
 		auto time = this->time;
@@ -50,7 +49,7 @@ public:
 
 Scanner scanner;
 
-class Context : public Loop::SocketHandler {
+class Context : public loop::SocketHandler {
 public:
 
 	Waitlist<ReceiveParameters> receiveWaitlist;
@@ -93,8 +92,8 @@ void init() {
 Awaitable<ScanParameters> scan(ScanResult &result) {
 	// add to event loop if necessary
 	if (!Ble::scanner.isInList()) {
-		Ble::scanner.time = Timer::now();
-		Loop::timeHandlers.add(Ble::scanner);
+		Ble::scanner.time = loop::now();
+		loop::timeHandlers.add(Ble::scanner);
 	}
 
 	// add to wait list
@@ -178,7 +177,7 @@ Awaitable<ReceiveParameters> receive(int index, int &length, uint8_t *data) {
 
 	// add to event loop if necessary
 	if (!context.isInList())
-		Loop::socketHandlers.add(context);
+		loop::socketHandlers.add(context);
 
 	// add to wait list
 	return {context.receiveWaitlist, &length, data};
@@ -193,7 +192,7 @@ Awaitable<SendParameters> send(int index, int length, uint8_t const *data) {
 
 	// add to event loop if necessary
 	if (!context.isInList())
-		Loop::socketHandlers.add(context);
+		loop::socketHandlers.add(context);
 
 	// add to wait list
 	return {context.sendWaitlist, length, data};

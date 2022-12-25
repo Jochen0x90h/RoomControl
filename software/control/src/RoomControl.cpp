@@ -9,7 +9,7 @@
 #include <Output.hpp>
 #include <Storage.hpp>
 #include <Terminal.hpp>
-#include <Timer.hpp>
+#include <Loop.hpp>
 #include <crypt.hpp>
 #include <Queue.hpp>
 #include "tahoma_8pt.hpp" // font
@@ -458,11 +458,11 @@ Coroutine RoomControl::displayMessageFilter() {
 			continue;
 
 		// wait for more messages and force resume from event loop in case the message originates from the idle menu
-		auto timeout = Timer::now() + 100ms;
+		auto timeout = loop::now() + 100ms;
 		while (true) {
 			ListenerInfo info2;
 			Message message2;
-			int s = co_await select(barrier.wait(info2, &message2), Timer::sleep(timeout));
+			int s = co_await select(barrier.wait(info2, &message2), loop::sleep(timeout));
 			if (s == 1) {
 				if (this->displaySourcesList[info2.source.interfaceId].contains(info2.source.elementId, info2.source.plugIndex)) {
 					info = info2;
@@ -1194,7 +1194,7 @@ Coroutine RoomControl::idleMenu() {
 			// wheel button pressed
 			s = co_await select(
 				Input::trigger(0, 1 << INPUT_WHEEL_BUTTON, index, value),
-				Timer::sleep(1s));
+				loop::sleep(1s));
 			if (s == 1) {
 				wheelPlugIndex = wheelPlugIndex + 1 >= this->configuration.wheelPlugCount ? 0 : wheelPlugIndex + 1;
 				//Terminal::out << "next " << dec(wheelPlugIndex) << '\n';
@@ -1263,7 +1263,7 @@ AwaitableCoroutine RoomControl::devicesMenu(int interfaceIndex) {
 			break;
 		
 		// show menu and wait for new event until timeout so that we can show newly commissioned devices
-		co_await select(menu.show(), Timer::sleep(250ms));
+		co_await select(menu.show(), loop::sleep(250ms));
 	}
 	interface.setCommissioning(false);
 }
@@ -1820,7 +1820,7 @@ AwaitableCoroutine RoomControl::measureRunTime(uint8_t deviceId, uint8_t plugInd
 				// start
 				state = up ? 1 : 2;
 				up = !up;
-				startTime = Timer::now();
+				startTime = loop::now();
 			} else {
 				// stop
 				state = 0;
@@ -1841,10 +1841,10 @@ AwaitableCoroutine RoomControl::measureRunTime(uint8_t deviceId, uint8_t plugInd
 			co_await menu.show();
 		} else {
 			// running: timeout so that the duration gets updated on display
-			co_await select(menu.show(), Timer::sleep(25ms));
+			co_await select(menu.show(), loop::sleep(25ms));
 
 			if (state != 0)
-				duration = (Timer::now() - startTime) / 10ms;
+				duration = (loop::now() - startTime) / 10ms;
 		}
 	}
 }
@@ -1919,7 +1919,7 @@ AwaitableCoroutine RoomControl::connectionsMenu(Array<MessageType const> plugs, 
 			break;
 
 		// show menu and wait for new event until timeout so that we can show endpoints of recommissioned device
-		co_await select(menu.show(), Timer::sleep(250ms));
+		co_await select(menu.show(), loop::sleep(250ms));
 	}
 }
 
@@ -2235,7 +2235,7 @@ AwaitableCoroutine RoomControl::plugsMenu(Interface &interface, uint8_t deviceId
 			break;
 
 		// show menu and wait for new event until timeout so that we can show endpoints of recommissioned device
-		co_await select(menu.show(), Timer::sleep(250ms));
+		co_await select(menu.show(), loop::sleep(250ms));
 	}
 }
 
@@ -2276,7 +2276,7 @@ AwaitableCoroutine RoomControl::messageLogger(Interface &interface, uint8_t devi
 		Event &event = queue.getBack();
 
 		// show menu or receive event (event gets filled in)
-		int selected = co_await select(menu.show(), barrier.wait(event.info, &event.message), Timer::sleep(250ms));
+		int selected = co_await select(menu.show(), barrier.wait(event.info, &event.message), loop::sleep(250ms));
 		if (selected == 2 && event.info.source.elementId == deviceId) {
 			// received an event: add new empty event at the back of the queue
 			event.type = interface.getPlugs(deviceId)[event.info.source.plugIndex];

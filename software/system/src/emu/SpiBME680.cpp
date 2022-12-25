@@ -43,7 +43,7 @@ SpiBME680::SpiBME680() {
 	setTemperature(20.0f);
 
 	// add to list of handlers
-	Loop::handlers.add(*this);
+	loop::handlers.add(*this);
 }
 
 Awaitable <SpiMaster::Parameters> SpiBME680::transfer(int writeCount, void const *writeData, int readCount, void *readData) {

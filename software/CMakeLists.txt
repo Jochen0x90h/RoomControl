@@ -259,6 +259,7 @@ if(POSIX)
 		system/src/posix/FlashImpl.cpp
 	)
 	set(LOOP
+		system/src/SystemTime.hpp
 		system/src/Loop.hpp
 		system/src/posix/Loop.hpp
 		system/src/posix/Loop.inc.hpp
@@ -280,7 +281,6 @@ if(POSIX)
 		system/src/posix/StorageImpl.cpp
 	)
 	set(TERMINAL system/src/Terminal.hpp system/src/posix/Terminal.cpp)
-	set(TIMER system/src/SystemTime.hpp system/src/Timer.hpp system/src/posix/Timer.cpp)
 	set(USB_DEVICE
 		system/src/UsbDevice.hpp
 		system/src/UsbDevice.cpp
@@ -308,6 +308,7 @@ if(EMU)
 	)
 	set(INPUT system/src/Input.hpp system/src/emu/Input.hpp system/src/emu/Input.cpp)
 	set(LOOP
+		system/src/SystemTime.hpp
 		system/src/Loop.hpp
 		system/src/posix/Loop.hpp
 		system/src/posix/Loop.inc.hpp
@@ -361,7 +362,9 @@ if("nrf52" IN_LIST PLATFORM)
 	)
 	set(INPUT system/src/Input.hpp system/src/nrf52/Input.cpp)
 	set(LOOP
-		system/src/Loop.hpp system/src/nrf52/Loop.hpp
+		system/src/SystemTime.hpp
+		system/src/Loop.hpp
+		system/src/nrf52/Loop.hpp
 		system/src/nrf52/Loop.cpp
 		system/src/nrf52/system/gcc_startup_nrf52840.S
 		#system/src/nrf52/system/system_nrf52840.c
@@ -386,7 +389,6 @@ if("nrf52" IN_LIST PLATFORM)
 		system/src/Storage.cpp
 	)
 	set(TERMINAL system/src/Terminal.hpp system/src/nrf52/Terminal.cpp)
-	set(TIMER system/src/SystemTime.hpp system/src/Timer.hpp system/src/nrf52/Timer.cpp)
 	set(USB_DEVICE
 		system/src/UsbDevice.hpp
 		system/src/UsbDevice.cpp
@@ -409,6 +411,7 @@ if("stm32f0" IN_LIST PLATFORM)
 	)
 	set(INPUT system/src/Input.hpp system/src/stm32f0/gpio.hpp system/src/stm32f0/Input.cpp)
 	set(LOOP
+		system/src/SystemTime.hpp
 		system/src/Loop.hpp
 		system/src/stm32f0/defs.hpp
 		system/src/stm32f0/Loop.hpp
@@ -430,7 +433,6 @@ if("stm32f0" IN_LIST PLATFORM)
 		system/src/Storage.cpp
 	)
 	set(TERMINAL system/src/Terminal.hpp system/src/stm32f0/Terminal.cpp)
-	set(TIMER system/src/SystemTime.hpp system/src/Timer.hpp system/src/stm32f0/Timer.cpp)
 endif()
 
 set(SYSTEM
@@ -450,7 +452,6 @@ set(SYSTEM
 	${SPI_MASTER}
 	${STORAGE}
 	${TERMINAL}
-	${TIMER}
 	${USB_DEVICE}
 	system/src/FeRamStorage4.cpp
 	system/src/FeRamStorage4.hpp
@@ -700,6 +701,7 @@ add_system_test_executable(BusNode)
 add_system_test_executable(Calendar)
 add_system_test_executable(Flash)
 add_system_test_executable(Input)
+add_system_test_executable(Loop)
 add_system_test_executable(Network)
 add_system_test_executable(QuadratureDecoder)
 add_system_test_executable(Radio)
@@ -707,7 +709,6 @@ add_system_test_executable(Random)
 add_system_test_executable(Sound)
 add_system_test_executable(SpiMaster)
 add_system_test_executable(Storage)
-add_system_test_executable(Timer)
 add_system_test_executable(UsbDevice)
 
 

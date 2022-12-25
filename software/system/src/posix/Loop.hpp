@@ -10,8 +10,7 @@ using Socket = int;
 #endif
 
 
-namespace Loop {
-
+namespace loop {
 
 // list of file descriptors to observe readable/writable events (used in Network.cpp)
 class SocketHandler : public LinkedListNode {
@@ -25,7 +24,6 @@ public:
 using SocketHandlerList = LinkedList<SocketHandler>;
 extern SocketHandlerList socketHandlers;
 
-
 // timeouts for Timer and Calendar
 class TimeHandler : public LinkedListNode {
 public:
@@ -37,5 +35,4 @@ public:
 using TimeHandlerList = LinkedList<TimeHandler>;
 extern TimeHandlerList timeHandlers;
 
-
-} // namespace Loop
+} // namespace loop

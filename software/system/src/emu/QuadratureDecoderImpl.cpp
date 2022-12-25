@@ -5,7 +5,7 @@
 
 QuadratureDecoderImpl::QuadratureDecoderImpl() {
 	// add to list of handlers
-	Loop::handlers.add(*this);
+	loop::handlers.add(*this);
 }
 
 Awaitable<QuadratureDecoder::Parameters> QuadratureDecoderImpl::change(int8_t& delta) {

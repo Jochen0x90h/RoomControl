@@ -1,5 +1,4 @@
 #include <BME680.hpp>
-#include <Timer.hpp>
 #include <UsbDevice.hpp>
 #include <Debug.hpp>
 #include <Loop.hpp>
@@ -90,7 +89,7 @@ Coroutine getId(SpiMaster &spi) {
 			debug::toggleRed();
 
 		// wait for 1s
-		co_await Timer::sleep(1s);
+		co_await loop::sleep(1s);
 	}
 }
 
@@ -106,7 +105,7 @@ Coroutine getRegisters(SpiMaster &spi, UsbDevice &usb) {
 		debug::toggleBlue();
 
 		// wait for 5s
-		co_await Timer::sleep(5s);
+		co_await loop::sleep(5s);
 	}
 }
 
@@ -132,13 +131,12 @@ Coroutine measure(SpiMaster &spi, UsbDevice &usb) {
 		co_await usb.send(1, string.count(), string.data());
 		debug::toggleRed();
 
-		co_await Timer::sleep(10s);
+		co_await loop::sleep(10s);
 	}
 }
 
 int main(void) {
-	Loop::init();
-	Timer::init();
+	loop::init();
 	Output::init();
 	UsbDeviceImpl usb(
 		[](usb::DescriptorType descriptorType) {
@@ -166,6 +164,6 @@ int main(void) {
 	//getId(drivers.airSensor, usb);
 	
 	measure(drivers.airSensor, usb);
-	
-	Loop::run();
+
+	loop::run();
 }

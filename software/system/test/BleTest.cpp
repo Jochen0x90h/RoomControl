@@ -1,4 +1,3 @@
-#include <Timer.hpp>
 #include <Ble.hpp>
 #include <Loop.hpp>
 #include <Terminal.hpp>
@@ -235,13 +234,12 @@ Coroutine scan() {
 }
 
 int main() {
-	Loop::init();
-	Timer::init();
+	loop::init();
 	Ble::init();
 	Terminal::init();
 	Output::init(); // for debug led's
 
 	scan();
 
-	Loop::run();
+	loop::run();
 }

@@ -1,4 +1,3 @@
-#include <Timer.hpp>
 #include <BusMaster.hpp>
 #include <Loop.hpp>
 #include <Debug.hpp>
@@ -16,19 +15,18 @@ Coroutine transferBus(BusNode &busNode) {
 
 		//int receiveLength = array::count(receive);
 
-		co_await Timer::sleep(1s);
+		co_await loop::sleep(1s);
 		
 		//Debug::toggleBlueLed();
 	}
 }
 
 int main() {
-	Loop::init();
-	Timer::init();
+	loop::init();
 	Output::init(); // for debug led's
 	DriversBusNodeTest drivers;
 
 	transferBus(drivers.busNode);
 
-	Loop::run();
+	loop::run();
 }

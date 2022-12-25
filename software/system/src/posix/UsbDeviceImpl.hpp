@@ -5,7 +5,7 @@
 /**
  * Implementation of an USB device that simply writes info about the transfer operations to Terminal::out
  */
-class UsbDeviceImpl : public UsbDevice, public Loop::TimeHandler {
+class UsbDeviceImpl : public UsbDevice, public loop::TimeHandler {
 public:
 	/**
 	 * Constructor

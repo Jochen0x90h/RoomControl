@@ -72,7 +72,7 @@ BusMasterImpl::BusMasterImpl() : file("busMaster.bin", File::Mode::READ_WRITE) {
 	}
 
 	// add to list of handlers
-	Loop::handlers.add(*this);
+	loop::handlers.add(*this);
 }
 
 Awaitable<BusMaster::ReceiveParameters> BusMasterImpl::receive(int &length, uint8_t *data) {

@@ -9,7 +9,7 @@ void USART1_IRQHandler();
 void TIM16_IRQHandler();
 }
 
-class BusNodeImpl : public BusNode, public Loop::Handler2 {
+class BusNodeImpl : public BusNode, public loop::Handler2 {
 	friend void USART1_IRQHandler();
 	friend void TIM16_IRQHandler();
 public:

@@ -22,12 +22,12 @@ Coroutine handleInput() {
 }
 
 int main() {
-	Loop::init();
+	loop::init();
 	Output::init(); // for debug signals on pins
 	Input::init();
 	//Drivers drivers;
 
 	handleInput();
 
-	Loop::run();
+	loop::run();
 }

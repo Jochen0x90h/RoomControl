@@ -4,7 +4,7 @@
 #include "Loop.hpp"
 
 
-class QuadratureDecoderImpl : public QuadratureDecoder, public Loop::Handler2 {
+class QuadratureDecoderImpl : public QuadratureDecoder, public loop::Handler2 {
 public:
 	/**
 	 * Constructor

@@ -1,5 +1,4 @@
 #include <SSD1309.hpp>
-#include <Timer.hpp>
 #include <QuadratureDecoder.hpp>
 #include <Debug.hpp>
 #include <Loop.hpp>
@@ -21,7 +20,7 @@ Coroutine draw(SSD1309::Spi spi) {
 		y = (y + 1) & (DISPLAY_HEIGHT - 1);
 		
 		co_await display.set(bitmap);
-		co_await Timer::sleep(200ms);
+		co_await loop::sleep(200ms);
 		
 		debug::toggleRed();
 	}
@@ -29,12 +28,11 @@ Coroutine draw(SSD1309::Spi spi) {
 
 
 int main(void) {
-	Loop::init();
-	Timer::init();
+	loop::init();
 	Output::init();
 	Drivers drivers;
 
 	draw({drivers.displayCommand, drivers.displayData});
-	
-	Loop::run();
+
+	loop::run();
 }

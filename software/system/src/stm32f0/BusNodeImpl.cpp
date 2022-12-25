@@ -69,7 +69,7 @@ BusNodeImpl::BusNodeImpl(int rxPin, int txPin) : rxPin(rxPin) {
 	enableInterrupt(TIM16_IRQn);
 
 	// add to list of handlers
-	Loop::handlers.add(*this);
+	loop::handlers.add(*this);
 }
 
 Awaitable<BusNode::ReceiveParameters> BusNodeImpl::receive(int &length, uint8_t *data) {

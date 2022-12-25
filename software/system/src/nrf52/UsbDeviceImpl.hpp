@@ -6,7 +6,7 @@
 /**
  * Implementation of an SPI master that simply writes info about the transfer operations to Terminal::out
  */
-class UsbDeviceImpl : public UsbDevice, public Loop::Handler2 {
+class UsbDeviceImpl : public UsbDevice, public loop::Handler2 {
 public:
 	// number of endpoints without endpoint 0
 	static constexpr int ENDPOINT_COUNT = 7;

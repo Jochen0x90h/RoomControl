@@ -1,5 +1,4 @@
 #include <Loop.hpp>
-#include <Timer.hpp>
 #include <Sound.hpp>
 #include <Terminal.hpp>
 #include <Debug.hpp>
@@ -12,7 +11,7 @@ Coroutine soundTest() {
 	while (true) {
 		Sound::play(index);
 		do {
-			co_await Timer::sleep(1s);
+			co_await loop::sleep(1s);
 		} while (Sound::isPlaying(index));
 		debug::toggleBlue();
 
@@ -21,8 +20,7 @@ Coroutine soundTest() {
 }
 
 int main() {
-	Loop::init();
-	Timer::init();
+	loop::init();
 	Sound::init();
 	Output::init(); // for debug led's
 
@@ -37,5 +35,5 @@ int main() {
 
 	soundTest();
 
-	Loop::run();
+	loop::run();
 }

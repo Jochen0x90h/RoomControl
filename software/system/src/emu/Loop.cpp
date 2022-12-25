@@ -4,7 +4,7 @@
 #include <cstdlib>
 
 
-namespace Loop {
+namespace loop {
 
 // opengl window
 GLFWwindow *window = nullptr;
@@ -14,21 +14,9 @@ void nop(Gui &gui) {}
 Handler nextHandler = nop;
 Handler addHandler(Handler handler) {
 	Handler h = nextHandler;
-	Loop::nextHandler = handler;
+	loop::nextHandler = handler;
 	return h;
 }
-/*
-// handler
-void Handler2::handle(Gui &) {}
-
-// handler chain
-Handler2 nopHandler;
-Handler2 *firstHandler = &nopHandler;
-Handler2 *setHandler(Handler2 *handler) {
-	auto h = firstHandler;
-	Loop::firstHandler = handler;
-	return h;
-}*/
 
 HandlerList handlers;
 
@@ -56,6 +44,8 @@ static void mouseCallback(GLFWwindow* window, int button, int action, int mods) 
 }
 
 void init() {
+	initTimer();
+
 	// init GLFW
 	glfwSetErrorCallback(errorCallback);
 	if (!glfwInit())
@@ -81,16 +71,16 @@ void init() {
 	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 	glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
 	//glfwWindowHint(GLFW_COCOA_RETINA_FRAMEBUFFER, GL_TRUE);
-	Loop::window = glfwCreateWindow(width, height, "RoomControl", NULL, NULL);
+	loop::window = glfwCreateWindow(width, height, "RoomControl", NULL, NULL);
 	if (!window) {
 		glfwTerminate();
 		exit(EXIT_FAILURE);
 	}
-	glfwSetKeyCallback(Loop::window, keyCallback);
-	glfwSetMouseButtonCallback(Loop::window, mouseCallback);
+	glfwSetKeyCallback(loop::window, keyCallback);
+	glfwSetMouseButtonCallback(loop::window, mouseCallback);
 	
 	// make OpenGL context current
-	glfwMakeContextCurrent(Loop::window);
+	glfwMakeContextCurrent(loop::window);
 	
 	// load OpenGL functions
 	gladLoadGLLoader((GLADloadproc)glfwGetProcAddress);
@@ -101,43 +91,43 @@ void init() {
 
 void run() {
 	// check if loop::init() was called
-	assert(Loop::window != nullptr);
+	assert(loop::window != nullptr);
 	
 	// emulator user interface
 	Gui gui;
 	
 	int frameCount = 0;
 	//auto start = std::chrono::steady_clock::now();
-	while (!glfwWindowShouldClose(Loop::window)) {
+	while (!glfwWindowShouldClose(loop::window)) {
 		//auto frameStart = std::chrono::steady_clock::now();
 
 		// process events
 		glfwPollEvents();
-		Loop::handleEvents(false);
+		loop::handleEvents(false);
 
 		// mouse
 		gui.doMouse(window);
 
 		// set viewport
 		int width, height;
-		glfwGetFramebufferSize(Loop::window, &width, &height);
+		glfwGetFramebufferSize(loop::window, &width, &height);
 		glViewport(0, 0, width, height);
 		
 		// clear screen
 		glClear(GL_COLOR_BUFFER_BIT);
 
 		// handle gui
-		auto it = Loop::handlers.begin();
-		while (it != Loop::handlers.end()) {
+		auto it = loop::handlers.begin();
+		while (it != loop::handlers.end()) {
 			// increment iterator beforehand because a handler can remove() itself
 			auto current = it;
 			++it;
 			current->handle(gui);
 		}
-		Loop::nextHandler(gui);
+		loop::nextHandler(gui);
 
 		// swap render buffer to screen
-		glfwSwapBuffers(Loop::window);
+		glfwSwapBuffers(loop::window);
 				
 		// show frames per second
 		/*auto now = std::chrono::steady_clock::now();
@@ -151,8 +141,8 @@ void run() {
 	}
 	
 	// cleanup
-	glfwDestroyWindow(Loop::window);
+	glfwDestroyWindow(loop::window);
 	glfwTerminate();
 }
 
-} // namespace Loop
+} // namespace loop

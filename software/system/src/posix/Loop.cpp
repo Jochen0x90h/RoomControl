@@ -1,21 +1,17 @@
 #include "Loop.inc.hpp"
-#include <util.hpp>
 #include <assert.hpp>
 
 
-namespace Loop {
-
-bool inited = false;
+namespace loop {
 
 void init() {
-	Loop::inited = true;
+	initTimer();
 }
 
 void run() {
-	assert(Loop::inited);
 	while (true) {
 		handleEvents();
 	}
 }
 
-} // namespace Loop
+} // namespace loop

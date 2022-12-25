@@ -1,4 +1,3 @@
-#include <Timer.hpp>
 #include <Random.hpp>
 #include <UsbDevice.hpp>
 #include <Debug.hpp>
@@ -79,13 +78,12 @@ Coroutine send(UsbDevice &usb) {
 		co_await usb.send(1, array::count(sendData), sendData);
 		debug::toggleBlue();
 		
-		co_await Timer::sleep(1s);
+		co_await loop::sleep(1s);
 	}
 }
 
 int main() {
-	Loop::init();
-	Timer::init();
+	loop::init();
 	Random::init();
 	UsbDeviceImpl usb(
 		[](usb::DescriptorType descriptorType) {
@@ -109,6 +107,6 @@ int main() {
 			return false;
 		});
 	Output::init(); // for debug signals on pins
-		
-	Loop::run();
+
+	loop::run();
 }

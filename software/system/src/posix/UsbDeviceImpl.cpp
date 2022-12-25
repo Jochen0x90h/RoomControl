@@ -1,5 +1,4 @@
 #include "UsbDeviceImpl.hpp"
-#include "../Timer.hpp"
 #include "../Terminal.hpp"
 #include <StringOperators.hpp>
 
@@ -18,8 +17,8 @@ UsbDeviceImpl::UsbDeviceImpl(
 	//Loop::context.post([onSetConfiguration]() {onSetConfiguration(1);});
 
 	// call onSetConfiguration from event loop
-	this->time = Timer::now();
-	Loop::timeHandlers.add(*this);
+	this->time = loop::now();
+	loop::timeHandlers.add(*this);
 }
 
 void UsbDeviceImpl::enableEndpoints(uint8_t inFlags, uint8_t outFlags) {	
@@ -40,8 +39,8 @@ Awaitable<UsbDevice::ReceiveParameters> UsbDeviceImpl::receive(int index, int &l
 	assert(index == 1);
 	auto &endpoint = this->endpoints[index - 1];
 	if (!isInList()) {
-		this->time = Timer::now() + 10ms; // emulate 10ms transfer time
-		Loop::timeHandlers.add(*this);
+		this->time = loop::now() + 10ms; // emulate 10ms transfer time
+		loop::timeHandlers.add(*this);
 	}
 	return {endpoint.receiveWaitlist, length, data};
 }
@@ -50,8 +49,8 @@ Awaitable<UsbDevice::SendParameters> UsbDeviceImpl::send(int index, int length, 
 	assert(index == 1);
 	auto &endpoint = this->endpoints[index - 1];
 	if (!isInList()) {
-		this->time = Timer::now() + 10ms; // emulate 10ms transfer time
-		Loop::timeHandlers.add(*this);
+		this->time = loop::now() + 10ms; // emulate 10ms transfer time
+		loop::timeHandlers.add(*this);
 	}
 	return {endpoint.sendWaitlist, length, data};
 }

@@ -18,7 +18,7 @@ SpiMR45Vxxx::SpiMR45Vxxx(std::string const &filename, int size)
 	this->file.resize(size, 0xff);
 
 	// add to list of handlers
-	Loop::handlers.add(*this);
+	loop::handlers.add(*this);
 }
 
 Awaitable <SpiMaster::Parameters> SpiMR45Vxxx::transfer(int writeCount, void const *writeData, int readCount, void *readData) {

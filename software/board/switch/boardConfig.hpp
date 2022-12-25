@@ -34,8 +34,8 @@ constexpr gpio::OutputConfig OUTPUTS[] = {
 	{gpio::PB(2), gpio::Pull::DISABLED, gpio::Speed::LOW, gpio::Drive::PUSH_PULL, true, false, false}, // dummy
 	//{gpio::PB(0), gpio::Pull::DISABLED, gpio::Speed::LOW, gpio::Drive::PUSH_PULL, true, false, false}, // green led
 	//{gpio::PB(1), gpio::Pull::DISABLED, gpio::Speed::LOW, gpio::Drive::PUSH_PULL, true, false, false}, // blue led
-	{gpio::PC(9), gpio::Pull::DISABLED, gpio::Speed::LOW, gpio::Drive::PUSH_PULL, true, false, false}, // green led
-	{gpio::PC(8), gpio::Pull::DISABLED, gpio::Speed::LOW, gpio::Drive::PUSH_PULL, true, false, false}, // blue led
+	{gpio::PC(9), gpio::Pull::DISABLED, gpio::Speed::LOW, gpio::Drive::PUSH_PULL, true, false, false}, // green led STM32F051 Discovry Kit
+	{gpio::PC(8), gpio::Pull::DISABLED, gpio::Speed::LOW, gpio::Drive::PUSH_PULL, true, false, false}, // blue led STM32F051 Discovry Kit
 };
 constexpr int OUTPUT_COUNT = array::count(OUTPUTS);
 

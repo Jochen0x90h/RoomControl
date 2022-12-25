@@ -15,11 +15,11 @@ Coroutine handleSecondTick() {
 }
 
 int main() {
-	Loop::init();
+	loop::init();
 	Calendar::init();
 	Output::init(); // for debug led's
 
 	handleSecondTick();
 
-	Loop::run();
+	loop::run();
 }

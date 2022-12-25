@@ -1,4 +1,3 @@
-#include <Timer.hpp>
 #include <Random.hpp>
 #include <Radio.hpp>
 #include <Debug.hpp>
@@ -49,7 +48,7 @@ Coroutine send() {
 	while (true) {
 		uint8_t result;
 
-		co_await Timer::sleep(1s);
+		co_await loop::sleep(1s);
 
 		// send over the air and increment mac counter
 		co_await Radio::send(0, packet1, result);
@@ -66,7 +65,7 @@ Coroutine send() {
 		radio::enableReceiver(true);*/
 
 
-		co_await Timer::sleep(1s);
+		co_await loop::sleep(1s);
 
 		// send over the air and increment mac counter
 		co_await Radio::send(0, packet2, result);
@@ -95,8 +94,7 @@ Coroutine reply() {
 
 
 int main() {
-	Loop::init();
-	Timer::init();
+	loop::init();
 	Radio::init();
 	Output::init();
 	
@@ -113,6 +111,6 @@ int main() {
 
 	send();
 	//reply();
-	
-	Loop::run();
+
+	loop::run();
 }

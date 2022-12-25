@@ -15,7 +15,7 @@ BusNodeImpl::BusNodeImpl() : file("busNode.bin", File::Mode::READ_WRITE) {
 	}
 
 	// add to list of handlers
-	Loop::handlers.add(*this);
+	loop::handlers.add(*this);
 }
 
 Awaitable<BusNode::ReceiveParameters> BusNodeImpl::receive(int &length, uint8_t *data) {

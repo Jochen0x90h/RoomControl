@@ -1,5 +1,4 @@
 #include <Loop.hpp>
-#include <Timer.hpp>
 #include <Debug.hpp>
 #include <boardConfig.hpp>
 
@@ -33,13 +32,12 @@ Coroutine writeCommandData(Spi spi) {
 
 
 int main() {
-	Loop::init();
+	loop::init();
 	Output::init(); // for debug led's
-	Timer::init();
 	DriversSpiMasterTest drivers;
 
 	transferSpi(drivers.transfer);
 	writeCommandData({drivers.command, drivers.data});
 	
-	Loop::run();
+	loop::run();
 }

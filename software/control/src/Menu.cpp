@@ -1,5 +1,4 @@
 #include "Menu.hpp"
-#include <Timer.hpp>
 #include <QuadratureDecoder.hpp>
 #include <Input.hpp>
 #include "tahoma_8pt.hpp" // font

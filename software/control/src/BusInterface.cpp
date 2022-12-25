@@ -2,7 +2,7 @@
 #include <BusMaster.hpp>
 #include <Storage.hpp>
 #include <Terminal.hpp>
-#include <Timer.hpp>
+#include <Loop.hpp>
 #include <Nonce.hpp>
 #include <StringOperators.hpp>
 #include <Pointer.hpp>
@@ -775,7 +775,7 @@ AwaitableCoroutine BusInterface::readAttribute(int &length, uint8_t *message, De
 		// wait for a response from the device
 		int r = co_await select(
 			this->responseBarrier.wait(length, message, device.data.address, endpointIndex, attribute),
-			Timer::sleep(TIMEOUT));
+			loop::sleep(TIMEOUT));
 
 		// check if response was received
 		if (r == 1) {

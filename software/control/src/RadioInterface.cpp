@@ -3,7 +3,7 @@
 #include <Random.hpp>
 #include <Storage.hpp>
 #include <Terminal.hpp>
-#include <Timer.hpp>
+#include <Loop.hpp>
 #include <Nonce.hpp>
 #include <hash.hpp>
 #include <ieee.hpp>
@@ -939,7 +939,7 @@ bool RadioInterface::writeZclCommand(PacketWriter &w, uint8_t zclCounter, int pl
 	}
 	case zcl::Cluster::COLOR_CONTROL: {
 		uint16_t color = clamp(int(message.value.f32 * 65279.0f + 0.5f), 0, 65279);
-		auto time = Timer::now();
+		auto time = loop::now();
 		auto d = time - endpoint->time;
 		if (d > 100ms || d < 0ms || endpoint->index == plugIndex) {
 			//todo: doing it here does not work with retry
@@ -1044,14 +1044,15 @@ void RadioInterface::writeFooter(PacketWriter &w, Radio::SendFlags sendFlags) {
 	w.finish(sendFlags);
 }
 
-AwaitableCoroutine RadioInterface::readAttribute(uint8_t (&packet)[MESSAGE_LENGTH], ZbDevice &device,
+// uint8_t (&packet)[MESSAGE_LENGTH] does not work on MSVC
+AwaitableCoroutine RadioInterface::readAttribute(uint8_t *packet, ZbDevice &device,
 	uint8_t dstEndpoint, zcl::Cluster clusterId, zcl::Profile profile, uint8_t srcEndpoint, uint16_t attribute)
 {
 	uint8_t zclCounter = this->zclCounter++;
 	for (int retry = 0;; ++retry) {
 		// send read attributes
 		{
-			PacketWriter w(packet);
+			PacketWriter w(MESSAGE_LENGTH, packet);
 
 			// nwk header
 			writeNwkData(w, device);
@@ -1076,7 +1077,7 @@ AwaitableCoroutine RadioInterface::readAttribute(uint8_t (&packet)[MESSAGE_LENGT
 			int length;
 			int r = co_await select(
 				this->responseBarrier.wait(length, packet, srcEndpoint, zclCounter,
-					uint16_t(zcl::Command::READ_ATTRIBUTES_RESPONSE)), Timer::sleep(timeout));
+					uint16_t(zcl::Command::READ_ATTRIBUTES_RESPONSE)), loop::sleep(timeout));
 
 			// check if response was received
 			if (r == 1)
@@ -1119,12 +1120,12 @@ optional<String> getString(uint8_t (&packet)[N]) {
 Coroutine RadioInterface::broadcast() {
 	uint8_t packet[52];
 	uint8_t sendResult;
-	auto linkTime = Timer::now() + 1s;
+	auto linkTime = loop::now() + 1s;
 	auto routeTime = linkTime + 1s;
 	while (true) {
 		// wait until the next timeout
 		auto time = linkTime;//min(linkTime, routeTime);
-		co_await Timer::sleep(time);
+		co_await loop::sleep(time);
 
 		if (time == linkTime) {
 			// broadcast link status every 15 seconds
@@ -1233,7 +1234,7 @@ Coroutine RadioInterface::sendBeacon() {
 		co_await Radio::send(RADIO_ZBEE, packet, sendResult);
 
 		// "cool down" before a new beacon can be sent
-		co_await Timer::sleep(100ms);
+		co_await loop::sleep(100ms);
 	}
 }
 /*
@@ -2752,7 +2753,7 @@ AwaitableCoroutine RadioInterface::handleZbCommission(uint64_t deviceLongAddress
 		if (sendResult != 0) {
 			// wait for a response from the device
 			int r = co_await select(this->responseBarrier.wait(length, packet1, uint8_t(0), zdpCounter,
-				uint16_t(zb::ZdpCommand::NODE_DESCRIPTOR_RESPONSE)), Timer::sleep(timeout));
+				uint16_t(zb::ZdpCommand::NODE_DESCRIPTOR_RESPONSE)), loop::sleep(timeout));
 
 			// check if response was received
 			if (r == 1)
@@ -2793,7 +2794,7 @@ AwaitableCoroutine RadioInterface::handleZbCommission(uint64_t deviceLongAddress
 		if (sendResult != 0) {
 			// wait for a response from the device
 			int r = co_await select(this->responseBarrier.wait(length, packet1, uint8_t(0), zdpCounter,
-				uint16_t(zb::ZdpCommand::ACTIVE_ENDPOINT_RESPONSE)), Timer::sleep(timeout));
+				uint16_t(zb::ZdpCommand::ACTIVE_ENDPOINT_RESPONSE)), loop::sleep(timeout));
 
 			// check if response was received
 			if (r == 1)
@@ -2860,7 +2861,7 @@ AwaitableCoroutine RadioInterface::handleZbCommission(uint64_t deviceLongAddress
 			if (sendResult != 0) {
 				// wait for a response from the device
 				int r = co_await select(this->responseBarrier.wait(length, packet2, uint8_t(0), zdpCounter,
-					uint16_t(zb::ZdpCommand::SIMPLE_DESCRIPTOR_RESPONSE)), Timer::sleep(timeout));
+					uint16_t(zb::ZdpCommand::SIMPLE_DESCRIPTOR_RESPONSE)), loop::sleep(timeout));
 
 				// check if response was received
 				if (r == 1)
@@ -2999,7 +3000,7 @@ AwaitableCoroutine RadioInterface::handleZbCommission(uint64_t deviceLongAddress
 				if (sendResult != 0) {
 					// wait for a response from the device
 					int r = co_await select(this->responseBarrier.wait(length, packet2, uint8_t(0), zdpCounter,
-						uint16_t(zb::ZdpCommand::BIND_RESPONSE)), Timer::sleep(timeout));
+						uint16_t(zb::ZdpCommand::BIND_RESPONSE)), loop::sleep(timeout));
 
 					// check if response was received
 					if (r == 1)
@@ -3141,7 +3142,7 @@ Coroutine RadioInterface::publish() {
 							continue;
 
 						// wait for first route reply or timeout (more route replies with lower cost may arrive later)
-						co_await select(device->routeBarrier.wait(), Timer::sleep(timeout));
+						co_await select(device->routeBarrier.wait(), loop::sleep(timeout));
 
 						Terminal::out << "Router for " << hex(device->data.shortAddress) << ": " << hex(device->routerAddress)
 							<< '\n';
@@ -3199,7 +3200,7 @@ Coroutine RadioInterface::publish() {
 							// wait for a response from the device
 							int length;
 							int r = co_await select(this->responseBarrier.wait(length, packet, endpoint->data->id,
-								zclCounter, uint16_t(zcl::Command::DEFAULT_RESPONSE)), Timer::sleep(timeout));
+								zclCounter, uint16_t(zcl::Command::DEFAULT_RESPONSE)), loop::sleep(timeout));
 
 							// check if response was received
 							if (r == 1) {

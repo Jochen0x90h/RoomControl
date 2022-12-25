@@ -1,5 +1,4 @@
 #include "../Input.hpp"
-#include "../Timer.hpp"
 #include "Loop.hpp"
 #include "gpio.hpp"
 #include <util.hpp>
@@ -37,12 +36,12 @@ State states[TRIGGER_COUNT];
 Waitlist<Parameters> waitlist;
 
 // event loop handler chain
-Loop::Handler nextHandler = nullptr;
+loop::Handler nextHandler = nullptr;
 void handle() {	
 	int PR = EXTI->PR;
 	if ((PR & 0xffff) != 0) {
 		// debounce timeout
-		auto timeout = Timer::now() + 50ms;
+		auto timeout = loop::now() + 50ms;
 		for (int index = 0; index < TRIGGER_COUNT; ++index) {
 			auto &input = INPUTS[index];
 			int pos = input.pin & 15;
@@ -111,7 +110,7 @@ void handle() {
 			TIM2->CCR2 = Input::next.value;
 		
 			// repeat until next timeout is in the future
-		} while (Timer::now() >= Input::next);
+		} while (loop::now() >= Input::next);
 	}
 	
 	// call next handler in chain
@@ -126,14 +125,14 @@ void init() {
 
 	// configure triggers
 	if (TRIGGER_COUNT > 0) {
-		Timer::init();
+		loop::init();
 	
 		// check if already initialized
 		if (Input::nextHandler != nullptr)
 			return;
 	
 		// add to event loop handler chain
-		Input::nextHandler = Loop::addHandler(handle);
+		Input::nextHandler = loop::addHandler(handle);
 	
 		for (int index = 0; index < TRIGGER_COUNT; ++index) {
 			auto &input = INPUTS[index];

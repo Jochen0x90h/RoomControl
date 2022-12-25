@@ -107,7 +107,7 @@ SpiMasterImpl::SpiMasterImpl(int index, int sckPin, int mosiPin, int misoPin) {
 	RCC->AHBENR = RCC->AHBENR & ~RCC_AHBENR_DMAEN;
 
 	// add to list of handlers
-	Loop::handlers.add(*this);
+	loop::handlers.add(*this);
 }
 
 void SpiMasterImpl::handle() {

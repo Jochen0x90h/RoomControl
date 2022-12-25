@@ -9,7 +9,7 @@
 /**
  * Emulates a MR45V064B FeRam an SPI slave device
  */
-class SpiMR45Vxxx : public SpiMaster, public Loop::Handler2 {
+class SpiMR45Vxxx : public SpiMaster, public loop::Handler2 {
 public:
 	/**
 	 * Constructor

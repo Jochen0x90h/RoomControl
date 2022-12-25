@@ -7,7 +7,7 @@
 /**
  * Emulates a MPQ6526 motor/relay driver
  */
-class SpiMPQ6526 : public SpiMaster, public Loop::Handler2 {
+class SpiMPQ6526 : public SpiMaster, public loop::Handler2 {
 public:
 	/**
 	 * Constructor

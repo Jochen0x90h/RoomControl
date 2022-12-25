@@ -1,5 +1,5 @@
 #include "LocalInterface.hpp"
-#include <Timer.hpp>
+#include <Loop.hpp>
 #include <Output.hpp>
 #include <Sound.hpp>
 #include <util.hpp>
@@ -239,9 +239,9 @@ Coroutine LocalInterface::readAirSensor(SpiMaster &spi) {
 
 		// wait
 		#ifdef DEBUG
-			co_await Timer::sleep(10s);
+			co_await loop::sleep(10s);
 		#else
-			co_await Timer::sleep(60s);
+			co_await loop::sleep(60s);
 		#endif
 	}
 }

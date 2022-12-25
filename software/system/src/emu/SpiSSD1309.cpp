@@ -12,7 +12,7 @@ SpiSSD1309::SpiSSD1309(int width, int height)
 	this->displayBuffer = new uint8_t[width * height];
 
 	// add to list of handlers
-	Loop::handlers.add(*this);
+	loop::handlers.add(*this);
 }
 
 SpiSSD1309::~SpiSSD1309() {

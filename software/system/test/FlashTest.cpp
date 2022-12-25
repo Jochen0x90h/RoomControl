@@ -1,5 +1,4 @@
 #include <Loop.hpp>
-#include <Timer.hpp>
 #include <Debug.hpp>
 #include <boardConfig.hpp>
 
@@ -47,11 +46,10 @@ void test() {
 }
 
 int main() {
-	Loop::init();
-	Timer::init();
+	loop::init();
 	Output::init(); // for debug led's
 
 	test();
 
-	Loop::run();
+	loop::run();
 }

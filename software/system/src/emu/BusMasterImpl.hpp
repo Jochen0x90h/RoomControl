@@ -7,7 +7,7 @@
 #include <chrono>
 
 
-class BusMasterImpl : public BusMaster, public Loop::Handler2 {
+class BusMasterImpl : public BusMaster, public loop::Handler2 {
 public:
 	/**
 	 * Constructor

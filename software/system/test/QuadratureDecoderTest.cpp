@@ -46,12 +46,12 @@ Coroutine handleDecoder(QuadratureDecoder &decoder) {
 }
 
 int main() {
-	Loop::init();
+	loop::init();
 	Output::init(); // for debug signals on pins
 	Input::init();
 	Drivers drivers;
 
 	handleDecoder(drivers.quadratureDecoder);
 
-	Loop::run();
+	loop::run();
 }

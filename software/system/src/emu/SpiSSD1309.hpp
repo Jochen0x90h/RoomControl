@@ -7,7 +7,7 @@
 /**
  * Emulates a SSD1309 based display as an SPI slave device
  */
-class SpiSSD1309 : public SpiMaster, public Loop::Handler2 {
+class SpiSSD1309 : public SpiMaster, public loop::Handler2 {
 public:
 	/**
 	 * Constructor

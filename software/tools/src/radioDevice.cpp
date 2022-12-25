@@ -1,7 +1,6 @@
 #include <UsbDevice.hpp>
 #include <Random.hpp>
 #include <Radio.hpp>
-#include <Timer.hpp>
 #include <Loop.hpp>
 #include <Debug.hpp>
 #include <util.hpp>
@@ -201,8 +200,7 @@ Coroutine send(UsbDevice &usb, int index) {
 
 
 int main(void) {
-	Loop::init();
-	Timer::init();
+	loop::init();
 	Radio::init();
 	UsbDeviceImpl usb(
 		[](usb::DescriptorType descriptorType) {
@@ -276,5 +274,5 @@ int main(void) {
 		}
 	}
 
-	Loop::run();
+	loop::run();
 }

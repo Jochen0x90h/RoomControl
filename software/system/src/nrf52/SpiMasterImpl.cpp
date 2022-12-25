@@ -51,7 +51,7 @@ SpiMasterImpl::SpiMasterImpl(int sckPin, int mosiPin, int misoPin, int dcPin)
 		| N(SPIM_CONFIG_ORDER, MsbFirst);
 
 	// add to list of handlers
-	Loop::handlers.add(*this);
+	loop::handlers.add(*this);
 }
 
 void SpiMasterImpl::handle() {

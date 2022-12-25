@@ -20,7 +20,7 @@ State states[OUTPUT_COUNT];
 
 
 // event loop handler chain
-Loop::Handler nextHandler = nullptr;
+loop::Handler nextHandler = nullptr;
 void handle(Gui &gui) {
 	// call next handler in chain
 	Output::nextHandler(gui);
@@ -38,7 +38,7 @@ void init() {
 		return;
 	
 	// add to event loop handler chain
-	Output::nextHandler = Loop::addHandler(handle);
+	Output::nextHandler = loop::addHandler(handle);
 	
 	// set initial state using config
 	for (int i = 0; i < OUTPUT_COUNT; ++i) {

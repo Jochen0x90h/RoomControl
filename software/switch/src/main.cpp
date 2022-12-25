@@ -1,4 +1,3 @@
-#include <Timer.hpp>
 #include <Input.hpp>
 #include <Output.hpp>
 #include <Debug.hpp>
@@ -102,7 +101,7 @@ public:
 			//Terminal::out << "trigger " << dec(index) << ' ' << dec(int(state)) << '\n';
 
 			// configure when at least one button was held for 3s after all were pressed
-			if (this->configure && Timer::now() > this->allTime + 3s) {
+			if (this->configure && loop::now() > this->allTime + 3s) {
 				// use button state as configuration
 				int a = this->buttons & 3;
 				if (a != 0)
@@ -123,7 +122,7 @@ public:
 
 			// check if all buttons are pressed
 			if (this->buttons == 0x0f) {
-				this->allTime = Timer::now();
+				this->allTime = loop::now();
 				this->commission = true;
 				this->configure = true;
 				//Terminal::out << "all\n";
@@ -541,7 +540,7 @@ public:
 				co_await this->drivers.relayDriver.transfer(2, &w, 2, &r);
 
 				// wait some time until relay contacts react
-				co_await Timer::sleep(RELAY_TIME);
+				co_await loop::sleep(RELAY_TIME);
 			}
 
 			// switch off all half bridges
@@ -597,12 +596,11 @@ public:
 
 
 int main() {
-	Loop::init();
+	loop::init();
 	Output::init(); // for debug signals on pins
 	Input::init();
-	Timer::init();
 
 	Switch s;
 
-	Loop::run();
+	loop::run();
 }

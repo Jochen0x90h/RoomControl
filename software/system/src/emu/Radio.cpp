@@ -348,7 +348,7 @@ void SendParameters::cancel() noexcept {
 }
 
 // event loop handler chain
-Loop::Handler nextHandler = nullptr;
+loop::Handler nextHandler = nullptr;
 void handle(Gui &gui) {
 	for (int index = 0; index < RADIO_CONTEXT_COUNT; ++index) {
 		auto &context = Radio::contexts[index];
@@ -478,7 +478,7 @@ void init() {
 		return;
 
 	// add to event loop handler chain
-	Radio::nextHandler = Loop::addHandler(handle);
+	Radio::nextHandler = loop::addHandler(handle);
 	
 	// radio connected via USB
 	int r = libusb_init(NULL);

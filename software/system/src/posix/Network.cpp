@@ -38,7 +38,7 @@ Address Address::fromString(String s) {
 }
 
 
-class Context : public Loop::SocketHandler {
+class Context : public loop::SocketHandler {
 public:
 	void activate(uint16_t events) override {
 		if (events & POLLIN) {
@@ -175,7 +175,7 @@ Awaitable<ReceiveParameters> receive(int index, Endpoint& source, int &length, v
 
 	// add to event loop if necessary
 	if (!context.isInList())
-		Loop::socketHandlers.add(context);
+		loop::socketHandlers.add(context);
 
 	// add to wait list
 	return {context.receiveWaitlist, &source, &length, data};
@@ -190,7 +190,7 @@ Awaitable<SendParameters> send(int index, Endpoint const &destination, int lengt
 
 	// add to event loop if necessary
 	if (!context.isInList())
-		Loop::socketHandlers.add(context);
+		loop::socketHandlers.add(context);
 
 	// add to wait list
 	return {context.sendWaitlist, &destination, length, data};

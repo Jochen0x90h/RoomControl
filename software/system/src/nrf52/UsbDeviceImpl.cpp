@@ -33,7 +33,7 @@ UsbDeviceImpl::UsbDeviceImpl(
 	NRF_USBD->ENABLE = N(USBD_ENABLE_ENABLE, Enabled);
 
 	// add to list of handlers
-	Loop::handlers.add(*this);
+	loop::handlers.add(*this);
 }
 
 void UsbDeviceImpl::enableEndpoints(uint8_t inFlags, uint8_t outFlags) {

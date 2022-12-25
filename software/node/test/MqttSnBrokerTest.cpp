@@ -1,6 +1,5 @@
 #include <MqttSnBroker.hpp>
 #include <Network.hpp>
-#include <Timer.hpp>
 #include <Terminal.hpp>
 #include <Loop.hpp>
 #include <Debug.hpp>
@@ -95,8 +94,7 @@ int main(void) {
 	inTopic += "in";
 	outTopic += "out";
 
-	Loop::init();
-	Timer::init();
+	loop::init();
 	Network::init();
 	Output::init();
 
@@ -104,5 +102,5 @@ int main(void) {
 	test.connect(gatewayPort, name);
 	test.function();
 
-	Loop::run();
+	loop::run();
 }

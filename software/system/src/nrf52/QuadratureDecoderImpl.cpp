@@ -26,7 +26,7 @@ QuadratureDecoderImpl::QuadratureDecoderImpl(int aPin, int bPin) {
 	NRF_QDEC->TASKS_START = TRIGGER;
 
 	// add to list of handlers
-	Loop::handlers.add(*this);
+	loop::handlers.add(*this);
 }
 
 Awaitable<QuadratureDecoder::Parameters> QuadratureDecoderImpl::change(int8_t& delta) {

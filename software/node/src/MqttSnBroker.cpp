@@ -1,5 +1,5 @@
 #include "MqttSnBroker.hpp"
-#include <Timer.hpp>
+#include <Loop.hpp>
 #include <StringOperators.hpp>
 #include <appConfig.hpp>
 
@@ -79,7 +79,7 @@ AwaitableCoroutine MqttSnBroker::connect(Network::Endpoint const &gatewayEndpoin
 		{
 			int length = array::count(message);
 			int s = co_await select(this->ackWaitlist.wait(uint8_t(0), mqttsn::MessageType::CONNACK,
-				uint16_t(0), length, message), Timer::sleep(RECONNECT_TIME));
+				uint16_t(0), length, message), loop::sleep(RECONNECT_TIME));
 
 			// check if we received a message
 			if (s == 1) {
@@ -114,7 +114,7 @@ AwaitableCoroutine MqttSnBroker::keepAlive() {
 
 	// ping gateway as long as we are connected
 	while (isGatewayConnected()) {
-		int s = co_await select(Timer::sleep(KEEP_ALIVE_TIME), this->keepAliveEvent.wait());
+		int s = co_await select(loop::sleep(KEEP_ALIVE_TIME), this->keepAliveEvent.wait());
 
 		if (s == 1) {
 			if (isGatewayConnected()) {
@@ -131,7 +131,7 @@ AwaitableCoroutine MqttSnBroker::keepAlive() {
 					{
 						int length = array::count(message);
 						int s = co_await select(this->ackWaitlist.wait(uint8_t(0), mqttsn::MessageType::PINGRESP,
-							uint16_t(0), length, message), Timer::sleep(RETRANSMISSION_TIME));
+							uint16_t(0), length, message), loop::sleep(RETRANSMISSION_TIME));
 						if (s == 1)
 							break;
 					}
@@ -176,7 +176,7 @@ AwaitableCoroutine MqttSnBroker::keepAlive() {
 							{
 								int length = array::count(message);
 								int s = co_await select(this->ackWaitlist.wait(uint8_t(0), mqttsn::MessageType::SUBACK, msgId, length,
-									message), Timer::sleep(RETRANSMISSION_TIME));
+									message), loop::sleep(RETRANSMISSION_TIME));
 
 								// check if still connected
 								if (!isGatewayConnected())
@@ -222,7 +222,7 @@ AwaitableCoroutine MqttSnBroker::keepAlive() {
 							{
 								int length = array::count(message);
 								int s = co_await select(this->ackWaitlist.wait(uint8_t(0), mqttsn::MessageType::UNSUBACK, msgId, length,
-									message), Timer::sleep(RETRANSMISSION_TIME));
+									message), loop::sleep(RETRANSMISSION_TIME));
 
 								// check if still connected
 								if (!isGatewayConnected())
@@ -259,7 +259,7 @@ AwaitableCoroutine MqttSnBroker::keepAlive() {
 							{
 								int length = array::count(message);
 								int s = co_await select(this->ackWaitlist.wait(uint8_t(0), mqttsn::MessageType::REGACK, msgId, length,
-									message), Timer::sleep(RETRANSMISSION_TIME));
+									message), loop::sleep(RETRANSMISSION_TIME));
 
 								// check if still connected
 								if (!isGatewayConnected())
@@ -570,7 +570,7 @@ Coroutine MqttSnBroker::publish() {
 						int length = array::count(messageData);
 						int s = co_await select(this->ackWaitlist.wait(uint8_t(connectionIndex),
 								mqttsn::MessageType::PUBACK, msgId, length, messageData),
-							Timer::sleep(RETRANSMISSION_TIME));
+							loop::sleep(RETRANSMISSION_TIME));
 
 						// check if still connected
 						if (!isConnected(connectionIndex))
@@ -1206,7 +1206,7 @@ Coroutine MqttSnBroker::forward() {
 						int length2 = array::count(message);
 						int s = co_await select(this->ackWaitlist.wait(uint8_t(connectionIndex),
 							mqttsn::MessageType::PUBACK, msgId, length2, message2),
-							Timer::sleep(RETRANSMISSION_TIME));
+							loop::sleep(RETRANSMISSION_TIME));
 
 						// check if still connected
 						if (!isConnected(connectionIndex))

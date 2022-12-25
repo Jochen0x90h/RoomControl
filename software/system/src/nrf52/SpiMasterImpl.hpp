@@ -7,7 +7,7 @@
 /**
  * Implementation of SPI hardware interface for nrf52 with multiple virtual channels
  */
-class SpiMasterImpl : public Loop::Handler2 {
+class SpiMasterImpl : public loop::Handler2 {
 public:
 	/**
 	 * Constructor

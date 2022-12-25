@@ -6,7 +6,7 @@
 #include <bus.hpp>
 
 
-class BusNodeImpl : public BusNode, public Loop::Handler2 {
+class BusNodeImpl : public BusNode, public loop::Handler2 {
 public:
 	/**
 	 * Constructor

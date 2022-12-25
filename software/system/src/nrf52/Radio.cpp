@@ -543,7 +543,7 @@ void SendParameters::cancel() noexcept {
 
 
 // event loop handler chain
-Loop::Handler nextHandler = nullptr;
+loop::Handler nextHandler = nullptr;
 void handle() {
 	if (isInterruptPending(SWI0_EGU0_IRQn)) {
 		// check energy detection
@@ -617,7 +617,7 @@ void init() {
 		return;
 
 	// add to event loop handler chain
-	Radio::nextHandler = Loop::addHandler(handle);
+	Radio::nextHandler = loop::addHandler(handle);
 
 	// init random number generator
 	Random::init();
