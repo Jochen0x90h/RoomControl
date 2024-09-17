@@ -15,41 +15,49 @@
 	Protocol:
 	The master always starts by sending a BREAK which are 13 zero bits and a stop bit followed by SYNC which is 0x55.
 	Then a command or message follows which is sent by the master or a node. A message is acknowledged by the receiver.
+ 	If a node wants to send a command or a message, it sends a single bit (pulls the bus low for one bit time) to wake
+ 	up the master which then starts by sending a BREAK.
 	BREAK SYNC | <Command>
 	BREAK SYNC | <Message> | <Ack>
 
-	Command:
+ 	BREAK:
+ 	13 zero bits followed by one stop bit
+
+ 	SYNC:
+ 	0x55
+
+	<Command>:
 	A device can be set to commissioning mode e.g. by pressing a button or button combination for a longer time or by
 	power cycle, depending on security requirements. All devices in commissioning mode will send an enumerate command,
 	simultaneous sending is resolved by bus arbitration. Commissioning command by master overrides all enumerate
 	commands (by sending a leading zero) and causes the commissioned device to leave commissioning mode.
-	Enumerate: 0 <encoded device id> <protocol version> <endpoint count> <mic(default key)>
-	Commission: 0 0 <device id> <address> <key> <mic(default key)>
+	Enumerate: 0 <Encoded Device Id> <Protocol Version> <Endpoint Count> <MIC(default key)>
+	Commission: 0 0 <Device Id> <Address> <Key> <MIC(default key)>
 
-	Message:
+	<Message>:
 	The message starts with the encoded device address for bus arbitration (always loses against commands as it never
 	starts with zero) and contains either an attribute read request, attribute data or a plug message
-	attribute read: <encoded address> <security counter> <255> <endpoint index> <attribute index> <mic(key)>
-	attribute data: <encoded address> <security counter> <255> <endpoint index> <attribute index> <data> <mic(key)>
-	plug message: <encoded address> <security counter> <endpoint index> <plug index> <message> <mic(key)>
+	Attribute Read: <Encoded Address> <Security Counter> <255> <Endpoint Index> <Attribute Index> <MIC(key)>
+	Attribute Data: <Encoded Address> <Security Counter> <255> <Endpoint Index> <Attribute Index> <Data> <MIC(key)>
+	Plug Message: <Encoded Address> <Security Counter> <Endpoint Index> <Plug Index> <Message> <MIC(key)>
 
-	Ack:
-	CRC-8 sent in response as acknowledgement
+	<Ack> (not implemented yet):
+	CRC-8 of Command or Message (not including sync) sent in response as acknowledgement
 
-
-	<encoded device id>:
+	<Encoded Device Id>:
 	Each byte encodes 3 bit of the device id as number of bits from 1 to 8, starting with lowest bits, 11 bytes in total
 	
-	<address>:
+	<Address>:
 	One byte unique address that gets assigned to a device during commissioning
 	
-	<encoded address>:
-	Two bytes, first is ((address & 7) + 1), second is (address / 8) encoded as number of bits from 0 to 8
+	<Encoded Address>:
+	Two bytes, first is ((address & 7) + 1) and therefore never 0 to to be different from commands,
+	second is (address / 8) encoded as number of bits from 0 to 8
 	
-	<security counter>:
+	<Security Counter>:
 	Four bytes security counter
 	
-	<mic>
+	<MIC(key)>
 	Message integrity code using the default key or a configured network key	
 */
 class BusMaster {
@@ -61,7 +69,7 @@ public:
 
 	struct SendParameters {
 		int length;
-		uint8_t const *data;
+		const uint8_t *data;
 	};
 
 

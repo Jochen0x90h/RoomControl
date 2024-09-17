@@ -14,6 +14,8 @@
 #include <StringSet.hpp>
 #include <TopicBuffer.hpp>
 #include <Terminal.hpp>
+#undef DELETE
+#undef IGNORE
 
 
 /**

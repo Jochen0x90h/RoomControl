@@ -7,7 +7,7 @@ SpiMPQ6526::SpiMPQ6526()
 	: relayStates{Gui::LightState::DISABLED, Gui::LightState::DISABLED, Gui::LightState::DISABLED, Gui::LightState::DISABLED}
 {
 	// add to list of handlers
-	Loop::handlers.add(*this);
+	loop::handlers.add(*this);
 }
 
 Awaitable <SpiMaster::Parameters> SpiMPQ6526::transfer(int writeCount, void const *writeData, int readCount, void *readData) {

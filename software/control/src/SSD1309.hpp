@@ -12,7 +12,12 @@
  */
 class SSD1309 {
 public:
-	explicit SSD1309(SpiMaster &spi) : spi(spi) {}
+	struct Spi {
+		SpiMaster &command;
+		SpiMaster &data;
+	};
+
+	explicit SSD1309(Spi &spi) : spi(spi) {}
 
 	/**
 	 * Initializate the display
@@ -49,10 +54,10 @@ public:
 	 * @return use co_await on return value to await end of operation
 	 */
 	auto set(Bitmap<DISPLAY_WIDTH, DISPLAY_HEIGHT> const &bitmap) {
-		return this->spi.writeData(array::count(bitmap.data), bitmap.data);
+		return this->spi.data.write(array::count(bitmap.data), bitmap.data);
 	}
 
 protected:
-	SpiMaster &spi;
+	Spi spi;
 	bool enabled = false;
 };

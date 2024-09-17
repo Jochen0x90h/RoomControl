@@ -5,7 +5,7 @@
 
 namespace Calendar {
 
-class Context : public Loop::Timeout {
+class Context : public loop::TimeHandler {
 public:
 	void activate() override {
 		// next activation in 1s
@@ -29,8 +29,8 @@ void init() {
 		return;
 	Calendar::inited = true;
 
-	Calendar::context.time = Loop::now() + 1s;
-	Loop::timeouts.add(Calendar::context);
+	Calendar::context.time = loop::now() + 1s;
+	loop::timeHandlers.add(Calendar::context);
 }
 
 ClockTime now() {

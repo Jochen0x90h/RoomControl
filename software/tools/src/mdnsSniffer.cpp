@@ -243,7 +243,7 @@ Coroutine sniffer(FILE *file) {
  * See https://wiki.wireshark.org/HowToDissectAnything to dissect DNS application layer in Wireshark
  */
 int main(int argc, char const *argv[]) {
-	Loop::init();
+	loop::init();
 	Network::init();
 	Terminal::init();
 
@@ -284,7 +284,7 @@ int main(int argc, char const *argv[]) {
 			sniffer(file);
 
 			Terminal::out << "waiting for mDNS packets on port 5353 ...\n";
-			Loop::run();
+			loop::run();
 		}
 	} else {
 		// read from file

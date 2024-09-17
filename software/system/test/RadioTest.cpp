@@ -1,4 +1,3 @@
-#include <Timer.hpp>
 #include <Random.hpp>
 #include <Radio.hpp>
 #include <Debug.hpp>
@@ -49,15 +48,15 @@ Coroutine send() {
 	while (true) {
 		uint8_t result;
 
-		co_await Timer::sleep(1s);
+		co_await loop::sleep(1s);
 
 		// send over the air and increment mac counter
 		co_await Radio::send(0, packet1, result);
 		packet1[3]++;
 		
 		bool success = result != 0;
-		Debug::setRedLed(!success);
-		Debug::setGreenLed(success);
+		debug::setRed(!success);
+		debug::setGreen(success);
 			
 		// change channel
 		/*radio::stop();
@@ -66,7 +65,7 @@ Coroutine send() {
 		radio::enableReceiver(true);*/
 
 
-		co_await Timer::sleep(1s);
+		co_await loop::sleep(1s);
 
 		// send over the air and increment mac counter
 		co_await Radio::send(0, packet2, result);
@@ -81,22 +80,21 @@ Coroutine reply() {
 	sendPacket[0] = array::count(sendPacket) - 1 - 1 + 2;
 	while (true) {
 		// wait for receive packet
-		Debug::setBlueLed(true);
+		debug::setBlue(true);
 		co_await Radio::receive(0, receivePacket);
-		Debug::setBlueLed(false);
+		debug::setBlue(false);
 
 		// reply
-		Debug::setRedLed(true);
+		debug::setRed(true);
 		uint8_t result;
 		co_await Radio::send(0, sendPacket, result);
-		Debug::setRedLed(false);
+		debug::setRed(false);
 	}
 }
 
 
 int main() {
-	Loop::init();
-	Timer::init();
+	loop::init();
 	Radio::init();
 	Output::init();
 	
@@ -113,6 +111,6 @@ int main() {
 
 	send();
 	//reply();
-	
-	Loop::run();
+
+	loop::run();
 }

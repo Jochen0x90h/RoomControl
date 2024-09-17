@@ -5,7 +5,7 @@
 #include <LinkedList.hpp>
 
 
-namespace Loop {
+namespace loop {
 
 using Handler = void (*)(Gui &);
 
@@ -13,7 +13,6 @@ using Handler = void (*)(Gui &);
  * Add a handler to the event loop
  */
 Handler addHandler(Handler handler);
-
 
 
 /**
@@ -26,4 +25,4 @@ public:
 using HandlerList = LinkedList<Handler2>;
 extern HandlerList handlers;
 
-} // namespace Loop
+} // namespace loop

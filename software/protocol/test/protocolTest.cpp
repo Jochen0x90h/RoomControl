@@ -18,11 +18,19 @@ TEST(protocolTest, DataBuffer) {
 	b.setData(0, b);
 }
 
+TEST(protocolTest, crc8) {
+	// calc crc-8
+	uint16_t crc = crc8(12, "Hello World!");
+
+	// expected result from CRC-8 on https://crccalc.com/
+	EXPECT_EQ(crc, 0x1c);
+}
+
 TEST(protocolTest, crc16) {
-	// calc crc with CRC-16/CCITT-FALSE
+	// calc crc-16
 	uint16_t crc = crc16(12, "Hello World!");
 
-	// expected result from https://crccalc.com/
+	// expected result from CRC-16/CCITT-FALSE on https://crccalc.com/
 	EXPECT_EQ(crc, 0x882a);
 }
 
@@ -201,15 +209,39 @@ void generateZa09Keys() {
 	printKey("za09KeyLoadAesKey", aesKey);
 }
 
+
+// generate lookup table for crc8
+void generateCrc8Table(uint8_t polynomial) {
+	uint8_t crc_table[256];
+	for (int b = 0; b <= 255; ++b) {
+		uint8_t v;
+		int i;
+		for (v = b, i = 8; --i >= 0;) {
+			if ((v & 0x80) != 0)
+				v = (v << 1) ^ polynomial;
+			else
+				v = v << 1;
+		}
+		crc_table[b] = v;
+	}
+
+	for (int j = 0; j < 16; ++j) {
+		for (int i = 0; i < 16; ++i) {
+			std::cout << "0x" << std::hex << std::setfill('0') << std::setw(2) << int(crc_table[j * 16 + i]) << ", ";
+		}
+		std::cout << std::endl;
+	}
+}
+
 // generate lookup table for crc16
 void generateCrc16Table(uint16_t polynomial) {
-	uint16_t  crc_table[256];
+	uint16_t crc_table[256];
 	for (int b = 0; b <= 255; ++b) {
 		uint16_t v;
 		int i;
 		for (v = b << 8, i = 8; --i >= 0;) {
-			if ((v & 0x8000) != 0x0000)
-				v = ( v << 1 ) ^ polynomial;
+			if ((v & 0x8000) != 0)
+				v = (v << 1) ^ polynomial;
 			else
 				v = v << 1;
 		}
@@ -227,6 +259,7 @@ void generateCrc16Table(uint16_t polynomial) {
 int main(int argc, char **argv) {
 	//generateBusKey();
 	//generateZa09Keys();
+	//generateCrc8Table(0x07);
 	//generateCrc16Table(0x1021);
 
 	testing::InitGoogleTest(&argc, argv);

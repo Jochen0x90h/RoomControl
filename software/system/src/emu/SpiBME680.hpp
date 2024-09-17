@@ -4,7 +4,7 @@
 #include "Loop.hpp"
 
 
-class SpiBME680 : public SpiMaster, public Loop::Handler2 {
+class SpiBME680 : public SpiMaster, public loop::Handler2 {
 public:
 	/**
 	 * Constructor

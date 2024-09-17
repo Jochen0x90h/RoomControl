@@ -1,5 +1,4 @@
 #include <Network.hpp>
-#include <Timer.hpp>
 #include <Loop.hpp>
 #include <Debug.hpp>
 #include <Coroutine.hpp>
@@ -20,8 +19,8 @@ Coroutine sender() {
 	uint8_t data[] = {1, 2, 3, 4};
 	while (true) {
 		co_await Network::send(0, destination, array::count(data), data);
-		Debug::toggleRedLed();
-		co_await Timer::sleep(1s);
+		debug::toggleRed();
+		co_await loop::sleep(1s);
 	}
 }
 
@@ -31,7 +30,7 @@ Coroutine receiver() {
 	while (true) {
 		int count = 4;
 		co_await Network::receive(0, source, count, data);
-		Debug::toggleGreenLed();
+		debug::toggleGreen();
 	}
 }
 
@@ -48,8 +47,7 @@ int main(int argc, char const **argv) {
 #else
 int main() {
 #endif
-	Loop::init();
-	Timer::init();
+	loop::init();
 	Network::init();
 	Output::init(); // for debug signals on pins
 
@@ -60,5 +58,5 @@ int main() {
 	sender();
 	receiver();
 
-	Loop::run();
+	loop::run();
 }

@@ -82,7 +82,7 @@ class Project(ConanFile):
         toolchain.variables["CPU"] = self.options.cpu
         toolchain.variables["FPU"] = self.options.fpu
 
-        # https://github.com/conan-io/conan/blob/develop/conan/tools/cmake/toolchain.py
+        # https://github.com/conan-io/conan/blob/develop/conan/tools/cmake/toolchain/blocks.py
         if str(self.settings.os) not in p:
             toolchain.blocks["generic_system"].values["cmake_system_name"] = "Generic"
             toolchain.blocks["generic_system"].values["cmake_system_processor"] = self.settings.arch
@@ -93,8 +93,12 @@ class Project(ConanFile):
             toolchain.variables["GENERATE_HEX"] = self.env.get("GENERATE_HEX", None)
 
         # bake CC and CXX from profile into toolchain
-        toolchain.blocks["generic_system"].values["compiler"] = self.env.get("CC", None)
-        toolchain.blocks["generic_system"].values["compiler_cpp"] = self.env.get("CXX", None)
+        cc = self.env.get("CC", None)
+        if cc != None:
+            toolchain.variables["CMAKE_C_COMPILER "] = cc
+        cxx = self.env.get("CXX", None)
+        if cxx != None:
+            toolchain.variables["CMAKE_CXX_COMPILER "] = cxx
 
         toolchain.generate()
 

@@ -16,7 +16,7 @@
 #include <map>
 #include <string>
 #include <filesystem>
-#include <libusb.h>
+#include <posix/libusb.hpp>
 
 
 // logs ieee 802.15.4 traffic to a .pcap file
@@ -927,7 +927,7 @@ void handleZcl(PacketReader &r, uint8_t destinationEndpoint) {
 
 int controlTransfer(libusb_device_handle *handle, Radio::Request request, uint16_t wValue, uint16_t wIndex) {
 	return libusb_control_transfer(handle,
-		uint8_t(usb::Request::OUT | usb::Request::TYPE_VENDOR | usb::Request::RECIPIENT_INTERFACE),
+		uint8_t(usb::Request::VENDOR_DEVICE_OUT),
 		uint8_t(request), wValue, wIndex,
 		nullptr, 0, 1000);
 }

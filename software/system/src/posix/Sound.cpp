@@ -61,7 +61,7 @@ std::vector<Type> types;
 
 
 // timeout to check if audio devices need to be stopped
-class Timeout : public Loop::Timeout {
+class Timeout : public loop::TimeHandler {
 public:
 	void activate() override {
 		// next activation in 1s
@@ -209,8 +209,8 @@ void init() {
 
 	Sound::inited = 2;
 
-	Sound::timeout.time = Loop::now() + 1s;
-	Loop::timeouts.add(Sound::timeout);
+	Sound::timeout.time = loop::now() + 1s;
+	loop::timeHandlers.add(Sound::timeout);
 }
 
 Array<Type> getTypes() {

@@ -2,6 +2,7 @@
 
 #include <enum.hpp>
 #include <cstdint>
+#undef READ_ATTRIBUTES
 
 
 /**

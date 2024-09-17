@@ -1,12 +1,11 @@
 #include <SSD1309.hpp>
-#include <Timer.hpp>
 #include <QuadratureDecoder.hpp>
 #include <Debug.hpp>
 #include <Loop.hpp>
 #include <boardConfig.hpp>
 
 
-Coroutine draw(SpiMaster &spi) {
+Coroutine draw(SSD1309::Spi spi) {
 	SSD1309 display(spi);
 	co_await display.init();
 	co_await display.enable();
@@ -21,20 +20,19 @@ Coroutine draw(SpiMaster &spi) {
 		y = (y + 1) & (DISPLAY_HEIGHT - 1);
 		
 		co_await display.set(bitmap);
-		co_await Timer::sleep(200ms);
+		co_await loop::sleep(200ms);
 		
-		Debug::toggleRedLed();
+		debug::toggleRed();
 	}
 }
 
 
 int main(void) {
-	Loop::init();
-	Timer::init();
+	loop::init();
 	Output::init();
 	Drivers drivers;
 
-	draw(drivers.display);
-	
-	Loop::run();
+	draw({drivers.displayCommand, drivers.displayData});
+
+	loop::run();
 }

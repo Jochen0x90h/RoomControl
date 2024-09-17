@@ -1,5 +1,4 @@
 #include "AlarmInterface.hpp"
-#include <Timer.hpp>
 #include <Calendar.hpp>
 #include <Storage.hpp>
 #include <util.hpp>

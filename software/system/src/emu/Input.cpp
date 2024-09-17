@@ -42,7 +42,7 @@ void set(int index, bool value) {
 
 
 // event loop handler chain
-Loop::Handler nextHandler = nullptr;
+loop::Handler nextHandler = nullptr;
 void handle(Gui &gui) {
 	// call next handler in chain
 	Input::nextHandler(gui);
@@ -68,7 +68,7 @@ void init() {
 		return;
 
 	// add to event loop handler chain
-	Input::nextHandler = Loop::addHandler(handle);
+	Input::nextHandler = loop::addHandler(handle);
 
 	// set initial state using config
 	for (int i = 0; i < INPUT_COUNT; ++i) {

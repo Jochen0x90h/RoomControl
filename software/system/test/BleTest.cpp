@@ -1,4 +1,3 @@
-#include <Timer.hpp>
 #include <Ble.hpp>
 #include <Loop.hpp>
 #include <Terminal.hpp>
@@ -73,7 +72,7 @@ Coroutine scan() {
 			<< hex(result.address.u8[3]) << ':' << hex(result.address.u8[2]) << ':' << hex(result.address.u8[1]) << ':'
 			<< hex(result.address.u8[0]) << '\n';
 
-		Debug::toggleBlueLed();
+		debug::toggleBlue();
 
 
 		Ble::open(0, result.address);
@@ -235,13 +234,12 @@ Coroutine scan() {
 }
 
 int main() {
-	Loop::init();
-	Timer::init();
+	loop::init();
 	Ble::init();
 	Terminal::init();
 	Output::init(); // for debug led's
 
 	scan();
 
-	Loop::run();
+	loop::run();
 }

@@ -1,5 +1,4 @@
 #include <BME680.hpp>
-#include <Timer.hpp>
 #include <UsbDevice.hpp>
 #include <Debug.hpp>
 #include <Loop.hpp>
@@ -31,7 +30,7 @@ struct UsbConfiguration {
 	struct usb::ConfigDescriptor config;
 	struct usb::InterfaceDescriptor interface;
 	struct usb::EndpointDescriptor endpoints[1];
-} __attribute__((packed));
+};
 
 static const UsbConfiguration configurationDescriptor = {
 	.config = {
@@ -67,14 +66,14 @@ static const UsbConfiguration configurationDescriptor = {
 
 
 uint8_t timerId;
-StringBuffer<128> string __attribute__((aligned(4)));
+StringBuffer<128> string;// __attribute__((aligned(4)));
 
 
 #define READ(reg) ((reg) | 0x80)
 #define WRITE(reg) ((reg) & 0x7f)
 
 constexpr int CHIP_ID = 0x61;
-uint8_t buffer[129] __attribute__((aligned(4)));
+uint8_t buffer[129];// __attribute__((aligned(4)));
 
 // get chip id and output result on debug led's
 Coroutine getId(SpiMaster &spi) {
@@ -85,33 +84,33 @@ Coroutine getId(SpiMaster &spi) {
 		
 		// check chip id
 		if (buffer[1] == CHIP_ID)
-			Debug::toggleGreenLed();
+			debug::toggleGreen();
 		else
-			Debug::toggleRedLed();
+			debug::toggleRed();
 
 		// wait for 1s
-		co_await Timer::sleep(1s);
+		co_await loop::sleep(1s);
 	}
 }
 
 // read all registers and send to usb host
-Coroutine getRegisters(SpiMaster &spi) {
+Coroutine getRegisters(SpiMaster &spi, UsbDevice &usb) {
 	while (true) {
-		// read upper page
+		// read upper page from sensor
 		buffer[0] = READ(0);
 		co_await spi.transfer(1, buffer, 129, buffer);
 		
 		// send to usb host
-		co_await UsbDevice::send(1, 128, buffer + 1);
-		Debug::toggleBlueLed();
+		co_await usb.send(1, 128, buffer + 1);
+		debug::toggleBlue();
 
 		// wait for 5s
-		co_await Timer::sleep(5s);
+		co_await loop::sleep(5s);
 	}
 }
 
 // measure and send values to usb host
-Coroutine measure(SpiMaster &spi) {
+Coroutine measure(SpiMaster &spi, UsbDevice &usb) {
 	BME680 sensor(spi);
 
 	co_await sensor.init();
@@ -119,7 +118,7 @@ Coroutine measure(SpiMaster &spi) {
 		2, 5, 2, // temperature and pressure oversampling and filter
 		1, // humidity oversampling
 		300, 100); // heater temperature (celsius) and duration (ms)
-	Debug::setBlueLed(true);
+	debug::setBlue(true);
 
 	while (true) {
 		co_await sensor.measure();
@@ -129,19 +128,17 @@ Coroutine measure(SpiMaster &spi) {
 			+ "Humidity: " + flt(sensor.getHumidity(), 1, 1) + "%\n"
 			+ "Gas: " + flt(sensor.getGasResistance(), 1, 1) + "Ω\n";
 
-		co_await UsbDevice::send(1, string.count(), string.data());
-		Debug::toggleRedLed();
+		co_await usb.send(1, string.count(), string.data());
+		debug::toggleRed();
 
-		co_await Timer::sleep(10s);
+		co_await loop::sleep(10s);
 	}
 }
 
-
 int main(void) {
-	Loop::init();
-	Timer::init();
+	loop::init();
 	Output::init();
-	UsbDevice::init(
+	UsbDeviceImpl usb(
 		[](usb::DescriptorType descriptorType) {
 			switch (descriptorType) {
 			case usb::DescriptorType::DEVICE:
@@ -152,9 +149,9 @@ int main(void) {
 				return ConstData();
 			}
 		},
-		[](uint8_t bConfigurationValue) {
+		[](UsbDevice &usb, uint8_t bConfigurationValue) {
 			// enable bulk endpoints in 1 (keep control endpoint 0 enabled in both directions)
-			UsbDevice::enableEndpoints(1 | (1 << 1), 1);
+			usb.enableEndpoints(1 | (1 << 1), 1);
 		
 			//getRegisters();
 		},
@@ -164,9 +161,9 @@ int main(void) {
 	Drivers drivers;
 
 	// test raw values
-	//getId(drivers.airSensor);
+	//getId(drivers.airSensor, usb);
 	
-	measure(drivers.airSensor);
-	
-	Loop::run();
+	measure(drivers.airSensor, usb);
+
+	loop::run();
 }

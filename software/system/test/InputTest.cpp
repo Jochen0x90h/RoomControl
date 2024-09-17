@@ -13,21 +13,21 @@ Coroutine handleInput() {
 		co_await Input::trigger(1 << INPUT_POTI_BUTTON, 1 << INPUT_PCB_BUTTON, index, value);
 		if (index == 0) {
 			// rising edge on poti button detected
-			Debug::toggleRedLed();
+			debug::toggleRed();
 		} else {
 			// falling edge on pcb button detected
-			Debug::toggleGreenLed();
+			debug::toggleGreen();
 		}
 	}
 }
 
 int main() {
-	Loop::init();
+	loop::init();
 	Output::init(); // for debug signals on pins
 	Input::init();
-	Drivers drivers;
+	//Drivers drivers;
 
 	handleInput();
 
-	Loop::run();
+	loop::run();
 }

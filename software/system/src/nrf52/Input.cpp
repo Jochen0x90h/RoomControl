@@ -1,5 +1,4 @@
 #include "../Input.hpp"
-#include "../Timer.hpp"
 #include "Loop.hpp"
 #include "gpio.hpp"
 #include <util.hpp>
@@ -42,7 +41,7 @@ State states[TRIGGER_COUNT];
 Waitlist<Parameters> waitlist;
 
 // event loop handler chain
-Loop::Handler nextHandler = nullptr;
+loop::Handler nextHandler = nullptr;
 void handle() {	
 	if (isInterruptPending(GPIOTE_IRQn)) {
 		// debounce timeout after about 50ms
@@ -128,14 +127,14 @@ void init() {
 
 	// configure triggers
 	if (TRIGGER_COUNT > 0) {
-		Timer::init();
+		//Timer::init();
 	
 		// check if already initialized
 		if (Input::nextHandler != nullptr)
 			return;
 	
 		// add to event loop handler chain
-		Input::nextHandler = Loop::addHandler(handle);
+		Input::nextHandler = loop::addHandler(handle);
 	
 		for (int index = 0; index < TRIGGER_COUNT; ++index) {
 			auto &input = INPUTS[index];

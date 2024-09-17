@@ -1,5 +1,5 @@
 #include "BME680.hpp"
-#include <Timer.hpp>
+#include <Loop.hpp>
 #include <assert.hpp>
 
 
@@ -116,7 +116,7 @@ AwaitableCoroutine BME680::measure() {
 	co_await this->spi.transfer(2, this->buffer, 0, nullptr);
 
 	// wait until measurement is ready
-	co_await Timer::sleep(1s);
+	co_await loop::sleep(1s);
 
 	// read measurements
 	this->buffer[0] = READ(0x1D);

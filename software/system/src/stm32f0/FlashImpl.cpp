@@ -1,13 +1,20 @@
 #include "FlashImpl.hpp"
 #include "defs.hpp"
+#include <assert.hpp>
 
 
-// https://infocenter.nordicsemi.com/index.jsp?topic=%2Fps_nrf52840%2Fmemory.html&cp=4_0_0_3_1_1&anchor=flash
-// https://infocenter.nordicsemi.com/index.jsp?topic=%2Fps_nrf52840%2Fnvmc.html&cp=4_0_0_3_2
+/*
+	Reference manual: https://www.st.com/resource/en/reference_manual/dm00031936-stm32f0x1stm32f0x2stm32f0x8-advanced-armbased-32bit-mcus-stmicroelectronics.pdf
+
+	Resources:
+		FLASH: Flash controller (reference manual section 3)
+*/
 
 FlashImpl::FlashImpl(uint32_t baseAddress, int sectorCount, int sectorSize)
-	: baseAddress(baseAddress), sectorCount(sectorCount), sectorSize(sectorSize & ~(PAGE_SIZE - 1))
+	: baseAddress(baseAddress), sectorCount(sectorCount), sectorSize(sectorSize)
 {
+	assert((baseAddress & (PAGE_SIZE - 1)) == 0);
+	assert((sectorSize & (PAGE_SIZE - 1)) == 0);
 }
 
 Flash::Info FlashImpl::getInfo() {
@@ -23,6 +30,9 @@ void FlashImpl::eraseSectorBlocking(int sectorIndex) {
 
 	// erase pages
 	for (int i = 0; i < this->sectorSize; i += PAGE_SIZE) {
+		// set page erase mode
+		FLASH->CR = FLASH_CR_PER;
+
 		// set address of page to erase
 		FLASH->AR = address + i;
 

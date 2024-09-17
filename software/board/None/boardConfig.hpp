@@ -1,6 +1,7 @@
 #include <posix/SpiMasterImpl.hpp>
 #include <posix/StorageImpl.hpp>
 #include <posix/FlashImpl.hpp>
+#include <posix/UsbDeviceImpl.hpp>
 #include <FlashStorage.hpp>
 
 
@@ -31,6 +32,12 @@ struct Drivers {
 	//StorageImpl storage{"storage.bin", 0xffff, 1024};
 	FlashImpl flash{"flash.bin", 32, 4096, 4};
 	FlashStorage storage{flash};
+};
+
+struct DriversSpiMasterTest {
+	SpiMasterImpl transfer{"transfer"};
+	SpiMasterImpl command{"command"};
+	SpiMasterImpl data{"data"};
 };
 
 struct DriversFlashTest {

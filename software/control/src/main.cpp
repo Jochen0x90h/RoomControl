@@ -3,7 +3,6 @@
 #include <Radio.hpp>
 #include <QuadratureDecoder.hpp>
 #include <Input.hpp>
-#include <Timer.hpp>
 #include <Debug.hpp>
 #include <Loop.hpp>
 #include <Sound.hpp>
@@ -14,8 +13,7 @@
  */
 int main(int argc, const char **argv) {
 	// init drivers
-	Loop::init();
-	Timer::init();
+	loop::init();
 	Calendar::init();
 	Radio::init();
 	Network::init();
@@ -47,7 +45,7 @@ int main(int argc, const char **argv) {
 	// the room control application
 	RoomControl roomControl(drivers);
 
-	Loop::run();
+	loop::run();
 
 	return 0;
 }

@@ -1,12 +1,15 @@
 #pragma once
 
 #include <emu/BusMasterImpl.hpp>
+#include <emu/BusNodeImpl.hpp>
 #include <emu/QuadratureDecoderImpl.hpp>
 #include <emu/SpiBME680.hpp>
 #include <emu/SpiSSD1309.hpp>
 #include <emu/SpiMR45Vxxx.hpp>
+#include <posix/SpiMasterImpl.hpp>
 #include <posix/StorageImpl.hpp>
 #include <posix/FlashImpl.hpp>
+#include <posix/UsbDeviceImpl.hpp>
 #include <FeRamStorage4.hpp>
 #include <FlashStorage.hpp>
 #include <util.hpp>
@@ -60,7 +63,8 @@ constexpr int DISPLAY_HEIGHT = 64;
 
 struct Drivers {
 	SpiBME680 airSensor;
-	SpiSSD1309 display{DISPLAY_WIDTH, DISPLAY_HEIGHT};
+	SpiSSD1309 displayCommand{DISPLAY_WIDTH, DISPLAY_HEIGHT};
+	SpiSSD1309::Data displayData{displayCommand};
 	QuadratureDecoderImpl quadratureDecoder;
 
 	BusMasterImpl busMaster;
@@ -72,6 +76,20 @@ struct Drivers {
 	//StorageImpl counters{"counters.bin", FERAM_SIZE / 10, 4};
 	SpiMR45Vxxx feRam{"feram.bin", FERAM_SIZE};
 	FeRamStorage4<FERAM_SIZE> counters{feRam};
+};
+
+struct DriversSpiMasterTest {
+	SpiMasterImpl transfer{"transfer"};
+	SpiMasterImpl command{"command"};
+	SpiMasterImpl data{"data"};
+};
+
+struct DriversBusMasterTest {
+	BusMasterImpl busMaster;
+};
+
+struct DriversBusNodeTest {
+	BusNodeImpl busNode;
 };
 
 struct DriversFlashTest {

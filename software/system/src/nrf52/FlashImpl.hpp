@@ -10,7 +10,10 @@
  */
 class FlashImpl : public Flash {
 public:
+	// size of a page that has to be erased at once
 	static constexpr int PAGE_SIZE = 4096;
+
+	// size of a block that has to be written at once
 	static constexpr int BLOCK_SIZE = 4;
 
 	/**

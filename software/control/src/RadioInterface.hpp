@@ -359,6 +359,12 @@ public:
 #endif
 		{}
 
+		PacketWriter(int N, uint8_t *packet) : EncryptWriter(packet + 1)
+#ifdef DEBUG
+			, end(packet + N)
+#endif
+		{}
+
 		void security(zb::SecurityControl securityControl, uint32_t securityCounter) {
 			this->securityControl = this->current;
 			u8(uint8_t(securityControl));
@@ -454,7 +460,7 @@ private:
 		zcl::Cluster cluster, Message &message, ZbEndpoint *endpoint);
 	void writeFooter(PacketWriter &w, Radio::SendFlags sendFlags);
 
-	[[nodiscard]] AwaitableCoroutine readAttribute(uint8_t (&packet)[MESSAGE_LENGTH], ZbDevice &device,
+	[[nodiscard]] AwaitableCoroutine readAttribute(uint8_t *packet, ZbDevice &device,
 		uint8_t dstEndpoint, zcl::Cluster clusterId, zcl::Profile profile, uint8_t srcEndpoint, uint16_t attribute);
 
 

@@ -26,7 +26,7 @@ uint8_t hours = 0;
 uint8_t weekday = 0;
 
 // event loop handler chain
-Loop::Handler nextHandler = nullptr;
+loop::Handler nextHandler = nullptr;
 void handle() {
 	if (NRF_RTC0->EVENTS_COMPARE[2]) {
 		// clear pending interrupt flags at peripheral and NVIC
@@ -61,7 +61,7 @@ void init() {
 		return;
 
 	// add to event loop handler chain
-	Calendar::nextHandler = Loop::addHandler(handle);
+	Calendar::nextHandler = loop::addHandler(handle);
 
 	// use channel 2 of RTC0
 	NRF_RTC0->CC[2] = (NRF_RTC0->COUNTER + 16384 + 256) & ~16383;

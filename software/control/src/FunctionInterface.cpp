@@ -1,6 +1,6 @@
 #include "FunctionInterface.hpp"
 #include "Cie1931.hpp"
-#include <Timer.hpp>
+#include <Loop.hpp>
 #include <Storage.hpp>
 #include <Terminal.hpp>
 #include <StringOperators.hpp>
@@ -78,7 +78,7 @@ static const TypeInfo typeInfos[] = {
 					co_await function->barrier.wait(info, &message);
 				} else {
 					// on: wait for message or timeout
-					int s = co_await select(function->barrier.wait(info, &message), Timer::sleep(timeout));
+					int s = co_await select(function->barrier.wait(info, &message), loop::sleep(timeout));
 					if (s == 2) {
 						// timeout: switch off
 						message = 0;
@@ -140,16 +140,16 @@ static const TypeInfo typeInfos[] = {
 					// timeout not active and no transition in progress: wait for message
 					co_await function->barrier.wait(info, &message);
 					//Terminal::out << "plug " << dec(info.plug.id) << '\n';
-					now = Timer::now();
+					now = loop::now();
 				} else {
 					// on: wait for message or timeout
 					//Terminal::out << "select" << '\n';
 					bool off = timeoutActive && (!transition || offTime <= endTime);
 					now = off ? offTime : endTime;
-					int s = co_await select(function->barrier.wait(info, &message), Timer::sleep(now));
+					int s = co_await select(function->barrier.wait(info, &message), loop::sleep(now));
 
 					// "relaxed" time to prevent lagging behind
-					now = Timer::now();
+					now = loop::now();
 
 					if (s == 1) {
 						// switched on or off
@@ -293,16 +293,16 @@ static const TypeInfo typeInfos[] = {
 					// timeout not active and no transition in progress: wait for message
 					co_await function->barrier.wait(info, &message);
 					//Terminal::out << "plug " << dec(info.plug.id) << '\n';
-					now = Timer::now();
+					now = loop::now();
 				} else {
 					// on: wait for message or timeout
 					//Terminal::out << "select" << '\n';
 					bool off = timeoutActive && (!transition || offTime <= endTime);
 					now = off ? offTime : endTime;
-					int s = co_await select(function->barrier.wait(info, &message), Timer::sleep(now));
+					int s = co_await select(function->barrier.wait(info, &message), loop::sleep(now));
 
 					// "relaxed" time to prevent lagging behind
-					now = Timer::now();
+					now = loop::now();
 
 					if (s == 1) {
 						// switched on or off
@@ -481,7 +481,7 @@ static const TypeInfo typeInfos[] = {
 					// off: wait for message
 					co_await function->barrier.wait(info, &message);
 					//Terminal::out << "plug " << dec(info.plug.id) << '\n';
-					now = Timer::now();
+					now = loop::now();
 					//setColor = true;
 				} else {
 					// on: wait for message or timeout
@@ -492,10 +492,10 @@ static const TypeInfo typeInfos[] = {
 					bool off = timeout > 0ms && on && offTime <= now;
 					if (off)
 						now = offTime;
-					int s = co_await select(function->barrier.wait(info, &message), Timer::sleep(now));
+					int s = co_await select(function->barrier.wait(info, &message), loop::sleep(now));
 
 					// "relaxed" time to prevent lagging behind
-					now = Timer::now();
+					now = loop::now();
 
 					if (s == 1) {
 						// switched on or off
@@ -693,7 +693,7 @@ static const TypeInfo typeInfos[] = {
 					auto d = targetPosition - position;
 
 					// wait for event or timeout with a maximum to regularly report the current position
-					int s = co_await select(function->barrier.wait(info, &message), Timer::sleep(min(up ? -d : d, 200ms)));
+					int s = co_await select(function->barrier.wait(info, &message), loop::sleep(min(up ? -d : d, 200ms)));
 
 					// set invalid plug index when timeout occurred
 					if (s != 1)
@@ -701,7 +701,7 @@ static const TypeInfo typeInfos[] = {
 					//Terminal::out << "select " << dec(s) << " plug " << dec(info.plug.id) << '\n';
 
 					// get time since last time
-					auto time = Timer::now();
+					auto time = loop::now();
 					d = time - lastTime;
 					lastTime = time;
 
@@ -724,7 +724,7 @@ static const TypeInfo typeInfos[] = {
 					// up/down or trigger in
 					if (message.value.u8 == 0) {
 						// released: stop if timeout elapsed
-						if (Timer::now() > startTime + holdTime)
+						if (loop::now() > startTime + holdTime)
 							targetPosition = position;
 					} else {
 						// up or down pressed
@@ -783,7 +783,7 @@ static const TypeInfo typeInfos[] = {
 					// start
 					up = targetPosition < position;
 					state = up ? 1 : 2;
-					lastTime = startTime = Timer::now();
+					lastTime = startTime = loop::now();
 				}
 
 				// publish up/down

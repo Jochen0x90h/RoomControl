@@ -1,6 +1,5 @@
 #include <MqttSnClient.hpp>
 #include <Network.hpp>
-#include <Timer.hpp>
 #include <Terminal.hpp>
 #include <Loop.hpp>
 #include <Debug.hpp>
@@ -59,7 +58,7 @@ Coroutine publish() {
 	Terminal::out << "registered topic 'bar' " << dec(bar) << "\n";
 
 	while (client.isConnected()) {
-		co_await Timer::sleep(1s);
+		co_await loop::sleep(1s);
 
 		// publish on topics
 		co_await client.publish(result, foo, mqttsn::makeQos(defaultQos), "a");
@@ -73,12 +72,11 @@ Coroutine publish() {
 }
 
 int main(void) {
-	Loop::init();
-	Timer::init();
+	loop::init();
 	Network::init();
 	Output::init();
 		
 	publish();
 
-	Loop::run();	
+	loop::run();
 }

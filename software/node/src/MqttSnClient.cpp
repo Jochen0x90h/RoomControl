@@ -1,5 +1,5 @@
 #include "MqttSnClient.hpp"
-#include <Timer.hpp>
+#include <Loop.hpp>
 #include <appConfig.hpp>
 
 
@@ -65,7 +65,7 @@ AwaitableCoroutine MqttSnClient::connect(Result &result, Network::Endpoint const
 			Network::Endpoint source;
 			int length = MAX_MESSAGE_LENGTH;
 			int s = co_await select(Network::receive(NETWORK_MQTT, source, length, this->tempMessage),
-				Timer::sleep(RETRANSMISSION_TIME));
+				loop::sleep(RETRANSMISSION_TIME));
 			if (s == 1) {
 				// check if the message is from the gateway
 				// todo
@@ -126,7 +126,7 @@ AwaitableCoroutine MqttSnClient::disconnect() {
 		{
 			int length = array::count(message);
 			int s = co_await select(this->ackWaitlist.wait(mqttsn::MessageType::DISCONNECT, uint16_t(0), length, message),
-				Timer::sleep(RETRANSMISSION_TIME));
+				loop::sleep(RETRANSMISSION_TIME));
 			if (s == 1)
 				break;
 		}
@@ -164,12 +164,12 @@ AwaitableCoroutine MqttSnClient::registerTopic(Result &result, uint16_t &topicId
 		{
 			int length = array::count(message);
 			int s = co_await select(this->ackWaitlist.wait(mqttsn::MessageType::REGACK, msgId, length, message),
-				Timer::sleep(RETRANSMISSION_TIME));
+				loop::sleep(RETRANSMISSION_TIME));
 			
 			// check if still connected
 			if (!isConnected()) {
 				// make sure we are resumed from the event loop, not from ping()
-				co_await Timer::sleep(100ms);
+				co_await loop::sleep(100ms);
 				result = Result::INVALID_STATE;
 				co_return;
 			}
@@ -230,12 +230,12 @@ AwaitableCoroutine MqttSnClient::publish(Result &result, uint16_t topicId, mqtts
 		{
 			int length = array::count(message);
 			int s = co_await select(this->ackWaitlist.wait(mqttsn::MessageType::PUBACK, msgId, length, message),
-				Timer::sleep(RETRANSMISSION_TIME));
+				loop::sleep(RETRANSMISSION_TIME));
 
 			// check if still connected
 			if (!isConnected()) {
 				// make sure we are resumed from the event loop, not from ping()
-				co_await Timer::sleep(100ms);
+				co_await loop::sleep(100ms);
 				result = Result::INVALID_STATE;
 				break;
 			}
@@ -295,12 +295,12 @@ AwaitableCoroutine MqttSnClient::subscribeTopic(Result &result, uint16_t &topicI
 		{
 			int length = array::count(message);
 			int s = co_await select(this->ackWaitlist.wait(mqttsn::MessageType::SUBACK, msgId, length, message),
-				Timer::sleep(RETRANSMISSION_TIME));
+				loop::sleep(RETRANSMISSION_TIME));
 
 			// check if still connected
 			if (!isConnected()) {
 				// make sure we are resumed from the event loop, not from ping()
-				co_await Timer::sleep(100ms);
+				co_await loop::sleep(100ms);
 				result = Result::INVALID_STATE;
 				co_return;
 			}
@@ -354,12 +354,12 @@ AwaitableCoroutine MqttSnClient::unsubscribeTopic(Result &result, String topicFi
 		{
 			int length = array::count(message);
 			int s = co_await select(this->ackWaitlist.wait(mqttsn::MessageType::UNSUBACK, msgId, length, message),
-				Timer::sleep(RETRANSMISSION_TIME));
+				loop::sleep(RETRANSMISSION_TIME));
 
 			// check if still connected
 			if (!isConnected()) {
 				// make sure we are resumed from the event loop, not from ping()
-				co_await Timer::sleep(100ms);
+				co_await loop::sleep(100ms);
 				result = Result::INVALID_STATE;
 				co_return;
 			}
@@ -390,7 +390,7 @@ AwaitableCoroutine MqttSnClient::receive(Result &result, uint16_t &msgId, uint16
 	// check if still connected
 	if (!isConnected()) {
 		// make sure we are resumed from the event loop, not from ping()
-		co_await Timer::sleep(100ms);
+		co_await loop::sleep(100ms);
 		result = Result::INVALID_STATE;
 		co_return;
 	}
@@ -440,7 +440,7 @@ AwaitableCoroutine MqttSnClient::ping() {
 	uint8_t message[4];
 
 	while (true) {
-		co_await Timer::sleep(KEEP_ALIVE_TIME);
+		co_await loop::sleep(KEEP_ALIVE_TIME);
 
 		for (int retry = 0; ; ++retry) {
 			// send idle ping
@@ -454,7 +454,7 @@ AwaitableCoroutine MqttSnClient::ping() {
 			{
 				int length = array::count(message);
 				int s = co_await select(this->ackWaitlist.wait(mqttsn::MessageType::PINGRESP, uint16_t(0), length, message),
-					Timer::sleep(RETRANSMISSION_TIME));
+					loop::sleep(RETRANSMISSION_TIME));
 				if (s == 1)
 					break;
 			}

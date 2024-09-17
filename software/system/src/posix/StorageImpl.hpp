@@ -18,13 +18,13 @@ public:
 	 */
 	StorageImpl(std::string const &filename, int maxId, int maxDataSize);
 
-	[[nodiscard]] virtual Awaitable<ReadParameters> read(int id, int &size, void *data, Status &status) override;
-	[[nodiscard]] virtual Awaitable<WriteParameters> write(int id, int size, void const *data, Status &status) override;
-	[[nodiscard]] virtual Awaitable<ClearParameters> clear(Status &status) override;
+	[[nodiscard]] Awaitable<ReadParameters> read(int id, int &size, void *data, Status &status) override;
+	[[nodiscard]] Awaitable<WriteParameters> write(int id, int size, void const *data, Status &status) override;
+	[[nodiscard]] Awaitable<ClearParameters> clear(Status &status) override;
 
-	virtual Status readBlocking(int id, int &size, void *data) override;
-	virtual Status writeBlocking(int id, int size, void const *data) override;
-	virtual Status clearBlocking() override;
+	Status readBlocking(int id, int &size, void *data) override;
+	Status writeBlocking(int id, int size, void const *data) override;
+	Status clearBlocking() override;
 
 protected:
 	void readData();

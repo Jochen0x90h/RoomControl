@@ -1,5 +1,4 @@
 #include <Loop.hpp>
-#include <Timer.hpp>
 #include <Debug.hpp>
 #include <Terminal.hpp>
 #include <StringOperators.hpp>
@@ -20,7 +19,7 @@ struct Kiss32Random {
 		c = 7654321;
 	}
 
-	uint32_t draw() {
+	int draw() {
 		// Linear congruence generator
 		x = 69069 * x + 12345;
 
@@ -34,24 +33,25 @@ struct Kiss32Random {
 		c = t >> 32;
 		z = (uint32_t) t;
 
-		return x + y + z;
+		return (x + y + z) & 0x7fffffff;
 	}
 };
 
 void fail() {
-	Debug::setRedLed();
-	while (true) {}
+	debug::setRed();
+	debug::setBlue();
 }
 
-int main() {
-	Loop::init();
-	Timer::init();
-	Output::init(); // for debug led's
+void test() {
+	debug::setBlue();
 	DriversStorageTest drivers;
+	debug::clearBlue();
 
+	// random generator for random data of random length
 	Kiss32Random random;
 
-	auto start = Timer::now();
+	// measure time
+	auto start = loop::now();
 
 	// table of currently stored elements
 	int sizes[64];
@@ -60,7 +60,8 @@ int main() {
 
 	// determine capacity
 	auto info = drivers.flash.getInfo();
-	unsigned int capacity = min(((info.sectorCount - 1) * (info.sectorSize - 8)) / (128 + 8), array::count(sizes)) - 1;
+	int capacity = min(((info.sectorCount - 1) * (info.sectorSize - 8)) / (128 + 8), array::count(sizes)) - 1;
+	Terminal::out << "capacity: " << dec(capacity) << '\n';
 
 	// clear storage
 	drivers.storage.clearBlocking();
@@ -78,10 +79,10 @@ int main() {
 
 			// check data
 			if (readSize != size)
-				fail();
+				return fail();
 			for (int j = 0; j < size; ++j) {
 				if (buffer[j] != uint8_t(id + j))
-					fail();
+					return fail();
 			}
 		}
 
@@ -100,13 +101,22 @@ int main() {
 
 		// store
 		if (drivers.storage.writeBlocking(id, size, buffer) != Storage::Status::OK)
-			fail();
+			return fail();
 	}
 
-	auto end = Timer::now();
+	auto end = loop::now();
 
 	Terminal::out << dec(int((end - start) / 1s)) << "s\n";
 
-	Debug::setGreenLed();
-	while (true) {}
+	// ok
+	debug::setGreen();
+}
+
+int main() {
+	loop::init();
+	Output::init(); // for debug led's
+
+	test();
+
+	loop::run();
 }

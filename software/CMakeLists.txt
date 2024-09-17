@@ -13,6 +13,7 @@ set(CMAKE_CXX_STANDARD 20)
 # debug generated makefile
 #set(CMAKE_VERBOSE_MAKEFILE TRUE)
 
+message("*** COMPILER ${CMAKE_CXX_COMPILER_ID}")
 message("*** TYPE ${CMAKE_BUILD_TYPE}")
 message("*** PLATFORM ${PLATFORM}")
 message("*** BOARD ${BOARD}")
@@ -25,8 +26,13 @@ if("Linux" IN_LIST PLATFORM)
 	set(LINUX 1)
 endif()
 
+# windows
+if("Windows" IN_LIST PLATFORM)
+	set(WINDOWS 1)
+endif()
+
 # posix compatible platforms
-if(LINUX OR "Macos" IN_LIST PLATFORM OR "FreeBSD" IN_LIST PLATFORM)
+if(LINUX OR WINDOWS OR "Macos" IN_LIST PLATFORM OR "FreeBSD" IN_LIST PLATFORM)
 	set(POSIX 1)
 endif()
 
@@ -82,13 +88,16 @@ if(POSIX)
 		Ogg::ogg
 		gtest::gtest
 	)
+	if(WINDOWS)
+		set(LIBRARIES ${LIBRARIES} wsock32 ws2_32 winmm)
+	endif()
 
 	# enable address sanitizer
-	if(CMAKE_BUILD_TYPE STREQUAL Debug)
-		message("Enable Address Sanitizer")
-		set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address")
-		set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=address")
-	endif()
+	#if(CMAKE_BUILD_TYPE STREQUAL Debug)
+	#	message("Enable Address Sanitizer")
+	#	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address")
+	#	set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=address")
+	#endif()
 
 	# set rpath so that shared libraries are searched in ../lib
 	if(APPLE)
@@ -149,6 +158,9 @@ endif()
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
 	# clang
 	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fcoroutines-ts -Wno-user-defined-literals")
+elseif(CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
+	# visual studio
+	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /wd4455")
 else()
 	# gcc
 	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fcoroutines -fconcepts -Wno-literal-suffix")
@@ -246,7 +258,13 @@ if(POSIX)
 		system/src/posix/FlashImpl.hpp
 		system/src/posix/FlashImpl.cpp
 	)
-	set(LOOP system/src/Loop.hpp system/src/posix/Loop.cpp system/src/posix/Loop2.cpp)
+	set(LOOP
+		system/src/SystemTime.hpp
+		system/src/Loop.hpp
+		system/src/posix/Loop.hpp
+		system/src/posix/Loop.inc.hpp
+		system/src/posix/Loop.cpp
+	)
 	set(NETWORK system/src/Network.hpp system/src/posix/Network.cpp)
 	set(OUTPUT system/src/Output.hpp system/src/posix/Output.cpp system/src/Debug.hpp)
 	set(SOUND system/src/Sound.hpp system/src/posix/Sound.cpp)
@@ -263,7 +281,12 @@ if(POSIX)
 		system/src/posix/StorageImpl.cpp
 	)
 	set(TERMINAL system/src/Terminal.hpp system/src/posix/Terminal.cpp)
-	set(TIMER system/src/SystemTime.hpp system/src/Timer.hpp system/src/posix/Timer.cpp)
+	set(USB_DEVICE
+		system/src/UsbDevice.hpp
+		system/src/UsbDevice.cpp
+		system/src/posix/UsbDeviceImpl.hpp
+		system/src/posix/UsbDeviceImpl.cpp
+	)
 endif()
 if(LINUX)
 	if(TARGET PkgConfig::BlueZ)
@@ -285,9 +308,10 @@ if(EMU)
 	)
 	set(INPUT system/src/Input.hpp system/src/emu/Input.hpp system/src/emu/Input.cpp)
 	set(LOOP
+		system/src/SystemTime.hpp
 		system/src/Loop.hpp
 		system/src/posix/Loop.hpp
-		system/src/posix/Loop.cpp
+		system/src/posix/Loop.inc.hpp
 		system/src/emu/Loop.hpp
 		system/src/emu/Loop.cpp
 		system/src/emu/Gui.cpp
@@ -310,6 +334,8 @@ if(EMU)
 	set(SPI_MASTER
 		system/src/SpiMaster.hpp
 		system/src/SpiMaster.cpp
+		system/src/posix/SpiMasterImpl.hpp
+		system/src/posix/SpiMasterImpl.cpp
 		system/src/emu/SpiBME680.hpp
 		system/src/emu/SpiBME680.cpp
 		system/src/emu/SpiMPQ6526.hpp
@@ -319,7 +345,6 @@ if(EMU)
 		system/src/emu/SpiSSD1309.hpp
 		system/src/emu/SpiSSD1309.cpp
 	)
-	set(USB_DEVICE system/src/UsbDevice.hpp system/src/emu/UsbDevice.cpp)
 endif()
 if("nrf52" IN_LIST PLATFORM)
 	set(BUS_MASTER
@@ -337,7 +362,9 @@ if("nrf52" IN_LIST PLATFORM)
 	)
 	set(INPUT system/src/Input.hpp system/src/nrf52/Input.cpp)
 	set(LOOP
-		system/src/Loop.hpp system/src/nrf52/Loop.hpp
+		system/src/SystemTime.hpp
+		system/src/Loop.hpp
+		system/src/nrf52/Loop.hpp
 		system/src/nrf52/Loop.cpp
 		system/src/nrf52/system/gcc_startup_nrf52840.S
 		#system/src/nrf52/system/system_nrf52840.c
@@ -362,8 +389,12 @@ if("nrf52" IN_LIST PLATFORM)
 		system/src/Storage.cpp
 	)
 	set(TERMINAL system/src/Terminal.hpp system/src/nrf52/Terminal.cpp)
-	set(TIMER system/src/SystemTime.hpp system/src/Timer.hpp system/src/nrf52/Timer.cpp)
-	set(USB_DEVICE system/src/UsbDevice.hpp system/src/nrf52/UsbDevice.cpp)
+	set(USB_DEVICE
+		system/src/UsbDevice.hpp
+		system/src/UsbDevice.cpp
+		system/src/nrf52/UsbDeviceImpl.hpp
+		system/src/nrf52/UsbDeviceImpl.cpp
+	)
 endif()
 if("stm32f0" IN_LIST PLATFORM)
 	set(BUS_NODE
@@ -380,11 +411,13 @@ if("stm32f0" IN_LIST PLATFORM)
 	)
 	set(INPUT system/src/Input.hpp system/src/stm32f0/gpio.hpp system/src/stm32f0/Input.cpp)
 	set(LOOP
+		system/src/SystemTime.hpp
 		system/src/Loop.hpp
 		system/src/stm32f0/defs.hpp
 		system/src/stm32f0/Loop.hpp
 		system/src/stm32f0/Loop.cpp
 		system/src/stm32f0/system/startup_stm32f042x6.s
+		#system/src/stm32f0/system/startup_stm32f051x8.s
 	)
 	set(OUTPUT system/src/Output.hpp system/src/stm32f0/Output.cpp system/src/Debug.hpp)
 	set(SPI_MASTER
@@ -392,13 +425,14 @@ if("stm32f0" IN_LIST PLATFORM)
 		system/src/SpiMaster.cpp
 		system/src/stm32f0/SpiMasterImpl.hpp
 		system/src/stm32f0/SpiMasterImpl.cpp
+		#system/src/stm32f0/SpiMasterSingle16.hpp
+		#system/src/stm32f0/SpiMasterSingle16.cpp
 	)
 	set(STORAGE
 		system/src/Storage.hpp
 		system/src/Storage.cpp
 	)
 	set(TERMINAL system/src/Terminal.hpp system/src/stm32f0/Terminal.cpp)
-	set(TIMER system/src/SystemTime.hpp system/src/Timer.hpp system/src/stm32f0/Timer.cpp)
 endif()
 
 set(SYSTEM
@@ -418,7 +452,6 @@ set(SYSTEM
 	${SPI_MASTER}
 	${STORAGE}
 	${TERMINAL}
-	${TIMER}
 	${USB_DEVICE}
 	system/src/FeRamStorage4.cpp
 	system/src/FeRamStorage4.hpp
@@ -664,9 +697,11 @@ endfunction()
 
 add_system_test_executable(Ble)
 add_system_test_executable(BusMaster)
+add_system_test_executable(BusNode)
 add_system_test_executable(Calendar)
 add_system_test_executable(Flash)
 add_system_test_executable(Input)
+add_system_test_executable(Loop)
 add_system_test_executable(Network)
 add_system_test_executable(QuadratureDecoder)
 add_system_test_executable(Radio)
@@ -674,7 +709,6 @@ add_system_test_executable(Random)
 add_system_test_executable(Sound)
 add_system_test_executable(SpiMaster)
 add_system_test_executable(Storage)
-add_system_test_executable(Timer)
 add_system_test_executable(UsbDevice)
 
 
@@ -752,7 +786,7 @@ target_link_libraries(MqttSnBrokerTest ${LIBRARIES})
 endif() # POSIX AND NOT EMU
 
 
-if(${BOARD} STREQUAL "emuControl")
+if(${BOARD} STREQUAL "None")
 
 # test for BME680 air sensor
 add_executable(BME680Test
@@ -778,6 +812,9 @@ target_include_directories(BME680Test
 )
 target_link_libraries(BME680Test ${LIBRARIES})
 
+endif()
+
+if(${BOARD} STREQUAL "emuControl")
 
 # test for SSD1309 display
 add_executable(SSD1309Test

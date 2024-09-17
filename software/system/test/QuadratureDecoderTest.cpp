@@ -25,9 +25,9 @@ Coroutine handleDecoder(QuadratureDecoder &decoder) {
 #ifdef DEBUG
 			Terminal::out << "delta " << dec(delta) << '\n';
 #endif
-			Debug::setRedLed(delta & 1);
-			Debug::setGreenLed(delta & 2);
-			Debug::setBlueLed(delta & 4);
+			debug::setRed(delta & 1);
+			debug::setGreen(delta & 2);
+			debug::setBlue(delta & 4);
 			break;
 		case 2:
 			// button activated
@@ -35,23 +35,23 @@ Coroutine handleDecoder(QuadratureDecoder &decoder) {
 			Terminal::out << "activated " << dec(index) << '\n';
 #endif
 			if (index == 0) {
-				Debug::toggleRedLed();
+				debug::toggleRed();
 			} else {
-				Debug::toggleGreenLed();
+				debug::toggleGreen();
 			}
-			Debug::setBlueLed(false);
+			debug::setBlue(false);
 			break;
 		}
 	}
 }
 
 int main() {
-	Loop::init();
+	loop::init();
 	Output::init(); // for debug signals on pins
 	Input::init();
 	Drivers drivers;
 
 	handleDecoder(drivers.quadratureDecoder);
 
-	Loop::run();
+	loop::run();
 }

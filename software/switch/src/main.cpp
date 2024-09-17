@@ -1,4 +1,3 @@
-#include <Timer.hpp>
 #include <Input.hpp>
 #include <Output.hpp>
 #include <Debug.hpp>
@@ -102,7 +101,7 @@ public:
 			//Terminal::out << "trigger " << dec(index) << ' ' << dec(int(state)) << '\n';
 
 			// configure when at least one button was held for 3s after all were pressed
-			if (this->configure && Timer::now() > this->allTime + 3s) {
+			if (this->configure && loop::now() > this->allTime + 3s) {
 				// use button state as configuration
 				int a = this->buttons & 3;
 				if (a != 0)
@@ -123,7 +122,7 @@ public:
 
 			// check if all buttons are pressed
 			if (this->buttons == 0x0f) {
-				this->allTime = Timer::now();
+				this->allTime = loop::now();
 				this->commission = true;
 				this->configure = true;
 				//Terminal::out << "all\n";
@@ -527,18 +526,21 @@ public:
 				//Terminal::out << "ab " << dec(ax) << dec(ay) << dec(az) << " " << dec(bx) << dec(by) << dec(bz) << "\n";
 
 				// build 16 bit word for relay driver
-				uint16_t word = 0x8000 // enable
+				uint16_t w = 0x8000 // enable
 					| (ax << (MPQ6526_MAPPING[0] * 2 + 1))
 					| (ay << (MPQ6526_MAPPING[1] * 2 + 1))
 					| (az << (MPQ6526_MAPPING[2] * 2 + 1))
 					| (bx << (MPQ6526_MAPPING[3] * 2 + 1))
 					| (by << (MPQ6526_MAPPING[4] * 2 + 1))
 					| (bz << (MPQ6526_MAPPING[5] * 2 + 1));
-				//Terminal::out << "spi " << hex(word) << "\n";
-				co_await this->drivers.relayDriver.transfer(1, &word, 0, nullptr);
+				//Terminal::out << "spi " << hex(w) << "\n";
+
+				// transfer
+				uint16_t r;
+				co_await this->drivers.relayDriver.transfer(2, &w, 2, &r);
 
 				// wait some time until relay contacts react
-				co_await Timer::sleep(RELAY_TIME);
+				co_await loop::sleep(RELAY_TIME);
 			}
 
 			// switch off all half bridges
@@ -594,12 +596,11 @@ public:
 
 
 int main() {
-	Loop::init();
+	loop::init();
 	Output::init(); // for debug signals on pins
 	Input::init();
-	Timer::init();
 
 	Switch s;
 
-	Loop::run();
+	loop::run();
 }

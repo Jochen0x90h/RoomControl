@@ -1,3 +1,5 @@
+#define _USE_MATH_DEFINES
+#include <cmath>
 #include "Gui.hpp"
 #include <tahoma_8pt.hpp>
 #include <Bitmap.hpp>
@@ -5,7 +7,6 @@
 #include <StringOperators.hpp>
 #include <vector>
 #include <stdexcept>
-#include <cmath>
 #include <iostream>
 
 

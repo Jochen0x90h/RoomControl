@@ -1,11 +1,21 @@
 #include "FlashImpl.hpp"
 #include "nrf52.hpp"
+#include <assert.hpp>
 
 
+/*
+	https://infocenter.nordicsemi.com/index.jsp?topic=%2Fps_nrf52840%2Fmemory.html&cp=4_0_0_3_1_1&anchor=flash
+	https://infocenter.nordicsemi.com/index.jsp?topic=%2Fps_nrf52840%2Fnvmc.html&cp=4_0_0_3_2
+
+	Resources:
+		NRF_NVMC
+*/
 
 FlashImpl::FlashImpl(uint32_t baseAddress, int sectorCount, int sectorSize)
-	: baseAddress(baseAddress), sectorCount(sectorCount), sectorSize(sectorSize & ~(PAGE_SIZE - 1))
+	: baseAddress(baseAddress), sectorCount(sectorCount), sectorSize(sectorSize)
 {
+	assert((baseAddress & (PAGE_SIZE - 1)) == 0);
+	assert((sectorSize & (PAGE_SIZE - 1)) == 0);
 }
 
 Flash::Info FlashImpl::getInfo() {
